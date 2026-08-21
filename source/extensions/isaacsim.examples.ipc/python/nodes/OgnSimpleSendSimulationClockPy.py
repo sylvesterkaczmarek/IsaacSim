@@ -14,11 +14,20 @@
 # limitations under the License.
 """Python implementation of the SimpleSendSimulationClock OmniGraph node."""
 
+import math
 import socket
 import struct
 
 import omni.graph.core as og
 from isaacsim.core.nodes import BaseResetNode
+
+
+def _seconds_to_nanoseconds(sec: float) -> int:
+    """Convert seconds to nanoseconds using C++ ``std::llround`` semantics."""
+    value = sec * 1e9
+    if value >= 0.0:
+        return int(math.floor(value + 0.5))
+    return int(math.ceil(value - 0.5))
 
 
 class OgnSimpleSendSimulationClockPyInternalState(BaseResetNode):
@@ -76,11 +85,13 @@ class OgnSimpleSendSimulationClockPy:
                     og.ExecutionAttributeState.ENABLED
                 )  # pulse execOut even on failure so downstream nodes keep running
                 return False
+            s = None
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.connect((host, port))
             except OSError:
-                s.close()
+                if s is not None:
+                    s.close()
                 db.outputs.execOut = (
                     og.ExecutionAttributeState.ENABLED
                 )  # pulse execOut even on failure so downstream nodes keep running
@@ -89,7 +100,7 @@ class OgnSimpleSendSimulationClockPy:
             state.uri = uri
 
         sec = float(db.inputs.simulationTime)
-        payload = int(round(sec * 1e9))
+        payload = _seconds_to_nanoseconds(sec)
         try:
             state.sock.sendall(struct.pack("<q", payload))
         except OSError:
