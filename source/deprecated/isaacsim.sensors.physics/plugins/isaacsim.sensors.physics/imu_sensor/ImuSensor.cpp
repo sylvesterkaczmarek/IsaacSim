@@ -200,8 +200,7 @@ void ImuSensor::onPhysicsStep()
     usdrt::GfMatrix3d rW = rBw.ExtractRotationMatrix();
     omni::math::linalg::quatd qWb = rW.ExtractRotation();
 
-    // velocity of sensor frame in sensor frame
-    omni::math::linalg::vec3d vB = rWb.TransformDir(vW);
+    // Keep linear velocity in the inertial world frame until after differentiation.
 
     // angular velocity of sensor frame in sensor frame
     omni::math::linalg::vec3d wB = rWb.TransformDir(wW);
@@ -209,7 +208,7 @@ void ImuSensor::onPhysicsStep()
     // gravity that the IMU experience in sensor frame
     m_gravitySensorFrame = rWb.TransformDir(m_gravity);
 
-    // we then finite diff vB to get a_b, to reduce noise, average multiple finite diffs
+    // Finite difference world-frame linear velocity to avoid rotation-induced acceleration.
     // save raw data into a buffer list , buffer 0 always saves the latest velocities
     if (!m_rawBuffer.empty())
     {
@@ -222,9 +221,9 @@ void ImuSensor::onPhysicsStep()
     m_rawBuffer.insert(m_rawBuffer.begin(), IsRawData());
     m_rawBuffer[0].time = static_cast<float>(m_timeSeconds);
     m_rawBuffer[0].dt = static_cast<float>(m_timeDelta);
-    m_rawBuffer[0].linVelX = static_cast<float>(vB[0]);
-    m_rawBuffer[0].linVelY = static_cast<float>(vB[1]);
-    m_rawBuffer[0].linVelZ = static_cast<float>(vB[2]);
+    m_rawBuffer[0].linVelX = static_cast<float>(vW[0]);
+    m_rawBuffer[0].linVelY = static_cast<float>(vW[1]);
+    m_rawBuffer[0].linVelZ = static_cast<float>(vW[2]);
     m_rawBuffer[0].angVelX = static_cast<float>(wB[0]);
     m_rawBuffer[0].angVelY = static_cast<float>(wB[1]);
     m_rawBuffer[0].angVelZ = static_cast<float>(wB[2]);
@@ -271,10 +270,14 @@ void ImuSensor::onPhysicsStep()
     }
 
 
-    // average acc
-    m_sensorReadings[0].linAccX = static_cast<float>(tmpSumX / m_linearAccelerationFilterSize);
-    m_sensorReadings[0].linAccY = static_cast<float>(tmpSumY / m_linearAccelerationFilterSize);
-    m_sensorReadings[0].linAccZ = static_cast<float>(tmpSumZ / m_linearAccelerationFilterSize);
+    // Average in world coordinates, then express acceleration in the sensor frame.
+    const omni::math::linalg::vec3d linearAccelerationW(
+        tmpSumX / m_linearAccelerationFilterSize, tmpSumY / m_linearAccelerationFilterSize,
+        tmpSumZ / m_linearAccelerationFilterSize);
+    const omni::math::linalg::vec3d linearAccelerationB = rWb.TransformDir(linearAccelerationW);
+    m_sensorReadings[0].linAccX = static_cast<float>(linearAccelerationB[0]);
+    m_sensorReadings[0].linAccY = static_cast<float>(linearAccelerationB[1]);
+    m_sensorReadings[0].linAccZ = static_cast<float>(linearAccelerationB[2]);
 
     // // add gravity
     // m_sensorReadings[0].linAccX += static_cast<float>(g_b[0]);

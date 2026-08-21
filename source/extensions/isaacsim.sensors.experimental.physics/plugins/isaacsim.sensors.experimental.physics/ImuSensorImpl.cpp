@@ -779,7 +779,6 @@ void ImuSensorImpl::_processSensor(ImplData& impl, const std::string& primPath, 
     omni::math::linalg::quatd qWb = rotMatrix.ExtractRotation();
     const omni::math::linalg::vec3d imaginary = qWb.GetImaginary();
 
-    omni::math::linalg::vec3d vB = rWb.TransformDir(vW);
     omni::math::linalg::vec3d wB = rWb.TransformDir(wW);
     sensor.gravitySensorFrame = rWb.TransformDir(sensor.gravity);
 
@@ -787,9 +786,11 @@ void ImuSensorImpl::_processSensor(ImplData& impl, const std::string& primPath, 
     ImuRawData& raw = sensor.rawAt(0);
     raw.time = static_cast<float>(sensor.timeSeconds);
     raw.dt = static_cast<float>(sensor.timeDelta);
-    raw.linearVelocityX = static_cast<float>(vB[0]);
-    raw.linearVelocityY = static_cast<float>(vB[1]);
-    raw.linearVelocityZ = static_cast<float>(vB[2]);
+    // Preserve linear velocity in the inertial world frame. Rotating before
+    // finite differencing introduces an apparent acceleration when the body rotates.
+    raw.linearVelocityX = static_cast<float>(vW[0]);
+    raw.linearVelocityY = static_cast<float>(vW[1]);
+    raw.linearVelocityZ = static_cast<float>(vW[2]);
     raw.angularVelocityX = static_cast<float>(wB[0]);
     raw.angularVelocityY = static_cast<float>(wB[1]);
     raw.angularVelocityZ = static_cast<float>(wB[2]);
@@ -833,9 +834,13 @@ void ImuSensorImpl::_processSensor(ImplData& impl, const std::string& primPath, 
                     timeDiff;
         }
     }
-    reading.linearAccelerationX = sumX / sensor.linearAccelerationFilterSize;
-    reading.linearAccelerationY = sumY / sensor.linearAccelerationFilterSize;
-    reading.linearAccelerationZ = sumZ / sensor.linearAccelerationFilterSize;
+    const omni::math::linalg::vec3d linearAccelerationW(
+        sumX / sensor.linearAccelerationFilterSize, sumY / sensor.linearAccelerationFilterSize,
+        sumZ / sensor.linearAccelerationFilterSize);
+    const omni::math::linalg::vec3d linearAccelerationB = rWb.TransformDir(linearAccelerationW);
+    reading.linearAccelerationX = static_cast<float>(linearAccelerationB[0]);
+    reading.linearAccelerationY = static_cast<float>(linearAccelerationB[1]);
+    reading.linearAccelerationZ = static_cast<float>(linearAccelerationB[2]);
 
     float sumW = 0.0f;
     sumX = 0.0f;
