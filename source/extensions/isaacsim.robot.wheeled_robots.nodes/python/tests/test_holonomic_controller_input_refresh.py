@@ -3,13 +3,27 @@
 
 """Regression coverage for HolonomicController runtime configuration refresh."""
 
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
 import omni.graph.core as og
 import omni.graph.core.tests as ogts
+import omni.kit.stage_templates
 
 
 class TestHolonomicControllerInputRefresh(ogts.OmniGraphTestCase):
     """Verify changed wheel geometry is applied without resetting the graph."""
+
+    async def setUp(self) -> None:
+        await stage_utils.create_new_stage_async()
+        stage_utils.set_stage_up_axis("Z")
+        stage_utils.set_stage_units(meters_per_unit=1.0)
+        await app_utils.update_app_async()
+
+    async def tearDown(self) -> None:
+        app_utils.stop()
+        await app_utils.update_app_async()
+        await omni.kit.stage_templates.new_stage_async()
 
     async def test_wheel_radius_change_rebuilds_controller(self) -> None:
         graph, [controller], _, _ = og.Controller.edit(
@@ -41,7 +55,7 @@ class TestHolonomicControllerInputRefresh(ogts.OmniGraphTestCase):
         await og.Controller.evaluate(graph)
         first = np.asarray(og.Controller(og.Controller.attribute("outputs:jointVelocityCommand", controller)).get())
 
-        og.Controller(og.Controller.attribute("inputs:wheelRadius", controller)).set([0.08, 0.08, 0.08])
+        og.Controller.attribute("inputs:wheelRadius", controller).set([0.08, 0.08, 0.08])
         await og.Controller.evaluate(graph)
         second = np.asarray(og.Controller(og.Controller.attribute("outputs:jointVelocityCommand", controller)).get())
 
