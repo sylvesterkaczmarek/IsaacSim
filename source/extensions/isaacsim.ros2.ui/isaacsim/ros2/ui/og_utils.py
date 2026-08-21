@@ -497,46 +497,40 @@ class Ros2JointStatesGraph(MenuHelperWindow):
         self._build_ui()
 
     def make_graph(self) -> None:
-        """Create or modifies the ROS2 joint states action graph with publisher and subscriber nodes.
+        """Create or modify the ROS2 joint states action graph.
 
-        This method stops the timeline, then creates a new graph or modifies an existing one by adding ROS2 nodes for
-        publishing and subscribing to joint states. When publishing is enabled, it adds a joint state publisher node.
-        When subscribing is enabled, it adds a joint state subscriber node and optionally an articulation controller
-        node to move the robot based on received joint commands.
+        The publisher uses Isaac Read Joint State as the preferred data source, matching the
+        current ROS2PublishJointState interface and keeping joint-state acquisition separate
+        from ROS message publication.
         """
         self._timeline = omni.timeline.get_timeline_interface()
         self._timeline.stop()
 
         keys = og.Controller.Keys
 
-        # if starting from a new graph, start it with just a tick,context, and sim_time node, the rest is the same for adding to exsiting graph
+        # New graphs only need a tick and ROS context. The joint-state reader supplies
+        # both data and timestamp to the publisher.
         if not self._add_to_existing_graph:
             self._og_path = stage_utils.generate_next_free_path(self._og_path, prepend_default_prim=False)
-            graph_handle, nodes, _, _ = og.Controller.edit(
+            graph_handle, _, _, _ = og.Controller.edit(
                 {"graph_path": self._og_path, "evaluator_name": "execution"},
                 {
                     keys.CREATE_NODES: [
                         ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
                         ("Context", "isaacsim.ros2.bridge.ROS2Context"),
-                        ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
-                    ],
-                    keys.SET_VALUES: [
-                        ("ReadSimTime.inputs:resetOnStop", True),
                     ],
                 },
             )
         else:
             graph_handle = og.get_graph_by_path(self._og_path)
 
-        # to an existin graph
-        # traverse through the graph
         all_nodes = graph_handle.get_nodes()
+        js_read_node_name = "ReadJointState"
         js_pub_node_name = "PublisherJointState"
         js_sub_node_name = "SubscriberJointState"
         art_node_name = "ArticulationController"
         tick_node = None
         context_node = None
-        sim_time_node = None
         for node in all_nodes:
             node_path = node.get_prim_path()
             node_type = node.get_type_name()
@@ -544,16 +538,15 @@ class Ros2JointStatesGraph(MenuHelperWindow):
                 tick_node = node_path
             elif node_type == "isaacsim.ros2.bridge.ROS2Context":
                 context_node = node_path
-            elif node_type == "isaacsim.core.nodes.IsaacReadSimulationTime":
-                sim_time_node = node_path
+            elif node_type == "isaacsim.sensors.physics.IsaacReadJointState":
+                read_path = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
+                js_read_node_name = Path(read_path).name
             elif node_type == "isaacsim.ros2.bridge.ROS2PublishJointState":
-                # if there already exist a js pub node, add a new one with a different name
-                js_pub_node_path = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
-                js_pub_node_name = Path(js_pub_node_path).name
+                pub_path = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
+                js_pub_node_name = Path(pub_path).name
             elif node_type == "isaacsim.ros2.bridge.ROS2SubscribeJointState":
-                # if there already exist a js sub node, add a new one with a different name
-                js_sub_node_path = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
-                js_sub_node_name = Path(js_sub_node_path).name
+                sub_path = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
+                js_sub_node_name = Path(sub_path).name
             elif node_type == "isaacsim.core.nodes.IsaacArticulationController":
                 msg = "already has an articulation controller node, CREATING A NEW ARTICULATION NODE"
                 print(msg)
@@ -566,12 +559,47 @@ class Ros2JointStatesGraph(MenuHelperWindow):
                 graph_handle,
                 {
                     keys.CREATE_NODES: [
+                        (js_read_node_name, "isaacsim.sensors.physics.IsaacReadJointState"),
                         (js_pub_node_name, "isaacsim.ros2.bridge.ROS2PublishJointState"),
                     ],
                     keys.SET_VALUES: [
-                        (js_pub_node_name + ".inputs:targetPrim", self._art_root_path),
+                        (js_read_node_name + ".inputs:prim", [Sdf.Path(self._art_root_path)]),
                         (js_pub_node_name + ".inputs:topicName", self._pub_topic),
                         (js_pub_node_name + ".inputs:nodeNamespace", self._node_namespace),
+                    ],
+                    keys.CONNECT: [
+                        (
+                            js_read_node_name + ".outputs:execOut",
+                            js_pub_node_name + ".inputs:execIn",
+                        ),
+                        (
+                            js_read_node_name + ".outputs:jointNames",
+                            js_pub_node_name + ".inputs:jointNames",
+                        ),
+                        (
+                            js_read_node_name + ".outputs:jointPositions",
+                            js_pub_node_name + ".inputs:jointPositions",
+                        ),
+                        (
+                            js_read_node_name + ".outputs:jointVelocities",
+                            js_pub_node_name + ".inputs:jointVelocities",
+                        ),
+                        (
+                            js_read_node_name + ".outputs:jointEfforts",
+                            js_pub_node_name + ".inputs:jointEfforts",
+                        ),
+                        (
+                            js_read_node_name + ".outputs:jointDofTypes",
+                            js_pub_node_name + ".inputs:jointDofTypes",
+                        ),
+                        (
+                            js_read_node_name + ".outputs:stageMetersPerUnit",
+                            js_pub_node_name + ".inputs:stageMetersPerUnit",
+                        ),
+                        (
+                            js_read_node_name + ".outputs:sensorTime",
+                            js_pub_node_name + ".inputs:sensorTime",
+                        ),
                     ],
                 },
             )
@@ -579,17 +607,12 @@ class Ros2JointStatesGraph(MenuHelperWindow):
             if tick_node:
                 og.Controller.connect(
                     og.Controller.attribute(tick_node + ".outputs:tick"),
-                    og.Controller.attribute(self._og_path + "/" + js_pub_node_name + ".inputs:execIn"),
+                    og.Controller.attribute(self._og_path + "/" + js_read_node_name + ".inputs:execIn"),
                 )
             if context_node:
                 og.Controller.connect(
                     og.Controller.attribute(context_node + ".outputs:context"),
                     og.Controller.attribute(self._og_path + "/" + js_pub_node_name + ".inputs:context"),
-                )
-            if sim_time_node:
-                og.Controller.connect(
-                    og.Controller.attribute(sim_time_node + ".outputs:simulationTime"),
-                    og.Controller.attribute(self._og_path + "/" + js_pub_node_name + ".inputs:timeStamp"),
                 )
 
         if self._subscriber:

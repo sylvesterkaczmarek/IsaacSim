@@ -717,7 +717,7 @@ class TestMenuROS2JointStatesGraph(ROS2MenuTestBase):
         expected_nodes = {
             "omni.graph.action.OnPlaybackTick",
             "isaacsim.ros2.bridge.ROS2Context",
-            "isaacsim.core.nodes.IsaacReadSimulationTime",
+            "isaacsim.sensors.physics.IsaacReadJointState",
             "isaacsim.ros2.bridge.ROS2SubscribeJointState",
             "isaacsim.ros2.bridge.ROS2PublishJointState",
             "isaacsim.core.nodes.IsaacArticulationController",
