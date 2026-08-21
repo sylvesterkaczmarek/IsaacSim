@@ -150,16 +150,16 @@ def bootstrap_kernel():
         os.path.join(isaacsim_path, "exts", "isaacsim.simulation_app"),
     ]
     # update sys.path
+    import carb
+
     for path in paths:
         if not path in sys.path:
             if not os.path.exists(path):
-                print(f"[Warning] PYTHONPATH: path doesn't exist ({path})")
+                carb.log_warn(f"PYTHONPATH: path doesn't exist ({path})")
                 continue
             sys.path.insert(0, path)
 
     # log info
-    import carb
-
     carb.log_info(f"Isaac Sim path: {isaacsim_path}")
     carb.log_info(f"Kit path: {kit_path}")
 
