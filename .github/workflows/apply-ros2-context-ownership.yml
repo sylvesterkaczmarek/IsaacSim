@@ -1,0 +1,114 @@
+name: Apply ROS2 context ownership fix
+
+on:
+  push:
+    branches:
+      - fix/ros2-context-ownership
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/ros2-context-ownership
+
+      - name: Apply context ownership fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('source/extensions/isaacsim.ros2.sim_control/python/impl/simulation_control.py')
+          text = path.read_text()
+
+          old = '''        # Single callback group for parallel execution of both services and actions
+        self.callback_group = None
+'''
+          new = '''        # Single callback group for parallel execution of both services and actions
+        self.callback_group = None
+        # Track whether this manager created the process-wide rclpy context.
+        self._owns_rclpy_context = False
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'callback-group anchor count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = '''            # Initialize ROS2 if it's not already initialized
+            try:
+                rclpy.init()
+            except RuntimeError:
+                # ROS2 is already initialized
+                pass
+
+            self.node = rclpy.create_node(self.node_name)
+'''
+          new = '''            # Initialize the process-wide ROS2 context only if another component has not already done so.
+            self._owns_rclpy_context = False
+            if not rclpy.ok():
+                rclpy.init()
+                self._owns_rclpy_context = True
+
+            self.node = rclpy.create_node(self.node_name)
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'initialize anchor count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = '''        except Exception as e:
+            carb.log_error(f"Error initializing ROS2 ServiceManager: {e}")
+            self.is_initialized = False
+'''
+          new = '''        except Exception as e:
+            carb.log_error(f"Error initializing ROS2 ServiceManager: {e}")
+            if self._owns_rclpy_context:
+                try:
+                    if rclpy.ok():
+                        rclpy.shutdown()
+                finally:
+                    self._owns_rclpy_context = False
+            self.is_initialized = False
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'initialization error anchor count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = '''        try:
+            rclpy.shutdown()
+        except Exception:
+            pass
+
+        self.is_initialized = False
+'''
+          new = '''        if self._owns_rclpy_context:
+            try:
+                if rclpy.ok():
+                    rclpy.shutdown()
+            except Exception:
+                pass
+            finally:
+                self._owns_rclpy_context = False
+
+        self.is_initialized = False
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'shutdown anchor count: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Validate and commit
+        shell: bash
+        run: |
+          python -m py_compile source/extensions/isaacsim.ros2.sim_control/python/impl/simulation_control.py
+          git diff --check
+          grep -q 'self._owns_rclpy_context = False' source/extensions/isaacsim.ros2.sim_control/python/impl/simulation_control.py
+          grep -q 'if not rclpy.ok()' source/extensions/isaacsim.ros2.sim_control/python/impl/simulation_control.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source/extensions/isaacsim.ros2.sim_control/python/impl/simulation_control.py
+          git commit -m 'Preserve externally owned ROS2 context'
+          git push origin HEAD:fix/ros2-context-ownership
