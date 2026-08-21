@@ -27,7 +27,7 @@ jobs:
               text = path.read_text()
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f"{path}: expected one match, found {count}")
+                  raise SystemExit(f"{path}: expected one match, found {count} for {old!r}")
               path.write_text(text.replace(old, new, 1))
 
           experimental = Path(
@@ -36,18 +36,36 @@ jobs:
           )
           replace_once(
               experimental,
-              '''        omni::math::linalg::vec3d vB = rWb.TransformDir(vW);\n        omni::math::linalg::vec3d wB = rWb.TransformDir(wW);\n''',
-              '''        omni::math::linalg::vec3d wB = rWb.TransformDir(wW);\n''',
+              '    omni::math::linalg::vec3d vB = rWb.TransformDir(vW);\n',
+              '',
           )
           replace_once(
               experimental,
-              '''        raw.linearVelocityX = static_cast<float>(vB[0]);\n        raw.linearVelocityY = static_cast<float>(vB[1]);\n        raw.linearVelocityZ = static_cast<float>(vB[2]);\n''',
-              '''        // Keep linear velocity in the inertial world frame. Differencing body-frame\n        // components would introduce a spurious transport term whenever the body rotates.\n        raw.linearVelocityX = static_cast<float>(vW[0]);\n        raw.linearVelocityY = static_cast<float>(vW[1]);\n        raw.linearVelocityZ = static_cast<float>(vW[2]);\n''',
+              '''    raw.linearVelocityX = static_cast<float>(vB[0]);
+    raw.linearVelocityY = static_cast<float>(vB[1]);
+    raw.linearVelocityZ = static_cast<float>(vB[2]);
+''',
+              '''    // Keep linear velocity in the inertial world frame. Differencing body-frame
+    // components would introduce a spurious transport term whenever the body rotates.
+    raw.linearVelocityX = static_cast<float>(vW[0]);
+    raw.linearVelocityY = static_cast<float>(vW[1]);
+    raw.linearVelocityZ = static_cast<float>(vW[2]);
+''',
           )
           replace_once(
               experimental,
-              '''        reading.linearAccelerationX = sumX / sensor.linearAccelerationFilterSize;\n        reading.linearAccelerationY = sumY / sensor.linearAccelerationFilterSize;\n        reading.linearAccelerationZ = sumZ / sensor.linearAccelerationFilterSize;\n''',
-              '''        const omni::math::linalg::vec3d linearAccelerationW(\n            sumX / sensor.linearAccelerationFilterSize, sumY / sensor.linearAccelerationFilterSize,\n            sumZ / sensor.linearAccelerationFilterSize);\n        const omni::math::linalg::vec3d linearAccelerationB = rWb.TransformDir(linearAccelerationW);\n        reading.linearAccelerationX = static_cast<float>(linearAccelerationB[0]);\n        reading.linearAccelerationY = static_cast<float>(linearAccelerationB[1]);\n        reading.linearAccelerationZ = static_cast<float>(linearAccelerationB[2]);\n''',
+              '''    reading.linearAccelerationX = sumX / sensor.linearAccelerationFilterSize;
+    reading.linearAccelerationY = sumY / sensor.linearAccelerationFilterSize;
+    reading.linearAccelerationZ = sumZ / sensor.linearAccelerationFilterSize;
+''',
+              '''    const omni::math::linalg::vec3d linearAccelerationW(
+        sumX / sensor.linearAccelerationFilterSize, sumY / sensor.linearAccelerationFilterSize,
+        sumZ / sensor.linearAccelerationFilterSize);
+    const omni::math::linalg::vec3d linearAccelerationB = rWb.TransformDir(linearAccelerationW);
+    reading.linearAccelerationX = static_cast<float>(linearAccelerationB[0]);
+    reading.linearAccelerationY = static_cast<float>(linearAccelerationB[1]);
+    reading.linearAccelerationZ = static_cast<float>(linearAccelerationB[2]);
+''',
           )
 
           deprecated = Path(
@@ -56,18 +74,45 @@ jobs:
           )
           replace_once(
               deprecated,
-              '''        omni::math::linalg::vec3d vB = rWb.TransformDir(vW);\n        omni::math::linalg::vec3d wB = rWb.TransformDir(wW);\n''',
-              '''        omni::math::linalg::vec3d wB = rWb.TransformDir(wW);\n''',
+              '''    // velocity of sensor frame in sensor frame
+    omni::math::linalg::vec3d vB = rWb.TransformDir(vW);
+
+''',
+              '''    // Linear velocity stays in the inertial world frame until after differentiation.
+''',
           )
           replace_once(
               deprecated,
-              '''        m_rawBuffer[0].linVelX = static_cast<float>(vB[0]);\n        m_rawBuffer[0].linVelY = static_cast<float>(vB[1]);\n        m_rawBuffer[0].linVelZ = static_cast<float>(vB[2]);\n''',
-              '''        // Keep linear velocity in the inertial world frame so rotation of the body\n        // cannot create an apparent acceleration during finite differencing.\n        m_rawBuffer[0].linVelX = static_cast<float>(vW[0]);\n        m_rawBuffer[0].linVelY = static_cast<float>(vW[1]);\n        m_rawBuffer[0].linVelZ = static_cast<float>(vW[2]);\n''',
+              '    // we then finite diff vB to get a_b, to reduce noise, average multiple finite diffs\n',
+              '    // finite difference world-frame velocity, then rotate acceleration to the sensor frame\n',
           )
           replace_once(
               deprecated,
-              '''        m_sensorReadings[0].linAccX = static_cast<float>(tmpSumX / m_linearAccelerationFilterSize);\n        m_sensorReadings[0].linAccY = static_cast<float>(tmpSumY / m_linearAccelerationFilterSize);\n        m_sensorReadings[0].linAccZ = static_cast<float>(tmpSumZ / m_linearAccelerationFilterSize);\n''',
-              '''        const omni::math::linalg::vec3d linearAccelerationW(\n            tmpSumX / m_linearAccelerationFilterSize, tmpSumY / m_linearAccelerationFilterSize,\n            tmpSumZ / m_linearAccelerationFilterSize);\n        const omni::math::linalg::vec3d linearAccelerationB = rWb.TransformDir(linearAccelerationW);\n        m_sensorReadings[0].linAccX = static_cast<float>(linearAccelerationB[0]);\n        m_sensorReadings[0].linAccY = static_cast<float>(linearAccelerationB[1]);\n        m_sensorReadings[0].linAccZ = static_cast<float>(linearAccelerationB[2]);\n''',
+              '''    m_rawBuffer[0].linVelX = static_cast<float>(vB[0]);
+    m_rawBuffer[0].linVelY = static_cast<float>(vB[1]);
+    m_rawBuffer[0].linVelZ = static_cast<float>(vB[2]);
+''',
+              '''    m_rawBuffer[0].linVelX = static_cast<float>(vW[0]);
+    m_rawBuffer[0].linVelY = static_cast<float>(vW[1]);
+    m_rawBuffer[0].linVelZ = static_cast<float>(vW[2]);
+''',
+          )
+          replace_once(
+              deprecated,
+              '''    // average acc
+    m_sensorReadings[0].linAccX = static_cast<float>(tmpSumX / m_linearAccelerationFilterSize);
+    m_sensorReadings[0].linAccY = static_cast<float>(tmpSumY / m_linearAccelerationFilterSize);
+    m_sensorReadings[0].linAccZ = static_cast<float>(tmpSumZ / m_linearAccelerationFilterSize);
+''',
+              '''    // Average in world coordinates and rotate the result into the current sensor frame.
+    const omni::math::linalg::vec3d linearAccelerationW(
+        tmpSumX / m_linearAccelerationFilterSize, tmpSumY / m_linearAccelerationFilterSize,
+        tmpSumZ / m_linearAccelerationFilterSize);
+    const omni::math::linalg::vec3d linearAccelerationB = rWb.TransformDir(linearAccelerationW);
+    m_sensorReadings[0].linAccX = static_cast<float>(linearAccelerationB[0]);
+    m_sensorReadings[0].linAccY = static_cast<float>(linearAccelerationB[1]);
+    m_sensorReadings[0].linAccZ = static_cast<float>(linearAccelerationB[2]);
+''',
           )
           PY
 
