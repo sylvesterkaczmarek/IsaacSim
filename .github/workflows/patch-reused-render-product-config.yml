@@ -1,0 +1,88 @@
+name: Patch reused render product configuration
+on:
+  push:
+    branches:
+      - fix/reused-render-product-config
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/reused-render-product-config
+      - name: Apply focused patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('source/extensions/isaacsim.core.nodes/python/nodes/OgnIsaacCreateRenderProduct.py')
+          text = path.read_text()
+          old = '''                    state.render_product_path = render_product_path
+                    db.node.get_attribute("inputs:renderProductPrim").set([render_product_path])
+                    db.outputs.renderProductPath = render_product_path
+                    db.outputs.execOut = omni.graph.core.ExecutionAttributeState.ENABLED
+                    return True
+'''
+          new = '''                    render_prod_prim = UsdRender.Product(stage.GetPrimAtPath(render_product_path))
+                    if not render_prod_prim:
+                        db.log_error(f'Invalid renderProduct "{render_product_path}"')
+                        return False
+
+                    requested_resolution = (db.inputs.width, db.inputs.height)
+                    if tuple(render_prod_prim.GetResolutionAttr().Get()) != requested_resolution:
+                        render_prod_prim.GetResolutionAttr().Set(Gf.Vec2i(*requested_resolution))
+                    requested_camera = db.inputs.cameraPrim[0].GetString()
+                    if list(render_prod_prim.GetCameraRel().GetTargets()) != [requested_camera]:
+                        render_prod_prim.GetCameraRel().SetTargets([requested_camera])
+
+                    state.render_product_path = render_product_path
+                    state.resolution = requested_resolution
+                    state.camera_path = requested_camera
+                    db.node.get_attribute("inputs:renderProductPrim").set([render_product_path])
+                    db.outputs.renderProductPath = render_product_path
+                    db.outputs.execOut = omni.graph.core.ExecutionAttributeState.ENABLED
+                    return True
+'''
+          assert text.count(old) == 1, 'reuse block anchor changed'
+          path.write_text(text.replace(old, new, 1))
+
+          test_path = Path('source/extensions/isaacsim.core.nodes/python/tests/test_create_render_product.py')
+          test_text = test_path.read_text()
+          old = '''                    ("createRP3.inputs:cameraPrim", "/OmniverseKit_Persp"),
+                    ("createRP3.inputs:renderProductPrim", [rp_3.path]),
+'''
+          new = '''                    ("createRP3.inputs:cameraPrim", "/OmniverseKit_Top"),
+                    ("createRP3.inputs:renderProductPrim", [rp_3.path]),
+'''
+          assert test_text.count(old) == 1, 'RP3 camera setup anchor changed'
+          test_text = test_text.replace(old, new, 1)
+
+          old = '''        self._stage = stage_utils.get_current_stage()
+        self._timeline.play()
+        await omni.kit.app.get_app().next_update_async()
+        await omni.kit.app.get_app().next_update_async()
+'''
+          new = '''        self._stage = stage_utils.get_current_stage()
+        rp_3_product = UsdRender.Product(self._stage.GetPrimAtPath(rp_3.path))
+        self._timeline.play()
+        await omni.kit.app.get_app().next_update_async()
+        self.assertEqual(rp_3_product.GetResolutionAttr().Get(), (1280, 720))
+        self.assertEqual(rp_3_product.GetCameraRel().GetTargets()[0], "/OmniverseKit_Top")
+        await omni.kit.app.get_app().next_update_async()
+'''
+          assert test_text.count(old) == 1, 'first update test anchor changed'
+          test_path.write_text(test_text.replace(old, new, 1))
+      - name: Validate patch
+        run: |
+          python -m py_compile source/extensions/isaacsim.core.nodes/python/nodes/OgnIsaacCreateRenderProduct.py source/extensions/isaacsim.core.nodes/python/tests/test_create_render_product.py
+          git diff --check
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add source/extensions/isaacsim.core.nodes/python/nodes/OgnIsaacCreateRenderProduct.py source/extensions/isaacsim.core.nodes/python/tests/test_create_render_product.py
+          git diff --cached --quiet || git commit -m "Apply reused render product configuration immediately"
+          git push origin HEAD:fix/reused-render-product-config
