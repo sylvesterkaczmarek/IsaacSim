@@ -1020,6 +1020,8 @@ class XformPrim(Prim):
             [... 'xformOp:orient', 'xformOp:scale', 'xformOp:translate', 'xformOpOrder']
         """
         assert self.valid, _MSG_PRIM_NOT_VALID
+        # Capture poses before removing non-canonical xform ops.
+        positions, orientations = self.get_world_poses()
         properties_to_remove = [
             "xformOp:rotateX",
             "xformOp:rotateXZY",
@@ -1071,8 +1073,7 @@ class XformPrim(Prim):
             # reset operations order
             xformable.ClearXformOpOrder()
             xformable.SetXformOpOrder([xform_op_translate, xform_op_orient, xform_op_scale])
-        # set pose
-        positions, orientations = self.get_world_poses()
+        # restore the poses captured before reorganizing xform operations
         self.set_world_poses(positions=positions, orientations=orientations)
 
     def reset_to_default_state(self, *, warn_on_non_default_state: bool = False) -> None:
