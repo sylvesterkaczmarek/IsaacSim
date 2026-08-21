@@ -6,7 +6,7 @@
 from types import SimpleNamespace
 
 import omni.kit.test
-from isaacsim.robot.wheeled_robots.nodes.OgnAckermannController import OgnAckermannController
+from isaacsim.robot.wheeled_robots.nodes.ogn.python.nodes.OgnAckermannController import OgnAckermannController
 
 
 class _State:
