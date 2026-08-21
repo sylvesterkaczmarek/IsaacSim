@@ -41,9 +41,9 @@ USE_SRTX_SETTING = "/exts/omni.replicator.srtx/enabled"
 # other on the shared SRTX runtime stage and only the last writer wins. See
 # `framework/services/extensions/isaac.mega.bridge/source/MegaFrontendClient.cpp`
 # in the mega-dev repo for the producer side.
-SRTX_SENSOR_SET_NAME_SETTING = "/exts/omni.replicator.srtx/sensorSetName"
-SRTX_SENSOR_SET_NAME_BY_RENDER_PRODUCT_PATH_SETTING = "/exts/omni.replicator.srtx/sensorSetNameByRenderProductPath"
-SRTX_SENSOR_SET_RENDER_PRODUCT_PATHS_BY_NAME_SETTING = "/exts/omni.replicator.srtx/sensorSetRenderProductPathsByName"
+SRTX_SENSOR_SET_NAME_SETTING = "/exts/isaacsim.ros2.bridge/sensorSetName"
+SRTX_SENSOR_SET_NAME_BY_RENDER_PRODUCT_PATH_SETTING = "/exts/isaacsim.ros2.bridge/sensorSetNameByRenderProductPath"
+SRTX_SENSOR_SET_RENDER_PRODUCT_PATHS_BY_NAME_SETTING = "/exts/isaacsim.ros2.bridge/sensorSetRenderProductPathsByName"
 
 
 def is_srtx_supported_platform() -> bool:
@@ -292,9 +292,16 @@ class SrtxCaptureState:
         paths = self._output_paths.setdefault(sensor_set_name, [])
         if output_path in paths:
             return
-        paths.append(output_path)
+
+        updated_paths = [*paths, output_path]
         srtx_instance.stop_continuous_capture(sensor_set_name)
-        srtx_instance.start_continuous_capture(sensor_set_name, paths)
+        try:
+            srtx_instance.start_continuous_capture(sensor_set_name, updated_paths)
+        except Exception:
+            if not paths:
+                self._output_paths.pop(sensor_set_name, None)
+            raise
+        self._output_paths[sensor_set_name] = updated_paths
 
     def stop_or_shrink(self, srtx_instance: object, sensor_set_name: str, output_paths_to_remove: list[str]) -> None:
         """Remove *output_paths_to_remove* from the SRTX continuous capture for *sensor_set_name*.
