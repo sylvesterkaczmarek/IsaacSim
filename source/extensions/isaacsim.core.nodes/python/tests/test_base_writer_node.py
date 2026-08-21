@@ -9,13 +9,13 @@ import omni.kit.test
 from isaacsim.core.nodes import BaseWriterNode, WriterRequest
 
 
-class TestBaseWriterNode(omni.kit.test.TestCase):
+class TestBaseWriterNode(omni.kit.test.AsyncTestCase):
     """Validate writer activation requests."""
 
     @patch("isaacsim.core.nodes.impl.base_writer_node.Usd.EditContext")
     @patch("isaacsim.core.nodes.impl.base_writer_node.omni.usd.get_context")
     @patch("isaacsim.core.nodes.impl.base_writer_node.rep.AnnotatorRegistry.get_annotator")
-    def test_noop_annotator_preserves_render_product_list(
+    async def test_noop_annotator_preserves_render_product_list(
         self, mock_get_annotator: MagicMock, mock_get_context: MagicMock, mock_edit_context: MagicMock
     ) -> None:
         """A list of render products must not be wrapped in another list."""
