@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import omni.graph.core as og
 import omni.kit.test
-from isaacsim.examples.ipc.nodes.OgnSimpleSendSimulationClockPy import (
+from isaacsim.examples.ipc.ogn.python.nodes.OgnSimpleSendSimulationClockPy import (
     OgnSimpleSendSimulationClockPy,
     OgnSimpleSendSimulationClockPyInternalState,
     _seconds_to_nanoseconds,
@@ -27,7 +27,7 @@ class TestSimpleSendSimulationClockPyFailures(omni.kit.test.AsyncTestCase):
         )
 
         with patch(
-            "isaacsim.examples.ipc.nodes.OgnSimpleSendSimulationClockPy.socket.socket",
+            "isaacsim.examples.ipc.ogn.python.nodes.OgnSimpleSendSimulationClockPy.socket.socket",
             side_effect=OSError("socket unavailable"),
         ):
             self.assertFalse(OgnSimpleSendSimulationClockPy.compute(db))
