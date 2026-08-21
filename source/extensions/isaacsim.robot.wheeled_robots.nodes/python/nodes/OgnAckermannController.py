@@ -111,6 +111,19 @@ class OgnAckermannController:
         state = db.per_instance_state
 
         try:
+            if state.initialized and (
+                state.wheel_base != db.inputs.wheelBase
+                or state.track_width != db.inputs.trackWidth
+                or state.front_wheel_radius != db.inputs.frontWheelRadius
+                or state.back_wheel_radius != db.inputs.backWheelRadius
+                or state.max_wheel_velocity != db.inputs.maxWheelVelocity
+                or state.invert_steering != db.inputs.invertSteering
+                or state.max_wheel_rotation_angle != db.inputs.maxWheelRotation
+                or state.max_acceleration != db.inputs.maxAcceleration
+                or state.max_steering_angle_velocity != db.inputs.maxSteeringAngleVelocity
+            ):
+                state.initialized = False
+
             if not state.initialized:
 
                 state.wheel_base = db.inputs.wheelBase
