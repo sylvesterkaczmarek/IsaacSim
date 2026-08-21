@@ -132,38 +132,58 @@ class OgnHolonomicController:
         state = db.per_instance_state
 
         try:
-            if not state.initialized:
-                stop = False
-                error_log = ""
-                # TODO: Add a check to see if the wheel radius is valid
-                if len(db.inputs.wheelRadius) == 0:
-                    error_log += "Wheel radius list is empty\n"
-                    stop = True
-                if len(db.inputs.wheelPositions) == 0:
-                    error_log += "Wheel positions list is empty\n"
-                    stop = True
-                if len(db.inputs.wheelOrientations) == 0:
-                    error_log += "Wheel orientations list is empty\n"
-                    stop = True
-                if len(db.inputs.mecanumAngles) == 0:
-                    error_log += "Mecanum angles list is empty\n"
-                    stop = True
-                if stop:
-                    db.log_warning(error_log)
-                    return False
+            stop = False
+            error_log = ""
+            if len(db.inputs.wheelRadius) == 0:
+                error_log += "Wheel radius list is empty\n"
+                stop = True
+            if len(db.inputs.wheelPositions) == 0:
+                error_log += "Wheel positions list is empty\n"
+                stop = True
+            if len(db.inputs.wheelOrientations) == 0:
+                error_log += "Wheel orientations list is empty\n"
+                stop = True
+            if len(db.inputs.mecanumAngles) == 0:
+                error_log += "Mecanum angles list is empty\n"
+                stop = True
+            if stop:
+                db.log_warning(error_log)
+                return False
 
-                state.wheel_radius = db.inputs.wheelRadius
-                state.wheel_positions = db.inputs.wheelPositions
-                state.wheel_orientations = db.inputs.wheelOrientations
-                state.mecanum_angles = db.inputs.mecanumAngles
-                state.wheel_axis = db.inputs.wheelAxis
-                state.up_axis = db.inputs.upAxis
+            wheel_radius = np.asarray(db.inputs.wheelRadius)
+            wheel_positions = np.asarray(db.inputs.wheelPositions)
+            wheel_orientations = np.asarray(db.inputs.wheelOrientations)
+            mecanum_angles = np.asarray(db.inputs.mecanumAngles)
+            wheel_axis = np.asarray(db.inputs.wheelAxis)
+            up_axis = np.asarray(db.inputs.upAxis)
+
+            configuration_changed = (
+                not state.initialized
+                or not np.array_equal(wheel_radius, np.asarray(state.wheel_radius))
+                or not np.array_equal(wheel_positions, np.asarray(state.wheel_positions))
+                or not np.array_equal(wheel_orientations, np.asarray(state.wheel_orientations))
+                or not np.array_equal(mecanum_angles, np.asarray(state.mecanum_angles))
+                or not np.array_equal(wheel_axis, np.asarray(state.wheel_axis))
+                or not np.array_equal(up_axis, np.asarray(state.up_axis))
+                or state.max_linear_speed != db.inputs.maxLinearSpeed
+                or state.max_angular_speed != db.inputs.maxAngularSpeed
+                or state.max_wheel_speed != db.inputs.maxWheelSpeed
+                or state.linear_gain != db.inputs.linearGain
+                or state.angular_gain != db.inputs.angularGain
+            )
+
+            if configuration_changed:
+                state.wheel_radius = wheel_radius.copy()
+                state.wheel_positions = wheel_positions.copy()
+                state.wheel_orientations = wheel_orientations.copy()
+                state.mecanum_angles = mecanum_angles.copy()
+                state.wheel_axis = wheel_axis.copy()
+                state.up_axis = up_axis.copy()
                 state.max_linear_speed = db.inputs.maxLinearSpeed
                 state.max_angular_speed = db.inputs.maxAngularSpeed
                 state.max_wheel_speed = db.inputs.maxWheelSpeed
                 state.linear_gain = db.inputs.linearGain
                 state.angular_gain = db.inputs.angularGain
-
                 state.initialize_controller()
 
             wheel_velocities = state.forward(np.array(db.inputs.inputVelocity))
