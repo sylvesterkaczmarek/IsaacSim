@@ -41,9 +41,9 @@ USE_SRTX_SETTING = "/exts/omni.replicator.srtx/enabled"
 # other on the shared SRTX runtime stage and only the last writer wins. See
 # `framework/services/extensions/isaac.mega.bridge/source/MegaFrontendClient.cpp`
 # in the mega-dev repo for the producer side.
-SRTX_SENSOR_SET_NAME_SETTING = "/exts/isaacsim.ros2.bridge/sensorSetName"
-SRTX_SENSOR_SET_NAME_BY_RENDER_PRODUCT_PATH_SETTING = "/exts/isaacsim.ros2.bridge/sensorSetNameByRenderProductPath"
-SRTX_SENSOR_SET_RENDER_PRODUCT_PATHS_BY_NAME_SETTING = "/exts/isaacsim.ros2.bridge/sensorSetRenderProductPathsByName"
+SRTX_SENSOR_SET_NAME_SETTING = "/exts/omni.replicator.srtx/sensorSetName"
+SRTX_SENSOR_SET_NAME_BY_RENDER_PRODUCT_PATH_SETTING = "/exts/omni.replicator.srtx/sensorSetNameByRenderProductPath"
+SRTX_SENSOR_SET_RENDER_PRODUCT_PATHS_BY_NAME_SETTING = "/exts/omni.replicator.srtx/sensorSetRenderProductPathsByName"
 
 
 def is_srtx_supported_platform() -> bool:
