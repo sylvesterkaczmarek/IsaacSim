@@ -27,7 +27,7 @@ class OgnIsaacGetViewportRenderProductInternalState:
     """Per-instance cache for the viewport API resolved from the input window name."""
 
     def __init__(self) -> None:
-        viewport = None
+        self.viewport = None
 
 
 class OgnIsaacGetViewportRenderProduct:
@@ -60,7 +60,7 @@ class OgnIsaacGetViewportRenderProduct:
         if viewport_api:
             db.per_instance_state.viewport = viewport_api
         if db.per_instance_state.viewport is None:
-            carb.log_warn("viewport name {db.inputs.viewport} not found")
+            carb.log_warn(f"viewport name {db.inputs.viewport} not found")
             db.per_instance_state.initialized = False
             return False
 
