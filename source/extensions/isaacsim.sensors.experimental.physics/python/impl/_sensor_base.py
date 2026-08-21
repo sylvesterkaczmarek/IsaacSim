@@ -25,7 +25,7 @@ Mirrors the pattern in ``isaacsim.sensors.experimental.rtx``:
   ``_SensorStepManager`` registration, timeline-stop reset). Concrete sensors
   override ``_acquire_interface`` and ``_get_invalid_reading``.
 - :class:`_PhysicsSensorRuntime` extends :class:`_PhysicsSensorRuntimeBase` for
-  sensors that pair with an authoring class. Concrete classes (e.g.
+  sensors that pair with an authoring class. Concrete sensors (e.g.
   :class:`IMUSensor`) define ``_AUTHORING_CLASS`` and ``_AUTHORING_ATTR``.
   Sensors with no authoring class (e.g. :class:`EffortSensor`) inherit
   :class:`_PhysicsSensorRuntimeBase` directly.
@@ -33,7 +33,7 @@ Mirrors the pattern in ``isaacsim.sensors.experimental.rtx``:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Self
 
 import carb
 import numpy as np
@@ -172,7 +172,7 @@ class _PhysicsSensorAuthoring(XformPrim):
         """
 
     @classmethod
-    def create(cls, path: str, **kwargs: Any) -> "_PhysicsSensorAuthoring":
+    def create(cls, path: str, **kwargs: Any) -> Self:
         """Create a new sensor at the specified path.
 
         Always creates a fresh prim, auto-numbering the path if it already
