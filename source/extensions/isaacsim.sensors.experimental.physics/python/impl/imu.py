@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Self
 
 import numpy as np
 import omni.isaac.IsaacSensorSchema as IsaacSensorSchema
@@ -64,6 +64,11 @@ class IMU(_PhysicsSensorAuthoring):
 
     _PRIM_TYPE = "IsaacImuSensor"
     _SCHEMA_CLASS = IsaacSensorSchema.IsaacImuSensor
+
+    @classmethod
+    def create(cls, path: str, **kwargs: Any) -> Self:
+        """Create a new IMU authoring instance with a precise subclass return type."""
+        return super().create(path, **kwargs)
 
     def __init__(
         self,
