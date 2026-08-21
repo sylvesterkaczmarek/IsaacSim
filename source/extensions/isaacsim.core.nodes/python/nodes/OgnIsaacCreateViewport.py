@@ -48,7 +48,7 @@ class OgnIsaacCreateViewport:
             db: OmniGraph database for this node.
 
         Returns:
-            True after the viewport output is populated.
+            True after the viewport output is populated, False if no viewport is available.
         """
         state = db.per_instance_state
         if state.window is None:
@@ -59,6 +59,8 @@ class OgnIsaacCreateViewport:
                     state.window = get_active_viewport_window()
                 else:
                     state.window = create_viewport_window(str(db.inputs.viewportId))
+        if state.window is None:
+            return False
         db.outputs.viewport = state.window.title
         db.outputs.execOut = omni.graph.core.ExecutionAttributeState.ENABLED
         return True
