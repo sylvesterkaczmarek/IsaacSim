@@ -9,10 +9,10 @@ import omni.kit.test
 from isaacsim.ros2.nodes.OgnROS2RtxRadarHelper import OgnROS2RtxRadarHelper
 
 
-class TestROS2RtxRadarHelperValidation(omni.kit.test.TestCase):
+class TestROS2RtxRadarHelperValidation(omni.kit.test.AsyncTestCase):
     """Validate early lifecycle and render-product guards."""
 
-    def test_disabling_initialized_helper_resets_state(self) -> None:
+    async def test_disabling_initialized_helper_resets_state(self) -> None:
         """Disabling an active helper must detach/reset its writer state."""
         db = MagicMock()
         db.inputs.enabled = False
@@ -24,7 +24,7 @@ class TestROS2RtxRadarHelperValidation(omni.kit.test.TestCase):
 
     @patch("isaacsim.ros2.nodes.OgnROS2RtxRadarHelper.ViewportManager.get_camera")
     @patch("isaacsim.ros2.nodes.OgnROS2RtxRadarHelper.omni.usd.get_context")
-    def test_missing_render_product_retries_before_camera_lookup(
+    async def test_missing_render_product_retries_before_camera_lookup(
         self, mock_get_context: MagicMock, mock_get_camera: MagicMock
     ) -> None:
         """An invalid USD prim should be rejected before resolving the radar camera."""
