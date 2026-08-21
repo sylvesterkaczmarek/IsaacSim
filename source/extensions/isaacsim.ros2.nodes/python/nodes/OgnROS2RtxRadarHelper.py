@@ -152,7 +152,7 @@ class OgnROS2RtxRadarHelper:
 
         Args:
             node: OmniGraph node being released.
-            graph_instance_id: OmniGraph graph instance ID.
+            graph_instance_id: Graph instance identifier.
         """
         try:
             state = OgnROS2RtxRadarHelperInternalState.per_instance_internal_state(node)
