@@ -1,0 +1,64 @@
+name: Apply ROS2 joint state menu fix
+
+on:
+  push:
+    branches:
+      - fix/ros2-joint-state-menu-reader
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/ros2-joint-state-menu-reader
+
+      - name: Update joint state graph generator
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('source/extensions/isaacsim.ros2.ui/isaacsim/ros2/ui/og_utils.py')
+          text = path.read_text()
+          class_start = text.index('class Ros2JointStatesGraph(')
+          method_start = text.index('    def make_graph(self) -> None:\n', class_start)
+          method_end = text.index('    def _build_ui(self) -> None:\n', method_start)
+
+          new_method = '''    def make_graph(self) -> None:\n        """Create or modify the ROS2 joint states action graph.\n\n        The publisher uses Isaac Read Joint State as the preferred data source, matching the\n        current ROS2PublishJointState interface and keeping joint-state acquisition separate\n        from ROS message publication.\n        """\n        self._timeline = omni.timeline.get_timeline_interface()\n        self._timeline.stop()\n\n        keys = og.Controller.Keys\n\n        # New graphs only need a tick and ROS context. The joint-state reader supplies\n        # both data and timestamp to the publisher.\n        if not self._add_to_existing_graph:\n            self._og_path = stage_utils.generate_next_free_path(self._og_path, prepend_default_prim=False)\n            graph_handle, _, _, _ = og.Controller.edit(\n                {"graph_path": self._og_path, "evaluator_name": "execution"},\n                {\n                    keys.CREATE_NODES: [\n                        ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),\n                        ("Context", "isaacsim.ros2.bridge.ROS2Context"),\n                    ],\n                },\n            )\n        else:\n            graph_handle = og.get_graph_by_path(self._og_path)\n\n        all_nodes = graph_handle.get_nodes()\n        js_read_node_name = "ReadJointState"\n        js_pub_node_name = "PublisherJointState"\n        js_sub_node_name = "SubscriberJointState"\n        art_node_name = "ArticulationController"\n        tick_node = None\n        context_node = None\n        for node in all_nodes:\n            node_path = node.get_prim_path()\n            node_type = node.get_type_name()\n            if node_type == "omni.graph.action.OnPlaybackTick" or node_type == "omni.graph.action.OnTick":\n                tick_node = node_path\n            elif node_type == "isaacsim.ros2.bridge.ROS2Context":\n                context_node = node_path\n            elif node_type == "isaacsim.sensors.physics.IsaacReadJointState":\n                read_path = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)\n                js_read_node_name = Path(read_path).name\n            elif node_type == "isaacsim.ros2.bridge.ROS2PublishJointState":\n                pub_path = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)\n                js_pub_node_name = Path(pub_path).name\n            elif node_type == "isaacsim.ros2.bridge.ROS2SubscribeJointState":\n                sub_path = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)\n                js_sub_node_name = Path(sub_path).name\n            elif node_type == "isaacsim.core.nodes.IsaacArticulationController":\n                msg = "already has an articulation controller node, CREATING A NEW ARTICULATION NODE"\n                print(msg)\n                post_notification(msg, status=NotificationStatus.WARNING)\n                art_node = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)\n                art_node_name = Path(art_node).name\n\n        if self._publisher:\n            og.Controller.edit(\n                graph_handle,\n                {\n                    keys.CREATE_NODES: [\n                        (js_read_node_name, "isaacsim.sensors.physics.IsaacReadJointState"),\n                        (js_pub_node_name, "isaacsim.ros2.bridge.ROS2PublishJointState"),\n                    ],\n                    keys.SET_VALUES: [\n                        (js_read_node_name + ".inputs:prim", [Sdf.Path(self._art_root_path)]),\n                        (js_pub_node_name + ".inputs:topicName", self._pub_topic),\n                        (js_pub_node_name + ".inputs:nodeNamespace", self._node_namespace),\n                    ],\n                    keys.CONNECT: [\n                        (\n                            js_read_node_name + ".outputs:execOut",\n                            js_pub_node_name + ".inputs:execIn",\n                        ),\n                        (\n                            js_read_node_name + ".outputs:jointNames",\n                            js_pub_node_name + ".inputs:jointNames",\n                        ),\n                        (\n                            js_read_node_name + ".outputs:jointPositions",\n                            js_pub_node_name + ".inputs:jointPositions",\n                        ),\n                        (\n                            js_read_node_name + ".outputs:jointVelocities",\n                            js_pub_node_name + ".inputs:jointVelocities",\n                        ),\n                        (\n                            js_read_node_name + ".outputs:jointEfforts",\n                            js_pub_node_name + ".inputs:jointEfforts",\n                        ),\n                        (\n                            js_read_node_name + ".outputs:jointDofTypes",\n                            js_pub_node_name + ".inputs:jointDofTypes",\n                        ),\n                        (\n                            js_read_node_name + ".outputs:stageMetersPerUnit",\n                            js_pub_node_name + ".inputs:stageMetersPerUnit",\n                        ),\n                        (\n                            js_read_node_name + ".outputs:sensorTime",\n                            js_pub_node_name + ".inputs:sensorTime",\n                        ),\n                    ],\n                },\n            )\n\n            if tick_node:\n                og.Controller.connect(\n                    og.Controller.attribute(tick_node + ".outputs:tick"),\n                    og.Controller.attribute(self._og_path + "/" + js_read_node_name + ".inputs:execIn"),\n                )\n            if context_node:\n                og.Controller.connect(\n                    og.Controller.attribute(context_node + ".outputs:context"),\n                    og.Controller.attribute(self._og_path + "/" + js_pub_node_name + ".inputs:context"),\n                )\n\n        if self._subscriber:\n            og.Controller.edit(\n                graph_handle,\n                {\n                    keys.CREATE_NODES: [\n                        (js_sub_node_name, "isaacsim.ros2.bridge.ROS2SubscribeJointState"),\n                    ],\n                    keys.SET_VALUES: [\n                        (js_sub_node_name + ".inputs:topicName", self._sub_topic),\n                        (self._og_path + "/" + js_sub_node_name + ".inputs:nodeNamespace", self._node_namespace),\n                    ],\n                },\n            )\n\n            if tick_node:\n                og.Controller.connect(\n                    og.Controller.attribute(tick_node + ".outputs:tick"),\n                    og.Controller.attribute(self._og_path + "/" + js_sub_node_name + ".inputs:execIn"),\n                )\n            if context_node:\n                og.Controller.connect(\n                    og.Controller.attribute(context_node + ".outputs:context"),\n                    og.Controller.attribute(self._og_path + "/" + js_sub_node_name + ".inputs:context"),\n                )\n\n            if self._sub_move_robot:\n                og.Controller.edit(\n                    graph_handle,\n                    {\n                        keys.CREATE_NODES: [\n                            (art_node_name, "isaacsim.core.nodes.IsaacArticulationController"),\n                        ],\n                        keys.SET_VALUES: [\n                            (art_node_name + ".inputs:targetPrim", self._art_root_path),\n                        ],\n                        keys.CONNECT: [\n                            (\n                                tick_node + ".outputs:tick",\n                                self._og_path + "/" + art_node_name + ".inputs:execIn",\n                            ),\n                            (\n                                self._og_path + "/" + js_sub_node_name + ".outputs:positionCommand",\n                                self._og_path + "/" + art_node_name + ".inputs:positionCommand",\n                            ),\n                            (\n                                self._og_path + "/" + js_sub_node_name + ".outputs:velocityCommand",\n                                self._og_path + "/" + art_node_name + ".inputs:velocityCommand",\n                            ),\n                            (\n                                self._og_path + "/" + js_sub_node_name + ".outputs:effortCommand",\n                                self._og_path + "/" + art_node_name + ".inputs:effortCommand",\n                            ),\n                            (\n                                self._og_path + "/" + js_sub_node_name + ".outputs:jointNames",\n                                self._og_path + "/" + art_node_name + ".inputs:jointNames",\n                            ),\n                        ],\n                    },\n                )\n\n'''
+          path.write_text(text[:method_start] + new_method + text[method_end:])
+
+          test_path = Path('source/extensions/isaacsim.ros2.ui/isaacsim/ros2/ui/tests/test_menu_graphs.py')
+          test_text = test_path.read_text()
+          old = '''        expected_nodes = {\n            "omni.graph.action.OnPlaybackTick",\n            "isaacsim.ros2.bridge.ROS2Context",\n            "isaacsim.core.nodes.IsaacReadSimulationTime",\n            "isaacsim.ros2.bridge.ROS2SubscribeJointState",\n            "isaacsim.ros2.bridge.ROS2PublishJointState",\n            "isaacsim.core.nodes.IsaacArticulationController",\n        }\n'''
+          new = '''        expected_nodes = {\n            "omni.graph.action.OnPlaybackTick",\n            "isaacsim.ros2.bridge.ROS2Context",\n            "isaacsim.sensors.physics.IsaacReadJointState",\n            "isaacsim.ros2.bridge.ROS2SubscribeJointState",\n            "isaacsim.ros2.bridge.ROS2PublishJointState",\n            "isaacsim.core.nodes.IsaacArticulationController",\n        }\n'''
+          if test_text.count(old) != 1:
+              raise SystemExit(f'expected node block count: {test_text.count(old)}')
+          test_path.write_text(test_text.replace(old, new, 1))
+          PY
+
+      - name: Validate Python and diff
+        shell: bash
+        run: |
+          python -m py_compile \
+            source/extensions/isaacsim.ros2.ui/isaacsim/ros2/ui/og_utils.py \
+            source/extensions/isaacsim.ros2.ui/isaacsim/ros2/ui/tests/test_menu_graphs.py
+          git diff --check
+          grep -q 'isaacsim.sensors.physics.IsaacReadJointState' \
+            source/extensions/isaacsim.ros2.ui/isaacsim/ros2/ui/og_utils.py
+
+      - name: Commit generator update
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            source/extensions/isaacsim.ros2.ui/isaacsim/ros2/ui/og_utils.py \
+            source/extensions/isaacsim.ros2.ui/isaacsim/ros2/ui/tests/test_menu_graphs.py
+          git diff --cached --check
+          git commit -m 'Use joint state reader in ROS2 menu graph'
+          git push origin HEAD:fix/ros2-joint-state-menu-reader
