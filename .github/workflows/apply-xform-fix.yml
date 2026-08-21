@@ -1,0 +1,47 @@
+name: Apply Xform pose fix
+
+on:
+  push:
+    branches:
+      - fix/xform-reset-preserve-euler-pose
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/xform-reset-preserve-euler-pose
+      - name: Apply focused source patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('source/extensions/isaacsim.core.experimental.prims/python/impl/xform_prim.py')
+          text = path.read_text()
+          marker = '        properties_to_remove = [\n'
+          replacement = '        # Capture poses before removing non-canonical xform ops.\n        positions, orientations = self.get_world_poses()\n        properties_to_remove = [\n'
+          if marker not in text:
+              raise SystemExit('properties_to_remove marker not found')
+          text = text.replace(marker, replacement, 1)
+          old_tail = '        # set pose\n        positions, orientations = self.get_world_poses()\n        self.set_world_poses(positions=positions, orientations=orientations)\n'
+          new_tail = '        # restore the poses captured before reorganizing xform operations\n        self.set_world_poses(positions=positions, orientations=orientations)\n'
+          if old_tail not in text:
+              raise SystemExit('pose restore marker not found')
+          text = text.replace(old_tail, new_tail, 1)
+          path.write_text(text)
+          PY
+      - name: Commit source fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source/extensions/isaacsim.core.experimental.prims/python/impl/xform_prim.py
+          git diff --cached --check
+          git commit -m 'Preserve poses when resetting xform operations'
+          git push origin HEAD:fix/xform-reset-preserve-euler-pose
