@@ -1,0 +1,157 @@
+name: Apply HeightmapImporter explicit-stage fix
+
+on:
+  push:
+    branches:
+      - fix/heightmap-explicit-stage
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/heightmap-explicit-stage
+
+      - name: Apply stage routing fix and tests
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path('source/extensions/isaacsim.asset.importer.heightmap/isaacsim/asset/importer/heightmap/importer.py')
+          text = source.read_text()
+
+          replacements = [
+              ('import isaacsim.core.experimental.utils.stage as stage_utils\n', ''),
+              ('from isaacsim.core.experimental.objects import GroundPlane\n', ''),
+              ('from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics\n',
+               'from pxr import Gf, PhysicsSchemaTools, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics\n'),
+              ('        stage_utils.set_stage_up_axis("Z")\n',
+               '        UsdGeom.SetStageUpAxis(self._stage, UsdGeom.Tokens.z)\n'),
+          ]
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit(f'{source}: expected one match for {old!r}, found {text.count(old)}')
+              text = text.replace(old, new, 1)
+
+          old = '''        GroundPlane(
+            GROUND_PLANE_PATH,
+            sizes=size,
+            positions=[[center_x, center_y, 0.0]],
+            colors=[1.0, 1.0, 1.0],
+        )
+'''
+          new = '''        PhysicsSchemaTools.addGroundPlane(
+            self._stage,
+            GROUND_PLANE_PATH,
+            UsdGeom.Tokens.z,
+            size / 2.0,
+            (center_x, center_y, 0.0),
+            (1.0, 1.0, 1.0),
+        )
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'{source}: ground-plane anchor count: {text.count(old)}')
+          source.write_text(text.replace(old, new, 1))
+
+          test = Path('source/extensions/isaacsim.asset.importer.heightmap/isaacsim/asset/importer/heightmap/tests/test_heightmap_importer.py')
+          text = test.read_text()
+          if text.count('from pxr import Gf\n') != 1:
+              raise SystemExit('pxr import anchor mismatch')
+          text = text.replace('from pxr import Gf\n', 'from pxr import Gf, Usd, UsdGeom\n', 1)
+
+          old = '''    @patch("isaacsim.asset.importer.heightmap.importer.UsdPhysics")
+    @patch("isaacsim.asset.importer.heightmap.importer.stage_utils")
+    @patch("isaacsim.asset.importer.heightmap.importer.UsdGeom")
+    @patch("isaacsim.asset.importer.heightmap.importer.GroundPlane")
+    @patch("isaacsim.asset.importer.heightmap.importer.UsdLux")
+    def test_create_heightmap_success(
+        self,
+        mock_usd_lux: object,
+        mock_ground_plane: object,
+        mock_usd_geom: object,
+        mock_stage_utils: object,
+        mock_usd_physics: object,
+    ) -> None:
+'''
+          new = '''    @patch("isaacsim.asset.importer.heightmap.importer.UsdPhysics")
+    @patch("isaacsim.asset.importer.heightmap.importer.PhysicsSchemaTools")
+    @patch("isaacsim.asset.importer.heightmap.importer.UsdGeom")
+    @patch("isaacsim.asset.importer.heightmap.importer.UsdLux")
+    def test_create_heightmap_success(
+        self,
+        mock_usd_lux: object,
+        mock_usd_geom: object,
+        mock_physics_schema_tools: object,
+        mock_usd_physics: object,
+    ) -> None:
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'test decorator/signature anchor count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = '''        mock_usd_geom.SetStageMetersPerUnit.assert_called_once()
+        mock_stage_utils.set_stage_up_axis.assert_called_once_with("Z")
+
+        # Verify collision API was applied
+        mock_usd_physics.CollisionAPI.Apply.assert_called_once()
+        mock_ground_plane.assert_called_once()
+'''
+          new = '''        mock_usd_geom.SetStageMetersPerUnit.assert_called_once_with(self.mock_stage, 1.0)
+        mock_usd_geom.SetStageUpAxis.assert_called_once_with(self.mock_stage, mock_usd_geom.Tokens.z)
+
+        # Verify collision API was applied and the ground plane was authored on the supplied stage.
+        mock_usd_physics.CollisionAPI.Apply.assert_called_once()
+        mock_physics_schema_tools.addGroundPlane.assert_called_once()
+        self.assertIs(mock_physics_schema_tools.addGroundPlane.call_args.args[0], self.mock_stage)
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'test assertions anchor count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          marker = '''    def test_initialization_without_stage(self) -> None:
+        """Test initialization without a provided stage."""
+        importer = HeightmapImporter()
+        self.assertIsNone(importer._stage)
+
+'''
+          addition = marker + '''    def test_setup_stage_properties_uses_provided_stage(self) -> None:
+        """Stage metadata should be authored on the stage passed to the importer."""
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
+
+        importer = HeightmapImporter(stage)
+        importer._setup_stage_properties()
+
+        self.assertEqual(UsdGeom.GetStageUpAxis(stage), UsdGeom.Tokens.z)
+        self.assertEqual(UsdGeom.GetStageMetersPerUnit(stage), 1.0)
+
+'''
+          if text.count(marker) != 1:
+              raise SystemExit(f'test insertion marker count: {text.count(marker)}')
+          test.write_text(text.replace(marker, addition, 1))
+          PY
+
+      - name: Validate and commit
+        shell: bash
+        run: |
+          python -m py_compile \
+            source/extensions/isaacsim.asset.importer.heightmap/isaacsim/asset/importer/heightmap/importer.py \
+            source/extensions/isaacsim.asset.importer.heightmap/isaacsim/asset/importer/heightmap/tests/test_heightmap_importer.py
+          git diff --check
+          grep -q 'UsdGeom.SetStageUpAxis(self._stage, UsdGeom.Tokens.z)' \
+            source/extensions/isaacsim.asset.importer.heightmap/isaacsim/asset/importer/heightmap/importer.py
+          grep -q 'PhysicsSchemaTools.addGroundPlane' \
+            source/extensions/isaacsim.asset.importer.heightmap/isaacsim/asset/importer/heightmap/importer.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            source/extensions/isaacsim.asset.importer.heightmap/isaacsim/asset/importer/heightmap/importer.py \
+            source/extensions/isaacsim.asset.importer.heightmap/isaacsim/asset/importer/heightmap/tests/test_heightmap_importer.py
+          git commit -m 'Honor explicit HeightmapImporter stage'
+          git push origin HEAD:fix/heightmap-explicit-stage
