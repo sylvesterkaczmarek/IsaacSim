@@ -1,0 +1,223 @@
+name: Apply organized PointCloud2 support
+
+on:
+  push:
+    branches:
+      - feat/ros2-organized-point-cloud
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ros2-organized-point-cloud
+
+      - name: Add shape and density metadata
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count} for {old[:80]!r}")
+              path.write_text(text.replace(old, new, 1))
+
+          def replace_count(path: Path, old: str, new: str, expected: int) -> None:
+              text = path.read_text()
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f"{path}: expected {expected} matches, found {count} for {old[:80]!r}")
+              path.write_text(text.replace(old, new))
+
+          ogn = Path('source/extensions/isaacsim.ros2.nodes/nodes/OgnROS2PublishPointCloud.ogn')
+          replace_once(ogn, '        "version": 3,\n', '        "version": 4,\n')
+          replace_once(
+              ogn,
+              '''            "dataPtr": {
+''',
+              '''            "height": {
+                "type": "uint",
+                "description": "Point cloud height. Use 1 for an unorganized cloud.",
+                "default": 1
+            },
+            "width": {
+                "type": "uint",
+                "description": "Point cloud width. A value of 0 infers width from the point count and height.",
+                "default": 0
+            },
+            "isDense": {
+                "type": "bool",
+                "description": "Whether all points in the PointCloud2 message are finite and valid.",
+                "default": true
+            },
+            "dataPtr": {
+''',
+          )
+
+          publisher_h = Path('source/extensions/isaacsim.ros2.nodes/include/isaacsim/ros2/nodes/PointCloudPublisher.h')
+          replace_once(
+              publisher_h,
+              '''    float* radialVelocityMSPtr = nullptr; ///< Per-point radial velocity (m/s).
+};
+''',
+              '''    float* radialVelocityMSPtr = nullptr; ///< Per-point radial velocity (m/s).
+    uint32_t height = 1; ///< Point cloud height. One denotes an unorganized cloud.
+    uint32_t width = 0; ///< Point cloud width. Zero infers it from point count and height.
+    bool isDense = true; ///< Whether every point is finite and valid.
+};
+''',
+          )
+
+          node_cpp = Path('source/extensions/isaacsim.ros2.nodes/nodes/OgnROS2PublishPointCloud.cpp')
+          replace_once(
+              node_cpp,
+              '''        metadata.radialVelocityMSPtr =
+            db.inputs.outputRadialVelocityMS() ? reinterpret_cast<float*>(db.inputs.radialVelocityMSPtr()) : nullptr;
+
+''',
+              '''        metadata.radialVelocityMSPtr =
+            db.inputs.outputRadialVelocityMS() ? reinterpret_cast<float*>(db.inputs.radialVelocityMSPtr()) : nullptr;
+        metadata.height = db.inputs.height();
+        metadata.width = db.inputs.width();
+        metadata.isDense = db.inputs.isDense();
+
+''',
+          )
+          replace_count(
+              node_cpp,
+              'metadata.echoIdPtr, metadata.tickStatePtr, metadata.radialVelocityMSPtr);',
+              'metadata.echoIdPtr, metadata.tickStatePtr, metadata.radialVelocityMSPtr, metadata.height, metadata.width, metadata.isDense);',
+              2,
+          )
+
+          publisher_cpp = Path('source/extensions/isaacsim.ros2.nodes/library/PointCloudPublisher.cpp')
+          replace_count(
+              publisher_cpp,
+              'metadata.tickStatePtr, metadata.radialVelocityMSPtr);',
+              'metadata.tickStatePtr, metadata.radialVelocityMSPtr, metadata.height, metadata.width, metadata.isDense);',
+              2,
+          )
+
+          message_h = Path('source/extensions/isaacsim.ros2.core/include/isaacsim/ros2/core/Ros2Message.h')
+          replace_once(
+              message_h,
+              '''     * @param[in] radialVelocityMSPtr Pointer to the radial velocity data
+     */
+''',
+              '''     * @param[in] radialVelocityMSPtr Pointer to the radial velocity data
+     * @param[in] height Point cloud height. One denotes an unorganized cloud.
+     * @param[in] width Point cloud width. Zero infers it from point count and height.
+     * @param[in] isDense Whether all points are finite and valid.
+     */
+''',
+          )
+          replace_once(
+              message_h,
+              '''                                uint8_t* tickStatePtr,
+                                float* radialVelocityMSPtr) = 0;
+''',
+              '''                                uint8_t* tickStatePtr,
+                                float* radialVelocityMSPtr,
+                                uint32_t height = 1,
+                                uint32_t width = 0,
+                                bool isDense = true) = 0;
+''',
+          )
+
+          impl_h = Path('source/extensions/isaacsim.ros2.core/library/backend/Ros2Impl.h')
+          replace_once(
+              impl_h,
+              '''                                uint8_t* tickStatePtr,
+                                float* radialVelocityMSPtr);
+''',
+              '''                                uint8_t* tickStatePtr,
+                                float* radialVelocityMSPtr,
+                                uint32_t height,
+                                uint32_t width,
+                                bool isDense);
+''',
+          )
+
+          message_cpp = Path('source/extensions/isaacsim.ros2.core/library/backend/Ros2Message.cpp')
+          replace_once(
+              message_cpp,
+              '''                                               uint8_t* tickStatePtr,
+                                               float* radialVelocityMSPtr)
+''',
+              '''                                               uint8_t* tickStatePtr,
+                                               float* radialVelocityMSPtr,
+                                               uint32_t height,
+                                               uint32_t width,
+                                               bool isDense)
+''',
+          )
+          replace_once(
+              message_cpp,
+              '    pointCloudMsg->is_dense = true;\n',
+              '    pointCloudMsg->is_dense = isDense;\n',
+          )
+          replace_once(
+              message_cpp,
+              '''    // Set message size and shape
+    pointCloudMsg->height = 1;
+    pointCloudMsg->width = static_cast<uint32_t>(m_numPoints);
+    pointCloudMsg->point_step = static_cast<uint32_t>(m_pointStep);
+    pointCloudMsg->row_step = static_cast<uint32_t>(m_pointStep * m_numPoints);
+''',
+              '''    // Resolve message shape. Existing callers keep the historical 1 x N layout.
+    uint32_t resolvedHeight = height == 0 ? 1 : height;
+    uint32_t resolvedWidth = width;
+    if (resolvedWidth == 0 && m_numPoints % resolvedHeight == 0)
+    {
+        resolvedWidth = static_cast<uint32_t>(m_numPoints / resolvedHeight);
+    }
+    if (resolvedWidth == 0 || static_cast<size_t>(resolvedHeight) * resolvedWidth != m_numPoints)
+    {
+        fprintf(stderr,
+                "[Ros2PointCloudMessage] Invalid organized cloud shape %u x %u for %zu points; falling back to 1 x N\\n",
+                resolvedHeight, resolvedWidth, m_numPoints);
+        resolvedHeight = 1;
+        resolvedWidth = static_cast<uint32_t>(m_numPoints);
+    }
+
+    pointCloudMsg->height = resolvedHeight;
+    pointCloudMsg->width = resolvedWidth;
+    pointCloudMsg->point_step = static_cast<uint32_t>(m_pointStep);
+    pointCloudMsg->row_step = static_cast<uint32_t>(m_pointStep * resolvedWidth);
+''',
+          )
+          PY
+
+      - name: Validate interfaces and tests
+        shell: bash
+        run: |
+          python -m json.tool source/extensions/isaacsim.ros2.nodes/nodes/OgnROS2PublishPointCloud.ogn >/dev/null
+          python -m py_compile source/extensions/isaacsim.ros2.nodes/python/tests/test_point_cloud_shape.py
+          git diff --check
+          grep -q 'metadata.height = db.inputs.height()' source/extensions/isaacsim.ros2.nodes/nodes/OgnROS2PublishPointCloud.cpp
+          grep -q 'pointCloudMsg->height = resolvedHeight' source/extensions/isaacsim.ros2.core/library/backend/Ros2Message.cpp
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            source/extensions/isaacsim.ros2.nodes/nodes/OgnROS2PublishPointCloud.ogn \
+            source/extensions/isaacsim.ros2.nodes/nodes/OgnROS2PublishPointCloud.cpp \
+            source/extensions/isaacsim.ros2.nodes/include/isaacsim/ros2/nodes/PointCloudPublisher.h \
+            source/extensions/isaacsim.ros2.nodes/library/PointCloudPublisher.cpp \
+            source/extensions/isaacsim.ros2.core/include/isaacsim/ros2/core/Ros2Message.h \
+            source/extensions/isaacsim.ros2.core/library/backend/Ros2Impl.h \
+            source/extensions/isaacsim.ros2.core/library/backend/Ros2Message.cpp
+          git diff --cached --check
+          git commit -m 'Support organized ROS2 point cloud messages'
+          git push origin HEAD:feat/ros2-organized-point-cloud
