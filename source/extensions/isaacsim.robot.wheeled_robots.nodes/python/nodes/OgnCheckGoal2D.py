@@ -103,7 +103,8 @@ class OgnCheckGoal2D:
 
         # compare & output if diff between current pos/rot and target pos/rot is above threshold limits
         t = db.inputs.thresholds
-        db.outputs.reachedGoal = [np.hypot(x - state.target[0], y - state.target[1]) <= t[0], rot <= t[1]]
+        yaw_error = abs(normalize_angle(rot - state.target[2]))
+        db.outputs.reachedGoal = [np.hypot(x - state.target[0], y - state.target[1]) <= t[0], yaw_error <= t[1]]
 
         # begin next node (steering control)
         db.outputs.execOut = og.ExecutionAttributeState.ENABLED
