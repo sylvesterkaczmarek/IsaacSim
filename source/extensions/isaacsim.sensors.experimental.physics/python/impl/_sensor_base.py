@@ -25,7 +25,7 @@ Mirrors the pattern in ``isaacsim.sensors.experimental.rtx``:
   ``_SensorStepManager`` registration, timeline-stop reset). Concrete sensors
   override ``_acquire_interface`` and ``_get_invalid_reading``.
 - :class:`_PhysicsSensorRuntime` extends :class:`_PhysicsSensorRuntimeBase` for
-  sensors that pair with an authoring class. Concrete sensors (e.g.
+  sensors that pair with an authoring class. Concrete classes (e.g.
   :class:`IMUSensor`) define ``_AUTHORING_CLASS`` and ``_AUTHORING_ATTR``.
   Sensors with no authoring class (e.g. :class:`EffortSensor`) inherit
   :class:`_PhysicsSensorRuntimeBase` directly.
