@@ -20,6 +20,17 @@ import os
 import platform
 import sys
 
+
+def _log_warning(message: str) -> None:
+    """Log a package warning through Carbonite when it is available."""
+    try:
+        import carb
+
+        carb.log_warn(message)
+    except ImportError:
+        print(f"[Warning] {message}")
+
+
 # Workaround for PyTorch >=2.9 c10.dll WinError 1114 (pytorch/pytorch#166628).
 # Kit's sitecustomize.py registers DLL directories via os.add_dll_directory()
 # before Python code runs. When torch's _load_dll_libraries() later calls
@@ -150,16 +161,16 @@ def bootstrap_kernel():
         os.path.join(isaacsim_path, "exts", "isaacsim.simulation_app"),
     ]
     # update sys.path
-    import carb
-
     for path in paths:
         if not path in sys.path:
             if not os.path.exists(path):
-                carb.log_warn(f"PYTHONPATH: path doesn't exist ({path})")
+                _log_warning(f"PYTHONPATH: path doesn't exist ({path})")
                 continue
             sys.path.insert(0, path)
 
     # log info
+    import carb
+
     carb.log_info(f"Isaac Sim path: {isaacsim_path}")
     carb.log_info(f"Kit path: {kit_path}")
 
@@ -190,12 +201,12 @@ def expose_api():
                 sys.modules["isaacsim.simulation_app.SimulationApp"] = SimulationApp
                 sys.modules["isaacsim.simulation_app.AppFramework"] = AppFramework
             else:
-                print(
-                    "[Warning] Unable to expose 'isaacsim.simulation_app' API: Extension not found. "
+                _log_warning(
+                    "Unable to expose 'isaacsim.simulation_app' API: Extension not found. "
                     "Please install 'isaacsim[all,extscache]' to install the full Isaac Sim bundle"
                 )
         except ImportError as e:
-            print(f"[Warning] Unable to expose 'isaacsim.simulation_app' API: {e}")
+            _log_warning(f"Unable to expose 'isaacsim.simulation_app' API: {e}")
     return AppFramework, SimulationApp
 
 
@@ -262,7 +273,7 @@ def exception_handler(exc_type, exc_value, exc_traceback):
     ret = _excepthook(exc_type, exc_value, exc_traceback)
     if issubclass(exc_type, (ImportError, ModuleNotFoundError)):
         if not hasattr(builtins, "ISAACSIM_APP_LAUNCHED"):
-            print("""
+            _log_warning("""
 ========================================================================
 WARNING: Omniverse/Isaac Sim import statements must take place after the
 `SimulationApp` class has been instantiated. It is a requirement of the
