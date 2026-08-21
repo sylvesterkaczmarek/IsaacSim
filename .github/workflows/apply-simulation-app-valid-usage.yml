@@ -1,0 +1,55 @@
+name: Fix SimulationApp usage example
+
+on:
+  push:
+    branches:
+      - docs/simulation-app-valid-usage
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/simulation-app-valid-usage
+
+      - name: Fix usage example
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('source/extensions/isaacsim.simulation_app/isaacsim/simulation_app/simulation_app.py')
+          text = path.read_text()
+          old = '''        config = {
+             width: "1280",
+             height: "720",
+             headless: False,
+        }
+'''
+          new = '''        config = {
+            "width": 1280,
+            "height": 720,
+            "headless": False,
+        }
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'usage example anchor count: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Validate and commit
+        shell: bash
+        run: |
+          python -m py_compile source/extensions/isaacsim.simulation_app/isaacsim/simulation_app/simulation_app.py
+          git diff --check
+          grep -q '"width": 1280' source/extensions/isaacsim.simulation_app/isaacsim/simulation_app/simulation_app.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source/extensions/isaacsim.simulation_app/isaacsim/simulation_app/simulation_app.py
+          git commit -m 'Fix SimulationApp usage example'
+          git push origin HEAD:docs/simulation-app-valid-usage
