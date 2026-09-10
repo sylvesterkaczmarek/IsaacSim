@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.9.0] - 2026-07-27
+### Added
+- Add `Stage` object
+
 ## [0.8.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

@@ -16,7 +16,7 @@
 #include <carb/BindingsUtils.h>
 
 #include <doctest/doctest.h>
-#include <isaacsim/sensors/experimental/physics/IImuSensor.h>
+#include <isaacsim/sensors/experimental/physics/IImuSensor.hpp>
 
 #include <cmath>
 #include <vector>

@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.1.9] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [4.1.8] - 2026-07-07
+### Changed
+- Update the generated Python API inventory.
+
 ## [4.1.7] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

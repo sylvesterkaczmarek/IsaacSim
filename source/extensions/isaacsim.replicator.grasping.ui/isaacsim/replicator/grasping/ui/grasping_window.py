@@ -558,7 +558,7 @@ class GraspingWindow(ui.Window):
     def _build_joints_target_positions_frame(self, phase_name: str) -> None:
         """Build the joint target positions frame UI for a specific grasp phase.
 
-        Creates UI controls for setting target joint positions within the specified grasp phase, ensuring all included joints are represented and displaying joint-specific input fields.
+        Creates UI controls for the joint drive targets already stored on the specified grasp phase.
 
         Args:
             phase_name: Name of the grasp phase to build joint target controls for.
@@ -573,14 +573,6 @@ class GraspingWindow(ui.Window):
             with ui.VStack(spacing=5):
                 phase = self._grasping_manager.get_grasp_phase_by_name(phase_name)
                 if phase:
-                    # Ensure all included joints are represented in the phase's targets
-                    for joint_data in self._joint_ui_data:
-                        if joint_data["include"] and joint_data["is_valid_grasp_joint"]:
-                            absolute_path = joint_data["path"]
-                            if not phase.has_joint(absolute_path):
-                                # Add with default target 0.0 if missing
-                                phase.add_joint(absolute_path)
-
                     # Display joint targets relevant to the current gripper
                     gripper_path_prefix = self._grasping_manager.gripper_path
                     joint_targets_to_display = {}
@@ -698,8 +690,8 @@ class GraspingWindow(ui.Window):
         - Removes joints from phases if they are no longer selected for inclusion in the UI
           or if they do not belong to the currently loaded gripper.
 
-        This is typically called after the gripper changes, UI visibility flags change,
-        or a configuration is loaded, to ensure phase definitions match the UI state.
+        This is typically called after the gripper changes or UI visibility flags change,
+        to ensure phase definitions match the UI state.
 
         Returns:
             None.
@@ -727,32 +719,32 @@ class GraspingWindow(ui.Window):
                         phase.remove_joint(absolute_path)
 
     def _update_ui_joint_selection_from_loaded_phases(self) -> None:
-        """Update the UI's joint 'include' checkboxes based on loaded grasp phases.
+        """Update the UI's joint include checkboxes from loaded grasp phases.
 
-        This function is primarily intended to be called after loading a configuration file.
-        It examines the `joint_drive_targets` of the *first* grasp phase loaded from the
-        config and sets the 'include' state of the corresponding joints in the UI's
-        internal `_joint_ui_data` list. This makes the UI checkboxes reflect the
-        joint selection saved in the configuration.
-
-        Note:
-            This method currently relies solely on the *first* grasp phase to determine
-            which joints should be marked as included in the UI. It assumes the first
-            phase in a saved configuration represents the intended set of active joints.
+        Call this after loading a configuration. Joints that appear in any loaded phase
+        are marked included in the UI. Each phase keeps the joint drive targets persisted
+        in the configuration; membership is not rewritten to match a single global set.
         """
-        # Get joint paths from first grasp phase to determine which joints are included
         included_joint_paths = set()
-        grasp_phases = self._grasping_manager.grasp_phases
-        if grasp_phases:
-            included_joint_paths = set(grasp_phases[0].joint_drive_targets.keys())
+        for phase in self._grasping_manager.grasp_phases:
+            included_joint_paths.update(phase.joint_drive_targets.keys())
 
-        # Update joint inclusion states and refresh UI
-        core_joint_info = grasping_utils.get_gripper_joints_info(self._grasping_manager.gripper_path)
-        for joint_data in core_joint_info:
-            if joint_data["is_valid_grasp_joint"]:
-                joint_data["include"] = joint_data["path"] in included_joint_paths
+        had_joints = bool(self._joint_ui_data)
+        self._clear_gripper_joints()
+        self._load_gripper_joints()
 
-        self._rebuild_ui_if_joints_changed()
+        if included_joint_paths:
+            for joint_data in self._joint_ui_data:
+                if joint_data["is_valid_grasp_joint"]:
+                    joint_data["include"] = joint_data["path"] in included_joint_paths
+        else:
+            # No persisted phase joints: include all valid joints and seed empty phases.
+            self._sync_phase_joints_with_ui_selection()
+
+        if had_joints or self._joint_ui_data:
+            asyncio.ensure_future(
+                asyncio.gather(self._rebuild_gripper_frame_async(), self._rebuild_workflow_frame_async())
+            )
 
     # ==============================================================================
     # Object UI Building and Logic
@@ -1318,8 +1310,8 @@ class GraspingWindow(ui.Window):
         """Handle adding a new grasp phase to the grasping manager.
 
         Creates a new grasp phase with the name specified in the phase name field and adds it to the manager.
-        Validates that the name is not empty and does not already exist (case-insensitive).
-        Rebuilds the gripper UI frame after successful addition.
+        Seeds the phase with joints currently marked included in the UI. Validates that the name is not empty
+        and does not already exist (case-insensitive). Rebuilds the gripper UI frame after successful addition.
 
         Returns:
             None.
@@ -1332,8 +1324,11 @@ class GraspingWindow(ui.Window):
             carb.log_warn(f"Grasp phase '{self._new_grasp_phase_name}' already exists (case-insensitive).")
             return
 
-        # Create and add the new phase to the manager
-        self._grasping_manager.create_and_add_grasp_phase(name=self._new_grasp_phase_name)
+        # Create and add the new phase to the manager, seeded with currently included joints.
+        new_phase = self._grasping_manager.create_and_add_grasp_phase(name=self._new_grasp_phase_name)
+        for joint_data in self._joint_ui_data:
+            if joint_data["is_valid_grasp_joint"] and joint_data["include"]:
+                new_phase.add_joint(joint_data["path"])
         self._new_grasp_phase_name = ""
         asyncio.ensure_future(self._rebuild_gripper_frame_async())
 

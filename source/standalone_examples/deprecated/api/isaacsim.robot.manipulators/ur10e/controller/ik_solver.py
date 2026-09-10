@@ -23,7 +23,12 @@ from isaacsim.robot_motion.motion_generation import ArticulationKinematicsSolver
 
 
 class KinematicsSolver(ArticulationKinematicsSolver):
-    """Kinematics solver for UR10e robot using Lula IK."""
+    """Kinematics solver for UR10e robot using Lula IK.
+
+    Args:
+        robot_articulation: UR10e articulation whose joint targets the solver should compute.
+        end_effector_frame_name: Frame to solve for. When ``None``, use the Robotiq gripper base frame.
+    """
 
     def __init__(self, robot_articulation: Articulation, end_effector_frame_name: Optional[str] = None) -> None:
         # TODO: change the config path

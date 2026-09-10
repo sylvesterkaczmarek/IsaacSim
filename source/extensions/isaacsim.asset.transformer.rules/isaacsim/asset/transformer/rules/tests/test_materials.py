@@ -396,3 +396,132 @@ class TestMaterialsRoutingRule(omni.kit.test.AsyncTestCase):
         self.assertIn("PhysicsMaterialAPI", phys_prim.GetAppliedSchemas())
 
         self._success = True
+
+    async def test_udim_detection_and_matching_helpers(self) -> None:
+        """Verify UDIM token detection, canonicalization, and tile matching."""
+        # Detection covers the canonical and URL-encoded token forms.
+        self.assertTrue(MaterialsRoutingRule._is_udim_path("Textures/albedo.<UDIM>.png"))
+        self.assertTrue(MaterialsRoutingRule._is_udim_path("Textures/albedo.%3CUDIM%3E.png"))
+        self.assertFalse(MaterialsRoutingRule._is_udim_path("Textures/albedo.1001.png"))
+        self.assertFalse(MaterialsRoutingRule._is_udim_path(""))
+
+        # Both token forms canonicalize to <UDIM>.
+        self.assertEqual(MaterialsRoutingRule._canonical_udim_name("albedo.%3CUDIM%3E.png"), "albedo.<UDIM>.png")
+        self.assertEqual(MaterialsRoutingRule._canonical_udim_name("albedo.<UDIM>.png"), "albedo.<UDIM>.png")
+
+        # The tile matcher accepts four-digit tiles and rejects look-alikes.
+        matcher = MaterialsRoutingRule._udim_filename_matcher("albedo.%3CUDIM%3E.png")
+        self.assertIsNotNone(matcher)
+        self.assertTrue(matcher.match("albedo.1001.png"))
+        self.assertTrue(matcher.match("albedo.1024.png"))
+        self.assertFalse(matcher.match("albedo.png"))
+        self.assertFalse(matcher.match("albedo.101.png"))
+        self.assertFalse(matcher.match("albedo_extra.1001.png"))
+
+        # A non-UDIM filename yields no matcher.
+        self.assertIsNone(MaterialsRoutingRule._udim_filename_matcher("albedo.1001.png"))
+        self._success = True
+
+    async def test_expand_local_udim_tiles(self) -> None:
+        """Verify local UDIM templates expand to the concrete tiles on disk."""
+        src_dir = os.path.join(self._tmpdir, "src_textures")
+        os.makedirs(src_dir, exist_ok=True)
+        for name in ("albedo.1001.png", "albedo.1002.png", "albedo.png", "normal.1001.png"):
+            with open(os.path.join(src_dir, name), "wb") as f:
+                f.write(b"\x89PNG\r\n\x1a\n")
+
+        rule = MaterialsRoutingRule(
+            source_stage=Usd.Stage.CreateInMemory(),
+            package_root=self._tmpdir,
+            destination_path="payloads",
+            args={},
+        )
+
+        tiles = rule._expand_local_udim_tiles(os.path.join(src_dir, "albedo.<UDIM>.png"))
+        self.assertEqual(
+            [os.path.basename(t) for t in tiles],
+            ["albedo.1001.png", "albedo.1002.png"],
+        )
+        self._success = True
+
+    async def test_process_rule_expands_local_udim_textures(self) -> None:
+        """Verify a UDIM material downloads/copies every tile and rewrites the template."""
+        src_tex_dir = os.path.join(self._tmpdir, "src_textures")
+        os.makedirs(src_tex_dir, exist_ok=True)
+        tile_names = ("albedo.1001.png", "albedo.1002.png", "albedo.1003.png")
+        for name in tile_names:
+            with open(os.path.join(src_tex_dir, name), "wb") as f:
+                f.write(b"\x89PNG\r\n\x1a\n" + bytes(8))
+
+        stage_path = os.path.join(self._tmpdir, "udim_test.usda")
+        stage = Usd.Stage.CreateNew(stage_path)
+        stage.SetMetadata("metersPerUnit", 1.0)
+        stage.SetMetadata("upAxis", "Z")
+        root = UsdGeom.Xform.Define(stage, "/root")
+        stage.SetDefaultPrim(root.GetPrim())
+
+        mat = UsdShade.Material.Define(stage, "/root/Materials/UdimMat")
+        shader = UsdShade.Shader.Define(stage, "/root/Materials/UdimMat/Shader")
+        shader.CreateIdAttr("UsdUVTexture")
+        template_src = os.path.join(src_tex_dir, "albedo.<UDIM>.png")
+        shader.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath(template_src))
+        mat.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
+
+        mesh = UsdGeom.Mesh.Define(stage, "/root/body/Mesh")
+        mesh.GetPointsAttr().Set([Gf.Vec3f(0, 0, 0), Gf.Vec3f(1, 0, 0), Gf.Vec3f(0, 1, 0)])
+        mesh.GetFaceVertexCountsAttr().Set([3])
+        mesh.GetFaceVertexIndicesAttr().Set([0, 1, 2])
+        UsdShade.MaterialBindingAPI.Apply(mesh.GetPrim())
+        UsdShade.MaterialBindingAPI(mesh.GetPrim()).Bind(mat)
+
+        stage.Export(stage_path)
+        stage = Usd.Stage.Open(stage_path)
+
+        os.makedirs(os.path.join(self._tmpdir, "payloads"), exist_ok=True)
+        rule = MaterialsRoutingRule(
+            source_stage=stage,
+            package_root=self._tmpdir,
+            destination_path="payloads",
+            args={
+                "params": {
+                    "materials_layer": "materials.usda",
+                    "textures_folder": "Textures",
+                    "download_textures": True,
+                }
+            },
+        )
+
+        rule.process_rule()
+
+        # Every concrete tile must be transferred into the Textures folder.
+        textures_dir = os.path.join(self._tmpdir, "Textures")
+        for name in tile_names:
+            self.assertTrue(
+                os.path.exists(os.path.join(textures_dir, name)),
+                f"UDIM tile {name} was not transferred",
+            )
+
+        log = rule.get_operation_log()
+        self.assertTrue(any("Transferred 3 UDIM tile(s)" in msg for msg in log))
+
+        # The material reference must use a local, relative <UDIM> template.
+        materials_path = os.path.join(self._tmpdir, "payloads", "materials.usda")
+        mat_layer = Sdf.Layer.FindOrOpen(materials_path)
+        self.assertIsNotNone(mat_layer)
+        mat_text = mat_layer.ExportToString()
+        self.assertIn("albedo.<UDIM>.png", mat_text)
+        self.assertNotIn(src_tex_dir, mat_text)
+
+        materials_stage = Usd.Stage.Open(materials_path)
+        found_template = False
+        for prim in materials_stage.Traverse():
+            file_attr = prim.GetAttribute("inputs:file")
+            if not file_attr or not file_attr.HasAuthoredValue():
+                continue
+            value = file_attr.Get()
+            if isinstance(value, Sdf.AssetPath):
+                self.assertFalse(os.path.isabs(value.path), f"UDIM path must be relative: {value.path}")
+                self.assertIn("<UDIM>", value.path)
+                found_template = True
+        self.assertTrue(found_template, "Expected a rewritten UDIM template in the materials layer")
+        self._success = True

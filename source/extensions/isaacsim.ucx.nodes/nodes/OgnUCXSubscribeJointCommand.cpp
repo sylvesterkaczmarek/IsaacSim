@@ -15,7 +15,7 @@
 
 
 #include <flatbuffers/flatbuffers.h>
-#include <isaacsim/ucx/nodes/UcxSubscribeJointCommandNodeBase.h>
+#include <isaacsim/ucx/nodes/UcxSubscribeJointCommandNodeBase.hpp>
 
 #include <OgnUCXSubscribeJointCommandDatabase.h>
 #include <joint_command_generated.h>

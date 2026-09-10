@@ -27,7 +27,7 @@ from .xrdf_io import is_xrdf_file, on_filter_xrdf_item
 # from a standalone Python environment without Kit. Not exposed in __all__ for
 # the same reason (see .cursor/rules/pip_packaging.mdc).
 try:
-    from .extension import Extension  # noqa: F401
+    from .extension import Extension as Extension
 except ImportError:
     pass
 
@@ -36,8 +36,8 @@ __all__ = [
     "EditorState",
     "UIBuilder",
     "articulation_discovery",
-    "is_yaml_file",
     "is_xrdf_file",
-    "on_filter_xrdf_item",
+    "is_yaml_file",
     "on_filter_item",
+    "on_filter_xrdf_item",
 ]

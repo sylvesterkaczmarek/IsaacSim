@@ -1,0 +1,59 @@
+{
+    "ZMQPublishJointStates": {
+        "version": 1,
+        "icon": "icons/isaac-sim.svg",
+        "description": "Publishes robot joint positions and velocities via ZMQ as a JointStates protobuf message",
+        "metadata": {
+            "uiName": "ZMQ Publish Joint States"
+        },
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": "isaacZmq",
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "The input execution port"
+            },
+            "ip": {
+                "type": "string",
+                "description": "Remote IP address of the ZMQ server",
+                "default": "localhost"
+            },
+            "port": {
+                "type": "uint",
+                "description": "Remote port number of the ZMQ server",
+                "default": 5561
+            },
+            "topicName": {
+                "type": "string",
+                "description": "ZMQ topic published on (first multipart frame); defaults to the message type. Set a unique value (e.g. \"robot_0/joint_states\") to distinguish multiple data sources.",
+                "default": "joint_states"
+            },
+            "timestamp": {
+                "type": "double",
+                "description": "Simulation timestamp in seconds",
+                "default": 0.0
+            },
+            "jointNames": {
+                "type": "token[]",
+                "description": "Ordered joint names matching the positions and velocities arrays",
+                "default": []
+            },
+            "positions": {
+                "type": "double[]",
+                "description": "Current joint positions in radians",
+                "default": []
+            },
+            "velocities": {
+                "type": "double[]",
+                "description": "Current joint velocities in radians per second",
+                "default": []
+            }
+        },
+        "outputs": {
+            "execOut": {
+                "type": "execution",
+                "description": "Fires every tick after the message is published"
+            }
+        }
+    }
+}

@@ -17,11 +17,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 import carb
 import carb.eventdispatcher
 import carb.events
+import isaacsim.core.experimental.utils.backend as backend_utils
+import isaacsim.core.experimental.utils.prim as prim_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
+import numpy as np
 import omni.kit.app
 import omni.kit.commands
 from pxr import Sdf, Usd
@@ -54,11 +59,11 @@ def create_exposed_variable(
     Returns:
         The created or existing USD attribute.
     """
-    attr = prim.GetAttribute(full_attr_name)
-    if attr:
+    attribute_exists = full_attr_name in prim_utils.get_prim_attribute_names(prim)
+    attr = prim_utils.create_prim_attribute(prim, name=full_attr_name, type_name=attr_type)
+    if attribute_exists:
         return attr
-    attr = prim.CreateAttribute(full_attr_name, attr_type)
-    attr.Set(default_value)
+    prim_utils.set_prim_attribute_value(prim, full_attr_name, default_value)
     if doc:
         attr.SetDocumentation(doc)
     return attr
@@ -118,12 +123,12 @@ def check_if_exposed_variables_should_be_removed(prim: Usd.Prim, script_file_pat
         # Invalid prim, cannot remove variables
         return False
 
-    scripts_attr = prim.GetAttribute("omni:scripting:scripts")
-    if not scripts_attr:
+    scripts_attr_name = "omni:scripting:scripts"
+    if scripts_attr_name not in prim_utils.get_prim_attribute_names(prim):
         # No scripts attribute, remove variables
         return True
 
-    scripts_paths: Sdf.AssetPathArray = scripts_attr.Get()
+    scripts_paths: Sdf.AssetPathArray = prim_utils.get_prim_attribute_value(prim, scripts_attr_name)
     if not scripts_paths:
         # Empty scripts attribute, remove variables
         return True
@@ -141,25 +146,21 @@ def remove_exposed_variable(prim: Usd.Prim, full_attr_name: str, remove_from_fab
         remove_from_fabric: Whether to also remove the attribute from fabric.
     """
     if prim is None or not prim.IsValid():
-        carb.log_warn(f"Prim {prim.GetPath()} is not valid, cannot remove exposed variable {full_attr_name}")
+        carb.log_warn(f"Prim is not valid, cannot remove exposed variable {full_attr_name}")
         return
-    attr = prim.GetAttribute(full_attr_name)
-    if attr:
-        prim.RemoveProperty(attr.GetName())
-        # Remove the attribute from fabric as well
-        if remove_from_fabric:
-            import usdrt
-            from pxr import UsdUtils
-
-            stage = prim.GetStage()
-            stage_id = UsdUtils.StageCache.Get().GetId(stage).ToLongInt()
-            stage_rt = usdrt.Usd.Stage.Attach(stage_id)
-            prim_rt = stage_rt.GetPrimAtPath(usdrt.Sdf.Path(prim.GetPath().pathString))
-            attr_rt = prim_rt.GetAttribute(full_attr_name)
-            if attr_rt:
-                prim_rt.RemoveProperty(full_attr_name)
-    else:
+    if full_attr_name not in prim_utils.get_prim_attribute_names(prim):
         carb.log_warn(f"Attribute {full_attr_name} not found on {prim.GetPath()}")
+        return
+
+    prim_path = prim_utils.get_prim_path(prim)
+    prim_utils.delete_prim_attribute(prim, full_attr_name)
+
+    # Remove the stale Fabric property immediately instead of waiting for stage synchronization.
+    if remove_from_fabric:
+        with backend_utils.use_backend("usdrt"):
+            prim_rt = prim_utils.get_prim_at_path(prim_path)
+            if full_attr_name in prim_utils.get_prim_attribute_names(prim_rt):
+                prim_utils.delete_prim_attribute(prim_rt, full_attr_name)
 
 
 def remove_exposed_variables(prim: Usd.Prim, exposed_attr_ns: str, behavior_ns: str, variables_to_expose: dict) -> None:
@@ -192,11 +193,9 @@ def get_exposed_variable(prim: Usd.Prim, full_attr_name: str) -> Any:
     if prim is None or not prim.IsValid():
         carb.log_warn(f"Prim is not valid, cannot receive exposed variable {full_attr_name}")
         return None
-    attr = prim.GetAttribute(full_attr_name)
-    if attr:
-        return attr.Get()
-    else:
-        return None
+    if full_attr_name in prim_utils.get_prim_attribute_names(prim):
+        return prim_utils.get_prim_attribute_value(prim, full_attr_name)
+    return None
 
 
 def set_exposed_variables(prim: Usd.Prim, exposed_variables: dict) -> None:
@@ -207,14 +206,13 @@ def set_exposed_variables(prim: Usd.Prim, exposed_variables: dict) -> None:
         exposed_variables: Dictionary mapping attribute names to values.
     """
     if prim is None or not prim.IsValid():
-        carb.log_warn(f"Prim is not valid, cannot receive exposed variable")
+        carb.log_warn("Prim is not valid, cannot receive exposed variable")
         return
     for attr_name, value in exposed_variables.items():
-        attr = prim.GetAttribute(attr_name)
-        if attr:
-            attr.Set(value)
+        if attr_name in prim_utils.get_prim_attribute_names(prim):
+            prim_utils.set_prim_attribute_value(prim, attr_name, value)
         else:
-            print(f"Attribute {attr_name} not found on {prim.GetPath()}")
+            carb.log_warn(f"Attribute {attr_name} not found on {prim.GetPath()}")
 
 
 def remove_empty_scopes(prim: Usd.Prim, stage: Usd.Stage) -> None:
@@ -234,7 +232,8 @@ def remove_empty_scopes(prim: Usd.Prim, stage: Usd.Stage) -> None:
 
     if prim_type in ("GenericPrim", "Scope"):
         if not any(child.IsValid() for child in prim.GetChildren()):
-            stage.RemovePrim(prim.GetPath())
+            with stage_utils.use_stage(stage):
+                stage_utils.delete_prim(prim)
 
 
 def add_behavior_script(prim: Usd.Prim, script_path: str, allow_duplicates: bool = False) -> None:
@@ -250,20 +249,19 @@ def add_behavior_script(prim: Usd.Prim, script_path: str, allow_duplicates: bool
         return
 
     # Ensure the scripting API is applied to the prim
-    scripts_attr = prim.GetAttribute("omni:scripting:scripts")
-    if not scripts_attr:
+    scripts_attr_name = "omni:scripting:scripts"
+    if scripts_attr_name not in prim_utils.get_prim_attribute_names(prim):
         print(f"Applying scripting API to prim: {prim.GetPath()}")
         omni.kit.commands.execute("ApplyScriptingAPICommand", paths=[prim.GetPath()])
-        scripts_attr = prim.GetAttribute("omni:scripting:scripts")
-        if not scripts_attr:
+        if scripts_attr_name not in prim_utils.get_prim_attribute_names(prim):
             print(f"Failed to create scripting attribute on prim: {prim.GetPath()}, cannot add behavior script.")
             return
 
     # Convert paths from immutable AssetPathArray to list of strings
-    current_scripts = [asset.path for asset in scripts_attr.Get() or []]
+    current_scripts = [asset.path for asset in prim_utils.get_prim_attribute_value(prim, scripts_attr_name) or []]
     if allow_duplicates or script_path not in current_scripts:
         current_scripts.append(script_path)
-        scripts_attr.Set(Sdf.AssetPathArray(current_scripts))
+        prim_utils.set_prim_attribute_value(prim, scripts_attr_name, Sdf.AssetPathArray(current_scripts))
 
 
 async def add_behavior_script_with_parameters_async(
@@ -365,3 +363,162 @@ async def publish_event_and_wait_for_completion_async(
         sub_pop = None
 
     return is_action_complete
+
+
+_ABSOLUTE_ASSET_URL_PREFIXES = ("omniverse://", "http://", "https://", "file://")
+
+
+def order_range_vectors(min_value: Any, max_value: Any, *, labels: Sequence[str], owner: Any) -> tuple[Any, Any]:
+    """Return min and max vectors with each component ordered as low then high.
+
+    Args:
+        min_value: Lower-bound vector. Returned unchanged when ``None``.
+        max_value: Upper-bound vector. Returned unchanged when ``None``.
+        labels: Per-component names used in the swap warning.
+        owner: Identifier included in the warning message.
+
+    Returns:
+        Ordered ``(min_value, max_value)`` pair, swapping any inverted components.
+    """
+    if min_value is None or max_value is None:
+        return min_value, max_value
+
+    ordered_min = []
+    ordered_max = []
+    swapped = []
+    for index, label in enumerate(labels):
+        low = min_value[index]
+        high = max_value[index]
+        if low > high:
+            swapped.append(f"{label} ({low} > {high})")
+            low, high = high, low
+        ordered_min.append(low)
+        ordered_max.append(high)
+
+    if swapped:
+        carb.log_warn(f"[{owner}] Inverted range bounds swapped for {', '.join(swapped)}.")
+    return type(min_value)(*ordered_min), type(max_value)(*ordered_max)
+
+
+def order_scalar_range(range_value: Any, *, owner: Any, label: str) -> Any:
+    """Return a two-component range with the components ordered as low then high.
+
+    Args:
+        range_value: Two-component range. Returned unchanged when ``None``.
+        owner: Identifier included in the warning message.
+        label: Attribute name used in the swap warning.
+
+    Returns:
+        Ordered range, swapping the components when the first exceeds the second.
+    """
+    if range_value is None:
+        return range_value
+    low, high = range_value[0], range_value[1]
+    if low <= high:
+        return range_value
+    carb.log_warn(f"[{owner}] Inverted {label} bounds swapped ({low} > {high}).")
+    return type(range_value)(high, low)
+
+
+def is_absolute_asset_url(url: str) -> bool:
+    """Return whether the URL already includes a scheme that does not need the assets root.
+
+    Args:
+        url: Asset URL or path.
+
+    Returns:
+        True when the URL is an absolute ``omniverse://``, HTTP(S), or ``file://`` path.
+    """
+    return url.startswith(_ABSOLUTE_ASSET_URL_PREFIXES)
+
+
+def csv_has_relative_asset_url(csv_entries: str) -> bool:
+    """Return whether a CSV list contains any path that needs the assets root.
+
+    Args:
+        csv_entries: Comma-separated asset URLs.
+
+    Returns:
+        True when at least one non-empty entry is not an absolute URL.
+    """
+    return any(not is_absolute_asset_url(url) for url in csv_entries.split(",") if url)
+
+
+def resolve_csv_asset_urls(csv_entries: str, assets_root_path: str | None, *, owner: Any) -> list[str]:
+    """Resolve CSV asset URLs, skipping relative entries when the assets root is unavailable.
+
+    Args:
+        csv_entries: Comma-separated asset URLs.
+        assets_root_path: Isaac assets root used to prefix relative paths. Relative entries are
+            skipped when this is empty.
+        owner: Identifier included in skip warnings.
+
+    Returns:
+        Absolute URLs and relative paths that could be joined to the assets root.
+    """
+    resolved: list[str] = []
+    for url in csv_entries.split(","):
+        if not url:
+            continue
+        if is_absolute_asset_url(url):
+            resolved.append(url)
+            continue
+        if not assets_root_path:
+            carb.log_warn(f"[{owner}] Skipping relative asset URL '{url}' because the assets root is unavailable.")
+            continue
+        if not url.startswith("/"):
+            url = "/" + url
+        resolved.append(assets_root_path + url)
+    return resolved
+
+
+def resolve_behavior_rng(
+    rng: np.random.Generator | None,
+    seed: Any,
+    *,
+    last_seed: Any = None,
+    injected: bool = False,
+) -> tuple[np.random.Generator, Any, bool]:
+    """Return the RNG for a USD seed without clobbering an injected generator.
+
+    An injected generator from ``set_rng`` is kept until the USD seed changes. A missing
+    generator, or a seed that differs from ``last_seed``, creates a new generator from
+    ``seed``. A negative or ``None`` seed creates a non-deterministic generator.
+
+    Args:
+        rng: Current generator, or ``None`` when one has not been created.
+        seed: USD seed attribute value.
+        last_seed: Seed last applied to ``rng``. Defaults to ``None`` before the first apply.
+        injected: Whether ``rng`` was provided through ``set_rng``.
+
+    Returns:
+        The generator, the seed it now tracks, and whether it is still injected.
+    """
+    if injected and rng is not None:
+        if last_seed is None or last_seed == seed:
+            return rng, seed, True
+        injected = False
+    if rng is None or last_seed != seed:
+        rng_seed = None if seed is None or seed < 0 else seed
+        rng = np.random.default_rng(rng_seed)
+        last_seed = seed
+        injected = False
+    return rng, last_seed, injected
+
+
+def apply_behavior_seed(behavior: Any, seed: Any) -> None:
+    """Apply a USD seed to a behavior, preserving an injected RNG until the seed changes.
+
+    Args:
+        behavior: Behavior instance with ``_rng``, ``_last_seed``, and ``_rng_injected`` state.
+        seed: USD seed attribute value.
+    """
+    rng, last_seed, injected = resolve_behavior_rng(
+        getattr(behavior, "_rng", None),
+        seed,
+        last_seed=getattr(behavior, "_last_seed", None),
+        injected=getattr(behavior, "_rng_injected", False),
+    )
+    behavior._rng = rng
+    behavior._last_seed = last_seed
+    behavior._rng_injected = injected

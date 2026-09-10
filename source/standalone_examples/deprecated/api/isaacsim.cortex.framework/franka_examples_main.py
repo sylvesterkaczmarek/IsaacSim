@@ -40,7 +40,12 @@ from isaacsim.cortex.framework.robot import add_franka_to_stage
 
 
 class CubeSpec:
-    """Store the name and color specification for a cube obstacle."""
+    """Store the name and color specification for a cube obstacle.
+
+    Args:
+        name: Scene-object name for the cube.
+        color: RGB components used to render the cube.
+    """
 
     def __init__(self, name: str, color: list[float]) -> None:
         self.name = name

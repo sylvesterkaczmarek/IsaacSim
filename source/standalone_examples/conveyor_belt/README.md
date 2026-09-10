@@ -22,7 +22,7 @@ At every physics post-step the pipeline:
 5. Accumulates the resulting force and torque for each body and applies them via the
    Isaac Sim rigid-prim API.
 
-The full pipeline (excluding Isaac Sim API calls) is implemented as Warp kernels and,
+The full pipeline (excluding Isaac Sim API calls) is implemented as Warp kernels and, 
 when running on CUDA, is captured into a CUDA graph after a short warm-up period so that
 subsequent steps incur minimal CPU overhead.
 

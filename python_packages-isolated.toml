@@ -1,23 +1,30 @@
 [isaacsim-asset-isolated]
 # pyproject.toml
-pyproject.version = "1.0.0"
 pyproject.description = "Isaac Sim isolated modules for asset import, export and management"
 pyproject.keywords = ["nvidia", "omniverse", "isaacsim", "asset", "import", "export", "management"]
+pyproject.classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+pyproject.license = "Apache-2.0"
+pyproject.license-files = ["APACHE-2.0-LICENSE.txt"]
 pyproject.dependencies.all = [
-    "isaacsim-robot-schema==1.0.0",
-    "usd-exchange>=2.2.2",
-    "urdf-usd-converter==0.1.3",
-    "mujoco==3.8.0",
-    "newton-usd-schemas==0.2.0",
-    "mujoco-usd-converter==0.2.0",
+    "isaacsim-robot-schema==${version}",
+    "usd-exchange==2.3.0",
+    "urdf-usd-converter==0.3.2",
+    "mujoco==3.11.0",
+    "newton-usd-schemas==0.4.1",
+    "mujoco-usd-converter==0.5.0",
+    "usd-optimize>=1.1.0",
 ]
 # inventory (relative to the build config)
 inventory.includes.all = [
+    [ "APACHE-2.0-LICENSE.txt", "../.." ],
     [ "exts/isaacsim.asset.exporter.urdf/isaacsim/asset/exporter/urdf/*", "./asset/exporter/urdf" ],
     [ "exts/isaacsim.asset.importer.mjcf/isaacsim/asset/importer/mjcf/*", "./asset/importer/mjcf" ],
     [ "exts/isaacsim.asset.importer.urdf/isaacsim/asset/importer/urdf/*", "./asset/importer/urdf" ],
-    [ "exts/isaacsim.asset.importer.utils/isaacsim/asset/importer/utils/*", "./asset/importer/utils" ],
-    [ "exts/isaacsim.asset.transformer/isaacsim/asset/transformer/*", "./asset/transformer" ],
+    [ "exts/isaacsim.asset.importer.utils/pip_prebundle/isaacsim/asset/importer/utils/*", "./asset/importer/utils" ],
+    [ "exts/isaacsim.asset.transformer/pip_prebundle/isaacsim/asset/transformer/*", "./asset/transformer" ],
     [ "exts/isaacsim.asset.transformer.rules/isaacsim/asset/transformer/rules/*", "./asset/transformer/rules" ],
     [ "exts/isaacsim.asset.transformer.rules/data/isaacsim_structure.json", "./asset/transformer/rules/data" ],
 ]
@@ -25,8 +32,8 @@ inventory.excludes.all = [
     "exts/isaacsim.asset.exporter.urdf/isaacsim/asset/exporter/urdf/tests",
     "exts/isaacsim.asset.importer.mjcf/isaacsim/asset/importer/mjcf/tests",
     "exts/isaacsim.asset.importer.urdf/isaacsim/asset/importer/urdf/tests",
-    "exts/isaacsim.asset.importer.utils/isaacsim/asset/importer/utils/tests",
-    "exts/isaacsim.asset.transformer/isaacsim/asset/transformer/tests",
+    "exts/isaacsim.asset.importer.utils/pip_prebundle/isaacsim/asset/importer/utils/tests",
+    "exts/isaacsim.asset.transformer/pip_prebundle/isaacsim/asset/transformer/tests",
     "exts/isaacsim.asset.transformer.rules/isaacsim/asset/transformer/rules/tests",
 ]
 # wheel specifications
@@ -35,22 +42,64 @@ wheel.python = "py3"
 
 [isaacsim-robot-schema]
 # pyproject.toml
-pyproject.version = "1.0.0"
 pyproject.description = "Isaac Sim USD robot schema helpers and applied schema utilities"
 pyproject.keywords = ["nvidia", "isaac", "sim", "usd", "robot", "schema"]
+pyproject.classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+pyproject.license = "Apache-2.0"
+pyproject.license-files = ["APACHE-2.0-LICENSE.txt"]
 pyproject.dependencies.all = [
-    "usd-exchange>=2.2.2",
+    "usd-exchange==2.3.0",
 ]
-pyproject.optional-dependencies.all = [
-    { "ik" = ["numpy>=1.24"] },
+templates.pyproject = """
+[build-system]
+requires = [ "setuptools >= 78.1.1" ]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = [
+    "omni.isaac.IsaacSensorSchema",
+    "omni.isaac.RangeSensorSchema",
+    "usd.schema.isaac",
+    "usd.schema.isaac.*",
 ]
+
+[tool.setuptools.package-data]
+"omni.isaac.IsaacSensorSchema" = ["py.typed"]
+"omni.isaac.RangeSensorSchema" = ["py.typed"]
+"usd.schema.isaac" = ["py.typed"]
+"usd.schema.isaac.range_sensor_schema" = ["*.usda", "plugInfo.json"]
+"usd.schema.isaac.robot_schema" = ["*.usda", "plugInfo.json"]
+"usd.schema.isaac.sensor_schema" = ["*.usda", "plugInfo.json"]
+
+[tool.setuptools.data-files]
+"share/isaacsim/packages/isaacsim_robot_schema" = [
+    "share/isaacsim/packages/isaacsim_robot_schema/package.json",
+    "share/isaacsim/packages/isaacsim_robot_schema/VERSION",
+]
+
+[project.scripts]
+isaacsim = "isaacsim:main"
+"""
 # inventory (relative to the build config)
 inventory.includes.all = [
-    [ "exts/isaacsim.robot.schema/usd/schema/isaac/robot_schema/*", "../usd/schema/isaac/robot_schema" ],
-    [ "exts/isaacsim.robot.schema/usd/schema/isaac/__init__.py", "../usd/schema/isaac" ],
+    [ "APACHE-2.0-LICENSE.txt", "../.." ],
+    [ "exts/isaacsim.robot.schema/pip_prebundle/usd/schema/isaac/*", "../usd/schema/isaac" ],
+    [ "exts/isaacsim.robot.schema/pip_prebundle/omni/isaac/IsaacSensorSchema/*", "../omni/isaac/IsaacSensorSchema" ],
+    [ "exts/isaacsim.robot.schema/pip_prebundle/omni/isaac/RangeSensorSchema/*", "../omni/isaac/RangeSensorSchema" ],
+    [ "exts/isaacsim.robot.schema/pip_prebundle/share/isaacsim/packages/isaacsim_robot_schema/*", "../../share/isaacsim/packages/isaacsim_robot_schema" ],
 ]
 inventory.excludes.all = [
-    "exts/isaacsim.robot.schema/usd/schema/isaac/robot_schema/premake5.lua",
+    "exts/isaacsim.robot.schema/pip_prebundle/usd/schema/isaac/__pycache__",
+    "exts/isaacsim.robot.schema/pip_prebundle/omni/isaac/IsaacSensorSchema/__pycache__",
+    "exts/isaacsim.robot.schema/pip_prebundle/omni/isaac/RangeSensorSchema/__pycache__",
 ]
 # wheel specifications
 wheel.platforms = {"linux-x86_64" = "any", "windows-x86_64" = "any", "linux-aarch64" = "any"}

@@ -1,0 +1,100 @@
+{
+    "ZMQPublishImage": {
+        "version": 1,
+        "icon": "icons/isaac-sim.svg",
+        "description": "Publishes a camera image (color or depth) via ZMQ as an Image protobuf message. The encoding input selects content type: rgba8/rgb8 for color, 32FC1 for depth. With useIpc (default) and a GPU source, pixels are shared zero-copy via CUDA IPC (same host); otherwise raw bytes are sent.",
+        "metadata": {
+            "uiName": "ZMQ Publish Image"
+        },
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": "isaacZmq",
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "The input execution port"
+            },
+            "ip": {
+                "type": "string",
+                "description": "Remote IP address of the ZMQ server",
+                "default": "localhost"
+            },
+            "port": {
+                "type": "uint",
+                "description": "Remote port number of the ZMQ server",
+                "default": 5561
+            },
+            "topicName": {
+                "type": "string",
+                "description": "ZMQ topic published on (first multipart frame); defaults to the message type. Set a unique value (e.g. \"robot_0/image\") to distinguish multiple data sources.",
+                "default": "image"
+            },
+            "timeStamp": {
+                "type": "double",
+                "description": "Frame timestamp in seconds",
+                "uiName": "Timestamp",
+                "default": 0.0
+            },
+            "dataPtr": {
+                "type": "uint64",
+                "description": "Pointer to raw image data (CUDA device pointer or host pointer)",
+                "default": 0
+            },
+            "bufferSize": {
+                "type": "uint64",
+                "description": "Size in bytes of the data buffer (0 if input is a GPU texture)",
+                "default": 0
+            },
+            "cudaDeviceIndex": {
+                "type": "int",
+                "description": "Index of CUDA device where data resides (-1 for host/CPU data)",
+                "default": -1
+            },
+            "width": {
+                "type": "uint",
+                "description": "Image width in pixels",
+                "default": 0
+            },
+            "height": {
+                "type": "uint",
+                "description": "Image height in pixels",
+                "default": 0
+            },
+            "encoding": {
+                "type": "token",
+                "description": "Image encoding format. rgba8/rgb8 for color images, 32FC1 for depth images.",
+                "metadata": {
+                    "allowedTokens": {
+                        "RGBA8": "rgba8",
+                        "RGB8": "rgb8",
+                        "Depth32FC1": "32FC1"
+                    }
+                },
+                "default": "rgba8"
+            },
+            "data": {
+                "type": "uchar[]",
+                "description": "CPU image data array (used when cudaDeviceIndex == -1 and dataPtr == 0)",
+                "memoryType": "any",
+                "default": [],
+                "optional": true
+            },
+            "format": {
+                "type": "uint64",
+                "description": "GPU texture format identifier (informational; sizing uses encoding)",
+                "default": 0,
+                "optional": true
+            },
+            "useIpc": {
+                "type": "bool",
+                "description": "When true (default) and the source is on the GPU, share pixels zero-copy via CUDA IPC (same host only). When false, or for CPU data, send raw bytes (works cross-host).",
+                "default": true
+            }
+        },
+        "outputs": {
+            "execOut": {
+                "type": "execution",
+                "description": "Fires every tick after the image is published"
+            }
+        }
+    }
+}

@@ -19,6 +19,8 @@ import json
 import tempfile
 
 import carb.settings
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit
 import omni.usd
 from isaacsim.core.simulation_manager import SimulationManager
@@ -33,19 +35,19 @@ class TestSDGDeformables(omni.kit.test.AsyncTestCase):
 
     async def setUp(self) -> None:
         """Create a clean stage and save render and physics-device settings changed by the test."""
-        await omni.kit.app.get_app().next_update_async()
-        omni.usd.get_context().new_stage()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
         self.original_dlss_exec_mode = carb.settings.get_settings().get("rtx/post/dlss/execMode")
         self.original_physics_sim_device = SimulationManager.get_device()
 
     async def tearDown(self) -> None:
         """Close the stage, wait for pending loads, and restore render and physics-device settings."""
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
         # In some cases the test will end before the asset is loaded, in this case wait for assets to load
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
         carb.settings.get_settings().set("rtx/post/dlss/execMode", self.original_dlss_exec_mode)
         # Make sure to reset the physics sim device to the original state for the following tests
         SimulationManager.set_physics_sim_device(self.original_physics_sim_device)
@@ -56,10 +58,7 @@ class TestSDGDeformables(omni.kit.test.AsyncTestCase):
         import random
 
         import carb.settings
-        import omni.kit.app
         import omni.replicator.core as rep
-        import omni.timeline
-        import omni.usd
         from isaacsim.core.experimental.materials import VolumeDeformableMaterial
         from isaacsim.core.experimental.prims import DeformablePrim
         from isaacsim.core.simulation_manager import SimulationManager
@@ -79,12 +78,12 @@ class TestSDGDeformables(omni.kit.test.AsyncTestCase):
 
         # (label, count, usd_path, youngs_modulus_Pa [higher=stiffer], poissons_ratio [0=compressible, 0.5=incompressible])
         ASSETS_CONFIG = [
-            ("banana", 6, "/Isaac/Props/YCB/Axis_Aligned/011_banana.usd", 500_000, 0.45),
-            ("large_marker", 5, "/Isaac/Props/YCB/Axis_Aligned/040_large_marker.usd", 9_000_000, 0.5),
+            ("banana", 2, "/Isaac/Props/YCB/Axis_Aligned/011_banana.usd", 500_000, 0.45),
+            ("large_marker", 2, "/Isaac/Props/YCB/Axis_Aligned/040_large_marker.usd", 9_000_000, 0.5),
         ]
 
         async def run_example_async(assets_config: list[tuple[str, int, str, float, float]]) -> None:
-            await omni.usd.get_context().new_stage_async()
+            await stage_utils.create_new_stage_async()
             assets_root_path = await get_assets_root_path_async()
             rng = random.Random(RNG_SEED)
 
@@ -187,8 +186,7 @@ class TestSDGDeformables(omni.kit.test.AsyncTestCase):
 
             # Start the simulation
             print(f"[SDG] Starting simulation")
-            timeline = omni.timeline.get_timeline_interface()
-            timeline.play()
+            app_utils.play()
 
             # Wrap deformables for tensor API access (requires active simulation, no re-cooking)
             deformables = []
@@ -197,7 +195,7 @@ class TestSDGDeformables(omni.kit.test.AsyncTestCase):
 
             for _ in range(MAX_STEPS):
                 # Advance the app which will advance the timeline (and implicitly the simulation)
-                await omni.kit.app.get_app().next_update_async()
+                await app_utils.update_app_async()
 
                 # Detect assets whose lowest vertex crossed the trigger height
                 newly_triggered = []
@@ -236,27 +234,22 @@ class TestSDGDeformables(omni.kit.test.AsyncTestCase):
 
             # Pause the simulation and clean up resources
             print(f"[SDG] Simulation complete. {len(triggered)} frames saved to {out_dir}")
-            timeline.pause()
+            app_utils.pause()
             await rep.orchestrator.wait_until_complete_async()
             writer.detach()
             render_product.destroy()
 
-        # asyncio.ensure_future(run_example_async(ASSETS_CONFIG))
-
         # Test setup
-        test_assets_config = [
-            ("banana", 2, "/Isaac/Props/YCB/Axis_Aligned/011_banana.usd", 500_000, 0.45),
-            ("large_marker", 2, "/Isaac/Props/YCB/Axis_Aligned/040_large_marker.usd", 9_000_000, 0.5),
-        ]
-        await run_example_async(test_assets_config)
-        num_assets = sum(count for _, count, _, _, _ in test_assets_config)
-        expected_pngs = num_assets * 2  # 2 assets * 2 (rgb+segmentation annotators)
-        expected_json = num_assets * 1  # 2 assets * 1 (segmentation annotator)
+        await run_example_async(ASSETS_CONFIG)
+        num_assets = sum(count for _, count, _, _, _ in ASSETS_CONFIG)
+        expected_pngs = num_assets * 2  # rgb + colorized semantic segmentation per capture
+        expected_json = num_assets  # semantic segmentation label json per capture
         golden_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data", "golden", "_out_deformable_drop")
         all_data_written = validate_folder_contents(
             path=out_dir,
             recursive=True,
             expected_counts={"png": expected_pngs, "json": expected_json},
+            fail_on_empty_extensions={"png", "json"},
         )
         self.assertTrue(all_data_written, f"Output directory contents validation failed for {out_dir}")
 

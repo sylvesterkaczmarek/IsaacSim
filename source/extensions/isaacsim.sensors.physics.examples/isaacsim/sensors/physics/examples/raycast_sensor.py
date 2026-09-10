@@ -28,7 +28,8 @@ import omni.physics.core
 import omni.ui as ui
 import omni.usd
 from isaacsim.examples.browser import get_instance as get_browser_instance
-from isaacsim.gui.components.ui_utils import LABEL_WIDTH, get_style, setup_ui_headers
+from isaacsim.gui.components import setup_ui_headers
+from isaacsim.gui.components.ui_utils import LABEL_WIDTH, get_style
 from isaacsim.sensors.experimental.physics import Raycast, RaycastSensor
 from pxr import Gf, Sdf, UsdGeom, UsdLux, UsdPhysics
 

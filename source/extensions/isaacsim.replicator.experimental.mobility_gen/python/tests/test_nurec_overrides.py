@@ -16,9 +16,15 @@
 """Tests for the NuRec replay-flag policy and replay setup."""
 
 import argparse
+from unittest import mock
 
 import omni.kit.test
 from isaacsim.replicator.experimental.mobility_gen import ensure_nurec_replay_flags, setup_for_replay
+from isaacsim.replicator.experimental.mobility_gen.impl import nurec_overrides
+
+# setup_for_replay only checks this for None; a non-None placeholder reaches setup_for_rendering,
+# which the tests below patch.
+_STAGE_SENTINEL = object()
 
 
 class TestNurecReplayOverrides(omni.kit.test.AsyncTestCase):
@@ -55,3 +61,37 @@ class TestNurecReplayOverrides(omni.kit.test.AsyncTestCase):
         self.assertEqual(result, (True, False, False, []))
         self.assertFalse(args.rgb_enabled)
         self.assertTrue(args.depth_enabled)
+
+    async def test_setup_for_replay_raises_on_unmet_prerequisites(self) -> None:
+        """An unmet NuRec launch prerequisite stops replay instead of proceeding into a crash."""
+        args = argparse.Namespace(rgb_enabled=True, depth_enabled=True)
+        problems = ["/renderer/multiGpu/enabled is true (launch with: --/renderer/multiGpu/enabled=false)"]
+        with mock.patch.object(nurec_overrides, "setup_for_rendering", return_value=(False, True, False, problems)):
+            with self.assertRaises(RuntimeError) as ctx:
+                setup_for_replay(args, _STAGE_SENTINEL)
+
+        # The message must carry the actionable launch setting, not just "failed".
+        self.assertIn("multiGpu", str(ctx.exception))
+        # The stage is unusable, so the replay flags must be left as the caller set them.
+        self.assertTrue(args.depth_enabled)
+
+    async def test_setup_for_replay_reports_success_when_it_returns(self) -> None:
+        """An unmet prerequisite raises, so a caller that gets a value back can trust it."""
+        args = argparse.Namespace(rgb_enabled=True, depth_enabled=True)
+        with mock.patch.object(nurec_overrides, "setup_for_rendering", return_value=(True, True, False, [])):
+            success, _, _, problems = setup_for_replay(args, _STAGE_SENTINEL)
+
+        self.assertTrue(success)
+        self.assertEqual(problems, [])
+
+    async def test_setup_for_replay_does_not_raise_when_prerequisites_met(self) -> None:
+        """A NuRec stage that satisfies its prerequisites still restricts replay to RGB."""
+        args = argparse.Namespace(rgb_enabled=True, depth_enabled=True)
+        with mock.patch.object(nurec_overrides, "setup_for_rendering", return_value=(True, True, False, [])):
+            success, nurec, _, problems = setup_for_replay(args, _STAGE_SENTINEL)
+
+        self.assertTrue(success)
+        self.assertTrue(nurec)
+        self.assertEqual(problems, [])
+        self.assertTrue(args.rgb_enabled)
+        self.assertFalse(args.depth_enabled)

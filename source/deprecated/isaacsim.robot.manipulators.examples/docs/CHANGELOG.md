@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.4] - 2026-07-30
+### Changed
+- Point deprecation guidance to `isaacsim.robot_motion.examples`.
+
+## [2.0.3] - 2026-07-29
+### Changed
+- Pin the deprecated UR10 bin-filling scene to the Isaac Sim 6.0 asset.
+
+## [2.0.2] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [2.0.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

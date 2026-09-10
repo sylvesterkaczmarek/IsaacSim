@@ -15,7 +15,7 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/ucx/nodes/IUcxNodes.h>
+#include <isaacsim/ucx/nodes/IUcxNodes.hpp>
 
 CARB_BINDINGS("isaacsim.ucx.nodes.python")
 

@@ -32,6 +32,15 @@ MJCF to PhysX Conversion Utils
     :no-show-inheritance:
 
 
+PhysX to MuJoCo/Newton Conversion
+=================================
+
+.. automodule:: isaacsim.asset.importer.utils.impl.physx_asset_to_mjc
+    :members:
+    :undoc-members:
+    :no-show-inheritance:
+
+
 Stage Utils
 ===========
 

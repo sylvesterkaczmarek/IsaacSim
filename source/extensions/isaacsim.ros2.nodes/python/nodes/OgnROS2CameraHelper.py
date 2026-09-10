@@ -114,6 +114,11 @@ SENSOR_CONFIGS = {
     },
 }
 
+COMPRESSED_IMAGE_TYPES = {
+    "rgb_h264": "h264",
+    "rgb_hevc": "hevc",
+}
+
 
 class OgnROS2CameraHelperInternalState(BaseWriterNode):
     """Internal state for the ROS2CameraHelper OmniGraph node."""
@@ -122,7 +127,8 @@ class OgnROS2CameraHelperInternalState(BaseWriterNode):
         self.rv = ""
         self.resetSimulationTimeOnStop = False
         self.publishStepSize = 1
-        self._h264_render_product = None
+        self._compressed_image_render_product = None
+        self._compressed_image_type = None
         self._srtx_callback_handle = None
         self._srtx_capsule = None
         self._srtx_sensor_set = None
@@ -131,9 +137,10 @@ class OgnROS2CameraHelperInternalState(BaseWriterNode):
 
     def custom_reset(self) -> None:
         """Reset the internal state."""
-        if self._h264_render_product is not None:
-            CompressedImageManager.detach(self._h264_render_product)
-            self._h264_render_product = None
+        if self._compressed_image_render_product is not None and self._compressed_image_type is not None:
+            CompressedImageManager.detach(self._compressed_image_render_product, self._compressed_image_type)
+            self._compressed_image_render_product = None
+            self._compressed_image_type = None
         cleanup_srtx_state(self)
         super().custom_reset()
 
@@ -290,14 +297,18 @@ class OgnROS2CameraHelper:
             "qosProfile": db.inputs.qosProfile,
         }
 
-        if sensor_type == "rgb_h264":
+        compression_type = COMPRESSED_IMAGE_TYPES.get(sensor_type)
+        if compression_type is not None:
             rv = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(
                 omni.syntheticdata._syntheticdata.SensorType.Rgb.name
             )
             state.rv = rv
-            CompressedImageManager.attach(render_product_path)
-            state._h264_render_product = render_product_path
-            writer = CompressedImageManager.get_writer(render_product_path, use_system_time=db.inputs.useSystemTime)
+            CompressedImageManager.attach(render_product_path, compression_type)
+            state._compressed_image_render_product = render_product_path
+            state._compressed_image_type = compression_type
+            writer = CompressedImageManager.get_writer(
+                render_product_path, use_system_time=db.inputs.useSystemTime, compression_type=compression_type
+            )
             writer.initialize(**init_params)
             db.per_instance_state.append_writer(writer)
             db.per_instance_state.attach_writers(render_product_path)

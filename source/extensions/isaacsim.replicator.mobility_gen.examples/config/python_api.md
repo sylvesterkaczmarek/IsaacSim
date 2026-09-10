@@ -24,8 +24,8 @@
 - class PolicyMobilityGenRobot(MobilityGenRobot)
   - usd_url: str
   - articulation_path: str
-  - def __init__(self, prim_path: str, articulation: Articulation, controller: H1FlatTerrainPolicy | SpotFlatTerrainPolicy, front_camera: Module | None = None)
-  - class def build_policy(cls, prim_path: str) -> H1FlatTerrainPolicy | SpotFlatTerrainPolicy
+  - def __init__(self, prim_path: str, articulation: Articulation, controller: RobotPolicyRunner, front_camera: Module | None = None)
+  - class def build_policy(cls, prim_path: str) -> RobotPolicyRunner
   - class def build(cls, prim_path: str) -> PolicyMobilityGenRobot
   - def write_action(self, step_size: float)
   - def set_pose_2d(self, pose: Pose2d)
@@ -135,7 +135,7 @@
   - usd_url: Unknown
   - articulation_path: str
   - controller_z_offset: float
-  - class def build_policy(cls, prim_path: str) -> H1FlatTerrainPolicy
+  - class def build_policy(cls, prim_path: str) -> RobotPolicyRunner
 
 - class SpotRobot(PolicyMobilityGenRobot)
   - physics_dt: float
@@ -170,7 +170,7 @@
   - usd_url: Unknown
   - articulation_path: str
   - controller_z_offset: float
-  - class def build_policy(cls, prim_path: str) -> SpotFlatTerrainPolicy
+  - class def build_policy(cls, prim_path: str) -> RobotPolicyRunner
 
 - class KeyboardTeleoperationScenario(TeleoperationScenario)
   - def __init__(self, robot: MobilityGenRobot, occupancy_map: OccupancyMap)

@@ -63,6 +63,9 @@ class TestEffortSensor(omni.kit.test.AsyncTestCase):
             include_cube: Whether to add a cube to the scene.
             cube_path: USD path for the cube prim.
             cube_position: World position of the cube.
+
+        Raises:
+            AssertionError: If the RevoluteJoint prim is not valid.
         """
         self.pivot_path = "/Articulation/CenterPivot"
         self.slider_path = "/Articulation/Slider"
@@ -108,7 +111,11 @@ class TestEffortSensor(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
 
     async def test_sensor_reading(self) -> None:
-        """Test sensor reading."""
+        """Test sensor reading.
+
+        Raises:
+            AssertionError: If effort readings, timestamps, or validity states do not match expected values.
+        """
         await self.createSimpleArticulation()
 
         self.effort_sensor = EffortSensor("/Articulation/Arm/RevoluteJoint")
@@ -149,7 +156,11 @@ class TestEffortSensor(omni.kit.test.AsyncTestCase):
         self.assertFalse(reading.is_valid)
 
     async def test_sensor_period(self) -> None:
-        """Test sensor period."""
+        """Test sensor period.
+
+        Raises:
+            AssertionError: If the number of new readings does not match the expected sensor period tolerance.
+        """
         await self.createSimpleArticulation()
 
         self.effort_sensor = EffortSensor("/Articulation/Arm/RevoluteJoint", 1 / 10)  # 10 hz
@@ -179,7 +190,11 @@ class TestEffortSensor(omni.kit.test.AsyncTestCase):
         self.assertTrue(abs(len(readings) - 10) <= 1)
 
     async def test_custom_interpolation_function(self) -> None:
-        """Test custom interpolation function."""
+        """Test custom interpolation function.
+
+        Raises:
+            AssertionError: If custom and default sensor readings do not match the expected time and value behavior.
+        """
 
         def custom_function(sensorReadings: Any, time: float) -> EsSensorReading():
             override_sensor_reading = EsSensorReading()
@@ -230,7 +245,11 @@ class TestEffortSensor(omni.kit.test.AsyncTestCase):
         return mock_sensor
 
     async def test_get_sensor_reading_uses_newest_valid_fallback(self) -> None:
-        """Use the newest valid reading when the older reading is invalid."""
+        """Use the newest valid reading when the older reading is invalid.
+
+        Raises:
+            AssertionError: If EffortSensor.get_sensor_reading does not return a copied newest valid fallback reading.
+        """
         mock_sensor = self._make_mock_effort_sensor()
         mock_sensor.sensor_reading_buffer[0] = EsSensorReading(is_valid=True, time=0.05, value=99.9)
         mock_sensor.sensor_reading_buffer[1] = EsSensorReading(is_valid=False, time=0.0, value=0.0)
@@ -243,7 +262,11 @@ class TestEffortSensor(omni.kit.test.AsyncTestCase):
         self.assertIsNot(reading, mock_sensor.sensor_reading_buffer[0])
 
     async def test_get_sensor_reading_does_not_promote_invalid_newest_fallback(self) -> None:
-        """Do not mark an invalid newest reading valid because an older reading was valid."""
+        """Do not mark an invalid newest reading valid because an older reading was valid.
+
+        Raises:
+            AssertionError: If EffortSensor.get_sensor_reading promotes the newest invalid fallback reading.
+        """
         mock_sensor = self._make_mock_effort_sensor()
         mock_sensor.sensor_reading_buffer[0] = EsSensorReading(is_valid=False, time=0.05, value=0.0)
         mock_sensor.sensor_reading_buffer[1] = EsSensorReading(is_valid=True, time=0.0, value=42.0)
@@ -256,7 +279,11 @@ class TestEffortSensor(omni.kit.test.AsyncTestCase):
 
     # Remove this test later
     async def test_change_to_wrong_dof_name_in_play(self) -> None:
-        """Test change to wrong dof name in play."""
+        """Test change to wrong dof name in play.
+
+        Raises:
+            AssertionError: If sensor readings do not reflect valid, invalid, and restored DOF name states.
+        """
         await self.createSimpleArticulation()
 
         self.effort_sensor = EffortSensor("/Articulation/Arm/RevoluteJoint")
@@ -302,7 +329,11 @@ class TestEffortSensor(omni.kit.test.AsyncTestCase):
         self.assertEqual(reading.is_valid, True)
 
     async def test_change_buffer_size(self) -> None:
-        """Test change buffer size."""
+        """Test changing the EffortSensor buffer size.
+
+        Raises:
+            AssertionError: If data_buffer_size, interpolation_buffer length, or sensor_reading_buffer length does not match.
+        """
         await self.createSimpleArticulation()
 
         self.effort_sensor = EffortSensor("/Articulation/Arm/RevoluteJoint", sensor_period=1)

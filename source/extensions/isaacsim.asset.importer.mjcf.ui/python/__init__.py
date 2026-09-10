@@ -15,7 +15,7 @@
 
 """Public MJCF importer UI Python API."""
 
-from .impl.command import *
-from .impl.extension import *
+from .impl import command as _command  # noqa: F401
+from .impl.extension import Extension as Extension
 
 __all__ = []

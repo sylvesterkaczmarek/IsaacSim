@@ -13,6 +13,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Utility functions and classes for robot policy examples, including actuator network implementations."""
-
-from isaacsim.robot.policy.examples.utils.actuator_network import LstmSeaNetwork as LstmSeaNetwork
+"""Internal helpers for robot policy examples."""

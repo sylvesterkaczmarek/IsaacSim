@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.4.0] - 2026-06-26
+### Changed
+- Moved the bundled `nvidia-*-cu12` CUDA runtime wheels and `cuda-bindings` into the new `isaacsim.pip.nv` extension and depend on it on Linux.
+
 ## [3.3.0] - 2026-04-13
 ### Changed
 - Update to pytorch 2.11.0+cu128, torchaudio 2.11.0+cu128, torchvision 0.26.0+cu128 and update dependencies

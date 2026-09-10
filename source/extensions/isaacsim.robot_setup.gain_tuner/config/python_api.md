@@ -2,13 +2,349 @@
 
 ## Classes
 
-- class UIBuilder
+- class ActuatorGains
+  - actuator_path: str
+  - is_pid: bool
+  - kp_attr: pxr.Usd.Attribute | None
+  - kd_attr: pxr.Usd.Attribute | None
+  - ki_attr: pxr.Usd.Attribute | None
+  - [property] def kp(self) -> float | None
+  - [property] def kd(self) -> float | None
+  - [property] def ki(self) -> float | None
+
+- class DiscretizationSweepTest(RobotTest)
+  - name: str
   - def __init__(self)
-  - def on_menu_callback(self)
-  - def on_timeline_event(self, event: object)
-  - def on_physics_step(self, step: float)
-  - def on_render_step(self, e: carb.events.IEvent)
-  - def on_stage_event(self, event: object)
+  - def setup(self, articulation: Articulation, joint_indices: list[int], joint_modes: dict[int, int], test_params: dict)
+  - def run(self) -> Generator[None, None, TestResult]
+
+- class GainLabels
+  - kp_label: str
+  - kd_label: str
+  - ki_label: str | None
+
+- class GainReadContext
+  - viewed_backend: str
+  - active_backend: str
+  - actuator_map: dict
+  - mjc_map: dict
+  - mujoco_solver_active: bool
+  - solver: str
+
+- class GainSource(IntEnum)
+  - NONE: int
+  - PHYSICS_DRIVE: int
+  - ACTUATOR: int
+  - MUJOCO: int
+
+- class GainSpecEdit
+  - prop_path: Sdf.Path
+  - type_name: object
+  - value: object
+  - apply_api: str | None
+
+- class GainTuner
+  - def __init__(self)
   - def reset(self)
-  - def cleanup(self)
-  - def build_ui(self)
+  - def add_inertia_updated_callback(self, callback: Callable[[], None])
+  - def stop_test(self)
+  - def register_test(self, mode_id: int, test: RobotTest)
+  - def unregister_test(self, mode_id: int)
+  - def get_registered_tests(self) -> dict[int, RobotTest]
+  - def on_reset(self)
+  - def setup(self, robot_path: str | None)
+  - def get_dof_type(self, dof_index: int) -> int
+  - def get_dof_effective_max_velocity(self, dof_index: int) -> float | None
+  - def get_dof_engine_armature(self, dof_index: int) -> float | None
+  - def invalidate_physics_views(self)
+  - def initialize(self)
+  - [property] def initialized(self) -> bool
+  - [initialized.setter] def initialized(self, value: bool)
+  - [property] def joint_range_maximum(self) -> float
+  - [joint_range_maximum.setter] def joint_range_maximum(self, value: float)
+  - [property] def position_impulse(self) -> float
+  - [position_impulse.setter] def position_impulse(self, value: float)
+  - [property] def velocity_impulse(self) -> float
+  - [velocity_impulse.setter] def velocity_impulse(self, value: float)
+  - [property] def robot(self) -> pxr.Usd.Prim
+  - def compute_joints_accumulated_inertia(self)
+  - def get_articulation(self) -> Articulation
+  - def get_articulation_root(self) -> str | None
+  - def get_all_joint_indices(self) -> list[int]
+  - def get_joint_accumulated_inertia(self, joint: object) -> float
+  - def get_joint_entries(self) -> list[JointListEntry]
+  - def get_permanent_fixed_joint_indices(self) -> list[int]
+  - def get_test_duration(self) -> float
+  - def is_data_ready(self) -> bool
+  - def get_test_result_metrics(self) -> dict[int, dict]
+  - def get_robot_prim_path(self) -> str | None
+  - def snapshot_recorded_trajectory(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+  - def ingest_sweep_results(self, metrics: dict[int, dict], trajectory: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None)
+  - def clear_test_results(self)
+  - def set_test_duration(self, duration: float)
+  - def sinusoidal_step(self, timestep: float, sequence_index: int) -> tuple[list[int], np.ndarray, list[int], np.ndarray]
+  - def step_step(self, timestep: float, sequence_index: int) -> tuple[list[int], np.ndarray, list[int], np.ndarray]
+  - def initialize_gains_test(self, test_params: dict)
+  - def compute_gains_test_error_terms(self) -> tuple[np.ndarray, np.ndarray]
+  - def update_gains_test(self, step: float) -> bool
+  - def get_joint_states_from_gains_test(self, joint_index: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+
+- class GainWriteTargets
+  - options: SaveTargetOptions
+  - mjc_sources: list[MjcGainSource]
+  - newton_actuators: list[ActuatorGains]
+  - mirror_enabled: bool
+  - mirror_drive_to_mjc: bool
+  - mjc_target_identifier: str | None
+  - newton_target_identifier: str | None
+  - [property] def has_mjc_mirror(self) -> bool
+  - [property] def has_newton_writeback(self) -> bool
+  - [property] def will_mirror_mjc(self) -> bool
+  - [property] def will_write_newton(self) -> bool
+  - [property] def mjc_layer_names(self) -> list[str]
+  - [property] def newton_layer_names(self) -> list[str]
+
+- class GainsTestMode(IntEnum)
+  - SINUSOIDAL: int
+  - STEP: int
+  - USER_PROVIDED: int
+  - SNAP_TO_LIMITS: int
+  - STRESS_TEST: int
+  - DISCRETIZATION: int
+
+- class JointDriveMode(IntEnum)
+  - NONE: int
+  - POSITION: int
+  - VELOCITY: int
+  - MIMIC: int
+
+- class JointListEntry
+  - joint: pxr.Usd.Prim
+  - display_name: str
+  - dof_index: int
+  - drive_axis: str
+
+- class JointMode(IntEnum)
+  - POSITION: int
+  - VELOCITY: int
+  - NONE: int
+
+- class JointParamResolution
+  - spec: JointParamSpec
+  - backend: str
+  - solver: str
+  - chain: tuple[str, Ellipsis]
+  - candidate_chains: tuple
+  - chain_complete: bool
+  - authored: dict
+  - effective_schema: str | None
+  - effective_value: float | None
+  - unlimited: bool
+  - [property] def determined(self) -> bool
+  - [property] def newton_value(self) -> float | None
+  - [property] def physx_value(self) -> float | None
+  - [property] def mjc_value(self) -> float | None
+  - [property] def backend_supported(self) -> bool
+  - [property] def engine_default(self) -> float | None
+  - [property] def backend_label(self) -> str
+  - [property] def write_schema(self) -> str | None
+  - [property] def write_attr(self) -> str | None
+  - [property] def other_schema(self) -> str | None
+  - [property] def other_value(self) -> float | None
+  - [property] def copy_value(self) -> float | None
+  - [property] def other_effective_value(self) -> float | None
+  - [property] def other_backend_agrees(self) -> bool
+  - [property] def backends_diverge(self) -> bool
+  - [property] def unread_schemas(self) -> tuple[str, Ellipsis]
+  - [property] def shadowed_schemas(self) -> tuple[str, Ellipsis]
+  - [property] def any_authored(self) -> bool
+
+- class JointParamSpec
+  - key: str
+  - label: str
+  - newton_attr: str
+  - physx_attr: str
+  - mjc_attr: str | None
+  - newton_reads_physx: bool
+  - unauthored_sentinel: float | None
+  - newton_default: float
+  - physx_default: float
+  - def engine_default(self, backend: str) -> float | None
+  - def attr_for_schema(self, schema: str) -> str | None
+  - [property] def schemas(self) -> tuple[str, Ellipsis]
+
+- class MjcGainParams
+  - gain_prm: list[float]
+  - bias_prm: list[float]
+  - gain_type: str
+  - bias_type: str
+  - [property] def is_velocity(self) -> bool
+
+- class MjcGainSource
+  - actuator_path: str
+  - gain_prm_attr: pxr.Usd.Attribute | None
+  - bias_prm_attr: pxr.Usd.Attribute | None
+  - gain_type_attr: pxr.Usd.Attribute | None
+  - bias_type_attr: pxr.Usd.Attribute | None
+  - joint_stiffness_attr: pxr.Usd.Attribute | None
+  - joint_damping_attr: pxr.Usd.Attribute | None
+  - [property] def has_joint_gains(self) -> bool
+  - [property] def defining_layer(self) -> Sdf.Layer | None
+
+- class ResolvedGains
+  - source: GainSource
+  - source_label: str
+  - kp: float
+  - kd: float
+  - ki: float | None
+  - is_active: bool
+  - multiple_sources: bool
+  - active_source: GainSource
+  - drive_mode: int
+  - kp_attr: pxr.Usd.Attribute | None
+  - kd_attr: pxr.Usd.Attribute | None
+  - ki_attr: pxr.Usd.Attribute | None
+  - mjc_source: object | None
+  - kp_label: str
+  - kd_label: str
+  - ki_label: str | None
+
+- class RobotTest
+  - name: str
+  - def __init__(self)
+  - [property] def step(self) -> float
+  - def setup(self, articulation: Articulation, joint_indices: list[int], joint_modes: dict[int, int], test_params: dict)
+  - def run(self) -> Generator[None, None, TestResult]
+  - def stop(self)
+
+- class SaveTargetCandidate
+  - identifier: str
+  - display_name: str
+  - is_default: bool
+
+- class SaveTargetOptions
+  - candidates: list[SaveTargetCandidate]
+  - default_identifier: str | None
+  - [property] def resolved(self) -> bool
+  - [property] def default(self) -> SaveTargetCandidate | None
+  - [property] def display_names(self) -> list[str]
+  - def identifier_for_display_name(self, display_name: str) -> str | None
+
+- class SinusoidalTest(RobotTest)
+  - name: str
+
+- class SnapToLimitsTest(RobotTest)
+  - name: str
+  - def __init__(self)
+  - def setup(self, articulation: Articulation, joint_indices: list[int], joint_modes: dict[int, int], test_params: dict)
+  - def run(self) -> Generator[None, None, TestResult]
+  - def stop(self)
+
+- class StepFunctionTest(RobotTest)
+  - name: str
+
+- class StressTest(RobotTest)
+  - name: str
+  - def __init__(self)
+  - def setup(self, articulation: Articulation, joint_indices: list[int], joint_modes: dict[int, int], test_params: dict)
+  - def run(self) -> Generator[None, None, TestResult]
+  - def stop(self)
+
+- class StressTestMode(IntEnum)
+  - RANDOM_WALK: int
+  - ADVERSARIAL: int
+
+- class TestResult
+  - joint_position_commands: np.ndarray
+  - joint_velocity_commands: np.ndarray
+  - observed_joint_positions: np.ndarray
+  - observed_joint_velocities: np.ndarray
+  - command_times: np.ndarray
+  - joint_metrics: dict[int, dict]
+
+## Functions
+
+- def aggregate_dt_sweep(per_joint_sweep: dict[int, list[dict]], target_dt: float, settle_threshold: float, error_threshold: float, tolerance: float) -> dict[int, dict]
+- def apply_gain_save_plan(plan: dict[str, list[GainSpecEdit]]) -> list[str]
+- def author_joint_param(joint: object, spec: JointParamSpec, value: float, backend: str) -> Usd.Attribute | None
+- def author_mjc_gains(mjc_source: object, kp: float, kd: float) -> bool
+- def authored_joint_param_attrs(joint: object, spec: JointParamSpec) -> tuple[Usd.Attribute | None, Usd.Attribute | None]
+- def authored_joint_param_values(joint: object, spec: JointParamSpec) -> dict
+- def available_viewed_sources(has_pd: bool, has_mjc: bool, has_act: bool) -> list[GainSource]
+- def backend_display_label(backend: str) -> str
+- def backend_reads_usd_while_playing(backend: str) -> bool
+- def backend_supported(backend: str) -> bool
+- def backend_write_schema(backend: str) -> str | None
+- def build_actuator_gain_map(stage: Usd.Stage, articulation_root_path: str) -> dict[str, ActuatorGains]
+- def build_gain_save_plan(joint_entries: list, stage: Usd.Stage | None, drive_target_identifier: str | None = None) -> dict[str, list[GainSpecEdit]]
+- def build_mjc_gain_map(stage: Usd.Stage) -> dict[str, MjcGainSource]
+- def candidate_param_chains(spec: JointParamSpec, backend: str, solver: str = '') -> tuple[tuple[str, Ellipsis], Ellipsis]
+- def clip_series_to_valid(x_data: list[np.ndarray], y_data: list[np.ndarray]) -> tuple[list[np.ndarray], list[np.ndarray]]
+- def collect_gain_save_edits(joint_gains: list, stage: Usd.Stage | None) -> tuple[dict[str, list[tuple[Sdf.Path, object]]], Sdf.Layer | None]
+- def copy_joint_param_to_backend(joint: object, spec: JointParamSpec, value: float, backend: str) -> Usd.Attribute | None
+- def damping_from_damping_ratio_position_drive(damping_ratio: float, stiffness_stored: float) -> float
+- def damping_ratio_from_stiffness_damping_position_drive(damping_stored: float, stiffness_stored: float) -> float
+- def divergence_limit(lower: float | None = None, upper: float | None = None, reference: np.ndarray | None = None, headroom: float = DIVERGENCE_HEADROOM) -> float | None
+- def diverging_joint_params(joint: object, backend: str, solver: str = '') -> list[JointParamResolution]
+- def drive_gains_to_mjc(kp: float, kd: float) -> MjcGainParams
+- def dt_sweep_levels(dt_max: float, dt_min: float, num_steps: int) -> np.ndarray
+- def find_layer_by_save_identifier(layer_id: str) -> Sdf.Layer | None
+- def gain_labels_for_source(source: GainSource) -> GainLabels
+- def get_damping_attr(joint: object, drive_axis: object = None) -> pxr.Usd.Attribute | None
+- def get_defining_layer(attr: pxr.Usd.Attribute | None) -> Sdf.Layer | None
+- def get_joint_drive_mode(joint: object) -> int
+- def get_joint_drive_type_attr(joint: object, drive_axis: object = None) -> pxr.Usd.Attribute | None
+- def get_stiffness_attr(joint: object, drive_axis: object = None) -> pxr.Usd.Attribute | None
+- def has_physics_drive(joint: object, drive_axis: object = None) -> bool
+- def is_joint_mimic(joint: object) -> bool
+- def is_layer_savable(layer: Sdf.Layer | None) -> bool
+- def is_physx_layer(layer_identifier: str) -> bool
+- def is_viewed_source_editable(viewed_source: GainSource, active_source: GainSource) -> bool
+- def joint_param_attrs(joint: object, spec: JointParamSpec) -> tuple[Usd.Attribute | None, Usd.Attribute | None]
+- def joint_param_spec(key: str) -> JointParamSpec | None
+- def list_gain_save_target_layers(attrs: pxr.Usd.Attribute | list[pxr.Usd.Attribute] | None) -> SaveTargetOptions
+- def max_velocity_agrees(usd_value: float | None, engine_value: float | None) -> bool
+- def meq_for_drive_frequency() -> float
+- def mjc_params_to_drive_gains(gain_prm: object, bias_prm: object) -> tuple[float, float]
+- def natural_frequency_hz_from_stiffness_position_drive(stiffness_stored: float) -> float
+- def newton_backend_selected(backend: str) -> bool
+- def newton_mujoco_solver_active(stage: Usd.Stage | None = None) -> bool
+- def newton_solver_type(stage: Usd.Stage | None = None) -> str
+- def other_backend(backend: str) -> str | None
+- def param_resolver_chain(spec: JointParamSpec, backend: str, solver: str = '') -> tuple[str, ...] | None
+- def peak_bound(series: np.ndarray | None, headroom: float = DIVERGENCE_HEADROOM) -> float | None
+- def plan_stage_layer_save(layers: Iterable[Sdf.Layer]) -> StageSaveDecision
+- def resolve_gain_write_targets(joint_entries: list, stage: Usd.Stage | None, articulation_root_path: str | None = None) -> GainWriteTargets
+- def resolve_joint_gains(joint: object, drive_axis: object, ctx: GainReadContext, viewed_source: GainSource | None = None) -> ResolvedGains
+- def resolve_joint_param(joint: object, spec: JointParamSpec, backend: str, solver: str = '') -> JointParamResolution
+- def resolve_joint_params(joint: object, backend: str, solver: str = '') -> list[JointParamResolution]
+- def resolver_chain(backend: str, solver: str = '') -> tuple[str, ...] | None
+- def select_target_level_index(dt_levels, target_dt: float) -> int
+- def stiffness_and_damping_from_natural_frequency_position_drive(natural_freq_hz: float, damping_ratio: float) -> tuple[float, float]
+- def stored_gain_scale() -> float
+- def travel_bound(lower: float, upper: float, headroom: float = DIVERGENCE_HEADROOM) -> float | None
+- def valid_prefix_length(x_series: np.ndarray | None = None, y_series: np.ndarray | None = None) -> int
+- def validate_dt_bounds(dt_max: float, dt_min: float)
+
+## Variables
+
+- BACKEND_DISPLAY_LABELS: Dict
+- BACKEND_NEWTON: str
+- BACKEND_PHYSX: str
+- DIVERGENCE_HEADROOM: float
+- JOINT_PARAM_SPECS: tuple[JointParamSpec, Ellipsis]
+- MAX_VELOCITY_AGREEMENT_REL_TOL: float
+- NEWTON_DEFAULT_ARMATURE: float
+- NEWTON_JOINT_API: str
+- NEWTON_SOLVER_TYPES: tuple[str, Ellipsis]
+- PHYSX_JOINT_API: str
+- SCHEMA_JOINT_APIS: Dict
+- SCHEMA_LABELS: Dict
+- SCHEMA_MJC: str
+- SCHEMA_NEWTON: str
+- SCHEMA_PHYSX: str
+- SOLVER_MUJOCO: str
+- SOLVER_VBD: str
+- SOLVER_XPBD: str
+- SUPPORTED_BACKENDS: tuple[str, Ellipsis]
+- UNLIMITED_VELOCITY_THRESHOLD: float

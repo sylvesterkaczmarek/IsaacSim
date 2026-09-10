@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.19.0] - 2026-08-20
+### Added
+- Added `active_cuda_gpus` launch option for renderer selection using CUDA device ordering.
+
+## [2.18.7] - 2026-07-23
+### Changed
+- Default value of `limit_cpu_threads` reduced from 32 to 16. Carbonite's task scheduler sees diminishing returns beyond 16 threads; users who need more can override explicitly via the `SimulationApp` constructor.
+
+## [2.18.6] - 2026-07-22
+### Fixed
+- `_flush_stdio()` no longer raises on Windows. The C stdio flush added in 2.18.5 used `ctypes.CDLL(None)`, which is POSIX-only; on Windows `CDLL.__init__` evaluates `'/' in name` before loading and raises `TypeError` on `None`, which the previous `except` clause did not catch, so the exception propagated out of `close()` and crashed every standalone script (all Windows `doc_snippets` tests failed). The Universal CRT (`ucrtbase`) is now loaded explicitly on Windows and the flush is fully best-effort.
+
+## [2.18.5] - 2026-07-21
+### Changed
+- `SimulationApp.close(exit_code=...)` now runs the same cleanup regardless of the exit code: the nonzero fast-shutdown path previously exited before any cleanup, while the graceful path always terminated the process with status 0. A nonzero status is now applied where fast shutdown would otherwise exit with 0, so callers no longer have to choose between cleanup and a truthful exit status (e.g. SIGTERM-terminated workers reporting success to distributed launchers).
+
+### Fixed
+- `_flush_stdio()` now also flushes the C stdio streams: native output such as `IApp.print_and_log` is buffered on the C/C++ side, which `os._exit` abandons, so the tail of the shutdown log (including the `Simulation App Shutting Down` marker) was lost on every `_exit` path.
+
 ## [2.18.4] - 2026-06-04
 ### Added
 - Added `shutdown_watchdog_timeout` launch config option (default 120s). When fast shutdown is enabled, `close()` arms a `faulthandler`-based watchdog before `app.shutdown()` so a deadlocked Kit teardown (e.g. the carb.tasking GIL deadlock) dumps all thread stacks and force-exits instead of hanging until an external timeout. The watchdog runs on a C thread so it fires even when the main thread is wedged holding the GIL.

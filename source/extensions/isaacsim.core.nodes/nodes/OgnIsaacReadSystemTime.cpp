@@ -14,13 +14,13 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/Defines.h>
 
-#include <isaacsim/core/includes/BaseResetNode.h>
-#include <isaacsim/core/simulation_manager/ISimulationManager.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
+#include <isaacsim/core/simulation_manager/ISimulationManager.hpp>
 #include <omni/usd/UsdContextIncludes.h>
 //
 #include <omni/usd/UsdContext.h>

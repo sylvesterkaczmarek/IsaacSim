@@ -17,6 +17,8 @@
 
 import tempfile
 
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit
 import omni.replicator.core as rep
 import omni.timeline
@@ -29,17 +31,17 @@ class TestSDGUsefulSnippets(omni.kit.test.AsyncTestCase):
 
     async def setUp(self) -> None:
         """Create a clean stage before timeline-running capture tests."""
-        await omni.kit.app.get_app().next_update_async()
-        omni.usd.get_context().new_stage()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
 
     async def tearDown(self) -> None:
         """Close the stage and wait for any pending loads to finish."""
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
         # In some cases the test will end before the asset is loaded, in this case wait for assets to load
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
 
     async def test_capture_data_with_timeline_running(self) -> None:
         """Attach BasicWriter during playback and ensure only explicit orchestrator steps write frames."""

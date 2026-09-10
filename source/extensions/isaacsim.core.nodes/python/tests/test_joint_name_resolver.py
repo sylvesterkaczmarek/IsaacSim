@@ -43,7 +43,9 @@ class TestJointNameResolver(ogts.OmniGraphTestCase):
         if assets_root_path is None:
             carb.log_error("Could not find Isaac Sim assets folder")
             return
-        await stage_utils.open_stage_async(assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd")
+        await stage_utils.open_stage_async(
+            assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
+        )
         self._stage = omni.usd.get_context().get_stage()
 
         # Build a lookup from prim name -> prim path for all prims under the robot root

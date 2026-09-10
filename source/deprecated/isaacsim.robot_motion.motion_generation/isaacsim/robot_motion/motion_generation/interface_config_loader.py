@@ -32,7 +32,11 @@ def get_supported_robot_policy_pairs() -> dict:
     """Get a dictionary of MotionPolicy names that are supported for each given robot name.
 
     Returns:
-        Dictionary mapping robot names (keys) to a list of supported MotionPolicy config files (values).
+        Mapping from robot names to lists of supported MotionPolicy config files.
+
+    Raises:
+        FileNotFoundError: If policy_map.json cannot be found.
+        json.JSONDecodeError: If policy_map.json contains invalid JSON.
     """
     mg_extension_path = get_extension_path_from_name("isaacsim.robot_motion.motion_generation")
     policy_config_dir = os.path.join(mg_extension_path, "motion_policy_configs")
@@ -50,7 +54,11 @@ def get_supported_robots_with_lula_kinematics() -> list[str]:
     """Robot names that have supported lula kinematics configurations.
 
     Returns:
-        List of robot names with supported lula kinematics.
+        Robot names with supported lula kinematics.
+
+    Raises:
+        FileNotFoundError: If policy_map.json cannot be found.
+        json.JSONDecodeError: If policy_map.json contains invalid JSON.
     """
     # Currently just uses robots that have RmpFlow supported
     robots = []
@@ -66,7 +74,11 @@ def get_supported_robot_path_planner_pairs() -> dict:
     """Get a dictionary of PathPlanner names that are supported for each given robot name.
 
     Returns:
-        Dictionary mapping robot names (keys) to a list of supported PathPlanner config files (values).
+        Mapping from robot names to lists of supported PathPlanner config files.
+
+    Raises:
+        FileNotFoundError: If path_planner_map.json cannot be found.
+        json.JSONDecodeError: If path_planner_map.json contains invalid JSON.
     """
     mg_extension_path = get_extension_path_from_name("isaacsim.robot_motion.motion_generation")
     policy_config_dir = os.path.join(mg_extension_path, "path_planner_configs")
@@ -81,7 +93,7 @@ def get_supported_robot_path_planner_pairs() -> dict:
 
 
 def load_supported_lula_kinematics_solver_config(robot_name: str, policy_config_dir: str = None) -> dict:
-    """Load lula kinematics solver for a supported robot.
+    """Load lula kinematics solver configuration for a supported robot.
 
     Use get_supported_robots_with_lula_kinematics() to get a list of robots with supported kinematics.
 
@@ -90,8 +102,13 @@ def load_supported_lula_kinematics_solver_config(robot_name: str, policy_config_
         policy_config_dir: Path to directory where a policy_map.json file is stored.
 
     Returns:
-        A dictionary whose keyword arguments are sufficient to load the lula kinematics solver.
-            e.g. lula.LulaKinematicsSolver(**load_supported_lula_kinematics_solver_config("Franka"))
+        Configuration keyword arguments for lula.LulaKinematicsSolver, such as the result used by
+        ``lula.LulaKinematicsSolver(**load_supported_lula_kinematics_solver_config("Franka"))``.
+
+    Raises:
+        FileNotFoundError: If policy_map.json or the referenced RMPflow configuration file cannot be found.
+        json.JSONDecodeError: If policy_map.json or the referenced RMPflow configuration file contains invalid JSON.
+        KeyError: If the referenced RMPflow configuration is missing required kinematics keys.
     """
     policy_name = "RMPflow"
 
@@ -123,23 +140,27 @@ def load_supported_lula_kinematics_solver_config(robot_name: str, policy_config_
 
 
 def load_supported_motion_policy_config(robot_name: str, policy_name: str, policy_config_dir: str = None) -> dict:
-    """Load a MotionPolicy object by specifying the robot name and policy name.
+    """Load a MotionPolicy configuration by specifying the robot name and policy name.
 
     For a dictionary mapping supported robots to supported policies on those robots,
     use get_supported_robot_policy_pairs().
 
-    To use this loader for a new policy, a user may copy the config file structure found under /motion_policy_configs/
-    in the motion_generation extension, passing in a path to a directory containing a "policy_map.json"
+    To use this loader for a new policy, copy the config file structure found under /motion_policy_configs/
+    in the isaacsim.robot_motion.motion_generation extension and pass a path to a directory containing policy_map.json.
 
     Args:
         robot_name: Name of robot.
         policy_name: Name of MotionPolicy.
-        policy_config_dir: Path to directory where a policy_map.json file is stored,
-            defaults to ".../isaacsim.robot_motion.motion_generation/motion_policy_configs".
+        policy_config_dir: Path to directory where a policy_map.json file is stored.
 
     Returns:
-        A dictionary whose keyword arguments are sufficient to load the desired motion policy
-            e.g. lula.motion_policies.RmpFlow(**load_supported_motion_policy_config("Franka","RMPflow"))
+        Configuration keyword arguments for the requested MotionPolicy, such as the result used by
+        ``lula.motion_policies.RmpFlow(**load_supported_motion_policy_config("Franka", "RMPflow"))``.
+
+    Raises:
+        FileNotFoundError: If policy_map.json or the referenced MotionPolicy configuration file cannot be found.
+        json.JSONDecodeError: If policy_map.json or the referenced MotionPolicy configuration file contains invalid JSON.
+        KeyError: If the referenced MotionPolicy configuration is missing required keys.
     """
     if policy_config_dir is None:
         mg_extension_path = get_extension_path_from_name("isaacsim.robot_motion.motion_generation")
@@ -175,7 +196,12 @@ def load_supported_path_planner_config(robot_name: str, planner_name: str, polic
         policy_config_dir: Path to directory where a path_planner_map.json file is stored.
 
     Returns:
-        A dictionary whose keyword arguments are sufficient to load the desired path planner.
+        Configuration keyword arguments for the requested PathPlanner.
+
+    Raises:
+        FileNotFoundError: If path_planner_map.json or the referenced PathPlanner configuration file cannot be found.
+        json.JSONDecodeError: If path_planner_map.json or the referenced PathPlanner configuration file contains invalid JSON.
+        KeyError: If the referenced PathPlanner configuration is missing required keys.
     """
     if policy_config_dir is None:
         mg_extension_path = get_extension_path_from_name("isaacsim.robot_motion.motion_generation")
@@ -209,7 +235,12 @@ def _process_policy_config(mg_config_file: str) -> dict:
         mg_config_file: Path to the motion generation config file.
 
     Returns:
-        The processed configuration dictionary with resolved asset paths.
+        Processed configuration with resolved asset paths.
+
+    Raises:
+        FileNotFoundError: If mg_config_file cannot be found.
+        json.JSONDecodeError: If mg_config_file contains invalid JSON.
+        KeyError: If the configuration does not contain relative_asset_paths.
     """
     mp_config_dir = os.path.dirname(mg_config_file)
     with open(mg_config_file) as config_file:

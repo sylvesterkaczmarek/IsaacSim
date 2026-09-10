@@ -1,5 +1,5 @@
 [package]
-version = "1.2.2"
+version = "1.2.5"
 category = "Simulation"
 title = "Camera Inspector"
 description = "This extension can inspect and modify the properties of cameras in the scene."
@@ -16,15 +16,21 @@ writeTarget.kit = true
 "isaacsim.core.experimental.utils" = {}
 "isaacsim.core.rendering_manager" = {}
 "isaacsim.gui.components" = {}
-"omni.physx" = {}
 
 [[python.module]]
 name = "isaacsim.util.camera_inspector"
+
+[[python.module]]
+name = "isaacsim.util.camera_inspector.tests"
 
 [[test]]
 name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [[test]]

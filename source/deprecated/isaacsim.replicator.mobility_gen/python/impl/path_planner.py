@@ -27,7 +27,7 @@ from ..bindings import _path_planner
 class GeneratePathsOutput:
     """Output data structure from path generation containing navigation information.
 
-    Stores the results of pathfinding operations including visited cells, distances,
+    Stores the results of pathfinding operations, including visited cells, distances,
     and parent pointers for path reconstruction.
 
     Args:
@@ -56,7 +56,7 @@ class GeneratePathsOutput:
         return np.array(path)
 
     def get_valid_end_points(self) -> tuple:
-        """Get coordinates of all valid end points that can be reached from the start.
+        """Gets coordinates of all valid end points that can be reached from the start.
 
         Returns:
             Tuple of (i_indices, j_indices) arrays containing coordinates of visited points.

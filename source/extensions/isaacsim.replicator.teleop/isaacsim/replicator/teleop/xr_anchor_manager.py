@@ -13,18 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""XR anchor management for headset camera positioning.
+"""Canonical XR and teleop anchor management.
 
 The XR anchor determines **where in the scene the VR headset user sees
-from**.  Kit's XR Core rendering subsystem places the headset camera at
-the anchor prim's world transform.  This module creates that anchor prim
-and keeps it in sync every frame.
+from** and supplies the same resolved transform to teleop head/controller
+poses and frame markers. Kit's XR Core rendering subsystem places the
+headset camera at the generated anchor prim's world transform.
 
 The anchor does **not** have its own prim-path UI field. Instead it
 derives its pose from the Session panel's **Tracking Space** prim
 (e.g. ``/World/TeleopTrackingSpace``). The relationship is:
 
-    Tracking Space prim  →  XR anchor pose  →  headset camera position
+    Tracking Space prim  →  canonical anchor pose  →  XR + teleop + markers
 
 Two modes of operation:
 
@@ -35,18 +35,19 @@ Static anchoring (no Tracking Space prim set)
 
 Dynamic anchoring (Tracking Space prim set)
     The anchor follows the Tracking Space prim every frame. Its world position
-    is ``tracking_space_prim_world_pos + anchor_offset``. This is needed when
-    the reference object moves (e.g. a mobile robot base) and the VR
-    camera should track it.
+    is the prim's world position plus ``anchor_offset`` expressed in the
+    resolved anchor's local axes. This is needed when the reference object
+    moves (e.g. a mobile robot base) and the VR camera should track it.
 
 Rotation modes control how the anchor's yaw tracks the Tracking Space prim:
 
-- **Fixed** - anchor orientation is the configured offset only;
-  Tracking Space prim rotation is ignored.
-- **Follow Prim** - yaw-only delta from the Tracking Space prim's initial
-  orientation is applied (roll/pitch stripped to prevent VR nausea).
-- **Follow (Smoothed)** - same as Follow Prim but the yaw delta is
-  slerp-smoothed over *smoothing_time* seconds.
+- **Fixed** - capture and hold the prim's initial absolute yaw.
+- **Follow Prim** - follow the prim's current absolute yaw.
+- **Follow (Smoothed)** - follow the current yaw with slerp smoothing.
+
+Roll and pitch are stripped in every mode to prevent VR nausea. The resolved
+pose is shared with teleop controller/head composition and marker display, so
+an authored yaw correction remains registered with Kit XR.
 
 **Fixed Height**, when enabled, locks the anchor's Z to the value it
 had on the first sync frame - prevents the VR camera from bobbing when
@@ -55,7 +56,7 @@ the Tracking Space prim has vertical motion.
 
 from __future__ import annotations
 
-import contextlib
+import importlib
 import math
 import time
 from enum import Enum
@@ -63,18 +64,91 @@ from typing import Any
 
 import carb
 import carb.events
+import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
 import omni.usd
 from isaacsim.core.experimental.prims import XformPrim
-from pxr import Gf, UsdGeom
+from pxr import Gf, Sdf, Usd, UsdGeom
 
 from .coordinate_utils import OXR_TO_ISS_ROTATION
 
 XRCore = None
 XRCoreEventType = None
 XRSettings = None
-with contextlib.suppress(ModuleNotFoundError):
-    from omni.kit.xr.core import XRCore, XRCoreEventType, XRSettings
+
+
+def _load_xr_api() -> tuple[object | None, object | None, object | None]:
+    """Resolve Kit XR lazily so Teleop may load before ``omni.kit.xr.core``.
+
+    The normal 2D application intentionally does not load Kit XR, while the XR
+    experience may initialize it after this module is imported. A failed import
+    is therefore not cached: a later Connect can discover XR after it becomes
+    available.
+
+    Returns:
+        ``(XRCore, XRCoreEventType, XRSettings)`` or ``None`` entries when Kit
+        XR is unavailable.
+    """
+    global XRCore, XRCoreEventType, XRSettings
+    if XRCore is not None and XRCoreEventType is not None and XRSettings is not None:
+        return XRCore, XRCoreEventType, XRSettings
+    try:
+        module = importlib.import_module("omni.kit.xr.core")
+        XRCore = getattr(module, "XRCore")
+        XRCoreEventType = getattr(module, "XRCoreEventType")
+        XRSettings = getattr(module, "XRSettings")
+    except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError):
+        # Expected in the documented 2D controller-tracking mode.
+        return None, None, None
+    return XRCore, XRCoreEventType, XRSettings
+
+
+class KitXrRuntimeState(Enum):
+    """Whether Kit XR stereo rendering is active in this process."""
+
+    UNAVAILABLE = "unavailable"
+    INACTIVE = "inactive"
+    ACTIVE = "active"
+
+
+def _get_xr_core() -> object | None:
+    """Return the lazily resolved XR Core singleton, if available."""
+    xr_core_type, _event_type, _settings_type = _load_xr_api()
+    if xr_core_type is None:
+        return None
+    try:
+        return xr_core_type.get_singleton()
+    except (AttributeError, RuntimeError):
+        return None
+
+
+def get_kit_xr_runtime_state() -> KitXrRuntimeState:
+    """Report whether Kit XR stereo rendering is active in this process.
+
+    Only ``ACTIVE`` requires Teleop to publish the Kit XR profile anchor;
+    ``UNAVAILABLE`` and ``INACTIVE`` are both valid for the documented 2D
+    controller-tracking mode.
+
+    Returns:
+        Current Kit XR runtime state.
+    """
+    xr_core_type, _event_type, _settings_type = _load_xr_api()
+    if xr_core_type is None:
+        return KitXrRuntimeState.UNAVAILABLE
+    xr_core = _get_xr_core()
+    if xr_core is None:
+        return KitXrRuntimeState.INACTIVE
+
+    for method_name in ("is_xr_display_enabled", "is_xr_enabled"):
+        method = getattr(xr_core, method_name, None)
+        if method is None:
+            continue
+        try:
+            if bool(method()):
+                return KitXrRuntimeState.ACTIVE
+        except (AttributeError, RuntimeError, TypeError):
+            continue
+    return KitXrRuntimeState.INACTIVE
 
 
 class AnchorRotationMode(Enum):
@@ -106,22 +180,22 @@ _settings_snapshot: dict[str, Any] | None = None
 _settings_snapshot_refs: int = 0
 
 
-def _xr_settings() -> object:
+def _xr_settings() -> object | None:
     """Return the XRSettings singleton, or None if XR core is unavailable.
 
-    Silent ``None`` only on ``ModuleNotFoundError`` (XR extension not
-    loaded). Anything else (e.g. Kit version mismatch) is logged via
-    ``carb.log_warn`` so the headset misconfiguration surfaces in the log.
+    Kit XR is resolved on every call until it becomes available. This supports
+    both the 2D application, where XR is intentionally absent, and an XR
+    experience that initializes after Teleop.
 
     Returns:
-        The requested value.
+        The settings singleton when Kit XR is available, otherwise None.
     """
-    if XRSettings is None:
+    _xr_core_type, _event_type, xr_settings_type = _load_xr_api()
+    if xr_settings_type is None:
         return None
     try:
-        return XRSettings.get_singleton()
-    except (ModuleNotFoundError, AttributeError) as exc:
-        carb.log_warn(f"[Teleop][Anchor] XRSettings.get_singleton() unavailable: {exc!r}")
+        return xr_settings_type.get_singleton()
+    except (AttributeError, RuntimeError, TypeError):
         return None
 
 
@@ -140,7 +214,12 @@ def _snapshot_settings() -> bool:
     xs = _xr_settings()
     if xs is None:
         return False
-    _settings_snapshot = {token: xs.get_setting(token) for token in _OVERRIDDEN_TOKENS}
+    try:
+        _settings_snapshot = {token: xs.get_setting(token) for token in _OVERRIDDEN_TOKENS}
+    except (AttributeError, RuntimeError, TypeError) as exc:
+        carb.log_warn(f"[Teleop][Anchor] Failed to snapshot XR profile settings: {exc!r}")
+        _settings_snapshot = None
+        return False
     return True
 
 
@@ -155,8 +234,6 @@ def _restore_settings() -> None:
     if xs is None:
         return
     for token, original in _settings_snapshot_local.items():
-        if original is None:
-            continue
         try:
             xs.set_setting(token, original)
         except (AttributeError, RuntimeError, TypeError) as exc:
@@ -180,7 +257,15 @@ def activate_pre_session_anchor() -> bool:
     xs = _xr_settings()
     if xs is None:
         return False
-    xs.set_setting(_XR_TOKEN_ANCHOR_MODE, "scene origin")
+    try:
+        xs.set_setting(_XR_TOKEN_ANCHOR_MODE, "scene origin")
+        if xs.get_setting(_XR_TOKEN_ANCHOR_MODE) != "scene origin":
+            raise RuntimeError("XR profile rejected the scene-origin anchor mode")
+    except (AttributeError, RuntimeError, TypeError) as exc:
+        carb.log_warn(f"[Teleop][Anchor] Failed to acquire the XR profile anchor: {exc!r}")
+        if _settings_snapshot_refs == 0:
+            _restore_settings()
+        return False
     _settings_snapshot_refs += 1
     return True
 
@@ -196,7 +281,7 @@ def restore_pre_session_anchor() -> None:
 
 
 class XrAnchorManager:
-    """Manages the XR anchor prim that controls where the VR headset renders from.
+    """Manage the canonical anchor shared by Kit XR and teleop pose composition.
 
     The anchor prim is an Xform in the USD stage whose world transform tells
     Kit's XR Core where to place the headset camera.  This class:
@@ -243,13 +328,14 @@ class XrAnchorManager:
         self._fixed_height = fixed_height
         self._near_plane = near_plane
 
-        self._xr_core = XRCore.get_singleton() if XRCore is not None else None
+        self._xr_core = _get_xr_core()
         self._pre_sync_sub: carb.events.ISubscription | None = None
         self._anchor_prim_path: str = ""
+        self._anchor_layer: Sdf.Layer | None = None
         self._anchor_layer_id: str | None = None
-        self._tracking_space_xform: XformPrim | None = None
         self._fabric_stage = None
         self._settings_active: bool = False
+        self._reference_missing: bool = False
 
         # Dynamic-sync state
         self._initial_ref_quat: Gf.Quatd | None = None
@@ -273,54 +359,85 @@ class XrAnchorManager:
         Returns:
             The requested value.
         """
-        stage = omni.usd.get_context().get_stage()
-        if stage is None:
+        if self._anchor_layer is not None:
+            return True
+        # XR may initialize after this manager is constructed. Retry at Connect
+        # so the XR experience gets a pre-sync subscription when available.
+        self._xr_core = _get_xr_core()
+        if not stage_utils.is_stage_set() and omni.usd.get_context().get_stage() is None:
             print("[Teleop][Anchor] No USD stage.")
             return False
+        stage = stage_utils.get_current_stage()
 
         self._anchor_prim_path = self.DEFAULT_ANCHOR_PATH
 
-        # Create prim if it doesn't exist
-        prim = stage.GetPrimAtPath(self._anchor_prim_path)
-        if not prim or not prim.IsValid():
-            UsdGeom.Xform.Define(stage, self._anchor_prim_path)
-            prim = stage.GetPrimAtPath(self._anchor_prim_path)
-
-        # Set initial transform (anchor_pos + anchor_rot)
-        x, y, z, w = self._anchor_rot_xyzw
-        try:
-            xf = XformPrim(self._anchor_prim_path, reset_xform_op_properties=True)
-            xf.set_world_poses(
-                positions=np.array([[*self._anchor_pos]], dtype=np.float32),
-                orientations=np.array([[w, x, y, z]], dtype=np.float32),
+        existing = stage.GetPrimAtPath(self._anchor_prim_path)
+        if existing and existing.IsValid():
+            carb.log_warn(
+                f"[Teleop][Anchor] Runtime anchor path '{self._anchor_prim_path}' is already occupied. "
+                "Rename or remove that prim before connecting."
             )
-        except Exception as exc:
-            print(f"[Teleop][Anchor] Failed to set prim transform: {exc}")
+            return False
 
-        # Cache the layer identifier for set_world_transform_matrix
-        prim_stack = prim.GetPrimStack() if prim.IsValid() else None
-        self._anchor_layer_id = prim_stack[0].layer.identifier if prim_stack else None
+        # Generated XR state belongs to a private session sublayer. It is
+        # removed exactly on cleanup and never dirties the user's root layer.
+        self._anchor_layer = Sdf.Layer.CreateAnonymous("anon_teleop_xr_anchor")
+        stage.GetSessionLayer().subLayerPaths.append(self._anchor_layer.identifier)
+        try:
+            with Usd.EditContext(stage, self._anchor_layer):
+                stage.DefinePrim(self._anchor_prim_path, "Xform")
+                x, y, z, w = self._anchor_rot_xyzw
+                xf = XformPrim(self._anchor_prim_path, reset_xform_op_properties=True)
+                xf.set_world_poses(
+                    positions=np.array([[*self._anchor_pos]], dtype=np.float32),
+                    orientations=np.array([[w, x, y, z]], dtype=np.float32),
+                )
+        except Exception as exc:
+            carb.log_error(f"[Teleop][Anchor] Failed to create runtime anchor: {exc}")
+            self._drop_anchor_layer()
+            return False
+        self._anchor_layer_id = self._anchor_layer.identifier
 
         # Refcounted snapshot of the user's XR settings; the bool tracks whether
         # this call actually committed so cleanup() pairs with it correctly.
-        self._settings_active = activate_pre_session_anchor()
+        try:
+            self._settings_active = activate_pre_session_anchor()
 
-        # Only write when the snapshot was taken - XR coming online late between
-        # the activate call and here would otherwise leave no restorable baseline.
-        if self._settings_active:
-            xs = _xr_settings()
-            if xs is not None:
-                xs.set_setting(_XR_TOKEN_NEAR_PLANE, float(self._near_plane))
-                xs.set_setting(_XR_TOKEN_ANCHOR_MODE, "custom anchor")
-                xs.set_setting(_XR_TOKEN_CUSTOM_ANCHOR, self._anchor_prim_path)
+            # Only write when the snapshot was taken - XR coming online late
+            # between activation and this block would otherwise leave no
+            # restorable baseline.
+            if self._settings_active:
+                xs = _xr_settings()
+                if xs is not None:
+                    xs.set_setting(_XR_TOKEN_NEAR_PLANE, float(self._near_plane))
+                    xs.set_setting(_XR_TOKEN_ANCHOR_MODE, "custom anchor")
+                    xs.set_setting(_XR_TOKEN_CUSTOM_ANCHOR, self._anchor_prim_path)
+                    if (
+                        xs.get_setting(_XR_TOKEN_ANCHOR_MODE) != "custom anchor"
+                        or xs.get_setting(_XR_TOKEN_CUSTOM_ANCHOR) != self._anchor_prim_path
+                    ):
+                        raise RuntimeError("XR profile rejected the generated custom anchor")
+        except Exception as exc:
+            carb.log_error(f"[Teleop][Anchor] Failed to configure XR profile settings: {exc}")
+            self.cleanup()
+            return False
 
         print(
             f"[Teleop][Anchor] Created at '{self._anchor_prim_path}', "
             f"pos={tuple(self._anchor_pos)}, mode={self._rotation_mode.value}"
         )
 
-        # Do an initial sync so cached values are populated
-        self._sync()
+        # Do an initial sync so cached values are populated.
+        if not self._sync():
+            self.cleanup()
+            return False
+        if self._tracking_space_prim_path and self._reference_missing:
+            carb.log_warn(
+                f"[Teleop][Anchor] Tracking-space prim '{self._tracking_space_prim_path}' "
+                "could not provide a world transform."
+            )
+            self.cleanup()
+            return False
 
         self._update_sync_subscription()
 
@@ -329,17 +446,15 @@ class XrAnchorManager:
     def cleanup(self) -> None:
         """Release event subscriptions and the per-Connect settings activation.
 
-        Leaves the anchor prim to stage cleanup. When the window-level
+        Removes the anonymous runtime-anchor layer. When the window-level
         activation is still outstanding, re-applies the ``scene origin``
-        baseline (and clears the custom anchor token) so the headset
-        returns to its pre-Connect mode instead of staying pinned to
-        ``/World/XRAnchor``; the final release replays the snapshot.
+        baseline (and clears the custom anchor token) so the headset returns
+        to its pre-Connect mode; the final release replays the snapshot.
         """
         self._pre_sync_sub = None
         self._reset_sync_state()
         self._cached_pos = None
         self._cached_quat_xyzw = None
-        self._tracking_space_xform = None
         self._fabric_stage = None
         if self._settings_active:
             self._settings_active = False
@@ -348,7 +463,12 @@ class XrAnchorManager:
             if still_held and xs is not None:
                 xs.set_setting(_XR_TOKEN_ANCHOR_MODE, "scene origin")
                 xs.set_setting(_XR_TOKEN_CUSTOM_ANCHOR, "")
+                if _settings_snapshot is not None:
+                    original_near_plane = _settings_snapshot.get(_XR_TOKEN_NEAR_PLANE)
+                    if original_near_plane is not None:
+                        xs.set_setting(_XR_TOKEN_NEAR_PLANE, original_near_plane)
             restore_pre_session_anchor()
+        self._drop_anchor_layer()
         print("[Teleop][Anchor] Cleaned up.")
 
     def reset(self) -> None:
@@ -374,6 +494,11 @@ class XrAnchorManager:
         """
         return self._tracking_space_prim_path
 
+    @property
+    def is_xr_profile_configured(self) -> bool:
+        """Whether this manager successfully acquired and configured XR profile settings."""
+        return self._settings_active
+
     # ------------------------------------------------------------------
     # Configuration setters (can be called live from UI)
     # ------------------------------------------------------------------
@@ -385,6 +510,7 @@ class XrAnchorManager:
             pos: Value for pos.
         """
         self._anchor_pos = np.array(pos, dtype=np.float64)
+        self._initial_height = None
         self._sync()
 
     def set_anchor_rot(self, rot_xyzw: tuple[float, float, float, float]) -> None:
@@ -403,7 +529,6 @@ class XrAnchorManager:
             path: Value for path.
         """
         self._tracking_space_prim_path = path
-        self._tracking_space_xform = None
         self._reset_sync_state()
         self._sync()
         self._update_sync_subscription()
@@ -458,17 +583,40 @@ class XrAnchorManager:
             return self._build_matrix(self._cached_pos, self._cached_quat_xyzw)
         return self._build_matrix(self._anchor_pos, self._anchor_rot_xyzw)
 
+    def sync(self) -> bool:
+        """Resolve and publish the current canonical anchor pose.
+
+        Teleop pose composition calls this before consuming a frame so robot
+        targets and Kit XR use the same transform.
+
+        Returns:
+            Whether a pose was resolved successfully.
+        """
+        return self._sync()
+
+    def get_world_pose(self) -> tuple[Gf.Vec3d, Gf.Quatd]:
+        """Return the last resolved anchor pose without coordinate conversion.
+
+        Returns:
+            Position and orientation in Isaac Sim world coordinates.
+        """
+        if self._cached_pos is not None and self._cached_quat_xyzw is not None:
+            x, y, z, w = [float(value) for value in self._cached_quat_xyzw]
+            return Gf.Vec3d(*self._cached_pos), Gf.Quatd(w, Gf.Vec3d(x, y, z))
+        x, y, z, w = [float(value) for value in self._anchor_rot_xyzw]
+        return Gf.Vec3d(*self._anchor_pos), Gf.Quatd(w, Gf.Vec3d(x, y, z))
+
     # ------------------------------------------------------------------
     # Internal: sync anchor prim to Tracking Space + write XR Core
     # ------------------------------------------------------------------
 
-    def _sync(self) -> None:
+    def _sync(self) -> bool:
         """Read tracking-space pose, apply offset and rotation mode, update XR anchor, and cache result."""
         try:
             anchor_pos, anchor_quat = self._compute_anchor_pose()
         except Exception as exc:
             print(f"[Teleop][Anchor] _sync failed: {exc}")
-            return
+            return False
 
         # Cache for get_world_matrix() / get_world_transform()
         img = anchor_quat.GetImaginary()
@@ -477,10 +625,15 @@ class XrAnchorManager:
 
         # Write to XR Core so the rendering camera follows
         if self._xr_core is not None and self._anchor_layer_id is not None:
-            mat = Gf.Matrix4d()
-            mat.SetTranslateOnly(anchor_pos)
-            mat.SetRotateOnly(anchor_quat)
-            self._xr_core.set_world_transform_matrix(self._anchor_prim_path, mat, self._anchor_layer_id)
+            try:
+                mat = Gf.Matrix4d()
+                mat.SetTranslateOnly(anchor_pos)
+                mat.SetRotateOnly(anchor_quat)
+                self._xr_core.set_world_transform_matrix(self._anchor_prim_path, mat, self._anchor_layer_id)
+            except Exception as exc:
+                carb.log_warn(f"[Teleop][Anchor] Failed to publish XR anchor transform: {exc}")
+                return False
+        return True
 
     def _compute_anchor_pose(self) -> tuple[Gf.Vec3d, Gf.Quatd]:
         """Compute the final anchor world pose from config + tracking-space prim.
@@ -497,19 +650,32 @@ class XrAnchorManager:
         # Read tracking-space prim world pose from Fabric for physics accuracy
         ref_pos, ref_matrix = self._read_tracking_space_prim()
         if ref_pos is None:
+            if not self._reference_missing:
+                carb.log_warn(
+                    f"[Teleop][Anchor] Tracking-space prim '{self._tracking_space_prim_path}' is unavailable; "
+                    "holding the last valid anchor pose."
+                )
+            self._reference_missing = True
+            if self._cached_pos is not None and self._cached_quat_xyzw is not None:
+                x_c, y_c, z_c, w_c = [float(value) for value in self._cached_quat_xyzw]
+                return Gf.Vec3d(*self._cached_pos), Gf.Quatd(w_c, Gf.Vec3d(x_c, y_c, z_c))
             return Gf.Vec3d(*self._anchor_pos), cfg_quat
+        if self._reference_missing:
+            carb.log_info(f"[Teleop][Anchor] Tracking-space prim '{self._tracking_space_prim_path}' recovered.")
+        self._reference_missing = False
 
-        # Optional fixed height
+        # Resolve rotation before translation because Offset is expressed in
+        # the final anchor's local axes rather than in world axes.
+        anchor_quat = self._compute_rotation(ref_matrix, cfg_quat)
+        offset = Gf.Rotation(anchor_quat).TransformDir(Gf.Vec3d(*self._anchor_pos))
+        anchor_pos = ref_pos + offset
+
+        # Fixed Height locks the final shared anchor so Kit XR, markers, and
+        # robot targets remain registered vertically.
         if self._fixed_height:
             if self._initial_height is None:
-                self._initial_height = float(ref_pos[2])
-            ref_pos = Gf.Vec3d(ref_pos[0], ref_pos[1], self._initial_height)
-
-        # Position: Tracking Space world pos + config offset
-        anchor_pos = ref_pos + Gf.Vec3d(*self._anchor_pos)
-
-        # Rotation: depends on mode
-        anchor_quat = self._compute_rotation(ref_matrix, cfg_quat)
+                self._initial_height = float(anchor_pos[2])
+            anchor_pos = Gf.Vec3d(anchor_pos[0], anchor_pos[1], self._initial_height)
 
         return anchor_pos, anchor_quat
 
@@ -548,23 +714,14 @@ class XrAnchorManager:
             except Exception as exc:
                 print(f"[Teleop][Anchor] Fabric read failed, falling back to USD: {exc}")
 
-        # Fallback: read via USD/XformPrim
+        # Fallback: read the composed USD matrix directly. This supports
+        # arbitrary user-authored xform stacks without normalizing them.
         try:
-            if self._tracking_space_xform is None or not self._tracking_space_xform.valid:
-                self._tracking_space_xform = XformPrim(self._tracking_space_prim_path, reset_xform_op_properties=False)
-            xf = self._tracking_space_xform
-            if xf.valid:
-                positions, orientations = xf.get_world_poses()
-                p = positions[0]
-                o = orientations[0]
-                pos_np = p.numpy() if hasattr(p, "numpy") else np.asarray(p)
-                ori_np = o.numpy() if hasattr(o, "numpy") else np.asarray(o)
-                pos = Gf.Vec3d(float(pos_np[0]), float(pos_np[1]), float(pos_np[2]))
-                qd = Gf.Quatd(float(ori_np[0]), float(ori_np[1]), float(ori_np[2]), float(ori_np[3]))
-                mat = Gf.Matrix4d()
-                mat.SetTranslateOnly(pos)
-                mat.SetRotateOnly(qd)
-                return pos, mat
+            stage = stage_utils.get_current_stage()
+            prim = stage.GetPrimAtPath(self._tracking_space_prim_path)
+            if prim and prim.IsValid() and prim.IsA(UsdGeom.Xformable):
+                matrix = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+                return matrix.ExtractTranslation(), matrix
         except Exception:
             pass
 
@@ -580,27 +737,28 @@ class XrAnchorManager:
         Returns:
             The requested value.
         """
-        if ref_matrix is None or self._rotation_mode == AnchorRotationMode.FIXED:
+        if ref_matrix is None:
             final = cfg_quat
         else:
             ref_quat = ref_matrix.ExtractRotationQuat()
 
-            if self._initial_ref_quat is None:
-                self._initial_ref_quat = ref_quat
-
-            # Delta rotation from initial → current
-            delta_quat = ref_quat * self._initial_ref_quat.GetInverse()
-
-            # Extract yaw-only (Z-axis) to avoid nauseating roll/pitch
-            w_d = delta_quat.GetReal()
-            img = delta_quat.GetImaginary()
+            # Extract the absolute world-Z yaw. Roll and pitch are excluded
+            # from the shared XR/teleop frame for operator comfort.
+            w_d = ref_quat.GetReal()
+            img = ref_quat.GetImaginary()
             yaw = math.atan2(
                 2.0 * (w_d * img[2] + img[0] * img[1]),
                 1.0 - 2.0 * (img[1] * img[1] + img[2] * img[2]),
             )
             cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
             yaw_quat = Gf.Quatd(cy, Gf.Vec3d(0.0, 0.0, sy))
-            anchor_quat = yaw_quat * cfg_quat
+
+            # Fixed preserves the custom anchor's authored initial yaw. Follow
+            # modes use its current absolute yaw.
+            if self._initial_ref_quat is None:
+                self._initial_ref_quat = yaw_quat
+            selected_yaw = self._initial_ref_quat if self._rotation_mode == AnchorRotationMode.FIXED else yaw_quat
+            anchor_quat = selected_yaw * cfg_quat
 
             if self._rotation_mode == AnchorRotationMode.FOLLOW_PRIM_SMOOTHED:
                 if self._smoothed_quat is None:
@@ -611,7 +769,7 @@ class XrAnchorManager:
                     dt = min(dt, 0.1)
                     self._last_sync_time = now
                     alpha = 1.0 - math.exp(-dt / self._smoothing_time)
-                    alpha = min(1.0, max(0.05, alpha))
+                    alpha = min(1.0, max(0.0, alpha))
                     self._smoothed_quat = Gf.Slerp(alpha, self._smoothed_quat, anchor_quat)
                 anchor_quat = self._smoothed_quat
 
@@ -661,6 +819,7 @@ class XrAnchorManager:
         self._last_quat = None
         self._rotation_enabled = True
         self._last_sync_time = 0.0
+        self._reference_missing = False
 
     def _get_fabric_stage(self) -> Any:
         """Return a cached usdrt stage attached to the current USD stage.
@@ -676,16 +835,31 @@ class XrAnchorManager:
         self._fabric_stage = get_current_stage(backend="fabric")
         return self._fabric_stage
 
+    def _drop_anchor_layer(self) -> None:
+        """Remove the anonymous runtime-anchor layer from the current stage."""
+        layer = self._anchor_layer
+        self._anchor_layer = None
+        self._anchor_layer_id = None
+        if layer is None:
+            return
+        stage = omni.usd.get_context().get_stage()
+        if stage is None:
+            return
+        session = stage.GetSessionLayer()
+        if layer.identifier in session.subLayerPaths:
+            session.subLayerPaths.remove(layer.identifier)
+
     def _update_sync_subscription(self) -> None:
         """Subscribe to per-frame sync only when following a live tracking-space prim."""
-        should_sync = bool(self._tracking_space_prim_path) and self._xr_core is not None and XRCoreEventType is not None
+        _xr_core_type, xr_event_type, _settings_type = _load_xr_api()
+        should_sync = bool(self._tracking_space_prim_path) and self._xr_core is not None and xr_event_type is not None
         if not should_sync:
             self._pre_sync_sub = None
             return
 
         if self._pre_sync_sub is None:
             self._pre_sync_sub = self._xr_core.get_message_bus().create_subscription_to_pop_by_type(
-                XRCoreEventType.pre_sync_update,
+                xr_event_type.pre_sync_update,
                 lambda _: self._sync(),
                 name="teleop_xr_anchor_sync",
             )

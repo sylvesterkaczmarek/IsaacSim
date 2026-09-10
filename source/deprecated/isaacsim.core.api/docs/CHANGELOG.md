@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.3.2] - 2026-09-03
+### Changed
+- Remove machine-local paths from bundled USD test fixture metadata.
+
+## [5.3.1] - 2026-07-07
+### Changed
+- Update the generated Python API inventory.
+
+## [5.3.0] - 2026-06-26
+### Removed
+- Remove crash reporter build metadata registration from the deprecated extension.
+
 ## [5.2.13] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

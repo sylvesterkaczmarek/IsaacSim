@@ -2,7 +2,7 @@
 description = "Main Omniverse Isaac Sim Application with XR VR"
 execFile = "isaac-sim.xr.vr"
 title = "Isaac Sim XR VR"
-version = "6.0.1"
+version = "6.1.0"
 keywords = ["experience", "app", "usd", "isaacsim", "xr"] # That makes it browsable in UI with "experience" filter
 
 
@@ -15,15 +15,19 @@ keywords = ["experience", "app", "usd", "isaacsim", "xr"] # That makes it browsa
 "omni.kit.xr.ui.window.profile" = {}
 
 [dependencies."filter:platform"."linux-x86_64"]
+"isaacsim.kit.xr.teleop.bridge" = {}
 "isaacsim.replicator.teleop.ui" = {}
 
 [settings]
-app.name = "Isaac-Sim XR VR"
-app.version = "6.0.1"
-app.vulkan = true                       # Explicitly enable Vulkan
-app.enableDeveloperWarnings = false     # disable developer warnings to reduce log noise
+rtx.spg.enabled = true # Enable RTX Sensor Processing Graphs feature
 rtx.hydra.supportMultiTickRate = false  # disable multi-tick rendering for XR VR
 rtx.rendering.perSensorTickTlas = false # disable per sensor tick tlas for XR VR
+
+[settings.app]
+name = "Isaac-Sim XR VR"
+version = "6.1.0"
+vulkan = true                       # Explicitly enable Vulkan
+enableDeveloperWarnings = false     # disable developer warnings to reduce log noise
 
 [settings.app.exts.folders]
 '++' = [
@@ -37,8 +41,3 @@ rtx.rendering.perSensorTickTlas = false # disable per sensor tick tlas for XR VR
 [settings.app.window]
 hideUi = false
 title = "Isaac Sim XR VR"
-
-[settings.exts."omni.kit.registry.nucleus".registries]
-++ = [
-    { name = "isaacsim/prod/6.0", url = "https://ovextensionsprod.blob.core.windows.net/exts/isaacsim/prod/6.0/shared" },
-]

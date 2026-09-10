@@ -1312,6 +1312,41 @@ class RigidPrim(XformPrim):
                 enabled[i] = not rigid_body_api.GetDisableGravityAttr().Get()
             return ops_utils.place(enabled, device=self._device)
 
+    def remove_physics_apis(self, *, indices: int | list | np.ndarray | wp.array | None = None) -> None:
+        """Remove the rigid body APIs from the prims.
+
+        Backends: :guilabel:`usd`.
+
+        This method removes the APIs applied when the wrapper is created:
+
+        - USD: ``UsdPhysics.RigidBodyAPI``
+        - PhysX: ``PhysxSchema.PhysxRigidBodyAPI``
+
+        After removal the prims are no longer simulated as rigid bodies. Any collision APIs
+        (see :py:meth:`~isaacsim.core.experimental.prims.GeomPrim.remove_collision_apis`) are
+        left untouched. Removing an API that is not applied is a no-op.
+
+        Args:
+            indices: Indices of prims to process (shape ``(N,)``). If not defined, all wrapped prims are processed.
+
+        Raises:
+            AssertionError: Wrapped prims are not valid.
+
+        Example:
+
+        .. code-block:: python
+
+            >>> # remove the rigid body APIs from all prims
+            >>> prims.remove_physics_apis()
+        """
+        assert self.valid, _MSG_PRIM_NOT_VALID
+        # USD API
+        indices = ops_utils.resolve_indices(indices, count=len(self), device="cpu")
+        for index in indices.numpy():
+            prim = self.prims[index]
+            prim.RemoveAPI(UsdPhysics.RigidBodyAPI)
+            prim.RemoveAPI(PhysxSchema.PhysxRigidBodyAPI)
+
     def set_enabled_contact_tracking(
         self,
         enabled: bool | list | np.ndarray | wp.array,

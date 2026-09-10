@@ -14,10 +14,10 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include <isaacsim/core/cloner/Cloner.h>
+#include <isaacsim/core/cloner/Cloner.hpp>
 #include <omni/fabric/FabricUSD.h>
 // clang-format on
 

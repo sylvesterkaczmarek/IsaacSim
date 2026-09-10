@@ -34,6 +34,7 @@ import os
 import random
 import sys
 from enum import Enum
+from typing import Any
 
 
 class CaseResult(Enum):
@@ -92,7 +93,14 @@ cfg_dir = os.path.dirname(os.path.abspath(os.path.expanduser(args.config)))
 
 
 def _to_rgb(image: np.ndarray) -> np.ndarray:
-    """Drop the alpha channel from an LdrColor render so it matches the 3-channel GT images."""
+    """Drop the alpha channel from an LdrColor render so it matches the 3-channel GT images.
+
+    Args:
+        image: Rendered image with three or four channels.
+
+    Returns:
+        Three-channel image when an alpha channel is present, otherwise the input image as an array.
+    """
     arr = np.asarray(image)
     if arr.ndim == 3 and arr.shape[-1] == 4:
         return arr[..., :3]
@@ -100,7 +108,15 @@ def _to_rgb(image: np.ndarray) -> np.ndarray:
 
 
 def _save_images(out_dir: str, stem: str, gt: np.ndarray, bind: np.ndarray, clone: np.ndarray) -> None:
-    """Save gt/bind/clone and an amplified clone-vs-bind diff as PNGs under out_dir for visual inspection."""
+    """Save ground-truth, authored, cloned, and amplified difference images for inspection.
+
+    Args:
+        out_dir: Directory in which to create the diagnostic images.
+        stem: Filename prefix shared by the four images.
+        gt: Ground-truth image.
+        bind: Image from the authored render product.
+        clone: Image from the cloned render product.
+    """
     from PIL import Image
 
     os.makedirs(out_dir, exist_ok=True)
@@ -110,11 +126,20 @@ def _save_images(out_dir: str, stem: str, gt: np.ndarray, bind: np.ndarray, clon
     Image.fromarray(image_diff(bind, clone)).save(os.path.join(out_dir, f"{stem}_diff_clone_bind.png"))
 
 
-def _render_target_keyframes(stage, name: str, target, ts_list: list[int]) -> dict:
-    """Render one RenderTarget at each keyframe; returns ``{ts_ns: rgb image or None}``, closing the renderer.
+def _render_target_keyframes(stage: Any, name: str, target: Any, ts_list: list[int]) -> dict[int, np.ndarray | None]:
+    """Render one target at each requested keyframe and close the renderer.
 
     Renders a single bound RenderProduct at a time: an authored RenderProduct and a clone of it cannot be
     bound simultaneously, so the bind and clone passes each run alone.
+
+    Args:
+        stage: USD stage containing the render product.
+        name: Name assigned to the temporary camera renderer.
+        target: Render target to bind for this pass.
+        ts_list: Ground-truth keyframe timestamps in nanoseconds.
+
+    Returns:
+        Mapping from each requested timestamp to its RGB image, with ``None`` for a failed render.
     """
     renderer = CameraRenderer.open(stage, name, simulation_app, target, warmup_steps=WARMUP_STEPS)
     images: dict = {}
@@ -128,7 +153,10 @@ def _render_target_keyframes(stage, name: str, target, ts_list: list[int]) -> di
 
 
 def run_case(case: dict) -> CaseResult:
-    """Render bind + clone for each camera at N random GT keyframes; score the clone and compare to bind.
+    """Render authored and cloned products at selected ground-truth keyframes and compare their scores.
+
+    Args:
+        case: Render-test configuration containing stage, ground-truth, camera, and threshold settings.
 
     Returns:
         `CaseResult.PASS` (clone passed the GT gate and matched the bind), `CaseResult.FAIL` (failed a

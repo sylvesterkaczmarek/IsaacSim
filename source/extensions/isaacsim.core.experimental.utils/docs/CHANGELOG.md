@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.23.0] - 2026-07-23
+### Added
+- Add a `space` parameter to `compute_obb` for computing bounds in `world`, `local`, or `untransformed` coordinate frames.
+
+## [0.22.0] - 2026-07-23
+### Added
+- Add multi-apply schema instance queries to `prim.has_api` through the optional `instance_name` argument
+- Add `transform_world_to_local` as the inverse point-frame transform to `transform_local_to_world`
+
+## [0.21.1] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [0.21.0] - 2026-07-15
+### Added
+- Add `join_prim_paths` to prim utils for joining prim path segments into a single validated (USD-compatible) prim path
+
+## [0.20.0] - 2026-07-11
+### Added
+- Add `set_prim_attribute_value`, `delete_prim_attribute`, and `is_prim_valid` helpers with USD, USDRT, and Fabric support.
+- Add USD support to `xform.set_local_pose`, including prims with non-canonical transform operation stacks.
+
+### Fixed
+- Make `apply_collision` update existing collision enablement and mesh approximation state instead of returning early.
+
+## [0.19.1] - 2026-07-09
+### Fixed
+- Fix app utils test initializations
+
+## [0.19.0] - 2026-06-29
+### Added
+- Add `rotate_vectors_by_quaternion` and `transform_local_to_world` to transform utils for frame-aware vector and point transforms
+- Add `compute_bound_volume` to bounds utils for bound volume via `GetVolume()` in `world`, `local`, or `untransformed` frames
+- Add `compute_bound_range` to bounds utils for axis-aligned bound midpoint and size in world, local, or untransformed coordinates
+- Add `space` parameter to `compute_aabb` for computing bounds in `world`, `local`, or `untransformed` coordinate frames, with `test_bounds` coverage
+
+### Fixed
+- Compute child-inclusive local and untransformed AABBs in the root prim's coordinate frame
+- Align input dtypes in `quaternion_multiplication` when the second quaternion is NumPy float64 and the first is Warp float32
+
+## [0.18.0] - 2026-06-23
+### Added
+- Add `physics` utils module with `apply_collision`, `remove_collision`, `apply_rigid_body`, and `remove_rigid_body` authoring helpers (in-repo replacement for `omni.physx.scripts.utils`), with `test_physics` coverage
+
 ## [0.17.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

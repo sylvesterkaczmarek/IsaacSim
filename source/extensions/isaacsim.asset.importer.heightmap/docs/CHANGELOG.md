@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.3.5] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [2.3.4] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

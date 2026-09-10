@@ -89,7 +89,7 @@ def define_environment() -> None:
         simulation_app.close()
         sys.exit()
 
-    asset_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+    asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
     robot1 = add_reference_to_stage(usd_path=asset_path, path="/World/env_0/Franka_1")
     robot1.GetVariantSet("Gripper").SetVariantSelection("AlternateFinger")
     robot1.GetVariantSet("Mesh").SetVariantSelection("Quality")

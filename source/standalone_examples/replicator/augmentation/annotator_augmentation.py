@@ -53,15 +53,27 @@ SEED = 42
 carb.settings.get_settings().set_bool("/app/omni.graph.scriptnode/opt_in", True)
 
 
-def rgb_to_bgr_np(data_in):
-    """Swap RGBA red and blue channels using NumPy (CPU)."""
+def rgb_to_bgr_np(data_in: np.ndarray) -> np.ndarray:
+    """Swap RGBA red and blue channels using NumPy.
+
+    Args:
+        data_in: RGBA image to modify.
+
+    Returns:
+        The same image array with its red and blue channels exchanged.
+    """
     data_in[:, :, [0, 2]] = data_in[:, :, [2, 0]]
     return data_in
 
 
 @wp.kernel
-def rgb_to_bgr_wp(data_in: wp.array3d(dtype=wp.uint8), data_out: wp.array3d(dtype=wp.uint8)):
-    """Swap RGBA red and blue channels using Warp (GPU)."""
+def rgb_to_bgr_wp(data_in: wp.array3d(dtype=wp.uint8), data_out: wp.array3d(dtype=wp.uint8)) -> None:
+    """Swap RGBA red and blue channels using Warp (GPU).
+
+    Args:
+        data_in: Source RGBA image in device memory.
+        data_out: Destination image to receive the channel-swapped pixels.
+    """
     i, j = wp.tid()
     data_out[i, j, 0] = data_in[i, j, 2]
     data_out[i, j, 1] = data_in[i, j, 1]
@@ -69,8 +81,19 @@ def rgb_to_bgr_wp(data_in: wp.array3d(dtype=wp.uint8), data_out: wp.array3d(dtyp
     data_out[i, j, 3] = data_in[i, j, 3]
 
 
-def gaussian_noise_depth_np(data_in, sigma, seed):
-    """Add Gaussian noise to depth values using NumPy (CPU)."""
+def gaussian_noise_depth_np(data_in: np.ndarray, sigma: float, seed: int) -> np.ndarray:
+    """Add Gaussian noise to depth values using NumPy.
+
+    Calling this function resets NumPy's global random state before sampling.
+
+    Args:
+        data_in: Depth image to augment.
+        sigma: Standard deviation of the Gaussian noise.
+        seed: Seed passed to ``np.random.seed``.
+
+    Returns:
+        The augmented depth image.
+    """
     np.random.seed(seed)
     result = data_in.astype(np.float32) + np.random.randn(*data_in.shape) * sigma
     return np.clip(result, 0, None).astype(data_in.dtype)
@@ -84,8 +107,15 @@ rep.annotators.register_augmentation(
 @wp.kernel
 def gaussian_noise_depth_wp(
     data_in: wp.array2d(dtype=wp.float32), data_out: wp.array2d(dtype=wp.float32), sigma: float, seed: int
-):
-    """Add Gaussian noise to depth values using Warp (GPU)."""
+) -> None:
+    """Add Gaussian noise to depth values using Warp (GPU).
+
+    Args:
+        data_in: Source depth image in device memory.
+        data_out: Destination image to receive noisy depth values.
+        sigma: Standard deviation of the Gaussian depth noise.
+        seed: Base random seed used to derive a stream for each pixel.
+    """
     i, j = wp.tid()
     # Unique ID for random seed per pixel
     scalar_pixel_id = i * data_in.shape[1] + j
@@ -99,7 +129,16 @@ rep.annotators.register_augmentation(
 
 
 def convert_depth_to_uint8(data: np.ndarray | wp.array) -> np.ndarray:
-    """Normalize depth data and convert it to uint8 grayscale."""
+    """Normalize depth data and convert it to uint8 grayscale.
+
+    A NumPy input already stored as float32 may be modified in place when nonfinite values are replaced.
+
+    Args:
+        data: Depth image stored as a NumPy or Warp array.
+
+    Returns:
+        Grayscale image spanning the finite depth range, with constant-depth inputs mapped to zero.
+    """
     if isinstance(data, wp.array):
         data = data.numpy()
     depth = data.astype(np.float32, copy=False)
@@ -117,7 +156,17 @@ def convert_depth_to_uint8(data: np.ndarray | wp.array) -> np.ndarray:
 
 
 def run_example(num_frames: int, resolution: tuple[int, int], use_warp: bool, env_url: str | None = None) -> float:
-    """Run the capture pipeline using step() to trigger a randomization and data capture."""
+    """Run the capture pipeline using step() to trigger a randomization and data capture.
+
+    Args:
+        num_frames: Number of randomized frames to capture and write.
+        resolution: Width and height of the render product in pixels.
+        use_warp: Whether to execute the augmentations with Warp instead of NumPy.
+        env_url: Optional environment USD path relative to the Isaac asset root.
+
+    Returns:
+        Elapsed wall-clock time for capture and queued image writes, in seconds.
+    """
     print(f"Running example with num_frames: {num_frames}, resolution: {resolution}, use_warp: {use_warp}")
 
     if env_url is not None and env_url != "":

@@ -32,6 +32,7 @@ class TestSupportedLidarConfigs(omni.kit.test.AsyncTestCase):
     A single test method iterates over every (config, variant) pair in SUPPORTED_LIDAR_CONFIGS,
     creating a sensor prim for each and validating its parameters with SensorCheckerUtil.
     The stage and scene geometry are created once; the checker is reused across all configs.
+
     """
 
     async def setUp(self) -> None:

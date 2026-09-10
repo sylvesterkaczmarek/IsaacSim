@@ -27,15 +27,10 @@ import omni.physics.tensors as physics
 import omni.ui as ui
 import usd.schema.isaac.robot_schema as robot_schema
 from isaacsim.core.rendering_manager import ViewportManager
-from isaacsim.core.simulation_manager import SimulationEvent, SimulationManager
+from isaacsim.core.simulation_manager import PhysxGpuCfg, PhysxScene, SimulationEvent, SimulationManager
 from isaacsim.examples.browser import get_instance as get_browser_instance
-from isaacsim.gui.components.ui_utils import (
-    add_separator,
-    btn_builder,
-    get_style,
-    setup_ui_headers,
-    state_btn_builder,
-)
+from isaacsim.gui.components import add_separator, btn_builder, setup_ui_headers, state_btn_builder
+from isaacsim.gui.components.ui_utils import get_style
 from isaacsim.robot.surface_gripper import _surface_gripper as surface_gripper
 from omni.kit.window.property.templates import LABEL_HEIGHT, LABEL_WIDTH
 
@@ -204,11 +199,16 @@ class Extension(omni.ext.IExt):
             self._models["create_button"].text = "Reset Scene"
             self._models["create_button"].set_tooltip("Resets scenario")
 
-            # Get Handle for stage and stage ID to check if stage was reloaded
-            self._stage = self._usd_context.get_stage()
+            # Use a local variable so no persistent reference keeps the stage alive after reset
+            stage = self._usd_context.get_stage()
             self._stage_id = self._usd_context.get_stage_id()
             app_utils.stop()
             self._models["create_button"].set_clicked_fn(self._on_reset_scenario_button_clicked)
+
+            # Raise foundLostAggregatePairsCapacity so PhysX broadphase can handle all aggregate
+            # pairs in this scene without silently dropping found/lost events (needed for gripper contacts).
+            physx_scene = PhysxScene("/World/physicsScene")
+            physx_scene.set_gpu_configuration(PhysxGpuCfg(gpu_found_lost_aggregate_pairs_capacity=2048))
 
             self.gripper_prim_path = "/World/SurfaceGripper"
             self.gripper_interface = surface_gripper.acquire_surface_gripper_interface()
@@ -218,8 +218,8 @@ class Extension(omni.ext.IExt):
             # This prim could be already defined in the stage,
             # but creating it in code instead to demonstrate how to do it.
             # Once it is created it can be saved and this doesn't need to be redone
-            robot_schema.CreateSurfaceGripper(self._stage, self.gripper_prim_path)
-            gripper_prim = self._stage.GetPrimAtPath(self.gripper_prim_path)
+            robot_schema.CreateSurfaceGripper(stage, self.gripper_prim_path)
+            gripper_prim = stage.GetPrimAtPath(self.gripper_prim_path)
             attachment_points_rel = gripper_prim.GetRelationship(robot_schema.Relations.ATTACHMENT_POINTS.name)
 
             # Select the joints to the gripper
@@ -233,9 +233,7 @@ class Extension(omni.ext.IExt):
             # Joint drives can be used to derive the desired joint bounce/stretch behavior
             # Enable/Disable the joint DoFs and limits as desired.
 
-            gripper_joints = [
-                p.GetPath() for p in self._stage.GetPrimAtPath("/World/Surface_Gripper_Joints").GetChildren()
-            ]
+            gripper_joints = [p.GetPath() for p in stage.GetPrimAtPath("/World/Surface_Gripper_Joints").GetChildren()]
             attachment_points_rel.SetTargets(gripper_joints)
 
             # Define the distance the joint can grasp, and at what distance from the origin of the joints it will settle

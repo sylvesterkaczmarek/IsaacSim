@@ -14,7 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Send Python code to a running Isaac Sim instance via the python_server TCP socket.
+"""Localhost IPC client for Isaac Sim's code-editor python_server.
+
+Sends a Python cell to the loopback endpoint (default ``127.0.0.1:8226``) used by
+a trusted workstation Isaac Sim session. This is intentional local control-plane
+IPC — see the skill Security section. Prefer ``--dry-run`` to print the payload
+without contacting the server.
 
 Usage:
     # Inline code
@@ -58,19 +63,35 @@ Exit codes:
 """
 
 import argparse
+import ast
 import asyncio
 import json
 import sys
 
 
 async def send_and_receive(host: str, port: int, source: str, timeout: float = 60.0) -> dict:
-    """Send Python source code or a JSON envelope and return the parsed JSON response."""
+    """Exchange one request/response with the local code-editor server.
+
+    Default endpoint is loopback (``127.0.0.1:8226``). Keep the server bound to localhost.
+    """
     reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=timeout)
     writer.write(source.encode())
     writer.write_eof()
     data = await asyncio.wait_for(reader.read(), timeout=timeout)
     writer.close()
     return json.loads(data.decode())
+
+
+def _parse_arg_value(value: str):
+    """Infer a Python literal from a CLI ``--arg`` value string.
+
+    Uses ``ast.literal_eval`` for numbers, booleans, None, lists, dicts, and
+    quoted strings. Non-literal values fall back to the raw string.
+    """
+    try:
+        return ast.literal_eval(value)
+    except (ValueError, SyntaxError):
+        return value
 
 
 def _inject_args(source: str, args: list[str]) -> str:
@@ -82,11 +103,7 @@ def _inject_args(source: str, args: list[str]) -> str:
         key, _, value = arg.partition("=")
         key = key.strip()
         value = value.strip()
-        try:
-            parsed = eval(value, {"__builtins__": {}})  # noqa: S307
-            lines.append(f"{key} = {repr(parsed)}")
-        except Exception:
-            lines.append(f'{key} = "{value}"')
+        lines.append(f"{key} = {repr(_parse_arg_value(value))}")
     return "\n".join(lines) + "\n" + source
 
 
@@ -103,11 +120,7 @@ def _wrap_isolated(source: str, args: list[str]) -> str:
         key, _, value = arg.partition("=")
         key = key.strip()
         value = value.strip()
-        try:
-            parsed = eval(value, {"__builtins__": {}})  # noqa: S307
-            arg_lines.append(f"    {key} = {repr(parsed)}")
-        except Exception:
-            arg_lines.append(f'    {key} = "{value}"')
+        arg_lines.append(f"    {key} = {repr(_parse_arg_value(value))}")
 
     # Indent the source
     indented = "\n".join("    " + line for line in source.splitlines())
@@ -129,10 +142,7 @@ def _parse_args_kv(arg_list: list[str]) -> dict:
         key, _, value = arg.partition("=")
         key = key.strip()
         value = value.strip()
-        try:
-            result[key] = eval(value, {"__builtins__": {}})  # noqa: S307
-        except Exception:
-            result[key] = value
+        result[key] = _parse_arg_value(value)
     return result
 
 
@@ -159,6 +169,11 @@ async def main() -> None:
     parser.add_argument("--port", type=int, default=8226, help="Server port (default: 8226)")
     parser.add_argument("--timeout", type=float, default=60.0, help="Client TCP timeout in seconds (default: 60)")
     parser.add_argument("--raw", action="store_true", help="Print raw JSON instead of formatted output")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the payload that would be sent and exit without connecting",
+    )
     parser.add_argument(
         "--no-isolate",
         action="store_true",
@@ -277,6 +292,10 @@ async def main() -> None:
         source = json.dumps(envelope)
     else:
         source = source_code
+
+    if args.dry_run:
+        print(source)
+        sys.exit(0)
 
     try:
         result = await send_and_receive(args.host, args.port, source, args.timeout)

@@ -17,16 +17,23 @@
 
 from __future__ import annotations
 
+import isaacsim.core.experimental.utils.backend as backend_utils
 import isaacsim.core.experimental.utils.prim as prim_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
 import warp as wp
 from isaacsim.core.experimental.objects import Plane
 from isaacsim.core.experimental.utils.transform import quaternion_to_rotation_matrix
-from pxr import Usd
 
 from .trackable_api import TrackableApi
 from .utils import collision_approximation as bound_utils
+
+
+def _is_path_in_prototype(prim_path: str) -> bool:
+    """Return whether a prim path belongs to a USD prototype."""
+    with backend_utils.use_backend("usd"):
+        prim = prim_utils.get_prim_at_path(prim_path)
+        return bool(prim and prim.IsValid() and prim.IsInPrototype())
 
 
 def _do_two_aabbs_overlap(
@@ -183,6 +190,10 @@ class SceneQuery:
             ...     tracked_api=TrackableApi.PHYSICS_COLLISION,
             ... )
         """
+        # Refresh the cache once per query so authored transform changes are reflected,
+        # while still sharing one cache across all bound computations in this query.
+        self._bb_cache = bound_utils.create_bbox_cache()
+
         # Convert single include path to list if it exists:
         if include_prim_paths is not None:
             if isinstance(include_prim_paths, str):
@@ -251,9 +262,17 @@ class SceneQuery:
             all_paths_to_include = _all_child_prims_of_list_of_prims(include_prim_paths)
 
         def _search_predicate(sdf_path: object) -> bool:
-            # Reject Prototypes:
             prim_path_string = sdf_path.GetString()
-            if Usd.Prim.IsPathInPrototype(prim_path_string):
+
+            with backend_utils.use_backend("usd"):
+                prim = prim_utils.get_prim_at_path(prim_path_string)
+
+            # Ignore transient USDRT-only paths, which cannot be queried for USD geometry.
+            if not (prim and prim.IsValid()):
+                return False
+
+            # Reject Prototypes:
+            if prim.IsInPrototype():
                 return False
 
             # Make sure that we are the child of at least one included
@@ -270,7 +289,7 @@ class SceneQuery:
 
             # In the case of a plane, we have to do a special check,
             # As its AABB can generally be meaningless:
-            if Plane.are_of_type(prim_path_string).numpy().item():
+            if prim.IsA("Plane"):
                 return _does_plane_intersect_aabb(Plane(prim_path_string), search_box)
 
             # In the case of other bodies, we do an AABB vs AABB check:
@@ -308,4 +327,4 @@ class SceneQuery:
         sdf_paths = self._stage.GetPrimsWithAppliedAPIName("IsaacRobotAPI")
 
         # Return any robot type which is not a prototype:
-        return [path.GetString() for path in sdf_paths if not Usd.Prim.IsPathInPrototype(path.GetString())]
+        return [path.GetString() for path in sdf_paths if not _is_path_in_prototype(path.GetString())]

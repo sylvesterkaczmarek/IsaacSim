@@ -32,7 +32,6 @@ class Extension(omni.ext.IExt):
 
         Args:
             ext_id: The extension identifier.
-
         """
 
     def on_shutdown(self) -> None:

@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "TcpStepServer.h"
+#include "TcpStepServer.hpp"
 
-#include <isaacsim/core/includes/BaseResetNode.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
 
 #include <OgnSimpleReceiveExternalStepCppDatabase.h>
 #include <memory>

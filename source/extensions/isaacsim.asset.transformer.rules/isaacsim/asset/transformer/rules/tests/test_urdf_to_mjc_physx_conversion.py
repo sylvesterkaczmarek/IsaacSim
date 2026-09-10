@@ -116,8 +116,8 @@ class TestUrdfToMjcPhysxConversionRule(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(drive.GetMaxForceAttr().Get(), 87.0)
         self._success = True
 
-    async def test_velocity_limit_to_max_velocity(self) -> None:
-        """URDF velocity limit should become PhysX max joint velocity (deg/s)."""
+    async def test_legacy_velocity_limit_does_not_set_max_velocity(self) -> None:
+        """Legacy URDF velocity limits should not author PhysX max joint velocity."""
         stage = _build_urdf_stage()
 
         rule = self._create_rule(stage)
@@ -127,8 +127,7 @@ class TestUrdfToMjcPhysxConversionRule(omni.kit.test.AsyncTestCase):
         from pxr import PhysxSchema
 
         physx_joint = PhysxSchema.PhysxJointAPI(joint)
-        expected_deg = 2.175 * 180 / 3.1415926
-        self.assertAlmostEqual(physx_joint.GetMaxJointVelocityAttr().Get(), expected_deg, places=2)
+        self.assertFalse(physx_joint.GetMaxJointVelocityAttr().HasAuthoredValue())
         self._success = True
 
     async def test_damping_set_on_drive(self) -> None:

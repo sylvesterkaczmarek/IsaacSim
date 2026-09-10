@@ -20,7 +20,7 @@ import omni.graph.core as og
 from isaacsim.core.experimental.materials import PreviewSurfaceMaterial
 from isaacsim.core.experimental.objects import Cube
 from isaacsim.core.rendering_manager import ViewportManager
-from isaacsim.examples.base.base_sample_experimental import BaseSample
+from isaacsim.examples.base import BaseSample
 from isaacsim.storage.native import get_assets_root_path
 
 

@@ -15,8 +15,12 @@
 
 """Searchable site combo box for the Robot Poser extension."""
 
+from __future__ import annotations
+
+import asyncio
 from collections.abc import Callable
 
+import omni.kit.app
 import omni.ui as ui
 
 from ..style import (
@@ -26,6 +30,51 @@ from ..style import (
     TREEVIEW_BG_COLOR,
     TREEVIEW_SELECTED_COLOR,
 )
+
+_retired_popups: list[ui.Window] = []
+_retire_task: asyncio.Task | None = None
+
+
+async def _drain_retired_popups() -> None:
+    """Destroy every queued popup window once the current frame has finished."""
+    await omni.kit.app.get_app().next_update_async()
+    popups = list(_retired_popups)
+    _retired_popups.clear()
+    for popup in popups:
+        popup.destroy()
+
+
+def _retire_popup(popup: ui.Window) -> None:
+    """Queue a popup window for destruction on a later frame.
+
+    omni.ui does not support destroying widgets while an event or a draw is in
+    progress, and combos are torn down from rebuild callbacks that run inside
+    both. The window is hidden immediately and released once the frame ends.
+
+    Args:
+        popup: The popup window to destroy.
+    """
+    global _retire_task
+    popup.visible = False
+    _retired_popups.append(popup)
+    if _retire_task is None or _retire_task.done():
+        _retire_task = asyncio.ensure_future(_drain_retired_popups())
+
+
+def flush_retired_popups() -> None:
+    """Destroy any queued popup windows immediately.
+
+    Called on extension shutdown, where no draw is in progress and the pending
+    drain task would otherwise never resume.
+    """
+    global _retire_task
+    if _retire_task is not None and not _retire_task.done():
+        _retire_task.cancel()
+    _retire_task = None
+    popups = list(_retired_popups)
+    _retired_popups.clear()
+    for popup in popups:
+        popup.destroy()
 
 
 def _short_name(path: str) -> str:
@@ -234,7 +283,17 @@ class SiteSearchComboBox:
         if items:
             self._list_model.set_items(items)
 
-        self._frame = ui.Frame(height=22, identifier=identifier)
+        # Widget handles filled in by _build_ui; declared up front so destroy
+        # works even if the build is interrupted.
+        self._display_label = None
+        self._search_placeholder = None
+        self._query_field = None
+        self._query_value_sub = None
+        self._tree_view = None
+        self._close_btn = None
+
+        # omni.ui rejects a None identifier, so only pass it when one was given.
+        self._frame = ui.Frame(height=22, **({"identifier": identifier} if identifier else {}))
         self._popup = ui.Window(
             f"_site_search_{id(self)}",
             width=100,
@@ -256,9 +315,34 @@ class SiteSearchComboBox:
     # -- public API ---------------------------------------------------------
 
     def destroy(self) -> None:
-        """Hide the popup and release callbacks."""
-        self._popup.set_visibility_changed_fn(None)
-        self._popup.visible = False
+        """Release the popup window and every callback that points back at this combo.
+
+        The frame mouse handler, the query-field subscription and the tree-view
+        selection callback each hold a reference to this object, so leaving them
+        in place keeps the combo and its popup window alive until Python's cyclic
+        collector runs. That collection can happen inside an omni.ui event or
+        draw, where destroying the popup's widgets is not supported.
+        """
+        self._on_selection_changed_fn = None
+        self._query_value_sub = None
+        if self._tree_view is not None:
+            self._tree_view.set_selection_changed_fn(None)
+            self._tree_view = None
+        if self._close_btn is not None:
+            self._close_btn.set_mouse_pressed_fn(None)
+            self._close_btn = None
+        if self._frame is not None:
+            self._frame.set_mouse_pressed_fn(None)
+            self._frame = None
+        if self._popup is not None:
+            self._popup.set_visibility_changed_fn(None)
+            _retire_popup(self._popup)
+            self._popup = None
+        self._display_label = None
+        self._search_placeholder = None
+        self._query_field = None
+        self._list_model = None
+        self._delegate = None
 
     @property
     def value(self) -> str:
@@ -276,7 +360,8 @@ class SiteSearchComboBox:
         Args:
             items: Full list of site path strings.
         """
-        self._list_model.set_items(items)
+        if self._list_model is not None:
+            self._list_model.set_items(items)
 
     # -- internal helpers ---------------------------------------------------
 
@@ -337,7 +422,7 @@ class SiteSearchComboBox:
                                     "background_color": TREEVIEW_BG_COLOR,
                                     "color": LABEL_COLOR,
                                 },
-                                identifier=f"{self._identifier}_search" if self._identifier else None,
+                                **({"identifier": f"{self._identifier}_search"} if self._identifier else {}),
                             )
                             with ui.ZStack(width=16, height=22):
                                 with ui.VStack():
@@ -352,8 +437,8 @@ class SiteSearchComboBox:
                                         )
                                         ui.Spacer()
                                     ui.Spacer()
-                                close_btn = ui.InvisibleButton()
-                                close_btn.set_mouse_pressed_fn(
+                                self._close_btn = ui.InvisibleButton()
+                                self._close_btn.set_mouse_pressed_fn(
                                     lambda x, y, b, m: self._close_popup() if b == 0 else None
                                 )
                         # Placeholder overlay (search icon + "Search" text)
@@ -442,6 +527,8 @@ class SiteSearchComboBox:
 
     def _update_display_label(self) -> None:
         """Update the collapsed label text and tooltip."""
+        if self._display_label is None:
+            return
         self._display_label.text = self._get_display_name()
         self._display_label.set_tooltip(self._current_value)
 

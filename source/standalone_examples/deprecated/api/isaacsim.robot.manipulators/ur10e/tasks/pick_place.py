@@ -26,7 +26,16 @@ from isaacsim.storage.native import get_assets_root_path
 
 
 class PickPlace(tasks.PickPlace):
-    """Pick-and-place task for UR10e with gripper."""
+    """Pick-and-place task for UR10e with gripper.
+
+    Args:
+        name: Name used to register the task in the world.
+        cube_initial_position: Optional initial world position of the cube.
+        cube_initial_orientation: Optional initial world orientation of the cube.
+        target_position: Optional world position at which to place the cube.
+        offset: Optional positional offset applied to the grasp pose.
+        cube_size: Optional dimensions of the cube used by the task.
+    """
 
     def __init__(
         self,
@@ -49,7 +58,14 @@ class PickPlace(tasks.PickPlace):
         return
 
     def set_robot(self) -> SingleManipulator:
-        """Configure and return the UR10e manipulator with gripper."""
+        """Configure and return the UR10e manipulator with gripper.
+
+        Returns:
+            Configured UR10e manipulator with its Robotiq gripper.
+
+        Raises:
+            Exception: If the Isaac Sim asset root cannot be found.
+        """
         assets_root_path = get_assets_root_path()
         if assets_root_path is None:
             raise Exception("Could not find Isaac Sim assets folder")

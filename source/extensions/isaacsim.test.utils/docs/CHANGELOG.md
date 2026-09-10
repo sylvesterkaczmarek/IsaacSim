@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.14.8] - 2026-06-29
+### Added
+- Add `fail_on_empty_extensions` to `validate_folder_contents` to reject zero-byte files for selected extensions only.
+
 ## [0.14.7] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

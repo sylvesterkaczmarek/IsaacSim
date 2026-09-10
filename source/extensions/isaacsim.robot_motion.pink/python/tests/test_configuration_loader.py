@@ -17,6 +17,7 @@
 
 import os
 import tempfile
+import xml.etree.ElementTree as ET
 
 import numpy as np
 import omni.kit.test
@@ -133,6 +134,32 @@ class TestConfigurationLoader(omni.kit.test.AsyncTestCase):
         robot = load_pink_robot(urdf_path=pathlib.Path(self._urdf_path))
         self.assertIsNotNone(robot)
 
+    async def test_load_exporter_urdf_without_dynamic_limits(self) -> None:
+        """Exporter-style limits without effort or velocity load successfully."""
+        exported_path = os.path.join(self._tmpdir, "exported.urdf")
+        try:
+            root = ET.fromstring(_TEST_URDF)
+            for limit in root.iter("limit"):
+                limit.attrib.pop("effort")
+                limit.attrib.pop("velocity")
+            ET.SubElement(root.find("joint"), "safety_controller", k_position="10")
+            ET.ElementTree(root).write(exported_path, encoding="utf-8", xml_declaration=True)
+            with open(exported_path) as exported_file:
+                exported_text = exported_file.read()
+
+            robot = load_pink_robot(exported_path)
+
+            self.assertEqual(robot.controlled_joint_names, ["joint1", "joint2", "joint3"])
+            self.assertTrue(np.allclose(robot.model.lowerPositionLimit, [-3.14, -3.14, -3.14]))
+            self.assertTrue(np.allclose(robot.model.upperPositionLimit, [3.14, 3.14, 3.14]))
+            collision_robot = load_pink_robot(exported_path, build_collision_model=True)
+            self.assertIsNotNone(collision_robot.collision_model)
+            with open(exported_path) as exported_file:
+                self.assertEqual(exported_file.read(), exported_text)
+        finally:
+            if os.path.exists(exported_path):
+                os.remove(exported_path)
+
     # ========================================================================
     # Error cases
     # ========================================================================
@@ -150,12 +177,12 @@ class TestConfigurationLoader(omni.kit.test.AsyncTestCase):
             load_pink_supported_robot("definitely_not_a_robot")
 
     async def test_load_invalid_urdf_content(self) -> None:
-        """RuntimeError or similar for malformed URDF content."""
+        """ValueError identifies the rejected file and suggests validation checks."""
         bad_path = os.path.join(self._tmpdir, "bad.urdf")
         with open(bad_path, "w") as f:
             f.write("this is not valid urdf xml")
         try:
-            with self.assertRaises(Exception):
+            with self.assertRaisesRegex(ValueError, "Failed to parse URDF.*Verify the XML structure"):
                 load_pink_robot(bad_path)
         finally:
             os.remove(bad_path)

@@ -23,12 +23,12 @@ from isaacsim.robot.surface_gripper import _surface_gripper as surface_gripper
 
 
 class SurfaceGripper(Gripper):
-    """Provides high level functions to set/ get properties and actions of a surface gripper.
+    """Provides high-level functions to set or get properties and actions of a surface gripper.
 
-    (a suction cup for example).
+    For example, a suction cup.
 
     Args:
-        end_effector_prim_path: Prim path of the Prim that corresponds to the gripper root/ end effector.
+        end_effector_prim_path: Prim path of the Prim that corresponds to the gripper root or end effector.
         surface_gripper_path: Prim path of the surface gripper.
     """
 
@@ -45,10 +45,9 @@ class SurfaceGripper(Gripper):
     def initialize(
         self, physics_sim_view: omni.physics.tensors.SimulationView = None, articulation_num_dofs: int = None
     ) -> None:
-        """Create a physics simulation view if not passed and creates a rigid prim view using physX tensor api.
+        """Creates a physics simulation view if not passed and stores the articulation DOF count.
 
-        This needs to be called after each hard reset (i.e stop + play on the timeline) before interacting with any
-        of the functions of this class.
+        This needs to be called after each hard reset, for example stop and play on the timeline, before using this class.
 
         Args:
             physics_sim_view: Current physics simulation view.
@@ -62,7 +61,7 @@ class SurfaceGripper(Gripper):
         return
 
     def close(self) -> None:
-        """Applies actions to the articulation that closes the gripper (ex: to hold an object)."""
+        """Closes the surface gripper, for example to hold an object."""
         if not self.is_closed():
             self._surface_gripper_interface.close_gripper(self._surface_gripper_path)
         if not self.is_closed():
@@ -70,7 +69,7 @@ class SurfaceGripper(Gripper):
         return
 
     def open(self) -> None:
-        """Applies actions to the articulation that opens the gripper (ex: to release an object held)."""
+        """Opens the surface gripper, for example to release a held object."""
         self._surface_gripper_interface.open_gripper(self._surface_gripper_path)
         if not self.is_open():
             carb.log_warn("gripper didn't open successfully")
@@ -117,7 +116,7 @@ class SurfaceGripper(Gripper):
         """Gets the default state of the gripper.
 
         Returns:
-            Key is "opened" and value would be true if the surface gripper should start in an opened state.
+            Dictionary with key "opened" set to true if the surface gripper should start in an opened state.
             False otherwise.
         """
         return {"opened": self._default_state}
@@ -132,9 +131,7 @@ class SurfaceGripper(Gripper):
         return
 
     def forward(self, action: str) -> ArticulationAction:
-        """Calculates the ArticulationAction for all of the articulation joints that corresponds to "open".
-
-        or "close" actions.
+        """Calculates the ArticulationAction for all articulation joints that corresponds to "open" or "close" actions.
 
         Args:
             action: "open" or "close" as an abstract action.
@@ -144,7 +141,7 @@ class SurfaceGripper(Gripper):
             Exception: If action is not "open" or "close".
 
         Returns:
-            Articulation action to be passed to the articulation itself (includes all joints of the articulation).
+            ArticulationAction to be passed to the articulation itself, including all joints of the articulation.
         """
         if self._articulation_num_dofs is None:
             raise Exception(

@@ -18,7 +18,7 @@ Test is implemented using the doctest C++ testing framework:
   https://github.com/doctest/doctest/blob/master/doc/markdown/readme.md
 */
 
-#include "TestBase.h"
+#include "TestBase.hpp"
 
 #include <carb/BindingsUtils.h>
 

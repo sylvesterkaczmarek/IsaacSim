@@ -67,7 +67,16 @@ def setup_stage() -> None:
 def add_behavior_script_with_parameters(
     prim_path: str, behavior_class: type, exposed_variables: dict[str, Any] | None = None
 ) -> None:
-    """Add a behavior script to a prim and set exposed variable values."""
+    """Add a behavior script to a prim and set exposed variable values.
+
+    Args:
+        prim_path: Path of the prim that will host the behavior script.
+        behavior_class: Behavior class whose source file should be attached.
+        exposed_variables: Values keyed by exposed variable name, or None to leave them unchanged.
+
+    Raises:
+        RuntimeError: If the prim or one of its requested exposed-variable attributes does not exist.
+    """
     stage = omni.usd.get_context().get_stage()
     prim = stage.GetPrimAtPath(prim_path)
     if not prim:
@@ -94,7 +103,14 @@ def add_behavior_script_with_parameters(
 
 
 def remove_all_scripts(prim_paths: list[str]) -> None:
-    """Remove all behavior scripts from the given prim paths."""
+    """Remove all behavior scripts from the given prim paths.
+
+    Args:
+        prim_paths: Paths of prims whose script arrays should be cleared.
+
+    Raises:
+        RuntimeError: If a prim or its script attribute does not exist.
+    """
     stage = omni.usd.get_context().get_stage()
     for prim_path in prim_paths:
         prim = stage.GetPrimAtPath(prim_path)
@@ -107,7 +123,15 @@ def remove_all_scripts(prim_paths: list[str]) -> None:
 
 
 def create_prims_single(prim_path: str, prim_type: str) -> None:
-    """Create a single prim at the given path for randomization."""
+    """Create a single prim at the given path for randomization.
+
+    Args:
+        prim_path: Stage path at which to define the prim.
+        prim_type: USD schema type to define.
+
+    Raises:
+        RuntimeError: If the stage cannot define a valid prim at ``prim_path``.
+    """
     stage = omni.usd.get_context().get_stage()
     prim = stage.DefinePrim(prim_path, prim_type)
     if not prim.IsValid():
@@ -117,7 +141,17 @@ def create_prims_single(prim_path: str, prim_type: str) -> None:
 def create_prims_multi(
     root_path: str, num_prims: int = 1, prim_type: str = "SphereLight", prim_name: str = "light"
 ) -> None:
-    """Create multiple child prims under a root path for randomization."""
+    """Create multiple child prims under a root path for randomization.
+
+    Args:
+        root_path: Path used directly for one prim or as the parent path for multiple prims.
+        num_prims: Number of prims to define.
+        prim_type: USD schema type to define.
+        prim_name: Base child name used when defining multiple prims.
+
+    Raises:
+        RuntimeError: If the stage cannot define one of the requested prims.
+    """
     stage = omni.usd.get_context().get_stage()
 
     for i in range(num_prims):

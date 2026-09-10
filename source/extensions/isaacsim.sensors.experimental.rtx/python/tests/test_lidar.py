@@ -22,6 +22,7 @@ import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
 from isaacsim.sensors.experimental.rtx import Lidar
 from isaacsim.storage.native import get_assets_root_path
+from pxr import Gf, UsdGeom
 
 
 class TestLidar(omni.kit.test.AsyncTestCase):
@@ -54,11 +55,13 @@ class TestLidar(omni.kit.test.AsyncTestCase):
         with self.assertRaises(ValueError):
             Lidar("/World/xform")
 
-    async def test_wrap_missing_schema_raises(self) -> None:
-        """Reject wrapping an OmniLidar prim that lacks the lidar core schema."""
-        stage_utils.define_prim("/World/lidar", "OmniLidar")
-        with self.assertRaises(ValueError):
-            Lidar("/World/lidar")
+    async def test_wrap_missing_schema_applies_schema(self) -> None:
+        """Apply the lidar core schema when wrapping an OmniLidar prim that lacks it."""
+        prim = stage_utils.define_prim("/World/lidar", "OmniLidar")
+        self.assertFalse(prim.HasAPI("OmniSensorGenericLidarCoreAPI"))
+        lidar = Lidar("/World/lidar")
+        self.assertEqual(lidar.paths[0], "/World/lidar")
+        self.assertTrue(lidar.prims[0].HasAPI("OmniSensorGenericLidarCoreAPI"))
 
     async def test_wrap_with_tick_rate(self) -> None:
         """Apply a tick rate override while wrapping an existing RTX lidar prim."""
@@ -179,6 +182,55 @@ class TestLidar(omni.kit.test.AsyncTestCase):
             reference_prim_attributes_dict.pop(key, None)
 
         self.assertDictEqual(reference_prim_attributes_dict, lidar_prim_attributes_dict)
+
+    # -- asset transforms --
+
+    async def test_create_nested_asset_transforms_reference_root(self) -> None:
+        """Author transforms on the reference root when the asset nests the OmniLidar prim."""
+        lidar = Lidar.create(
+            path="/World/lidar",
+            config="OS1",
+            variant="OS1_REV6_32ch20hz512res",
+            translations=[[1.0, 2.0, 3.0]],
+        )
+        # The OS1 asset places the OmniLidar under the reference root, next to the housing mesh.
+        self.assertNotEqual(lidar.paths[0], "/World/lidar")
+        self.assertEqual(lidar.asset_root_path, "/World/lidar")
+        root = prim_utils.get_prim_at_path("/World/lidar")
+        self.assertTrue(
+            Gf.IsClose(
+                UsdGeom.Xformable(root).ComputeLocalToWorldTransform(0).ExtractTranslation(),
+                Gf.Vec3d(1.0, 2.0, 3.0),
+                1e-6,
+            )
+        )
+
+    async def test_create_nested_asset_preserves_mounting_offset(self) -> None:
+        """Keep the vendor's mounting offset on the nested OmniLidar prim when transforms are applied."""
+        lidar = Lidar.create(
+            path="/World/lidar",
+            config="OS1",
+            variant="OS1_REV6_32ch20hz512res",
+            translations=[[1.0, 2.0, 3.0]],
+        )
+        # The OS1 asset offsets the ray origin from the housing base along z.
+        offset = 0.03622
+        sensor_world = UsdGeom.Xformable(lidar.prims[0]).ComputeLocalToWorldTransform(0).ExtractTranslation()
+        self.assertTrue(Gf.IsClose(sensor_world, Gf.Vec3d(1.0, 2.0, 3.0 + offset), 1e-6))
+
+    async def test_create_root_asset_transforms_sensor_prim(self) -> None:
+        """Author transforms on the sensor prim when the asset's OmniLidar is the reference root."""
+        lidar = Lidar.create(path="/World/lidar", config="Example_Rotary", translations=[[1.0, 2.0, 3.0]])
+        self.assertEqual(lidar.paths[0], "/World/lidar")
+        sensor_world = UsdGeom.Xformable(lidar.prims[0]).ComputeLocalToWorldTransform(0).ExtractTranslation()
+        self.assertTrue(Gf.IsClose(sensor_world, Gf.Vec3d(1.0, 2.0, 3.0), 1e-6))
+
+    async def test_create_without_asset_transforms_sensor_prim(self) -> None:
+        """Author transforms on the created prim when no asset is referenced."""
+        lidar = Lidar.create(path="/World/lidar", translations=[[1.0, 2.0, 3.0]])
+        self.assertIsNone(lidar.asset_root_path)
+        sensor_world = UsdGeom.Xformable(lidar.prims[0]).ComputeLocalToWorldTransform(0).ExtractTranslation()
+        self.assertTrue(Gf.IsClose(sensor_world, Gf.Vec3d(1.0, 2.0, 3.0), 1e-6))
 
     # -- schemas --
 

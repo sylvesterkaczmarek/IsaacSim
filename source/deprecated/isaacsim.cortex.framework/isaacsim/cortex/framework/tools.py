@@ -24,9 +24,7 @@ from typing import Optional
 
 
 def write(s: str) -> None:
-    """A convenient utility method for writing a string to sys.stdout with a buffer flush but no.
-
-    newline.
+    """Writes a string to sys.stdout, flushes the buffer, and does not append a newline.
 
     Args:
         s: The string to write.
@@ -36,19 +34,19 @@ def write(s: str) -> None:
 
 
 class SteadyRate:
-    """Maintains the steady cycle rate provided on initialization by adaptively sleeping an amount.
-
-    of time to make up the remaining cycle time after work is done.
+    """Maintains the steady cycle rate provided on initialization by adaptively sleeping for the remaining cycle time after work is done.
 
     Usage:
 
-    rate = SteadyRate(rate_hz=30.)
-    while True:
-      do.work()  # Do any work.
-      rate.sleep()  # Sleep for the remaining cycle time.
+    .. code-block:: python
+
+        rate = SteadyRate(rate_hz=30.)
+        while True:
+          do.work()  # Do any work.
+          rate.sleep()  # Sleep for the remaining cycle time.
 
     Args:
-        rate_hz: The rate in hz to run at.
+        rate_hz: The rate in Hz to run at.
     """
 
     def __init__(self, rate_hz: float) -> None:
@@ -84,7 +82,11 @@ class CycleTimer:
 
     @property
     def elapse_time(self) -> float:
-        """Accessor for the current elapsed time."""
+        """Current elapsed time.
+
+        Returns:
+            Current elapsed time in seconds.
+        """
         return time.time() - self.start_time
 
     def tick(self) -> None:
@@ -107,11 +109,11 @@ class CycleTimer:
 
 
 class Profiler(object):
-    """A profiling utility for capturing the average percentage of a cycle given sections of code.
+    """A profiling utility for capturing the average percentage of a cycle that sections of code take.
 
-    take.
+    Basic usage (see cortex_main.py for an example):
 
-    Basic usage: (see cortex_main.py for an example)
+    .. code-block:: python
 
         profiler = Profiler(name="cortex_loop_runner", alpha=0.99, skip_cycles=100)
 
@@ -130,19 +132,15 @@ class Profiler(object):
             profiler.print_report(max_rate_hz=rate_hz)
 
     Args:
-        name:
-            The name of this profile report. Used in the printout. This parameter can be used to
-            distinguish profiler reports when are multiple are running simultaneoulsy. E.g. if each
-            of many extensions is reporting it's own profile.
-        alpha:
-            The alpha blending parameter of the exponential weighted average. Blending is performed
+        name: The name of this profile report. Used in the printout. This parameter can be used to
+            distinguish profiler reports when multiple are running simultaneously, for example if each
+            of many extensions is reporting its own profile.
+        alpha: The alpha blending parameter of the exponential weighted average. Blending is performed
             as running_val = alpha * running_val + (1.-alpha) * new_val.
-        skip_cycles:
-            The number of cycles to skip up front. E.g. if we know the first k cycles are
+        skip_cycles: The number of cycles to skip up front. E.g. if we know the first k cycles are
             artificially slow, we can use this parameter to skip those cycles.
-        print_rate_hz:
-            How frequently to print. Printing once per loop can be unreadable. This parameter can be
-            used to throttle the prints so they're easier to parse visually.
+        print_rate_hz: How frequently to print. Printing once per loop can be unreadable. This parameter
+            can be used to throttle the prints so they are easier to parse visually.
     """
 
     def __init__(
@@ -166,25 +164,26 @@ class Profiler(object):
 
     @property
     def is_active(self) -> bool:
-        """Returns true if the profiler is past the skip cycle set. The profiler won't capture and.
+        """Whether the profiler is past the skip cycle set. The profiler will not capture or print until is_active is true.
 
-        print anything until is_active is true.
+        Returns:
+            True if the profiler is past the skip cycle set.
         """
         return self.cycle_num > self.skip_cycles
 
     def start_cycle(self) -> None:
-        """Start the current cycle capture. This method should be called at the beginning of the.
+        """Start the current cycle capture.
 
-        cycle before any captures.
+        This method should be called at the beginning of the cycle before any captures.
         """
         self.cycle_num += 1
         self.start_capture("cycle")
 
     def start_capture(self, tag: str) -> None:
-        """Start a named capture. This method should be called after self.start_cycle(), and later.
+        """Start a named capture.
 
-        self.end_capture(tag) should be called to end the capture anytime before self.end_cycle() is
-        called.
+        This method should be called after self.start_cycle(), and self.end_capture(tag) should be called before
+        self.end_cycle().
 
         Args:
             tag: The string tag to give this capture. Used to reference the capture in a call to
@@ -194,13 +193,16 @@ class Profiler(object):
         self.capture_start_times[tag] = time.time()
 
     def end_capture(self, tag: str) -> None:
-        """End the named capture. The tag provided should be tag corresponding to a given open.
+        """End the named capture.
 
-        capture. This method should be called after self.start_capture(tag) and before
-        self.end_cycle().
+        The tag provided should correspond to a given open capture. This method should be called after
+        self.start_capture(tag) and before self.end_cycle().
 
         Args:
             tag: The string tag assigned to the capture on start_capture(tag).
+
+        Raises:
+            KeyError: If the tag does not have a recorded capture start time.
         """
         if not self.is_active:
             return
@@ -213,9 +215,9 @@ class Profiler(object):
             self.capture_avg_durations[tag] = duration
 
     def end_cycle(self) -> None:
-        """End the current cycle. No more captures should be performed after this call until.
+        """End the current cycle.
 
-        self.start_cycle() is again called.
+        No more captures should be performed after this call until self.start_cycle() is called again.
         """
         self.end_capture("cycle")
 
@@ -231,37 +233,42 @@ class Profiler(object):
         return tag in self.capture_avg_durations
 
     def get_avg(self, tag: str) -> float:
-        """Returns the average capture duration for the specified tag. This method does not check.
+        """Return the average capture duration for the specified tag.
 
-        whether the average duration exists. Use self.has_avg(tag) to see whether it's safe to call
-        this method.
+        This method does not check whether the average duration exists. Use self.has_avg(tag) to see whether it is
+        safe to call this method.
 
         Args:
             tag: The string tag of the requested capture.
 
         Returns:
             The average capture duration for the specified tag.
+
+        Raises:
+            KeyError: If an average capture duration is not available for the specified tag.
         """
         return self.capture_avg_durations[tag]
 
     def get_avg_cycle(self) -> float:
-        """Get the average cycle duration.
+        """Return the average cycle duration.
 
         Returns:
             The cycle average.
+
+        Raises:
+            KeyError: If an average cycle duration is not available.
         """
         return self.capture_avg_durations["cycle"]
 
     def print_report(self, max_rate_hz: Optional[float] = None) -> None:
-        """Prints a report of the average captures.
+        """Print a report of the average captures.
 
-        The max_rate_hz parameter can be used to set a cap for the reported cycle rate (hz). E.g. if
-        the profiler is capturing only a portion of the overall computation (user code, for
-        instance) the measured hz will be high. If the loop runner is running at a realtime rate of
-        60hz, this max_rate_hz cap can be used to report slowdowns if necessary, but the cap if it's
-        running fast.
+        The max_rate_hz parameter can be used to set a cap for the reported cycle rate in hz. For example, if the
+        profiler is capturing only a portion of the overall computation, the measured hz will be high. If the loop
+        runner is running at a realtime rate of 60hz, this max_rate_hz cap can be used to report slowdowns when
+        necessary, but cap the report when it is running fast.
 
-        Example:
+        Example report output:
 
             ======= <cortex_loop_runner> =======
             avg cycle time: 0.0073777115377921774
@@ -276,6 +283,9 @@ class Profiler(object):
         Args:
             max_rate_hz: The maximum rate in hz to print the report. Throttles prints faster than
                 that rate.
+
+        Raises:
+            KeyError: If an average cycle duration is not available.
         """
         curr_time = time.time()
         if self.last_print_time is None:

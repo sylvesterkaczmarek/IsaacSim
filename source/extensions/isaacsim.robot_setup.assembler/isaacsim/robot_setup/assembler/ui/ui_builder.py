@@ -24,9 +24,7 @@ import omni.timeline
 import omni.ui as ui
 import omni.usd
 import pxr
-from isaacsim.gui.components.element_wrappers import (
-    DropDown,
-)
+from isaacsim.gui.components import DropDown
 from omni.kit.widget.filebrowser import FileBrowserItem
 from omni.kit.window.filepicker import FilePickerDialog
 from pxr import Gf, Sdf, Usd, UsdGeom

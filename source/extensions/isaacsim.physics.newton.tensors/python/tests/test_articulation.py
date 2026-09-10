@@ -82,6 +82,42 @@ class TestArticulationViewCartpole(NewtonTensorTestBase):
         for i in range(num_envs):
             self.assertIn(f"/envs/env{i}/cartpole", cartpoles.prim_paths)
 
+    async def test_apply_force_at_position_adds_link_moment(self) -> None:
+        """Apply the moment from an off-center world-frame force to articulation links."""
+        num_envs = self.setup_cartpole_grid()
+        sim = await self.create_sim()
+        self.start_playing()
+
+        cartpoles = sim.create_articulation_view("/envs/*/cartpole")
+        all_indices = warp_utils.arange(cartpoles.count, device=self.DEVICE)
+        pole_index = cartpoles.shared_metatype.link_indices["pole"]
+        transforms = cartpoles.get_link_transforms().numpy().reshape(num_envs, cartpoles.max_links, 7)
+
+        centers_of_mass = np.zeros((num_envs, cartpoles.max_links, 7), dtype=np.float32)
+        centers_of_mass[:, :, 6] = 1.0
+        cartpoles.set_coms(self.to_warp(centers_of_mass), all_indices)
+
+        forces = np.zeros((num_envs, cartpoles.max_links, 3), dtype=np.float32)
+        forces[:, pole_index, 2] = 50.0
+        positions = transforms[:, :, :3].copy()
+        positions[:, pole_index, 0] += 2.0
+
+        from isaacsim.physics.newton.impl.extension import acquire_stage as acquire_newton_stage
+
+        newton_stage = acquire_newton_stage()
+        newton_stage.state_0.body_f.zero_()
+        cartpoles.apply_forces_and_torques_at_position(
+            self.to_warp(forces), None, self.to_warp(positions), all_indices, is_global=True
+        )
+
+        body_labels = [str(label) for label in newton_stage.model.body_label]
+        body_forces = newton_stage.state_0.body_f.numpy().reshape(-1, 6)
+        pole_wrenches = np.stack([body_forces[body_labels.index(f"{path}/pole")] for path in cartpoles.prim_paths])
+        expected_forces = np.tile(np.array([0.0, 0.0, 50.0]), (cartpoles.count, 1))
+        expected_torques = np.tile(np.array([0.0, -100.0, 0.0]), (cartpoles.count, 1))
+        np.testing.assert_allclose(pole_wrenches[:, :3], expected_forces, atol=1e-5)
+        np.testing.assert_allclose(pole_wrenches[:, 3:], expected_torques, atol=1e-5)
+
 
 # ---------------------------------------------------------------------------
 # TestArticulationViewHumanoid
@@ -705,6 +741,40 @@ class TestDofEffortsMovement(NewtonTensorTestBase):
                 5.0,
                 f"DOF {dof}: position change should be bounded (gravity only, no applied effort)",
             )
+
+
+# ---------------------------------------------------------------------------
+# TestSimulationView
+# ---------------------------------------------------------------------------
+
+
+@run_on_device_configs()
+class TestJacobianAndMassMatrices(NewtonTensorTestBase):
+    """Test Jacobian Shape and Value."""
+
+    # Free Articulation
+    async def test_humanoid_jacobian_and_mass_matrices(self) -> None:
+        num_envs = self.setup_humanoid_grid()
+        sim = await self.create_sim()
+        humanoids = sim.create_articulation_view("/envs/*/humanoid/torso")
+        self.assertEqual(humanoids.jacobian_shape, (96, 27))
+        jacobian = humanoids.get_jacobians()
+        self.assertEqual(jacobian.shape, (4, 16, 6, 27))
+        self.assertEqual(humanoids.generalized_mass_matrix_shape, (27, 27))
+        mass_matrices = humanoids.get_generalized_mass_matrices()
+        self.assertEqual(mass_matrices.shape, (4, 27, 27))
+
+    # Root-fixed Articulation
+    async def test_franka_jacobian_and_mass_matrices(self) -> None:
+        num_envs = self.setup_franka_grid()
+        sim = await self.create_sim()
+        frankas = sim.create_articulation_view("/envs/*/franka/root_joint")
+        self.assertEqual(frankas.jacobian_shape, (42, 6))
+        jacobian = frankas.get_jacobians()
+        self.assertEqual(jacobian.shape, (4, 7, 6, 6))
+        self.assertEqual(frankas.generalized_mass_matrix_shape, (6, 6))
+        mass_matrices = frankas.get_generalized_mass_matrices()
+        self.assertEqual(mass_matrices.shape, (4, 6, 6))
 
 
 # ---------------------------------------------------------------------------

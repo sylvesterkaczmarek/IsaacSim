@@ -13,8 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <isaacsim/core/simulation_manager/PhysicsScene.h>
+#include <isaacsim/core/simulation_manager/PhysicsScene.hpp>
 #include <omni/usd/UsdContext.h>
+
+#include <cmath>
 
 namespace isaacsim
 {
@@ -49,7 +51,16 @@ pxr::GfVec3d PhysicsScene::getGravity()
     double metersPerUnit = UsdGeomGetStageMetersPerUnit(omni::usd::UsdContext::getContext()->getStage());
     m_physicsScene.GetGravityMagnitudeAttr().Get(&magnitude);
     m_physicsScene.GetGravityDirectionAttr().Get(&direction);
-    return pxr::GfVec3d(direction) * static_cast<double>(magnitude) / metersPerUnit;
+    if (std::isinf(magnitude) && magnitude < 0.0f && direction == pxr::GfVec3f(0.0f))
+    {
+        return pxr::GfVec3d(0.0, 0.0, -9.81);
+    }
+    if (!std::isfinite(magnitude) || !std::isfinite(direction[0]) || !std::isfinite(direction[1]) ||
+        !std::isfinite(direction[2]))
+    {
+        return pxr::GfVec3d(0.0);
+    }
+    return pxr::GfVec3d(direction.GetNormalized()) * static_cast<double>(magnitude) / metersPerUnit;
 }
 
 bool PhysicsScene::isValid() const

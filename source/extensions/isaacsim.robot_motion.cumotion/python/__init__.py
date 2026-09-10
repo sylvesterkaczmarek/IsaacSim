@@ -17,10 +17,12 @@
 
 from .extension import *
 from .impl import *
+from .impl.cumotion_debug_visualizer import CumotionDebugVisualizer as CumotionDebugVisualizer
 
 __all__ = [
     "load_cumotion_robot",
     "load_cumotion_supported_robot",
+    "CumotionDebugVisualizer",
     "CumotionRobot",
     "CumotionWorldInterface",
     "RmpFlowController",

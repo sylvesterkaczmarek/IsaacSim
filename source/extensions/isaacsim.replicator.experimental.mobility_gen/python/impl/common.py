@@ -19,26 +19,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 
-from pxr import Sdf
-
 __all__ = ["Buffer", "Module"]
-
-
-def _join_sdf_paths(*subpaths: str) -> str:
-    """Join one or more USD path segments into a single SdfPath string.
-
-    Args:
-        *subpaths: USD path segments to join.
-
-    Returns:
-        The joined USD path string.
-    """
-    p = Sdf.Path(subpaths[0])
-    for subpath in subpaths[1:]:
-        subpath = subpath.strip("/")
-        if subpath:
-            p = p.AppendPath(subpath)
-    return str(p)
 
 
 class Buffer:
@@ -411,6 +392,50 @@ class Module:
         """
         for child in self.children().values():
             child.update_state()
+
+    def missing_modalities(self) -> list[str]:
+        """Get the modalities this module could not capture during the last update_state().
+
+        Camera implementations override this; a module that captures no rendered data never
+        misses anything.
+
+        Returns:
+            The names of the modalities with no data for the current step.
+        """
+        return []
+
+    def named_missing_modalities(self, prefix: str = "") -> dict[str, list[str]]:
+        """Get the modalities missed by any module in the tree during the last update_state().
+
+        An empty result means the step is complete and all of its state may be persisted.
+
+        Args:
+            prefix: Prefix to prepend to nested module names. Defaults to "".
+
+        Returns:
+            Module names mapped to the modalities they could not capture. Modules that captured
+                everything are omitted.
+        """
+        named_missing = OrderedDict()
+        for name, module in self.named_modules(prefix).items():
+            missing = module.missing_modalities()
+            if missing:
+                named_missing[name] = missing
+        return named_missing
+
+    def format_missing_modalities(self, prefix: str = "") -> str:
+        r"""Build a readable summary of the modalities missed during the last update_state().
+
+        Args:
+            prefix: Prefix to prepend to nested module names. Defaults to "".
+
+        Returns:
+            A summary such as "robot.front_camera.left\: depth, rgb", or an empty string if the
+                step is complete.
+        """
+        return "; ".join(
+            f"{name}: {', '.join(modalities)}" for name, modalities in self.named_missing_modalities(prefix).items()
+        )
 
     def load_state_dict(self, state_dict: dict) -> None:
         """Load a state dictionary.

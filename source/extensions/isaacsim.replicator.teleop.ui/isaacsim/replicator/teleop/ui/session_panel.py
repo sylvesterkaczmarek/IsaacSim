@@ -18,19 +18,22 @@
 from __future__ import annotations
 
 import carb.settings
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.ui as ui
 import omni.usd
 from isaacsim.gui.components.ui_utils import get_style
 from isaacsim.replicator.teleop import (
+    AnchorRotationMode,
     CoordinateSystem,
     MarkersManager,
+    TeleopCapabilities,
     TeleopCommand,
     TeleopManager,
     TeleopSettingsProfile,
     get_teleop_backend,
+    get_teleop_capabilities,
     set_teleop_backend,
 )
-from isaacsim.replicator.teleop.xr_anchor_manager import AnchorRotationMode
 from pxr import Sdf, UsdGeom
 
 from .ui_helpers import (
@@ -43,6 +46,7 @@ from .ui_helpers import (
     ROW_SPACING,
     SECTION_SPACING,
     STATUS_HEIGHT,
+    build_debug_slider,
     build_prim_path_row,
 )
 from .ui_helpers import set_status as _set_status_base
@@ -103,6 +107,8 @@ class SessionPanel:
         self._mm = markers_manager
         self._collapsed = collapsed_states
         self._settings = carb.settings.get_settings()
+        self._capabilities: TeleopCapabilities = get_teleop_capabilities()
+        self._tm.set_on_status_changed(self._on_session_status_changed)
 
         self._settings.set_default_string(f"{_SETTINGS_PREFIX}/tracking_space_path", "")
         self._settings.set_default_float(f"{_SETTINGS_PREFIX}/anchor_x", 0.0)
@@ -131,6 +137,10 @@ class SessionPanel:
         self._anchor_fixed_height_cb: ui.CheckBox | None = None
         self._debug_tracking_cb: ui.CheckBox | None = None
         self._debug_backend_combo: ui.ComboBox | None = None
+        self._debug_carry_cb: ui.CheckBox | None = None
+        self._debug_up_btn: ui.Button | None = None
+        self._debug_down_btn: ui.Button | None = None
+        self._debug_input_widgets: list = []
 
         # User intent for the custom XR anchor. Decoupled from runtime so Clear
         # records ``enabled=False`` even though the built-in marker is active,
@@ -149,7 +159,14 @@ class SessionPanel:
                 with ui.HStack(spacing=ROW_SPACING):
                     ui.Spacer(width=INDENT)
                     self._connect_btn = ui.Button(
-                        "Connect", clicked_fn=self._on_connect, tooltip="Connect to OpenXR teleop session"
+                        "Connect",
+                        clicked_fn=self._on_connect,
+                        tooltip=(
+                            "Connect live teleop (start CloudXR in a separate terminal first)"
+                            if self._capabilities.live_input
+                            else self._capabilities.native_input_unavailable_reason
+                        ),
+                        enabled=self._capabilities.live_input,
                     )
                     self._disconnect_btn = ui.Button(
                         "Disconnect", clicked_fn=self._on_disconnect, tooltip="Disconnect from session", enabled=False
@@ -157,7 +174,10 @@ class SessionPanel:
                 with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
                     ui.Spacer(width=INDENT)
                     ui.Label("Status:", width=50)
-                    self._status_label = ui.Label("Disconnected", style={"color": CLR_RED})
+                    self._status_label = ui.Label(
+                        self._idle_status_text(),
+                        style={"color": CLR_RED if self._capabilities.live_input else CLR_YELLOW},
+                    )
 
                 markers_key = f"{_PANEL_NAME}:Frame Markers"
                 with ui.CollapsableFrame(
@@ -227,7 +247,7 @@ class SessionPanel:
                         self._tracking_space_field = build_prim_path_row(
                             "Custom Anchor:",
                             tooltip=(
-                                "Scene prim to anchor the VR headset and controllers to (Kit's 'Custom USD Anchor').\n"
+                                "Read-only scene prim shared by XR rendering, markers, and teleop targets.\n"
                                 "Empty path resolves to the built-in origin marker under /Teleop/Markers/.\n"
                                 "Paths under /Teleop/Markers/ are reserved and will fall back to the built-in origin.\n"
                                 "Set applies a typed path live; Clear reverts the active anchor to the built-in origin."
@@ -255,9 +275,9 @@ class SessionPanel:
                                 "Offset:",
                                 width=90,
                                 tooltip=(
-                                    "Position offset (metres) for the VR headset camera.\n"
+                                    "Position offset (metres) for the shared tracking origin.\n"
                                     "No Custom Anchor: this is an absolute world position.\n"
-                                    "With a Custom Anchor: offset relative to that prim."
+                                    "With a Custom Anchor: offset in the resolved anchor's local axes."
                                 ),
                             )
                             ui.Label("X", width=10)
@@ -295,11 +315,11 @@ class SessionPanel:
                                 "Rotation:",
                                 width=90,
                                 tooltip=(
-                                    "How the headset camera rotation tracks the Custom Anchor prim.\n"
+                                    "How the shared tracking-origin yaw uses the Custom Anchor prim.\n"
                                     "Only relevant when a Custom Anchor prim is set above.\n"
-                                    "- Fixed: ignore anchor rotation entirely.\n"
-                                    "- Follow Prim: track yaw only (roll/pitch stripped).\n"
-                                    "- Smoothed: yaw follows with slerp damping."
+                                    "- Fixed: hold the prim's initial absolute yaw.\n"
+                                    "- Follow Prim: follow absolute yaw (roll/pitch stripped).\n"
+                                    "- Smoothed: follow absolute yaw with slerp damping."
                                 ),
                             )
                             self._anchor_rotation_combo = ui.ComboBox(
@@ -307,9 +327,9 @@ class SessionPanel:
                                 *[name for name, _ in _ROTATION_MODES],
                                 width=140,
                                 tooltip=(
-                                    "Fixed: headset orientation uses offset only.\n"
-                                    "Follow Prim: yaw tracks anchor prim rotation.\n"
-                                    "Smoothed: yaw tracks with slerp damping."
+                                    "Fixed: preserve the prim's initial authored yaw.\n"
+                                    "Follow Prim: yaw follows the anchor prim.\n"
+                                    "Smoothed: yaw follows with slerp damping."
                                 ),
                             )
                             self._anchor_rotation_combo.model.add_item_changed_fn(
@@ -337,9 +357,9 @@ class SessionPanel:
                             self._anchor_fixed_height_cb = ui.CheckBox(
                                 width=20,
                                 tooltip=(
-                                    "Lock the headset camera height (Z) to the value it had\n"
-                                    "on the first frame. Prevents vertical bobbing when the\n"
-                                    "Custom Anchor prim moves up/down (e.g. uneven terrain)."
+                                    "Lock the shared XR/teleop height (Z) to its first-frame\n"
+                                    "value. Prevents vertical bobbing without separating\n"
+                                    "rendered controllers from teleop targets."
                                 ),
                             )
                             self._anchor_fixed_height_cb.model.set_value(True)
@@ -349,7 +369,7 @@ class SessionPanel:
                             ui.Label(
                                 "Fixed Height",
                                 width=80,
-                                tooltip="Lock headset camera Z to its initial value during dynamic anchoring",
+                                tooltip="Lock the shared XR/teleop anchor Z during dynamic anchoring",
                             )
 
                 debug_key = f"{_PANEL_NAME}:Debug"
@@ -361,6 +381,197 @@ class SessionPanel:
                 ) as debug_frame:
                     debug_frame.set_collapsed_changed_fn(lambda c, k=debug_key: self._collapsed.__setitem__(k, c))
                     with ui.VStack(spacing=SECTION_SPACING):
+                        with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
+                            ui.Spacer(width=INDENT)
+                            self._debug_tracking_cb = ui.CheckBox(
+                                width=20,
+                                tooltip=(
+                                    "Use frame markers and on-screen sliders instead of VR controllers.\n\n"
+                                    "When enabled, IK / floating / grasp / locomotion read their target poses\n"
+                                    "from the Left and Right frame markers.\n\n"
+                                    "Drag the markers in the viewport to drive the robot.\n"
+                                    "No VR connection is required.\n\n"
+                                    "Use the simulated input controls below for grasp and locomotion.\n\n"
+                                    "Mutually exclusive with a live VR connection.\n"
+                                    "Disconnect first to enable debug mode."
+                                ),
+                            )
+                            self._debug_tracking_cb.model.set_value(self._tm.debug_tracking_enabled)
+                            self._debug_tracking_cb.model.add_value_changed_fn(
+                                lambda m: self._on_debug_tracking_toggled(m.get_value_as_bool())
+                            )
+                            ui.Label(
+                                "Debug Mode",
+                                width=100,
+                                tooltip=(
+                                    "Synthetic input source: markers and sliders replace VR controllers.\n"
+                                    "All downstream controllers are driven by marker world poses\n"
+                                    "and the simulated input controls below."
+                                ),
+                            )
+
+                        with ui.HStack(spacing=ROW_SPACING, height=STATUS_HEIGHT):
+                            ui.Spacer(width=INDENT)
+                            ui.Label(
+                                "Simulated Inputs",
+                                style={"color": CLR_DIM},
+                                tooltip="Grasp and locomotion controls active while Debug Mode is enabled.",
+                            )
+
+                        debug_widgets = self._debug_input_widgets
+                        with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
+                            ui.Spacer(width=INDENT)
+                            ui.Label(
+                                "L Grasp:",
+                                width=55,
+                                tooltip="Left hand trigger analog value (0 = open, 1 = fully closed)",
+                            )
+                            build_debug_slider(
+                                minimum=0.0,
+                                maximum=1.0,
+                                tooltip="Simulated left trigger — fed to grasp controller as trigger_value",
+                                on_value_changed=lambda value: self._tm.set_debug_trigger("left", value),
+                                widgets_out=debug_widgets,
+                            )
+                            ui.Label(
+                                "R Grasp:",
+                                width=55,
+                                tooltip="Right hand trigger analog value (0 = open, 1 = fully closed)",
+                            )
+                            build_debug_slider(
+                                minimum=0.0,
+                                maximum=1.0,
+                                tooltip="Simulated right trigger — fed to grasp controller as trigger_value",
+                                on_value_changed=lambda value: self._tm.set_debug_trigger("right", value),
+                                widgets_out=debug_widgets,
+                            )
+
+                        with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
+                            ui.Spacer(width=INDENT)
+                            ui.Label(
+                                "L Squeeze:",
+                                width=55,
+                                tooltip="Left grip/squeeze analog value (0 = released, 1 = fully pressed)",
+                            )
+                            build_debug_slider(
+                                minimum=0.0,
+                                maximum=1.0,
+                                tooltip="Simulated left squeeze — fed as squeeze_value",
+                                on_value_changed=lambda value: self._tm.set_debug_squeeze("left", value),
+                                widgets_out=debug_widgets,
+                            )
+                            ui.Label(
+                                "R Squeeze:",
+                                width=55,
+                                tooltip="Right grip/squeeze analog value (0 = released, 1 = fully pressed)",
+                            )
+                            build_debug_slider(
+                                minimum=0.0,
+                                maximum=1.0,
+                                tooltip="Simulated right squeeze — fed as squeeze_value",
+                                on_value_changed=lambda value: self._tm.set_debug_squeeze("right", value),
+                                widgets_out=debug_widgets,
+                            )
+
+                        with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
+                            ui.Spacer(width=INDENT)
+                            ui.Label(
+                                "Slide X:",
+                                width=55,
+                                tooltip="Synthetic left-thumbstick X for locomotion lateral slide (-1 = right, 1 = left)",
+                            )
+                            build_debug_slider(
+                                minimum=-1.0,
+                                maximum=1.0,
+                                tooltip="Synthetic left-thumbstick X for locomotion lateral slide",
+                                on_value_changed=lambda value: self._tm.set_debug_thumbstick("left", x=value),
+                                widgets_out=debug_widgets,
+                            )
+                            ui.Label(
+                                "Slide Y:",
+                                width=55,
+                                tooltip="Synthetic left-thumbstick Y for locomotion forward/back slide (-1 = back, 1 = forward)",
+                            )
+                            build_debug_slider(
+                                minimum=-1.0,
+                                maximum=1.0,
+                                tooltip="Synthetic left-thumbstick Y for locomotion forward/back slide",
+                                on_value_changed=lambda value: self._tm.set_debug_thumbstick("left", y=value),
+                                widgets_out=debug_widgets,
+                            )
+
+                        with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
+                            ui.Spacer(width=INDENT)
+                            ui.Label(
+                                "Turn:",
+                                width=40,
+                                tooltip="Synthetic right-thumbstick X for locomotion yaw turn (-1 = right, 1 = left)",
+                            )
+                            build_debug_slider(
+                                minimum=-1.0,
+                                maximum=1.0,
+                                tooltip="Synthetic right-thumbstick X for locomotion yaw turn",
+                                on_value_changed=lambda value: self._tm.set_debug_thumbstick("right", x=value),
+                                widgets_out=debug_widgets,
+                            )
+                            ui.Label(
+                                "Up/Down:",
+                                width=55,
+                                tooltip="Synthetic right-side locomotion buttons for vertical motion",
+                            )
+                            self._debug_up_btn = ui.Button(
+                                "Up",
+                                width=50,
+                                tooltip="Hold to press the synthetic right secondary locomotion button",
+                            )
+                            self._debug_up_btn.set_mouse_pressed_fn(
+                                lambda x, y, b, m: self._tm.set_debug_button("right", "secondary_click", True)
+                            )
+                            self._debug_up_btn.set_mouse_released_fn(
+                                lambda x, y, b, m: self._tm.set_debug_button("right", "secondary_click", False)
+                            )
+                            debug_widgets.append(self._debug_up_btn)
+                            self._debug_down_btn = ui.Button(
+                                "Down",
+                                width=60,
+                                tooltip="Hold to press the synthetic right primary locomotion button",
+                            )
+                            self._debug_down_btn.set_mouse_pressed_fn(
+                                lambda x, y, b, m: self._tm.set_debug_button("right", "primary_click", True)
+                            )
+                            self._debug_down_btn.set_mouse_released_fn(
+                                lambda x, y, b, m: self._tm.set_debug_button("right", "primary_click", False)
+                            )
+                            debug_widgets.append(self._debug_down_btn)
+                            self._debug_carry_cb = ui.CheckBox(
+                                width=20,
+                                tooltip=(
+                                    "Carry Tracking Space — when enabled, locomotion also moves the Session "
+                                    "panel's Tracking Space prim with the robot base.\n\n"
+                                    "Matches the left primary face button (`X` on Meta-style controllers).\n"
+                                    "Unavailable when locomotion targets the VR origin (carry is implicit), or\n"
+                                    "when a custom anchor does not have a safely writable xform stack."
+                                ),
+                            )
+                            self._debug_carry_cb.model.set_value(self._tm.carry_tracking_space_enabled)
+                            self._debug_carry_cb.model.add_value_changed_fn(
+                                lambda model: self._on_debug_carry_toggled(model.get_value_as_bool())
+                            )
+                            debug_widgets.append(self._debug_carry_cb)
+                            ui.Label(
+                                "Carry Origin",
+                                width=80,
+                                tooltip=("Toggle Carry Tracking Space so the VR origin follows robot-base locomotion."),
+                            )
+
+                        with ui.HStack(spacing=ROW_SPACING, height=STATUS_HEIGHT):
+                            ui.Spacer(width=INDENT)
+                            ui.Label(
+                                "Advanced",
+                                style={"color": CLR_DIM},
+                                tooltip="Developer settings for teleop XformPrim writes.",
+                            )
+
                         with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
                             ui.Spacer(width=INDENT)
                             ui.Label(
@@ -383,162 +594,7 @@ class SessionPanel:
                                 lambda model, _item: self._on_debug_backend_changed(model.get_item_value_model().as_int)
                             )
 
-                        with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
-                            ui.Spacer(width=INDENT)
-                            self._debug_tracking_cb = ui.CheckBox(
-                                width=20,
-                                tooltip=(
-                                    "When enabled, IK / floating / grasp / locomotion read\n"
-                                    "their target poses from the Left and Right frame\n"
-                                    "markers instead of real VR controllers.\n\n"
-                                    "Drag the markers in the viewport to drive the robot.\n"
-                                    "No VR connection is required.\n\n"
-                                    "Use the controls below to simulate grasp and\n"
-                                    "locomotion input.\n\n"
-                                    "Mutually exclusive with a live VR connection.\n"
-                                    "Disconnect first to enable debug tracking."
-                                ),
-                            )
-                            self._debug_tracking_cb.model.set_value(self._tm.debug_tracking_enabled)
-                            self._debug_tracking_cb.model.add_value_changed_fn(
-                                lambda m: self._on_debug_tracking_toggled(m.get_value_as_bool())
-                            )
-                            ui.Label(
-                                "Debug Tracking",
-                                width=90,
-                                tooltip=(
-                                    "Synthetic pose source: markers become inputs.\n"
-                                    "All downstream controllers are driven by marker\n"
-                                    "world poses and the controls below."
-                                ),
-                            )
-
-                        with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
-                            ui.Spacer(width=INDENT)
-                            ui.Label(
-                                "L Grasp:",
-                                width=55,
-                                tooltip="Left hand trigger analog value (0 = open, 1 = fully closed)",
-                            )
-                            lt_slider = ui.FloatSlider(
-                                min=0.0,
-                                max=1.0,
-                                step=0.01,
-                                width=ui.Fraction(1),
-                                tooltip="Simulated left trigger — fed to grasp controller as trigger_value",
-                            )
-                            lt_slider.model.set_value(0.0)
-                            lt_slider.model.add_value_changed_fn(
-                                lambda m: self._tm.set_debug_trigger("left", m.get_value_as_float())
-                            )
-                            ui.Label(
-                                "R Grasp:",
-                                width=55,
-                                tooltip="Right hand trigger analog value (0 = open, 1 = fully closed)",
-                            )
-                            rt_slider = ui.FloatSlider(
-                                min=0.0,
-                                max=1.0,
-                                step=0.01,
-                                width=ui.Fraction(1),
-                                tooltip="Simulated right trigger — fed to grasp controller as trigger_value",
-                            )
-                            rt_slider.model.set_value(0.0)
-                            rt_slider.model.add_value_changed_fn(
-                                lambda m: self._tm.set_debug_trigger("right", m.get_value_as_float())
-                            )
-
-                        with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
-                            ui.Spacer(width=INDENT)
-                            ui.Label(
-                                "Slide X:",
-                                width=55,
-                                tooltip="Synthetic left-thumbstick X for locomotion lateral slide (-1 = right, 1 = left)",
-                            )
-                            slide_x_slider = ui.FloatSlider(
-                                min=-1.0,
-                                max=1.0,
-                                step=0.01,
-                                width=ui.Fraction(1),
-                                tooltip="Synthetic left-thumbstick X for locomotion lateral slide",
-                            )
-                            slide_x_slider.model.set_value(0.0)
-                            slide_x_slider.model.add_value_changed_fn(
-                                lambda m: self._tm.set_debug_thumbstick("left", x=m.get_value_as_float())
-                            )
-                            ui.Label(
-                                "Slide Y:",
-                                width=55,
-                                tooltip="Synthetic left-thumbstick Y for locomotion forward/back slide (-1 = back, 1 = forward)",
-                            )
-                            slide_y_slider = ui.FloatSlider(
-                                min=-1.0,
-                                max=1.0,
-                                step=0.01,
-                                width=ui.Fraction(1),
-                                tooltip="Synthetic left-thumbstick Y for locomotion forward/back slide",
-                            )
-                            slide_y_slider.model.set_value(0.0)
-                            slide_y_slider.model.add_value_changed_fn(
-                                lambda m: self._tm.set_debug_thumbstick("left", y=m.get_value_as_float())
-                            )
-
-                        with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
-                            ui.Spacer(width=INDENT)
-                            ui.Label(
-                                "Turn:",
-                                width=40,
-                                tooltip="Synthetic right-thumbstick X for locomotion yaw turn (-1 = right, 1 = left)",
-                            )
-                            turn_slider = ui.FloatSlider(
-                                min=-1.0,
-                                max=1.0,
-                                step=0.01,
-                                width=ui.Fraction(1),
-                                tooltip="Synthetic right-thumbstick X for locomotion yaw turn",
-                            )
-                            turn_slider.model.set_value(0.0)
-                            turn_slider.model.add_value_changed_fn(
-                                lambda m: self._tm.set_debug_thumbstick("right", x=m.get_value_as_float())
-                            )
-                            ui.Label(
-                                "Up/Down:",
-                                width=55,
-                                tooltip="Synthetic right-side locomotion buttons for vertical motion",
-                            )
-                            up_button = ui.Button(
-                                "Up",
-                                width=50,
-                                tooltip="Hold to press the synthetic right secondary locomotion button",
-                            )
-                            up_button.set_mouse_pressed_fn(
-                                lambda x, y, b, m: self._tm.set_debug_button("right", "secondary_click", True)
-                            )
-                            up_button.set_mouse_released_fn(
-                                lambda x, y, b, m: self._tm.set_debug_button("right", "secondary_click", False)
-                            )
-                            down_button = ui.Button(
-                                "Down",
-                                width=60,
-                                tooltip="Hold to press the synthetic right primary locomotion button",
-                            )
-                            down_button.set_mouse_pressed_fn(
-                                lambda x, y, b, m: self._tm.set_debug_button("right", "primary_click", True)
-                            )
-                            down_button.set_mouse_released_fn(
-                                lambda x, y, b, m: self._tm.set_debug_button("right", "primary_click", False)
-                            )
-                            carry_button = ui.Button(
-                                "Carry Origin",
-                                width=90,
-                                tooltip="Hold to toggle Carry Tracking Space (synthetic left primary button)",
-                            )
-                            carry_button.set_mouse_pressed_fn(
-                                lambda x, y, b, m: self._tm.set_debug_button("left", "primary_click", True)
-                            )
-                            carry_button.set_mouse_released_fn(
-                                lambda x, y, b, m: self._tm.set_debug_button("left", "primary_click", False)
-                            )
+        self._sync_ui()
 
     # ------------------------------------------------------------------
     # Marker backend callback
@@ -550,23 +606,22 @@ class SessionPanel:
             set_teleop_backend(backend)
 
     # ------------------------------------------------------------------
-    # Debug tracking callbacks
+    # Debug mode callbacks
     # ------------------------------------------------------------------
 
     def _on_debug_tracking_toggled(self, enabled: bool) -> None:
-        """Ensure markers exist before enabling debug tracking mode.
+        """Ensure markers exist before enabling debug mode.
 
         Args:
-            enabled: Whether debug tracking should be enabled.
+            enabled: Whether debug mode should be enabled.
         """
         if enabled:
             if self._tm.is_connected:
                 if self._debug_tracking_cb:
                     self._debug_tracking_cb.model.set_value(False)
                 return
-            ctx = omni.usd.get_context()
-            if ctx.get_stage() is None:
-                set_status(self._marker_status, "No stage - open a scene first", CLR_RED, emit_terminal=True)
+            if not stage_utils.is_stage_set() and omni.usd.get_context().get_stage() is None:
+                set_status(self._marker_status, "No stage", CLR_RED, emit_terminal=True)
                 if self._debug_tracking_cb:
                     self._debug_tracking_cb.model.set_value(False)
                 return
@@ -582,6 +637,16 @@ class SessionPanel:
             self._tm.set_builtin_tracking_space()
         self._sync_ui()
 
+    def _on_debug_carry_toggled(self, enabled: bool) -> None:
+        """Apply Carry Tracking Space from the debug checkbox.
+
+        Args:
+            enabled: Desired carry state from the checkbox.
+        """
+        if not self._tm.set_carry_tracking_space(enabled):
+            if self._debug_carry_cb:
+                self._debug_carry_cb.model.set_value(self._tm.carry_tracking_space_enabled)
+
     # ------------------------------------------------------------------
     # Marker callbacks
     # ------------------------------------------------------------------
@@ -589,12 +654,11 @@ class SessionPanel:
     def _on_show_markers(self) -> None:
         """Create frame markers (if needed) and starts live tracking."""
         ctx = omni.usd.get_context()
-        if ctx.get_stage() is None:
-            set_status(self._marker_status, "No stage - open a scene first", CLR_RED, emit_terminal=True)
+        if not stage_utils.is_stage_set() and omni.usd.get_context().get_stage() is None:
+            set_status(self._marker_status, "No stage", CLR_RED, emit_terminal=True)
             return
-        _, _, remaining = ctx.get_stage_loading_status()
-        if remaining > 0:
-            set_status(self._marker_status, "Stage still loading - try again shortly", CLR_YELLOW, emit_terminal=True)
+        if stage_utils.is_stage_loading():
+            set_status(self._marker_status, "Stage loading", CLR_YELLOW, emit_terminal=True)
             return
 
         selection = ctx.get_selection()
@@ -684,9 +748,6 @@ class SessionPanel:
 
         self._tracking_space_intended_active = bool(path)
 
-        if path and self._mm.has_active_markers and self._is_valid_xformable(path):
-            self._mm.move_tracking_space_to(path)
-
         set_status(
             self._tracking_space_status,
             msg if deferred else f"Set - {msg}",
@@ -696,7 +757,7 @@ class SessionPanel:
         self._sync_tracking_space_controls()
 
     def _clear_tracking_space(self) -> None:
-        """Revert the active tracking space to the built-in origin marker at world (0,0,0).
+        """Revert to the built-in origin marker at the configured absolute Offset.
 
         Keeps the typed path in the field (the bin glyph is the dedicated
         clear) and resets the origin marker to identity so the headset
@@ -735,7 +796,7 @@ class SessionPanel:
             Tuple containing whether the operation succeeded, whether activation
             was deferred, and the message to surface in the UI or log.
         """
-        if not path or path.startswith(MarkersManager.MARKERS_SCOPE):
+        if not path or path == MarkersManager.MARKERS_SCOPE or path.startswith(f"{MarkersManager.MARKERS_SCOPE}/"):
             if not self._mm.has_active_markers:
                 return True, True, "Built-in anchor will activate when session markers are active."
             ok, msg = self._tm.set_builtin_tracking_space()
@@ -759,9 +820,11 @@ class SessionPanel:
         Returns:
             True if the path resolves to a valid Xformable prim, False otherwise.
         """
-        stage = omni.usd.get_context().get_stage()
-        if stage is None or not Sdf.Path.IsValidPathString(path):
+        if (
+            not stage_utils.is_stage_set() and omni.usd.get_context().get_stage() is None
+        ) or not Sdf.Path.IsValidPathString(path):
             return False
+        stage = stage_utils.get_current_stage()
         prim = stage.GetPrimAtPath(path)
         return bool(prim and prim.IsValid() and UsdGeom.Xformable(prim))
 
@@ -790,7 +853,7 @@ class SessionPanel:
         if self._is_tracking_space_clearable():
             self._tracking_space_toggle_btn.text = "Clear"
             self._tracking_space_toggle_btn.tooltip = (
-                "Revert the active custom origin to the built-in origin marker at world (0,0,0). "
+                "Revert the active custom origin to the built-in origin marker at the configured Offset. "
                 "The field text is preserved — use the bin glyph to clear it."
             )
         else:
@@ -941,7 +1004,7 @@ class SessionPanel:
         self._sync_tracking_space_controls()
 
     def sync_from_command(self, command: TeleopCommand, success: bool, message: str) -> None:
-        """Update session UI after an external command bus execution.
+        """Update session UI after a teleop command execution.
 
         Only reacts to connection-related commands.  Timeline commands
         (START / STOP / RESET) are handled by the controller panels.
@@ -963,7 +1026,11 @@ class SessionPanel:
                     and self._tracking_space_field.model.get_value_as_string().strip()
                 ):
                     self._set_tracking_space()
-                self._set_status("Connected - markers active", emit_terminal=True)
+                self._set_status("Connected", emit_terminal=True)
+
+    def _on_session_status_changed(self, message: str) -> None:
+        """Display a live input connection or data-status change."""
+        self._set_status(message, emit_terminal=True)
 
     def _sync_marker_buttons(self) -> None:
         """Enables/disables marker buttons based on current state."""
@@ -978,29 +1045,28 @@ class SessionPanel:
     # ------------------------------------------------------------------
 
     def _on_connect(self) -> None:
-        ctx = omni.usd.get_context()
-        if ctx.get_stage() is None:
-            self._set_status("No stage - open a scene first", emit_terminal=True)
+        if not self._capabilities.live_input:
+            self._set_status(self._capabilities.native_input_unavailable_reason, emit_terminal=True)
             return
-        _, _, remaining = ctx.get_stage_loading_status()
-        if remaining > 0:
-            self._set_status("Stage still loading - try again shortly", emit_terminal=True)
+        if not stage_utils.is_stage_set() and omni.usd.get_context().get_stage() is None:
+            self._set_status("No stage", emit_terminal=True)
+            return
+        if stage_utils.is_stage_loading():
+            self._set_status("Stage loading", emit_terminal=True)
             return
 
-        self._tm.connect(on_status_changed=lambda text: self._set_status(text, emit_terminal=True))
-        self._sync_ui()
-        if self._tm.is_connected:
-            self._on_show_markers()
-            self._set_status("Connected - markers active", emit_terminal=True)
+        success, message = self._tm.execute_command(TeleopCommand.CONNECT)
+        if not success:
+            self._set_status(message, emit_terminal=True)
 
     def _on_disconnect(self) -> None:
-        self._on_remove_markers()
-        self._tm.disconnect()
-        self.reset_ui()
+        success, message = self._tm.execute_command(TeleopCommand.DISCONNECT)
+        if not success:
+            self._set_status(message, emit_terminal=True)
 
     def reset_ui(self) -> None:
         """Reset all UI widgets to the disconnected/idle state."""
-        self._set_status("Disconnected", emit_terminal=True)
+        self._set_status(self._idle_status_text(), emit_terminal=True)
         self._sync_ui()
         set_status(self._marker_status, "", CLR_DIM)
         self._tm.disable_tracking_space()
@@ -1010,13 +1076,13 @@ class SessionPanel:
 
     def on_stage_closed(self) -> None:
         """Clear stage-bound runtime state while preserving the configured profile in the UI."""
-        self._set_status("Disconnected")
+        self._set_status(self._idle_status_text())
         self._sync_ui()
         set_status(self._marker_status, "", CLR_DIM)
         if self._tracking_space_field and self._tracking_space_field.model.get_value_as_string().strip():
             set_status(
                 self._tracking_space_status,
-                "XR Anchor retained - click Set after opening a stage.",
+                "Anchor retained",
                 CLR_YELLOW,
             )
         else:
@@ -1034,7 +1100,7 @@ class SessionPanel:
             if self._status_label.text == text:
                 return
             self._status_label.text = text
-            if "no data" in text.lower():
+            if "no data" in text.lower() or "unavailable" in text.lower():
                 self._status_label.style = {"color": CLR_YELLOW}
             elif self._tm.is_connected:
                 self._status_label.style = {"color": CLR_GREEN}
@@ -1047,10 +1113,25 @@ class SessionPanel:
         connected = self._tm.is_connected
         debug = self._tm.debug_tracking_enabled
         if self._connect_btn:
-            self._connect_btn.enabled = not connected and not debug
+            self._connect_btn.enabled = self._capabilities.live_input and not connected and not debug
         if self._disconnect_btn:
             self._disconnect_btn.enabled = connected
         if self._debug_tracking_cb:
             self._debug_tracking_cb.enabled = not connected
         if self._debug_backend_combo:
             self._debug_backend_combo.enabled = not connected
+        debug_inputs_enabled = debug
+        for widget in self._debug_input_widgets:
+            widget.enabled = debug_inputs_enabled
+        if self._debug_carry_cb:
+            carry_available = self._tm.carry_tracking_space_available
+            self._debug_carry_cb.enabled = debug_inputs_enabled and carry_available
+            carry_enabled = self._tm.carry_tracking_space_enabled
+            if self._debug_carry_cb.model.get_value_as_bool() != carry_enabled:
+                self._debug_carry_cb.model.set_value(carry_enabled)
+
+    def _idle_status_text(self) -> str:
+        """Return the disconnected status appropriate for available inputs."""
+        if self._capabilities.live_input:
+            return "Disconnected"
+        return "Live unavailable; Debug available"

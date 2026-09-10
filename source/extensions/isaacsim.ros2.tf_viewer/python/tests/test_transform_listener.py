@@ -69,7 +69,7 @@ class TestTransformListener(omni.kit.test.AsyncTestCase):
         if assets_root_path is None:
             carb.log_error("Could not find Isaac Sim assets folder")
             return
-        asset_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
         robot = stage_utils.add_reference_to_stage(usd_path=asset_path, path="/World/panda")
         robot.GetVariantSet("Gripper").SetVariantSelection("Default")
         robot.GetVariantSet("Mesh").SetVariantSelection("Performance")
@@ -80,6 +80,7 @@ class TestTransformListener(omni.kit.test.AsyncTestCase):
             {
                 og.Controller.Keys.CREATE_NODES: [
                     ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+                    ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
                     ("PublishTransformTree", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
                 ],
                 og.Controller.Keys.SET_VALUES: [
@@ -88,6 +89,7 @@ class TestTransformListener(omni.kit.test.AsyncTestCase):
                 ],
                 og.Controller.Keys.CONNECT: [
                     ("OnPlaybackTick.outputs:tick", "PublishTransformTree.inputs:execIn"),
+                    ("ReadSimTime.outputs:simulationTime", "PublishTransformTree.inputs:timeStamp"),
                 ],
             },
         )
@@ -107,19 +109,6 @@ class TestTransformListener(omni.kit.test.AsyncTestCase):
         interface = module.acquire_transform_listener_interface()
         interface.initialize(os.environ.get("ROS_DISTRO", "").lower())
 
-        # run the simulation
-        self._timeline.play()
-        for _ in range(10):
-            await omni.kit.app.get_app().next_update_async()
-            interface.spin()
-
-        frames, transforms, relations = interface.get_transforms("panda_link0")
-        # print(frames, transforms, relations)
-
-        interface.finalize()
-        module.release_transform_listener_interface(interface)
-
-        # check frames
         gt_frames = [
             "panda_link0",
             "panda_link1",
@@ -133,6 +122,26 @@ class TestTransformListener(omni.kit.test.AsyncTestCase):
             "panda_leftfinger",
             "panda_rightfinger",
         ]
+
+        # Run until the listener has received the transform tree, bounded by a frame timeout.
+        self._timeline.play()
+        frames, transforms, relations = [], {}, []
+        try:
+            for _ in range(120):
+                await omni.kit.app.get_app().next_update_async()
+                interface.spin()
+                frames, transforms, relations = interface.get_transforms("panda_link0")
+                if all(frame in frames for frame in gt_frames):
+                    break
+            else:
+                self.fail(f"Timed out waiting for TF frames. Last received frames: {frames}")
+        finally:
+            interface.finalize()
+            module.release_transform_listener_interface(interface)
+
+        # print(frames, transforms, relations)
+
+        # check frames
         for frame in gt_frames:
             self.assertIn(frame, frames)
 

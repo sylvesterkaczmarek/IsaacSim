@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-asset_path: /Isaac/Robots/Unitree/H1/h1.usd
+asset_path: /Isaac/Robots_Multiphysics/Unitree/H1/h1.usda
 physics_dt: 0.005
 z_offset: 1.05
 articulation_path: pelvis
@@ -53,9 +53,18 @@ path_following:
   target_point_offset_m: 1.0
 
 sensor_rig:
+  # These cameras are mounted by PolicyMultiSensorRobot.build_sensor_rig, not shipped in the
+  # robot asset. generate_sensor_rigs.py only discovers cameras already in the asset, so
+  # re-running it against this robot would drop this section.
   sensors:
-    - name: front_camera
+    - name: front_camera_left
       type: camera
-      sensor_prim_path: d435_left_imager_link/front_camera/front
+      sensor_prim_path: d435_left_imager_link/front_camera/front/left/camera_left
+      width_px: 1920
+      height_px: 1200
+
+    - name: front_camera_right
+      type: camera
+      sensor_prim_path: d435_left_imager_link/front_camera/front/right/camera_right
       width_px: 1920
       height_px: 1200

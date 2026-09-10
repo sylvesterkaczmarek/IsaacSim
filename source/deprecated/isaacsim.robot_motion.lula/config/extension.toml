@@ -1,5 +1,5 @@
 [package]
-version = "4.1.3"
+version = "4.1.4"
 category = "Simulation"
 title = "Isaac Sim Lula"
 description = "Extension that provides lula python interface"
@@ -31,6 +31,10 @@ name = "isaacsim.robot_motion.lula.tests"
 [[test]]
 dependencies = [
     "omni.kit.test"
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [documentation]

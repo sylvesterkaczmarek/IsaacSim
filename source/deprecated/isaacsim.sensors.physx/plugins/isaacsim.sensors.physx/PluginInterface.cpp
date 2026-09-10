@@ -16,14 +16,14 @@
 #define CARB_EXPORTS
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 #include <pxr/usd/usd/inherits.h>
 // clang-format on
 
-#include "core/RangeSensorManager.h"
-#include "generic/GenericSensor.h"
-#include "lidar/LidarSensor.h"
-#include "lightbeam_sensor/LightBeamSensor.h"
+#include "core/RangeSensorManager.hpp"
+#include "generic/GenericSensor.hpp"
+#include "lidar/LidarSensor.hpp"
+#include "lightbeam_sensor/LightBeamSensor.hpp"
 
 #include <carb/Framework.h>
 #include <carb/PluginUtils.h>
@@ -31,7 +31,7 @@
 #include <carb/settings/ISettings.h>
 #include <carb/tasking/ITasking.h>
 
-#include <isaacsim/sensors/physx/IPhysxSensorInterface.h>
+#include <isaacsim/sensors/physx/IPhysxSensorInterface.hpp>
 #include <omni/fabric/FabricUSD.h>
 #include <omni/graph/core/ogn/Registration.h>
 #include <omni/kit/IStageUpdate.h>

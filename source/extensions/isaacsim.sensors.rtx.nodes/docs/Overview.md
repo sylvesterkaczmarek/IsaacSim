@@ -29,8 +29,12 @@ native-plugin dependencies out of that base extension.
 ## Quick Start
 
 ```python
+import omni.kit.app
 import omni.replicator.core as rep
 from isaacsim.sensors.experimental.rtx import Lidar
+
+extension_manager = omni.kit.app.get_app().get_extension_manager()
+extension_manager.set_extension_enabled_immediate("isaacsim.sensors.rtx.nodes", True)
 
 lidar = Lidar.create("/World/lidar", config="Example_Rotary")
 render_product = rep.create.render_product(lidar.paths[0], resolution=(1, 1))

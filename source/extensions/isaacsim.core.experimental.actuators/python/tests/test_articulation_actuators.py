@@ -32,7 +32,7 @@ _ART_ROOT = "/World/A_0"
 _REVOLUTE_JOINT_PATH = "/World/A_0/Arm/RevoluteJoint"
 _PRISMATIC_JOINT_PATH = "/World/A_0/Slider/PrismaticJoint"
 
-_FRANKA_REL_PATH = "Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+_FRANKA_REL_PATH = "Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 _FRANKA_BASE_PATH = "/World/Franka"  # /World/Franka_0, /World/Franka_1, ...
 _FRANKA_REGEX = "/World/Franka_.*"
 _FRANKA_ARM_JOINTS = [f"panda_joint{i}" for i in range(1, 8)]
@@ -637,12 +637,13 @@ class TestArticulationActuators(omni.kit.test.AsyncTestCase):
     # from_actuators
     # ------------------------------------------------------------------
 
-    def _make_pd_config(self, kp: float = 100.0, kd: float = 10.0) -> ActuatorConfig:
+    def _make_pd_config(self, kp: float = 100.0, kd: float = 10.0, device: str | None = None) -> ActuatorConfig:
         """Build an `ActuatorConfig` with a `ControllerPD`.
 
         Args:
             kp: Proportional gain for the PD controller.
             kd: Derivative gain for the PD controller.
+            device: Warp device on which to allocate the controller's gain arrays.
 
         Returns:
             An `ActuatorConfig` containing a one-DOF `ControllerPD`.
@@ -652,18 +653,19 @@ class TestArticulationActuators(omni.kit.test.AsyncTestCase):
 
         return ActuatorConfig(
             controller=ControllerPD(
-                kp=wp.array([kp], dtype=wp.float32),
-                kd=wp.array([kd], dtype=wp.float32),
+                kp=wp.array([kp], dtype=wp.float32, device=device),
+                kd=wp.array([kd], dtype=wp.float32, device=device),
             )
         )
 
-    def _make_ff_clamped_config(self, max_effort: float) -> ActuatorConfig:
+    def _make_ff_clamped_config(self, max_effort: float, device: str | None = None) -> ActuatorConfig:
         """Build an `ActuatorConfig` with kp=kd=0 and `ClampingMaxEffort`.
 
         Useful for testing that feedforward effort is symmetrically clamped to ±`max_effort`.
 
         Args:
             max_effort: Symmetric effort limit [N or N·m].
+            device: Warp device on which to allocate the controller's and clamp's arrays.
 
         Returns:
             An `ActuatorConfig` whose net output is ``clip(feedforward, -max_effort, +max_effort)``.
@@ -671,17 +673,20 @@ class TestArticulationActuators(omni.kit.test.AsyncTestCase):
         import warp as wp
         from newton.actuators import ClampingMaxEffort
 
-        config = self._make_pd_config(kp=0.0, kd=0.0)
-        config.clamping = [ClampingMaxEffort(max_effort=wp.array([max_effort], dtype=wp.float32))]
+        config = self._make_pd_config(kp=0.0, kd=0.0, device=device)
+        config.clamping = [ClampingMaxEffort(max_effort=wp.array([max_effort], dtype=wp.float32, device=device))]
         return config
 
-    def _make_pid_config(self, kp: float = 100.0, ki: float = 10.0, kd: float = 5.0) -> ActuatorConfig:
+    def _make_pid_config(
+        self, kp: float = 100.0, ki: float = 10.0, kd: float = 5.0, device: str | None = None
+    ) -> ActuatorConfig:
         """Build an `ActuatorConfig` with a `ControllerPID`.
 
         Args:
             kp: Proportional gain for the PID controller.
             ki: Integral gain for the PID controller.
             kd: Derivative gain for the PID controller.
+            device: Warp device on which to allocate the controller's gain arrays.
 
         Returns:
             An `ActuatorConfig` containing a one-DOF `ControllerPID`.
@@ -691,10 +696,10 @@ class TestArticulationActuators(omni.kit.test.AsyncTestCase):
 
         return ActuatorConfig(
             controller=ControllerPID(
-                kp=wp.array([kp], dtype=wp.float32),
-                ki=wp.array([ki], dtype=wp.float32),
-                kd=wp.array([kd], dtype=wp.float32),
-                integral_max=wp.array([float("inf")], dtype=wp.float32),
+                kp=wp.array([kp], dtype=wp.float32, device=device),
+                ki=wp.array([ki], dtype=wp.float32, device=device),
+                kd=wp.array([kd], dtype=wp.float32, device=device),
+                integral_max=wp.array([float("inf")], dtype=wp.float32, device=device),
             )
         )
 
@@ -743,6 +748,30 @@ class TestArticulationActuators(omni.kit.test.AsyncTestCase):
                 self.assertNotEqual(applied, 0.0, "CPU-only stepping must apply a non-zero effort.")
             finally:
                 actuated.close()
+
+    async def test_from_actuators_runs_on_selected_cpu_device(self) -> None:
+        """Verify that `from_actuators` succeeds when selected device is ``cpu``."""
+        actuated_cpu = ArticulationActuators.from_actuators(
+            _ART_ROOT,
+            [(self._make_pd_config(kp=100.0, kd=100.0, device="cpu"), "RevoluteJoint")],
+            auto_step_pre_physics=False,
+            device="cpu",
+        )
+        dof_index = int(actuated_cpu.articulation.get_dof_indices("RevoluteJoint").numpy()[0])
+        try:
+            self._timeline.play()
+            await omni.kit.app.get_app().next_update_async()
+
+            target_position = 0.05
+            actuated_cpu.articulation.set_dof_position_targets(positions=target_position, dof_indices=dof_index)
+            for _ in range(5):
+                actuated_cpu.step_actuators(step_dt=1.0 / 60.0)
+                await omni.kit.app.get_app().next_update_async()
+
+            applied = actuated_cpu.articulation.get_dof_efforts(dof_indices=dof_index).numpy().item()
+            self.assertNotEqual(applied, 0.0, "CPU-only stepping must apply a non-zero effort.")
+        finally:
+            actuated_cpu.close()
 
     async def test_from_actuators_unknown_dof_raises(self) -> None:
         """Verify that `from_actuators` raises `ValueError` for an unrecognised DOF name."""

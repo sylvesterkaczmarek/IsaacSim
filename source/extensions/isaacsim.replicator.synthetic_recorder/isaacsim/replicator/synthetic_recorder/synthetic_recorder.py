@@ -15,15 +15,17 @@
 
 """Handle synthetic data recording with state management and asynchronous recording operations."""
 
+import inspect
 from enum import Enum
 
 import carb.settings
-import omni.kit.app
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.prim as prim_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.replicator.core as rep
 import omni.timeline
-import omni.usd
 import Semantics
-from pxr import UsdGeom, UsdSemantics, UsdSkel
+from pxr import Sdf, UsdGeom, UsdSemantics, UsdSkel
 
 # If both width and height are larger than this value, warn the user
 MAX_RESOLUTION_WARN = 8000
@@ -123,6 +125,17 @@ class SyntheticRecorder:
         Returns:
             True if initialization was successful, False otherwise.
         """
+        if not self._try_init_recorder():
+            self.clear_recorder()
+            return False
+        return True
+
+    def _try_init_recorder(self) -> bool:
+        """Create the writer, backend, and render products.
+
+        Returns:
+            True if initialization was successful, False otherwise.
+        """
         if self._writer is None:
             try:
                 self._writer = rep.WriterRegistry.get(self.writer_name)
@@ -150,7 +163,6 @@ class SyntheticRecorder:
             print(f"[SDR] Could not initialize {self.backend_type}: {e}")
             return False
 
-        # Add backend to writer_params
         writer_params = {"backend": backend}
         writer_params.update(self.writer_params)
 
@@ -168,6 +180,21 @@ class SyntheticRecorder:
             if writer_params.get("skeleton_data", False) and not self._check_if_stage_has_skeleton_prims():
                 print("[SDR] Stage does not have any skeleton prims, disabling skeleton annotator.")
                 writer_params["skeleton_data"] = False
+
+        # Require `backend` on the writer. The default Writer.initialize only takes `**kwargs` and
+        # forwards them to `__init__`, so inspect that constructor when `initialize` is not overridden.
+        writer_cls = type(self._writer)
+        if writer_cls.initialize is rep.Writer.initialize:
+            init_fn = writer_cls.__init__
+        else:
+            init_fn = self._writer.initialize
+        try:
+            inspect.signature(init_fn).bind_partial(backend=None)
+        except TypeError:
+            print(
+                f"[SDR] Could not initialize writer {self.writer_name}: " "the writer must accept a 'backend' argument."
+            )
+            return False
 
         try:
             self._writer.initialize(**writer_params)
@@ -219,32 +246,40 @@ class SyntheticRecorder:
                 print("[SDR] Re-enabled replicator capture on play flag after recording.")
             self._original_capture_on_play = None
 
-    async def start_stop_async(self) -> None:
-        """Start or stop the recording loop."""
+    async def start_stop_async(self) -> bool:
+        """Start or stop the recording loop.
+
+        Returns:
+            True if recording started or stopped successfully, False if start failed.
+        """
         timeline = omni.timeline.get_timeline_interface()
-        if self._state == RecorderState.STOPPED and self.init_recorder():
+        if self._state == RecorderState.STOPPED:
+            if not self.init_recorder():
+                print("[SDR] Failed to start recording.")
+                return False
             # Start recording if the state is STOPPED and init_recorder() was successful
             if self.verbose:
                 print(
                     f"[SDR][Recorder] Start;\tFrame: {self._current_frame};\tTime: {timeline.get_current_time():.4f}."
                 )
             self._set_state(RecorderState.RUNNING)
-            if self.control_timeline and not timeline.is_playing():
+            if self.control_timeline and not app_utils.is_playing():
                 if self.verbose:
                     print("[SDR][ControlTimeline] Start Recording; Timeline is not playing. Starting it.")
-                timeline.play()
-                timeline.commit()
+                app_utils.play()
             # Start the recording loop with the specified number of frames (or run indefinitely == MAX_NUM_FRAMES)
             num_frames = self.num_frames if self.num_frames > 0 else MAX_NUM_FRAMES
             await self._run_recording_loop_async(num_frames)
-        else:
-            # Stop the recording if the state is RUNNING or PAUSED
-            if self.verbose:
-                print(f"[SDR] Stop;\tFrame: {self._current_frame};\tTime: {timeline.get_current_time():.4f}.")
-            if self.rt_subframes > 0:
-                rep.orchestrator.stop()
-            self._set_state(RecorderState.STOPPED)
-            await self._finish_recording_async()
+            return True
+
+        # Stop the recording if the state is RUNNING or PAUSED
+        if self.verbose:
+            print(f"[SDR] Stop;\tFrame: {self._current_frame};\tTime: {timeline.get_current_time():.4f}.")
+        if self.rt_subframes > 0:
+            rep.orchestrator.stop()
+        self._set_state(RecorderState.STOPPED)
+        await self._finish_recording_async()
+        return True
 
     async def pause_resume_async(self) -> None:
         """Pause or resume the recording loop."""
@@ -257,29 +292,27 @@ class SyntheticRecorder:
             if self.rt_subframes > 0:
                 rep.orchestrator.pause()
             self._set_state(RecorderState.PAUSED)
-            if self.control_timeline and timeline.is_playing():
+            if self.control_timeline and app_utils.is_playing():
                 if self.verbose:
                     print("[SDR][ControlTimeline] Pausing Recording; Timeline is playing. Pausing it.")
-                timeline.pause()
-                timeline.commit()
+                app_utils.pause()
         elif self._state == RecorderState.PAUSED:
             if self.verbose:
                 print(
                     f"[SDR][Recorder] Resume;\tFrame: {self._current_frame};\tTime: {timeline.get_current_time():.4f}."
                 )
             self._set_state(RecorderState.RUNNING)
-            if self.control_timeline and not timeline.is_playing():
+            if self.control_timeline and not app_utils.is_playing():
                 if self.verbose:
                     print("[SDR][ControlTimeline] Resuming Recording; Timeline is not playing. Starting it.")
-                timeline.play()
-                timeline.commit()
+                app_utils.play()
             # Resume the recording loop (internal frame counter will continue from the last frame)
             num_frames = self.num_frames if self.num_frames > 0 else MAX_NUM_FRAMES
             await self._run_recording_loop_async(num_frames)
         else:
             print(f"[SDR] Recorder is in an unexpected state ({self._state.name}), try again.")
 
-    def _check_if_valid_camera(self, path: str) -> bool:
+    def _check_if_valid_camera(self, path: str | Sdf.Path) -> bool:
         """Check if the camera path is valid for the render product.
 
         Args:
@@ -288,19 +321,15 @@ class SyntheticRecorder:
         Returns:
             True if the camera path is valid, False otherwise.
         """
-        context = omni.usd.get_context()
-        stage = context.get_stage()
-        prim = stage.GetPrimAtPath(path)
-
+        prim = prim_utils.get_prim_at_path(str(path))
         if not prim.IsValid():
             print(f"[SDR] {path} is not a valid prim path.")
             return False
 
         if UsdGeom.Camera(prim):
             return True
-        else:
-            print(f"[SDR] {prim.GetPath()} is not a valid 'Camera' type.")
-            return False
+        print(f"[SDR] {prim.GetPath()} is not a valid 'Camera' type.")
+        return False
 
     def _check_if_valid_resolution(self, width: int, height: int) -> bool:
         """Check if the resolution is valid for the render product.
@@ -341,13 +370,9 @@ class SyntheticRecorder:
         Returns:
             True if the stage has semantically labeled prims, False otherwise.
         """
-        stage = omni.usd.get_context().get_stage()
+        stage = stage_utils.get_current_stage()
         for prim in stage.Traverse():
-            # Check the new semantics API
-            if prim.HasAPI(UsdSemantics.LabelsAPI):
-                return True
-            # Check the old semantics API
-            if prim.HasAPI(Semantics.SemanticsAPI):
+            if prim_utils.has_api(prim, [UsdSemantics.LabelsAPI, Semantics.SemanticsAPI], test="any"):
                 return True
         return False
 
@@ -357,7 +382,7 @@ class SyntheticRecorder:
         Returns:
             True if the stage has skeleton prims, False otherwise.
         """
-        stage = omni.usd.get_context().get_stage()
+        stage = stage_utils.get_current_stage()
         return any(prim.IsA(UsdSkel.Skeleton) for prim in stage.Traverse())
 
     def _disable_semantics_annotators(self, writer_params: dict) -> None:
@@ -389,11 +414,10 @@ class SyntheticRecorder:
             if self._state != RecorderState.RUNNING:
                 break
             # Make sure the timeline is playing if Control Timeline is enabled
-            if self.control_timeline and not timeline.is_playing():
+            if self.control_timeline and not app_utils.is_playing():
                 if self.verbose:
                     print("[SDR][ControlTimeline] Recording; Timeline is not playing. Starting it.")
-                timeline.play()
-                timeline.commit()
+                app_utils.play()
             if self.verbose:
                 print(f"[SDR][Capture] Frame: {self._current_frame};\tTime: {timeline.get_current_time():.4f};")
             await rep.orchestrator.step_async(rt_subframes=self.rt_subframes, delta_time=None, pause_timeline=False)
@@ -406,13 +430,11 @@ class SyntheticRecorder:
 
     async def _finish_recording_async(self) -> None:
         """Finish the recording and wait until the data is complete."""
-        timeline = omni.timeline.get_timeline_interface()
         # If the timeline should be controlled by the recorder and it is running, stop it
-        if self.control_timeline and timeline.is_playing():
+        if self.control_timeline and app_utils.is_playing():
             if self.verbose:
                 print("[SDR][ControlTimeline] Finishing Recording; Timeline is playing. Stopping it.")
-            timeline.stop()
-            timeline.commit()
+            app_utils.stop()
         await rep.orchestrator.wait_until_complete_async()
         if self.verbose:
             # Print completion message based on backend type

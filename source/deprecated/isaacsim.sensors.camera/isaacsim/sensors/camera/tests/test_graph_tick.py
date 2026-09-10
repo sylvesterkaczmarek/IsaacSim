@@ -36,6 +36,14 @@ class TestGraphSDGPipelineConflict(omni.kit.test.AsyncTestCase):
         self._timeline.stop()
 
     async def _create_and_initialize_camera(self, stage: object) -> "Camera":
+        """Creates a camera prim and initializes a Camera sensor for the test stage.
+
+        Args:
+            stage: Stage object used to define the camera prim.
+
+        Returns:
+            The initialized Camera sensor.
+        """
         cam_path = "/World/Cam"
         camera_prim = stage.DefinePrim(cam_path, "Camera")
         xform = UsdGeom.XformCommonAPI(camera_prim)
@@ -49,7 +57,11 @@ class TestGraphSDGPipelineConflict(omni.kit.test.AsyncTestCase):
         return camera
 
     async def test_sdg_pipeline_conflict(self) -> None:
-        """Test sdg pipeline conflict."""
+        """Test sdg pipeline conflict.
+
+        Raises:
+            AssertionError: If Cube.size does not match the expected value after graph updates.
+        """
         stage = omni.usd.get_context().get_stage()
 
         # Define test cube

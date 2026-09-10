@@ -24,10 +24,12 @@ from __future__ import annotations
 
 import os
 
-import omni.kit.app
+import carb
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
 import omni.usd
-from isaacsim.test.utils.file_validation import validate_folder_contents
+from isaacsim.test.utils.file_validation import get_folder_file_summary, validate_folder_contents
 from isaacsim.test.utils.image_comparison import compare_images_in_directories
 
 
@@ -49,8 +51,8 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
     import numpy as np
     import omni.replicator.core as rep
     import omni.timeline
-    import omni.usd
-    from isaacsim.core.experimental.prims import XformPrim
+    from isaacsim.core.experimental.objects import Camera
+    from isaacsim.core.experimental.prims import Articulation, XformPrim
     from isaacsim.core.experimental.utils import app as app_utils
     from isaacsim.core.experimental.utils import stage as stage_utils
     from isaacsim.replicator.episode_recorder import EpisodeReplayer, ReplayPolicy
@@ -69,9 +71,13 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
         get_builtin_teleop_profiles_dir,
         load_grasp_config,
         load_teleop_profile,
+        make_pose,
+        move_debug_markers_to_world_targets_async,
+        set_debug_grasp_async,
+        set_debug_markers_world_poses,
+        wait_for_controllers_running_async,
     )
     from isaacsim.storage.native import get_assets_root_path_async
-    from pxr import Gf, Usd, UsdGeom
 
     TELEOP_DEFAULT_ORIENTATION_XYZW = OXR_TO_ISS_QUAT
 
@@ -87,46 +93,22 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
         recorded_frame_index: int
         live_capture_index: int
 
-    # -----------------------------------------------------------------------
-    # Generic helpers
-    # -----------------------------------------------------------------------
-
-    def world_to_tracking_origin_local(
-        markers_manager: MarkersManager, world_position: np.ndarray
-    ) -> np.ndarray | None:
-        """Convert a world target to the current TrackingOrigin-local marker position.
+    def compute_marker_world_position(
+        asset_origin: np.ndarray,
+        motion_offset: tuple[float, float, float],
+        marker_offset: np.ndarray,
+    ) -> np.ndarray:
+        """Compose a marker's world position from explicit world-frame terms.
 
         Args:
-            markers_manager: Value for markers manager.
-            world_position: Value for world position.
+            asset_origin: World position of the manipulated asset or drop target.
+            motion_offset: Phase-specific world displacement from the asset origin.
+            marker_offset: World displacement from the asset origin to the controller marker.
 
         Returns:
-            The requested value.
+            Controller-marker target position in world coordinates.
         """
-        stage = omni.usd.get_context().get_stage()
-        if stage is None:
-            return None
-        origin_path = markers_manager.MARKER_PATHS.get("origin")
-        if not origin_path:
-            return None
-        origin_prim = stage.GetPrimAtPath(origin_path)
-        if not origin_prim or not origin_prim.IsValid():
-            return None
-        origin_to_world = UsdGeom.Xformable(origin_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-        local_position = origin_to_world.GetInverse().Transform(Gf.Vec3d(*world_position.tolist()))
-        return np.array([local_position[0], local_position[1], local_position[2]], dtype=np.float64)
-
-    def asset_relative_world_target(state: dict, relative_location: tuple[float, float, float]) -> np.ndarray:
-        """Return ``asset_origin + relative_location + tcp_offset`` for one side.
-
-        Args:
-            state: Value for state.
-            relative_location: Value for relative location.
-
-        Returns:
-            The requested value.
-        """
-        return state["asset_origin"] + np.asarray(relative_location, dtype=np.float64) + state["tcp_offset"]
+        return asset_origin + np.asarray(motion_offset, dtype=np.float64) + marker_offset
 
     # -----------------------------------------------------------------------
     # Per-controller configuration helpers (one side at a time)
@@ -249,12 +231,17 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
             if not ok:
                 print(f"[TeleopDemo][Setup]   PINK QP solver unavailable for {side}: {message}")
                 return False
-        controller.set_pink_task_gain(side, float(settings.get("pink_task_gain", controller.get_pink_task_gain(side))))
+        controller.set_pink_task_gain(
+            side,
+            float(settings.get("pink_task_gain", controller.get_pink_task_gain(side))),
+        )
         controller.set_pink_posture_cost(
-            side, float(settings.get("pink_posture_cost", controller.get_pink_posture_cost(side)))
+            side,
+            float(settings.get("pink_posture_cost", controller.get_pink_posture_cost(side))),
         )
         controller.set_pink_lm_damping(
-            side, float(settings.get("pink_lm_damping", controller.get_pink_lm_damping(side)))
+            side,
+            float(settings.get("pink_lm_damping", controller.get_pink_lm_damping(side))),
         )
 
         validation = controller.validate(side)
@@ -298,7 +285,18 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
                 f"'{side_profile.config_path}': {'; '.join(errors)}"
             )
             return None
-        if not controller.configure(side_profile.prim_path, side, config):
+        drive_mode = (side_profile.drive_mode or "trigger").strip().lower()
+        retargeter_kind = (side_profile.retargeter_kind or "").strip().lower() or None
+        if drive_mode != "retargeted":
+            retargeter_kind = None
+        if not controller.configure(
+            side_profile.prim_path,
+            side,
+            config,
+            drive_mode=drive_mode,
+            retargeter_kind=retargeter_kind,
+            joint_aliases=dict(side_profile.joint_aliases or {}),
+        ):
             print(
                 f"[TeleopDemo][Setup]   Could not configure {side} grasp controller " f"at '{side_profile.prim_path}'"
             )
@@ -398,7 +396,7 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
 
         The returned per-side state bundles everything the rest of the demo needs:
         motion type and controller, the controlled gripper prim, asset path /
-        TCP offset, and grasp availability.
+        task-specific marker offset, and grasp availability.
 
         Args:
             profile: Value for profile.
@@ -429,7 +427,10 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
             if motion_type == "floating":
                 controlled_path = str(getattr(profile.floating, side).settings.get("prim_path", "")).strip()
             else:
-                controlled_path = str(getattr(profile.grasp, side).prim_path).strip()
+                ik_settings = getattr(profile.ik, side).settings
+                robot = Articulation(str(ik_settings["robot_path"]))
+                ee_link_index = int(robot.get_link_indices(str(ik_settings["ee_link"])).numpy().item())
+                controlled_path = str(robot.link_paths[0][ee_link_index])
             side_config = scenario_config["sides"][side]
             sides_state[side] = {
                 "motion_type": motion_type,
@@ -438,7 +439,7 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
                 "controlled_gripper": XformPrim(controlled_path),
                 "asset_path": side_config["asset_path"],
                 "drop_target_path": side_config.get("drop_target_path"),
-                "tcp_offset": np.asarray(side_config["tcp_offset_world"], dtype=np.float64),
+                "marker_offset": np.asarray(side_config["marker_offset_world"], dtype=np.float64),
                 "start_offset": tuple(side_config["start_offset"]),
                 "reach_offset": tuple(side_config["reach_offset"]),
                 "pre_grasp_offset": tuple(side_config["pre_grasp_offset"]),
@@ -453,55 +454,38 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
         teleop_manager.set_grasp_tracking(grasp_controller.has_any_side_tracking_enabled)
         return sides_state
 
-    def cache_target_origins(stage: object, sides_state: dict[str, dict]) -> bool:
+    def cache_target_origins(sides_state: dict[str, dict]) -> bool:
         """Cache each side's asset world position once, used as the relative-motion origin.
 
         Args:
-            stage: Value for stage.
             sides_state: Value for sides state.
 
         Returns:
             The requested value.
         """
         for side, state in sides_state.items():
-            prim = stage.GetPrimAtPath(state["asset_path"])
-            if prim is None or not prim.IsValid():
+            asset_paths, _ = XformPrim.resolve_paths(state["asset_path"])
+            if not asset_paths:
                 print(f"[TeleopDemo][Setup]   {side.capitalize()} asset not found: {state['asset_path']}, exiting")
                 return False
-            positions, _ = XformPrim(state["asset_path"]).get_world_poses()
+            positions, _ = XformPrim(asset_paths[0]).get_world_poses()
             state["asset_origin"] = np.asarray(positions.numpy(), dtype=np.float64).reshape(-1, 3)[0]
             drop_target_path = state.get("drop_target_path")
             if drop_target_path:
-                drop_target_prim = stage.GetPrimAtPath(drop_target_path)
-                if drop_target_prim is None or not drop_target_prim.IsValid():
+                drop_target_paths, _ = XformPrim.resolve_paths(drop_target_path)
+                if not drop_target_paths:
                     print(
                         f"[TeleopDemo][Setup]   {side.capitalize()} drop target not found: "
                         f"{drop_target_path}, exiting"
                     )
                     return False
-                positions, _ = XformPrim(drop_target_path).get_world_poses()
+                positions, _ = XformPrim(drop_target_paths[0]).get_world_poses()
                 state["drop_target_origin"] = np.asarray(positions.numpy(), dtype=np.float64).reshape(-1, 3)[0]
         return True
 
     # -----------------------------------------------------------------------
     # Motion primitives
     # -----------------------------------------------------------------------
-
-    async def wait_for_motion_controllers(sides_state: dict[str, dict], max_frames: int = 5) -> bool:
-        """Block briefly until every active side's motion controller is running.
-
-        Args:
-            sides_state: Value for sides state.
-            max_frames: Value for max frames.
-
-        Returns:
-            The requested value.
-        """
-        for _ in range(max_frames):
-            if all(state["motion_controller"].is_running(side) for side, state in sides_state.items()):
-                return True
-            await app_utils.update_app_async()
-        return False
 
     async def place_markers_at_start(
         markers_manager: MarkersManager,
@@ -525,14 +509,20 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
             f"{side.capitalize()}={list(state['start_offset'])}" for side, state in sides_state.items()
         )
         print(f"[TeleopDemo][Setup] Place markers at start: {offsets_summary}")
-        for side, state in sides_state.items():
-            local_target = world_to_tracking_origin_local(
-                markers_manager, asset_relative_world_target(state, state["start_offset"])
-            )
-            if local_target is None:
-                print("[TeleopDemo][Setup]   Tracking origin pose unavailable, exiting")
-                return False
-            markers_manager.update_marker_transform(side, tuple(local_target.tolist()), TELEOP_DEFAULT_ORIENTATION_XYZW)
+        orientation_wxyz = (
+            TELEOP_DEFAULT_ORIENTATION_XYZW[3],
+            *TELEOP_DEFAULT_ORIENTATION_XYZW[:3],
+        )
+        set_debug_markers_world_poses(
+            markers_manager,
+            {
+                side: make_pose(
+                    compute_marker_world_position(state["asset_origin"], state["start_offset"], state["marker_offset"]),
+                    orientation_wxyz,
+                )
+                for side, state in sides_state.items()
+            },
+        )
         return True
 
     async def settle_at_start_pose(
@@ -556,7 +546,9 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
 
         summary_parts = []
         for side, state in sides_state.items():
-            target_world = asset_relative_world_target(state, state["start_offset"])
+            target_world = compute_marker_world_position(
+                state["asset_origin"], state["start_offset"], state["marker_offset"]
+            )
             gripper_positions, _ = state["controlled_gripper"].get_world_poses()
             gripper_position = np.asarray(gripper_positions.numpy(), dtype=np.float64).reshape(-1, 3)[0]
             error = float(np.linalg.norm(gripper_position - target_world))
@@ -564,164 +556,64 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
             summary_parts.append(f"{side.capitalize()} {flag} {error:.4f}/{target_min_distance_error:.4f} m")
         print(f"[TeleopDemo][Settle]   Start: {settle_frames} frames | " + ", ".join(summary_parts))
 
-    async def move_markers_to_asset_relative_target(
+    async def execute_marker_world_phase_async(
         markers_manager: MarkersManager,
         sides_state: dict[str, dict],
-        offset_key: str,
+        target_positions: dict[str, np.ndarray],
         motion_frames: int,
         settle_frames: int,
         target_min_distance_error: float,
         phase_name: str,
     ) -> bool:
-        """Drive each side's marker along its per-side asset-relative trajectory, then settle.
-
-        ``offset_key`` selects which per-side offset to read from ``sides_state``
-        (e.g. ``"reach_offset"`` or ``"lift_offset"``). Markers update once per
-        frame (one trajectory waypoint per frame) so the motion controllers can
-        track continuously, then the marker is held at the final pose for
-        ``settle_frames`` frames so the controller can converge. Prints a per-side
-        gripper-vs-target tracking summary at the end and flags any side whose
-        error exceeds ``target_min_distance_error``.
-
-        Args:
-            markers_manager: Value for markers manager.
-            sides_state: Value for sides state.
-            offset_key: Value for offset key.
-            motion_frames: Value for motion frames.
-            settle_frames: Value for settle frames.
-            target_min_distance_error: Value for target min distance error.
-            phase_name: Value for phase name.
-
-        Returns:
-            The requested value.
-        """
-        if motion_frames < 1:
-            print(f"[TeleopDemo][Motion]     {phase_name}: motion_frames must be >= 1")
+        """Execute one sampled marker phase with per-waypoint convergence checks."""
+        if motion_frames < 2:
+            print(f"[TeleopDemo][Motion]     {phase_name}: motion_frames must be >= 2")
             return False
 
-        trajectories: dict[str, dict] = {}
-        alphas = np.linspace(0.0, 1.0, motion_frames)
-        for side, base in sides_state.items():
-            marker_pose = markers_manager.get_marker_world_pose(side)
-            if marker_pose is None:
-                print(f"[TeleopDemo][Motion]     {phase_name} {side}: Debug marker pose unavailable")
-                return False
-            start = np.asarray(marker_pose[0], dtype=np.float64)
-            target = asset_relative_world_target(base, base[offset_key])
-            trajectories[side] = {
-                "controlled_gripper": base["controlled_gripper"],
-                "waypoints": [start + (target - start) * a for a in alphas],
-                "target_world": target,
-            }
+        orientation_wxyz = (
+            TELEOP_DEFAULT_ORIENTATION_XYZW[3],
+            *TELEOP_DEFAULT_ORIENTATION_XYZW[:3],
+        )
+        targets = {side: make_pose(position, orientation_wxyz) for side, position in target_positions.items()}
 
-        for frame_index in range(motion_frames):
-            for side, traj in trajectories.items():
-                local_target = world_to_tracking_origin_local(markers_manager, traj["waypoints"][frame_index])
-                if local_target is None:
-                    print(f"[TeleopDemo][Motion]     {phase_name} {side}: Tracking origin pose unavailable")
-                    return False
-                markers_manager.update_marker_transform(
-                    side,
-                    tuple(local_target.tolist()),
-                    TELEOP_DEFAULT_ORIENTATION_XYZW,
-                )
+        async def update_async() -> None:
             await app_utils.update_app_async()
 
+        result = await move_debug_markers_to_world_targets_async(
+            markers_manager,
+            {side: sides_state[side]["controlled_gripper"] for side in target_positions},
+            targets,
+            update_async,
+            sample_count=motion_frames,
+            position_tolerance=target_min_distance_error,
+            # Controller-specific frame offsets make marker and controlled
+            # orientations intentionally different in these scenarios.
+            orientation_tolerance=np.pi,
+            max_steps_per_target=max(1, settle_frames),
+        )
         if settle_frames > 0:
             await app_utils.update_app_async(steps=settle_frames)
-
-        summary_parts = []
-        for side, traj in trajectories.items():
-            gripper_positions, _ = traj["controlled_gripper"].get_world_poses()
-            gripper_position = np.asarray(gripper_positions.numpy(), dtype=np.float64).reshape(-1, 3)[0]
-            error = float(np.linalg.norm(gripper_position - traj["target_world"]))
-            flag = "OK" if error <= target_min_distance_error else "OUT"
-            summary_parts.append(f"{side.capitalize()} {flag} {error:.4f}/{target_min_distance_error:.4f} m")
+        flag = "OK" if result["reached"] else "OUT"
         print(
-            f"[TeleopDemo][Motion]   {phase_name} motion {motion_frames} + settle {settle_frames} frames | "
-            + ", ".join(summary_parts)
+            f"[TeleopDemo][Motion]   {phase_name} {flag} "
+            f"{result['completed_samples']}/{motion_frames} samples, "
+            f"{result['position_error']:.4f}/{target_min_distance_error:.4f} m | "
+            f"settle {settle_frames} frames"
         )
-        return True
-
-    async def move_markers_to_drop_target(
-        markers_manager: MarkersManager,
-        sides_state: dict[str, dict],
-        motion_frames: int,
-        settle_frames: int,
-        target_min_distance_error: float,
-    ) -> bool:
-        """Drive each side's marker to ``drop_target_origin + tcp_offset + drop_offset``, then settle.
-
-        Reads each side's ``drop_offset`` from ``sides_state``. Same per-frame
-        trajectory + settle + tracking summary contract as
-        ``move_markers_to_asset_relative_target``. Sides without a configured
-        drop target are skipped silently.
-
-        Args:
-            markers_manager: Value for markers manager.
-            sides_state: Value for sides state.
-            motion_frames: Value for motion frames.
-            settle_frames: Value for settle frames.
-            target_min_distance_error: Value for target min distance error.
-
-        Returns:
-            The requested value.
-        """
-        if motion_frames < 1:
-            print("[TeleopDemo][Motion]     Drop: motion_frames must be >= 1")
-            return False
-
-        active_states = {
-            side: state for side, state in sides_state.items() if state.get("drop_target_origin") is not None
-        }
-        if not active_states:
-            print("[TeleopDemo][Motion]   No drop target prims configured, skipping")
-            return True
-
-        trajectories: dict[str, dict] = {}
-        alphas = np.linspace(0.0, 1.0, motion_frames)
-        for side, base in active_states.items():
-            marker_pose = markers_manager.get_marker_world_pose(side)
-            if marker_pose is None:
-                print(f"[TeleopDemo][Motion]     Drop {side}: Debug marker pose unavailable")
-                return False
-            start = np.asarray(marker_pose[0], dtype=np.float64)
-            drop_offset_vec = np.asarray(base["drop_offset"], dtype=np.float64)
-            target = np.asarray(base["drop_target_origin"], dtype=np.float64) + base["tcp_offset"] + drop_offset_vec
-            trajectories[side] = {
-                "controlled_gripper": base["controlled_gripper"],
-                "waypoints": [start + (target - start) * a for a in alphas],
-                "target_world": target,
-            }
-
-        for frame_index in range(motion_frames):
-            for side, traj in trajectories.items():
-                local_target = world_to_tracking_origin_local(markers_manager, traj["waypoints"][frame_index])
-                if local_target is None:
-                    print(f"[TeleopDemo][Motion]     Drop {side}: Tracking origin pose unavailable")
-                    return False
-                markers_manager.update_marker_transform(
-                    side,
-                    tuple(local_target.tolist()),
-                    TELEOP_DEFAULT_ORIENTATION_XYZW,
-                )
-            await app_utils.update_app_async()
-
-        if settle_frames > 0:
-            await app_utils.update_app_async(steps=settle_frames)
-
-        summary_parts = []
-        for side, traj in trajectories.items():
-            gripper_positions, _ = traj["controlled_gripper"].get_world_poses()
-            gripper_position = np.asarray(gripper_positions.numpy(), dtype=np.float64).reshape(-1, 3)[0]
-            error = float(np.linalg.norm(gripper_position - traj["target_world"]))
-            flag = "OK" if error <= target_min_distance_error else "OUT"
-            summary_parts.append(f"{side.capitalize()} {flag} {error:.4f}/{target_min_distance_error:.4f} m")
-        print(
-            f"[TeleopDemo][Motion]   Drop motion {motion_frames} + settle {settle_frames} frames | "
-            + ", ".join(summary_parts)
-        )
-        return True
+        if not result["reached"]:
+            side_errors = []
+            for side in target_positions:
+                marker_pose = markers_manager.get_marker_world_pose(side)
+                if marker_pose is None:
+                    side_errors.append(f"{side.capitalize()}=marker unavailable")
+                    continue
+                gripper_positions, _ = sides_state[side]["controlled_gripper"].get_world_poses()
+                gripper_position = np.asarray(gripper_positions.numpy(), dtype=np.float64).reshape(-1, 3)[0]
+                marker_position = np.asarray(marker_pose[0], dtype=np.float64)
+                error = float(np.linalg.norm(gripper_position - marker_position))
+                side_errors.append(f"{side.capitalize()}={error:.4f} m")
+            print(f"[TeleopDemo][Motion]   {phase_name} per-side errors: {', '.join(side_errors)}")
+        return bool(result["reached"])
 
     async def locomote_to_asset_relative_target(
         markers_manager: MarkersManager,
@@ -749,7 +641,10 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
         Returns:
             The requested value.
         """
-        targets = {side: asset_relative_world_target(state, state[offset_key]) for side, state in sides_state.items()}
+        targets = {
+            side: compute_marker_world_position(state["asset_origin"], state[offset_key], state["marker_offset"])
+            for side, state in sides_state.items()
+        }
         final_errors = {side: float("inf") for side in sides_state}
 
         targets_summary = ", ".join(
@@ -794,40 +689,6 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
         print(f"[TeleopDemo][Locomotion]   Settle {settle_frames} frames")
         return True
 
-    async def close_grasps(teleop_manager: TeleopManager, sides_state: dict[str, dict], settle_frames: int) -> None:
-        """Trigger every active grasp side and let the drives settle.
-
-        Args:
-            teleop_manager: Value for teleop manager.
-            sides_state: Value for sides state.
-            settle_frames: Value for settle frames.
-        """
-        grasp_sides = [side for side, state in sides_state.items() if state["grasp_enabled"]]
-        if not grasp_sides:
-            print("[TeleopDemo][Grasp]   No grasp sides enabled, skipping")
-            return
-        for side in grasp_sides:
-            teleop_manager.set_debug_trigger(side, 1.0)
-        await app_utils.update_app_async(steps=settle_frames)
-        print(f"[TeleopDemo][Grasp]   Closed ({', '.join(grasp_sides)}) after settle {settle_frames} frames")
-
-    async def open_grasps(teleop_manager: TeleopManager, sides_state: dict[str, dict], settle_frames: int) -> None:
-        """Open every active grasp side and let dropped objects settle.
-
-        Args:
-            teleop_manager: Value for teleop manager.
-            sides_state: Value for sides state.
-            settle_frames: Value for settle frames.
-        """
-        grasp_sides = [side for side, state in sides_state.items() if state["grasp_enabled"]]
-        if not grasp_sides:
-            print("[TeleopDemo][Grasp]   No grasp sides enabled, skipping drop release")
-            return
-        for side in grasp_sides:
-            teleop_manager.set_debug_trigger(side, 0.0)
-        await app_utils.update_app_async(steps=settle_frames)
-        print(f"[TeleopDemo][Grasp]   Opened ({', '.join(grasp_sides)}) after settle {settle_frames} frames")
-
     # -----------------------------------------------------------------------
     # Episode recorder targets
     # -----------------------------------------------------------------------
@@ -869,14 +730,12 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
     # -----------------------------------------------------------------------
 
     def setup_sdg_render_products(
-        stage: object,
         camera_paths: list[str],
         resolution: tuple[int, int],
     ) -> object:
         """Build per-camera render products for SDG captures.
 
         Args:
-            stage: Value for stage.
             camera_paths: Value for camera paths.
             resolution: Value for resolution.
 
@@ -885,11 +744,7 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
         """
         valid_camera_paths: list[str] = []
         for camera_path in camera_paths:
-            camera_prim = stage.GetPrimAtPath(camera_path)
-            if camera_prim is None or not camera_prim.IsValid():
-                print(f"[TeleopDemo][SDG]   Capture camera missing, skipping: {camera_path}")
-                continue
-            if not camera_prim.IsA(UsdGeom.Camera):
+            if not bool(Camera.are_of_type(camera_path).numpy()[0]):
                 print(f"[TeleopDemo][SDG]   Capture prim is not a camera, skipping: {camera_path}")
                 continue
             valid_camera_paths.append(camera_path)
@@ -1084,7 +939,11 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
             _safe("timeline.stop", timeline.stop)
 
         if teleop_manager is not None:
-            _safe("teleop_manager.set_debug_tracking", teleop_manager.set_debug_tracking, False)
+            _safe(
+                "teleop_manager.set_debug_tracking",
+                teleop_manager.set_debug_tracking,
+                False,
+            )
             _safe("teleop_manager.destroy", teleop_manager.destroy)
 
         if markers_manager is not None:
@@ -1182,7 +1041,13 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
         print(f"[TeleopDemo][Setup]   Loaded: {profile_path}")
 
         print("[TeleopDemo][Setup] Configure motion / grasp")
-        sides_state = build_sides_state(profile, teleop_manager, floating_controller, ik_controller, grasp_controller)
+        sides_state = build_sides_state(
+            profile,
+            teleop_manager,
+            floating_controller,
+            ik_controller,
+            grasp_controller,
+        )
         if sides_state is None:
             return
         active_sides = list(sides_state.keys())
@@ -1198,7 +1063,7 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
             return
 
         print("[TeleopDemo][Setup] Cache target origins")
-        if not cache_target_origins(stage, sides_state):
+        if not cache_target_origins(sides_state):
             return
 
         if not await place_markers_at_start(markers_manager, sides_state):
@@ -1206,7 +1071,6 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
 
         if capture_sdg:
             sdg_capture_render_products = setup_sdg_render_products(
-                stage,
                 camera_paths,
                 capture_resolution,
             )
@@ -1247,7 +1111,11 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
         print("[TeleopDemo] Start timeline")
         timeline.play()
         timeline_started = True
-        if not await wait_for_motion_controllers(sides_state):
+        if not await wait_for_controllers_running_async(
+            {side: state["motion_controller"] for side, state in sides_state.items()},
+            app_utils.update_app_async,
+            max_steps=5,
+        ):
             print("[TeleopDemo][Setup]   Motion controllers did not activate after 5 frames, exiting")
             return
 
@@ -1258,9 +1126,7 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
             print("[TeleopDemo][Setup]   Locomotion carries tracking origin implicitly")
         else:
             print("[TeleopDemo][Setup]   Enable locomotion carry")
-            teleop_manager.set_debug_button("left", "primary_click", True)
-            await app_utils.update_app_async()
-            teleop_manager.set_debug_button("left", "primary_click", False)
+            teleop_manager.set_carry_tracking_space(True)
             await app_utils.update_app_async()
             print("[TeleopDemo][Setup]     Locomotion carry flag toggled")
 
@@ -1271,10 +1137,15 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
             f"{side.capitalize()}={list(state['reach_offset'])}" for side, state in sides_state.items()
         )
         print(f"[TeleopDemo][Motion] Reach: {reach_summary}")
-        await move_markers_to_asset_relative_target(
+        await execute_marker_world_phase_async(
             markers_manager,
             sides_state,
-            "reach_offset",
+            {
+                side: compute_marker_world_position(
+                    state["asset_origin"], state["reach_offset"], state["marker_offset"]
+                )
+                for side, state in sides_state.items()
+            },
             reach_motion_frames,
             reach_settle_frames,
             target_min_distance_error,
@@ -1318,7 +1189,20 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
             print("[TeleopDemo][Locomotion] Skipped (disabled in profile)")
 
         print("[TeleopDemo][Grasp] Close grippers")
-        await close_grasps(teleop_manager, sides_state, grasp_settle_frames)
+        grasp_sides = [side for side, state in sides_state.items() if state["grasp_enabled"]]
+        if grasp_sides:
+            await set_debug_grasp_async(
+                teleop_manager,
+                grasp_sides,
+                True,
+                app_utils.update_app_async,
+                settle_steps=grasp_settle_frames,
+            )
+            print(
+                f"[TeleopDemo][Grasp]   Closed ({', '.join(grasp_sides)}) " f"after settle {grasp_settle_frames} frames"
+            )
+        else:
+            print("[TeleopDemo][Grasp]   No grasp sides enabled, skipping")
         sdg_capture_index = await capture_live_sdg_action_image(
             "grasp",
             recorder,
@@ -1333,10 +1217,13 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
             f"{side.capitalize()}={list(state['lift_offset'])}" for side, state in sides_state.items()
         )
         print(f"[TeleopDemo][Motion] Lift: {lift_summary}")
-        await move_markers_to_asset_relative_target(
+        await execute_marker_world_phase_async(
             markers_manager,
             sides_state,
-            "lift_offset",
+            {
+                side: compute_marker_world_position(state["asset_origin"], state["lift_offset"], state["marker_offset"])
+                for side, state in sides_state.items()
+            },
             lift_motion_frames,
             lift_settle_frames,
             target_min_distance_error,
@@ -1356,16 +1243,43 @@ async def run_teleop_pick_and_place_async(scenario_config: dict) -> None:
             f"{side.capitalize()}={list(state['drop_offset'])}" for side, state in sides_state.items()
         )
         print(f"[TeleopDemo][Motion] Drop: {drop_summary}")
-        if not await move_markers_to_drop_target(
+        drop_states = {
+            side: state for side, state in sides_state.items() if state.get("drop_target_origin") is not None
+        }
+        if not drop_states:
+            print("[TeleopDemo][Motion]   No drop target prims configured, skipping")
+        elif not await execute_marker_world_phase_async(
             markers_manager,
-            sides_state,
+            drop_states,
+            {
+                side: compute_marker_world_position(
+                    np.asarray(state["drop_target_origin"], dtype=np.float64),
+                    state["drop_offset"],
+                    state["marker_offset"],
+                )
+                for side, state in drop_states.items()
+            },
             drop_motion_frames,
             drop_settle_frames,
             target_min_distance_error,
+            "Drop",
         ):
             return
         print("[TeleopDemo][Grasp] Open grippers")
-        await open_grasps(teleop_manager, sides_state, release_settle_frames)
+        if grasp_sides:
+            await set_debug_grasp_async(
+                teleop_manager,
+                grasp_sides,
+                False,
+                app_utils.update_app_async,
+                settle_steps=release_settle_frames,
+            )
+            print(
+                f"[TeleopDemo][Grasp]   Opened ({', '.join(grasp_sides)}) "
+                f"after settle {release_settle_frames} frames"
+            )
+        else:
+            print("[TeleopDemo][Grasp]   No grasp sides enabled, skipping drop release")
         sdg_capture_index = await capture_live_sdg_action_image(
             "drop",
             recorder,
@@ -1494,18 +1408,45 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
     # introduce small per-pixel variation, so a moderate budget is used.
     MEAN_DIFF_TOLERANCE = 10
 
+    def _assert_folder_contents(self, out_dir: str, expected_counts: dict[str, int], phase: str) -> None:
+        """Validate generated files and report detailed output diagnostics on failure."""
+        valid = validate_folder_contents(
+            path=out_dir,
+            expected_counts=expected_counts,
+            recursive=True,
+            fail_on_empty_extensions=set(expected_counts),
+        )
+        if valid:
+            return
+
+        summary = get_folder_file_summary(out_dir, recursive=True, include_file_sizes=True)
+        message = (
+            f"[SDG][Test][FAIL] Output validation failed ({phase}) for {out_dir}: "
+            f"expected {expected_counts}, found {summary}"
+        )
+        carb.log_error(message)
+        self.fail(message)
+
+    def _require_pink_ik(self) -> None:
+        """Skip PINK-specific scenarios when its optional backend is unavailable."""
+        from isaacsim.replicator.teleop import IKSolverType, RobotIKController
+
+        available, reason = RobotIKController.get_solver_availability(IKSolverType.PINK)
+        if not available:
+            self.skipTest(reason)
+
     async def setUp(self) -> None:
         """Set up the test fixture."""
-        await omni.kit.app.get_app().next_update_async()
-        omni.usd.get_context().new_stage()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
 
     async def tearDown(self) -> None:
         """Tear down the test fixture."""
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
-        while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+        if stage_utils.is_stage_set() or omni.usd.get_context().get_stage() is not None:
+            stage_utils.close_stage()
+            await app_utils.update_app_async()
+        while stage_utils.is_stage_loading():
+            await app_utils.update_app_async()
 
     async def test_floating_xarm_dex3(self) -> None:
         """Bimanual floating teleop: xArm gripper (left) + Dex3 gripper (right)."""
@@ -1517,7 +1458,7 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
                 "left": {
                     "asset_path": "/World/teleop_env/teleop_assets/Assets/_06_mustard_bottle",
                     "drop_target_path": "/World/teleop_env/teleop_tables/TableMain/SM_Crate_A08_Blue_01_physics",
-                    "tcp_offset_world": (-0.10, 0.0, 0.0),
+                    "marker_offset_world": (-0.10, 0.0, 0.0),
                     "start_offset": (0.0, 0.0, 0.5),
                     "reach_offset": (-0.5, 0.0, 0.0),
                     "pre_grasp_offset": (0.0, 0.0, 0.0),
@@ -1527,7 +1468,7 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
                 "right": {
                     "asset_path": "/World/teleop_env/teleop_assets/Assets/_05_tomato_soup_can",
                     "drop_target_path": "/World/teleop_env/teleop_tables/TableMain/SM_Crate_A07_Yellow_01_physics",
-                    "tcp_offset_world": (-0.05, -0.05, 0.0),
+                    "marker_offset_world": (-0.05, -0.05, 0.0),
                     "start_offset": (0.0, 0.0, 0.5),
                     "reach_offset": (-0.5, 0.0, 0.0),
                     "pre_grasp_offset": (0.0, 0.0, 0.0),
@@ -1559,13 +1500,14 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
         await run_teleop_pick_and_place_async(scenario_config)
 
         # 2 cameras x 5 captures (reach + locomotion + grasp + lift + drop) per phase.
-        golden_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data", "_out_teleop_floating_xarm_dex3")
+        golden_dir = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)),
+            "data",
+            "_out_teleop_floating_xarm_dex3",
+        )
         for phase in ("sdg_live", "sdg_replay"):
             out_dir = os.path.join(os.getcwd(), "_out_teleop_floating_xarm_dex3", phase)
-            self.assertTrue(
-                validate_folder_contents(path=out_dir, expected_counts={"png": 10}, recursive=True),
-                f"Folder contents validation failed ({phase}). Output dir: {out_dir}",
-            )
+            self._assert_folder_contents(out_dir, {"png": 10}, phase)
             for camera_dir in ("rp_dex3_view_cam", "rp_xarm_view_cam"):
                 golden_camera_dir = os.path.join(golden_dir, camera_dir, "rgb")
                 test_camera_dir = os.path.join(out_dir, camera_dir, "rgb")
@@ -1593,7 +1535,7 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
                 "right": {
                     "asset_path": "/World/teleop_env/teleop_assets/Assets/_05_tomato_soup_can",
                     "drop_target_path": "/World/teleop_env/teleop_tables/TableMain/SM_Crate_A07_Yellow_01_physics",
-                    "tcp_offset_world": (-0.05, 0.0, 0.0),
+                    "marker_offset_world": (-0.05, 0.0, 0.0),
                     "start_offset": (0.0, 0.0, 0.5),
                     "reach_offset": (-0.5, 0.0, 0.0),
                     "pre_grasp_offset": (0.0, 0.0, 0.0),
@@ -1624,13 +1566,14 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
         await run_teleop_pick_and_place_async(scenario_config)
 
         # 1 camera x 5 captures (reach + locomotion + grasp + lift + drop) per phase.
-        golden_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data", "_out_teleop_floating_xarm")
+        golden_dir = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)),
+            "data",
+            "_out_teleop_floating_xarm",
+        )
         for phase in ("sdg_live", "sdg_replay"):
             out_dir = os.path.join(os.getcwd(), "_out_teleop_floating_xarm", phase)
-            self.assertTrue(
-                validate_folder_contents(path=out_dir, expected_counts={"png": 5}, recursive=True),
-                f"Folder contents validation failed ({phase}). Output dir: {out_dir}",
-            )
+            self._assert_folder_contents(out_dir, {"png": 5}, phase)
             result = compare_images_in_directories(
                 golden_dir=golden_dir,
                 test_dir=out_dir,
@@ -1640,10 +1583,15 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
                 mean_tolerance=self.MEAN_DIFF_TOLERANCE,
                 print_all_stats=False,
             )
-            self.assertTrue(result["all_passed"], f"Image comparison failed ({phase}). Output dir: {out_dir}")
+            self.assertTrue(
+                result["all_passed"],
+                f"Image comparison failed ({phase}). Output dir: {out_dir}",
+            )
 
     async def test_ik_dual_ur3_xarm_dex3(self) -> None:
         """Bimanual IK teleop: dual UR3 arms with xArm gripper (left) + Dex3 (right)."""
+        self._require_pink_ik()
+
         scenario_config = {
             "name": "ik_dual_ur3_xarm_dex3",
             "stage_url": "/Isaac/Samples/Replicator/Teleop/teleop_scenario_dual_ur3_xarm_dex3.usd",
@@ -1652,17 +1600,17 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
                 "left": {
                     "asset_path": "/World/teleop_env/teleop_assets/Assets/_06_mustard_bottle",
                     "drop_target_path": "/World/teleop_env/teleop_tables/TableMain/SM_Crate_A08_Blue_01_physics",
-                    "tcp_offset_world": (-0.05, 0.0, 0.0),
+                    "marker_offset_world": (-0.05, 0.0, 0.0),
                     "start_offset": (-0.35, 0.0, 0.3),
                     "reach_offset": (-0.45, 0.0, 0.0),
                     "pre_grasp_offset": (0.0, 0.0, 0.0),
                     "lift_offset": (0.0, 0.0, 0.35),
-                    "drop_offset": (-0.1, -0.1, 0.35),
+                    "drop_offset": (-0.2, -0.1, 0.35),
                 },
                 "right": {
                     "asset_path": "/World/teleop_env/teleop_assets/Assets/_05_tomato_soup_can",
                     "drop_target_path": "/World/teleop_env/teleop_tables/TableMain/SM_Crate_A07_Yellow_01_physics",
-                    "tcp_offset_world": (-0.02, -0.04, 0.0),
+                    "marker_offset_world": (-0.02, -0.04, 0.0),
                     "start_offset": (-0.35, 0.0, 0.3),
                     "reach_offset": (-0.45, 0.0, 0.0),
                     "pre_grasp_offset": (0.0, 0.0, 0.0),
@@ -1695,14 +1643,13 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
 
         # 2 cameras x 5 captures (reach + locomotion + grasp + lift + drop) per phase.
         golden_dir = os.path.join(
-            os.path.dirname(os.path.realpath(__file__)), "data", "_out_teleop_ik_dual_ur3_xarm_dex3"
+            os.path.dirname(os.path.realpath(__file__)),
+            "data",
+            "_out_teleop_ik_dual_ur3_xarm_dex3",
         )
         for phase in ("sdg_live", "sdg_replay"):
             out_dir = os.path.join(os.getcwd(), "_out_teleop_ik_dual_ur3_xarm_dex3", phase)
-            self.assertTrue(
-                validate_folder_contents(path=out_dir, expected_counts={"png": 10}, recursive=True),
-                f"Folder contents validation failed ({phase}). Output dir: {out_dir}",
-            )
+            self._assert_folder_contents(out_dir, {"png": 10}, phase)
             for camera_dir in ("rp_dex3_view_cam", "rp_xarm_view_cam"):
                 golden_camera_dir = os.path.join(golden_dir, camera_dir, "rgb")
                 test_camera_dir = os.path.join(out_dir, camera_dir, "rgb")
@@ -1722,6 +1669,8 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
 
     async def test_ik_solo_ur3_xarm(self) -> None:
         """Solo IK teleop: single UR3 arm with an xArm gripper on the right."""
+        self._require_pink_ik()
+
         scenario_config = {
             "name": "ik_solo_ur3_xarm",
             "stage_url": "/Isaac/Samples/Replicator/Teleop/teleop_scenario_solo_ur3_xarm.usd",
@@ -1730,7 +1679,7 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
                 "right": {
                     "asset_path": "/World/teleop_env/teleop_assets/Assets/_05_tomato_soup_can",
                     "drop_target_path": "/World/teleop_env/teleop_tables/TableMain/SM_Crate_A07_Yellow_01_physics",
-                    "tcp_offset_world": (-0.05, 0.0, 0.0),
+                    "marker_offset_world": (-0.05, 0.0, 0.0),
                     "start_offset": (-0.5, 0.0, 0.3),
                     "reach_offset": (-0.45, 0.0, 0.0),
                     "pre_grasp_offset": (0.0, 0.0, 0.0),
@@ -1761,13 +1710,14 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
         await run_teleop_pick_and_place_async(scenario_config)
 
         # 1 camera x 5 captures (reach + locomotion + grasp + lift + drop) per phase.
-        golden_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data", "_out_teleop_ik_solo_ur3_xarm")
+        golden_dir = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)),
+            "data",
+            "_out_teleop_ik_solo_ur3_xarm",
+        )
         for phase in ("sdg_live", "sdg_replay"):
             out_dir = os.path.join(os.getcwd(), "_out_teleop_ik_solo_ur3_xarm", phase)
-            self.assertTrue(
-                validate_folder_contents(path=out_dir, expected_counts={"png": 5}, recursive=True),
-                f"Folder contents validation failed ({phase}). Output dir: {out_dir}",
-            )
+            self._assert_folder_contents(out_dir, {"png": 5}, phase)
             result = compare_images_in_directories(
                 golden_dir=golden_dir,
                 test_dir=out_dir,
@@ -1777,4 +1727,7 @@ class TestTeleopSDGPickAndPlace(omni.kit.test.AsyncTestCase):
                 mean_tolerance=self.MEAN_DIFF_TOLERANCE,
                 print_all_stats=False,
             )
-            self.assertTrue(result["all_passed"], f"Image comparison failed ({phase}). Output dir: {out_dir}")
+            self.assertTrue(
+                result["all_passed"],
+                f"Image comparison failed ({phase}). Output dir: {out_dir}",
+            )

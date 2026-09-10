@@ -15,6 +15,9 @@
 
 """Browser interface for organizing and displaying Isaac Sim robotics examples with hierarchical navigation."""
 
-from .extension import *
+from .extension import ExampleBrowserExtension as ExampleBrowserExtension
+from .extension import get_instance as get_instance
+from .model import ExampleBrowserModel as ExampleBrowserModel
+from .window import ExampleBrowserWindow as ExampleBrowserWindow
 
 __all__ = ["ExampleBrowserModel", "ExampleBrowserWindow", "get_instance"]

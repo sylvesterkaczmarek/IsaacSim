@@ -14,13 +14,14 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 
-#include <isaacsim/core/includes/UsdUtilities.h>
-#include <isaacsim/core/nodes/ICoreNodes.h>
+#include <isaacsim/core/includes/UsdUtilities.hpp>
+#include <isaacsim/core/nodes/ICoreNodes.hpp>
 #include <omni/fabric/FabricUSD.h>
+#include <pxr/base/gf/matrix3d.h>
 
 #include <OgnIsaacReadCameraInfoDatabase.h>
 
@@ -85,6 +86,26 @@ public:
 
         camera.GetAttribute(pxr::TfToken("horizontalApertureOffset")).Get(&db.outputs.horizontalOffset());
         camera.GetAttribute(pxr::TfToken("verticalApertureOffset")).Get(&db.outputs.verticalOffset());
+
+        // 3x3 camera intrinsics matrix [fx, 0, cx; 0, fy, cy; 0, 0, 1], computed from the
+        // focal length, apertures, offsets, and resolution already read above. The USD
+        // tenths-of-units scale cancels in the focal/aperture and offset/aperture ratios, so the
+        // raw attribute values apply directly. The principal point includes the aperture offset
+        // (offset/aperture is the fractional shift across the sensor, scaled to pixels), matching
+        // isaacsim.replicator.writers' pose_writer.
+        if (db.outputs.horizontalAperture() > 0.0f && db.outputs.verticalAperture() > 0.0f)
+        {
+            const double fx = db.outputs.width() * db.outputs.focalLength() / db.outputs.horizontalAperture();
+            const double fy = db.outputs.height() * db.outputs.focalLength() / db.outputs.verticalAperture();
+            const double cx =
+                db.outputs.width() * (0.5 + db.outputs.horizontalOffset() / db.outputs.horizontalAperture());
+            const double cy = db.outputs.height() * (0.5 + db.outputs.verticalOffset() / db.outputs.verticalAperture());
+            db.outputs.cameraIntrinsics() = pxr::GfMatrix3d(fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0);
+        }
+        else
+        {
+            db.outputs.cameraIntrinsics() = pxr::GfMatrix3d(1.0);
+        }
 
         pxr::TfToken projectionType;
         camera.GetAttribute(pxr::TfToken("cameraProjectionType")).Get(&projectionType);

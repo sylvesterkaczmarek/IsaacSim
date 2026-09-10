@@ -14,18 +14,21 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/asset/gen/omap/IOccupancyMap.h>
-#include <isaacsim/asset/gen/omap/MapGenerator.h>
+#include <isaacsim/asset/gen/omap/IOccupancyMap.hpp>
+#include <isaacsim/asset/gen/omap/MapGenerator.hpp>
 #include <omni/physx/IPhysx.h>
 #include <pybind11/chrono.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+
+#include <cstddef>
+#include <unordered_map>
 
 
 CARB_BINDINGS("isaacsim.asset.gen.omap.python")
@@ -35,6 +38,9 @@ namespace
 {
 
 namespace py = pybind11;
+using isaacsim::asset::gen::omap::OccupancyMap;
+
+std::unordered_map<OccupancyMap*, std::size_t> g_interfaceReferenceCounts;
 
 PYBIND11_MODULE(_omap, m)
 {
@@ -90,6 +96,10 @@ Example:
                  {
                      pxr::UsdStageWeakPtr stage =
                          pxr::UsdUtilsStageCache::Get().Find(pxr::UsdStageCache::Id::FromLongInt(stageId));
+                     if (!stage)
+                     {
+                         throw py::value_error("No USD stage found for the given stage id");
+                     }
                      return new MapGenerator(physXPtr, stage);
                  }),
              R"doc(Initialize a new Generator instance.
@@ -195,8 +205,39 @@ Returns:
 )doc");
 
 
-    defineInterfaceClass<OccupancyMap>(m, "OccupancyMap", "acquire_omap_interface", "release_omap_interface")
+    // Registered before the acquire/release defs so pybind can name OccupancyMap in their signatures.
+    py::class_<OccupancyMap> occupancyMapClass(m, "OccupancyMap");
 
+    m.def(
+        "acquire_omap_interface",
+        [](const char* pluginName, const char* libraryPath)
+        {
+            OccupancyMap* iface = libraryPath ? acquireInterfaceFromLibraryForBindings<OccupancyMap>(libraryPath) :
+                                                acquireInterfaceForBindings<OccupancyMap>(pluginName);
+            ++g_interfaceReferenceCounts[iface];
+            return iface;
+        },
+        py::arg("plugin_name") = nullptr, py::arg("library_path") = nullptr, py::return_value_policy::reference);
+
+    m.def(
+        "release_omap_interface",
+        [](OccupancyMap* iface)
+        {
+            auto it = g_interfaceReferenceCounts.find(iface);
+            if (it == g_interfaceReferenceCounts.end())
+            {
+                CARB_LOG_ERROR("Attempted to release an invalid occupancy map interface");
+                return;
+            }
+            if (--it->second == 0)
+            {
+                g_interfaceReferenceCounts.erase(it);
+                carb::getFramework()->releaseInterface(iface);
+            }
+        },
+        py::arg("interface"));
+
+    occupancyMapClass
         .def("generate", wrapInterfaceFunction(&OccupancyMap::generateMap), R"doc(Generate the occupancy map.
 
 Initializes and creates an occupancy map based on the current scene.

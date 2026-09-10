@@ -36,7 +36,6 @@ class OmniPBR(VisualMaterial):
         texture_scale: Texture UV scale (x, y).
         texture_translate: Texture UV translation (x, y).
         color: Diffuse color RGB.
-
     """
 
     def __init__(
@@ -109,7 +108,6 @@ class OmniPBR(VisualMaterial):
 
         Args:
             color: RGB color array.
-
         """
         if self.shaders_list[0].GetInput("diffuse_color_constant").Get() is None:
             self.shaders_list[0].CreateInput("diffuse_color_constant", Sdf.ValueTypeNames.Color3f).Set(
@@ -124,7 +122,6 @@ class OmniPBR(VisualMaterial):
 
         Returns:
             RGB color array.
-
         """
         if self.shaders_list[0].GetInput("diffuse_color_constant").Get() is None:
             carb.log_warn("A color attribute is not set yet")
@@ -137,7 +134,6 @@ class OmniPBR(VisualMaterial):
 
         Args:
             path: Path to the texture file.
-
         """
         if self.shaders_list[0].GetInput("diffuse_texture").Get() is None:
             self.shaders_list[0].CreateInput("diffuse_texture", Sdf.ValueTypeNames.Asset).Set(path)
@@ -150,7 +146,6 @@ class OmniPBR(VisualMaterial):
 
         Returns:
             Path to the texture file.
-
         """
         if self.shaders_list[0].GetInput("diffuse_texture").Get() is None:
             carb.log_warn("A diffuse_texture attribute is not set yet")
@@ -164,7 +159,6 @@ class OmniPBR(VisualMaterial):
         Args:
             x: Scale in U direction.
             y: Scale in V direction.
-
         """
         if self.shaders_list[0].GetInput("texture_scale").Get() is None:
             self.shaders_list[0].CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f([x, y]))
@@ -178,7 +172,6 @@ class OmniPBR(VisualMaterial):
         Args:
             x: Translation in U direction.
             y: Translation in V direction.
-
         """
         if self.shaders_list[0].GetInput("texture_translate").Get() is None:
             self.shaders_list[0].CreateInput("texture_translate", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f([x, y]))
@@ -191,7 +184,6 @@ class OmniPBR(VisualMaterial):
 
         Returns:
             Array with (x, y) scale values.
-
         """
         if self.shaders_list[0].GetInput("texture_scale").Get() is None:
             carb.log_warn("A texture_scale attribute is not set yet")
@@ -204,7 +196,6 @@ class OmniPBR(VisualMaterial):
 
         Returns:
             Array with (x, y) translation values.
-
         """
         if self.shaders_list[0].GetInput("texture_translate").Get() is None:
             carb.log_warn("A texture_translate attribute is not set yet")
@@ -217,7 +208,6 @@ class OmniPBR(VisualMaterial):
 
         Args:
             flag: True to enable projection, False to disable.
-
         """
         if self.shaders_list[0].GetInput("project_uvw").Get() is None:
             self.shaders_list[0].CreateInput("project_uvw", Sdf.ValueTypeNames.Bool).Set(flag)
@@ -230,7 +220,6 @@ class OmniPBR(VisualMaterial):
 
         Returns:
             True if projection is enabled, False otherwise.
-
         """
         if self.shaders_list[0].GetInput("project_uvw").Get() is None:
             carb.log_warn("A project_uvw attribute is not set yet")
@@ -243,7 +232,6 @@ class OmniPBR(VisualMaterial):
 
         Args:
             amount: Roughness value (0-1).
-
         """
         if self.shaders_list[0].GetInput("reflection_roughness_constant").Get() is None:
             self.shaders_list[0].CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(amount)
@@ -256,7 +244,6 @@ class OmniPBR(VisualMaterial):
 
         Returns:
             Roughness value.
-
         """
         if self.shaders_list[0].GetInput("reflection_roughness_constant").Get() is None:
             carb.log_warn("A reflection_roughness_constant attribute is not set yet")
@@ -269,7 +256,6 @@ class OmniPBR(VisualMaterial):
 
         Args:
             amount: Metallic value (0-1).
-
         """
         if self.shaders_list[0].GetInput("metallic_constant").Get() is None:
             self.shaders_list[0].CreateInput("metallic_constant", Sdf.ValueTypeNames.Float).Set(amount)
@@ -282,7 +268,6 @@ class OmniPBR(VisualMaterial):
 
         Returns:
             Metallic value.
-
         """
         if self.shaders_list[0].GetInput("metallic_constant").Get() is None:
             carb.log_warn("A metallic_constant attribute is not set yet")

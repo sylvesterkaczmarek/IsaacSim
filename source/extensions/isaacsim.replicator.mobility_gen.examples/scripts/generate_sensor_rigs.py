@@ -58,9 +58,8 @@ from isaacsim import SimulationApp
 
 simulation_app = SimulationApp({"headless": True})
 
-import omni.usd
+import isaacsim.core.experimental.utils.stage as stage_utils
 import yaml
-from isaacsim.core.utils.stage import is_stage_loading, open_stage
 from isaacsim.storage.native import get_assets_root_path
 from pxr import Usd
 
@@ -140,7 +139,7 @@ def _open_stage_for_yaml(yaml_path: str) -> Any:
         return None
     usd_url = get_assets_root_path() + asset_path
     print(f"  opening: {usd_url}", flush=True)
-    success = open_stage(usd_url)
+    success, stage = stage_utils.open_stage(usd_url)
     if not success:
         print(f"  ERROR: open_stage returned False for {usd_url!r}", flush=True)
         return None
@@ -148,14 +147,14 @@ def _open_stage_for_yaml(yaml_path: str) -> Any:
     simulation_app.update()
     t0 = time.monotonic()
     last_log = 0
-    while is_stage_loading():
+    while stage_utils.is_stage_loading():
         simulation_app.update()
         elapsed = time.monotonic() - t0
         if elapsed - last_log >= 10:
             print(f"  loading... {elapsed:.0f}s", flush=True)
             last_log = elapsed
     print(f"  stage ready ({time.monotonic() - t0:.1f}s)", flush=True)
-    return omni.usd.get_context().get_stage()
+    return stage
 
 
 def _print_sensor_table(entries: list) -> None:

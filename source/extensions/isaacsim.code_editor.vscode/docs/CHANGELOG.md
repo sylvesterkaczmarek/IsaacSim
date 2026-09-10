@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.5] - 2026-06-30
+### Fixed
+- Resolve the Python server's live state and bound endpoint when VS Code is launched.
+
+## [1.2.4] - 2026-06-26
+### Changed
+- Replace package-root star imports with explicit lifecycle imports.
+
 ## [1.2.3] - 2026-05-14
 ### Fixed
 - Show a Kit warning notification when VS Code cannot be launched because `code` is not available on the system

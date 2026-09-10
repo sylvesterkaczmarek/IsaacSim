@@ -19,12 +19,36 @@ import enum
 import io
 import os
 import posixpath
+from collections.abc import Sequence
 
 import numpy as np
 import PIL.Image
 import yaml
 
 from .types import Point2d
+
+
+def _parse_ros_origin(origin: str | Sequence[float]) -> tuple[float, float, float]:
+    """Coerce a map `origin` into a numeric (x, y, yaw) tuple.
+
+    Accepts a sequence, or a scalar string holding three comma- or whitespace-separated
+    components such as `"(x, y, yaw)"` or `"[x y yaw]"`.
+
+    Args:
+        origin: The origin to coerce.
+
+    Returns:
+        The (x, y, yaw) origin as floats.
+
+    Raises:
+        ValueError: If `origin` does not hold three numeric components.
+    """
+    parts = origin.strip().strip("()[]").replace(",", " ").split() if isinstance(origin, str) else origin
+    try:
+        x, y, yaw = (float(value) for value in parts)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Map origin must have three numeric components, got {origin!r}") from exc
+    return (x, y, yaw)
 
 
 def _load_ros_map_local(ros_yaml_path: str) -> tuple[dict, PIL.Image.Image]:
@@ -39,7 +63,13 @@ def _load_ros_map_local(ros_yaml_path: str) -> tuple[dict, PIL.Image.Image]:
     with open(ros_yaml_path) as f:
         yaml_data = yaml.safe_load(f)
     image_path = os.path.join(os.path.dirname(ros_yaml_path), yaml_data["image"])
-    return yaml_data, PIL.Image.open(image_path).convert("L")
+    try:
+        image = PIL.Image.open(image_path).convert("L")
+    except FileNotFoundError as error:
+        raise FileNotFoundError(
+            f"Occupancy map image '{yaml_data['image']}' referenced by '{ros_yaml_path}' was not found: '{image_path}'"
+        ) from error
+    return yaml_data, image
 
 
 def _load_ros_map_url(ros_yaml_path: str) -> tuple[dict, PIL.Image.Image]:
@@ -122,10 +152,10 @@ occupied_thresh: {occupied_thresh}
 free_thresh: {free_thresh}
 """
 
-    def __init__(self, data: np.ndarray, resolution: int, origin: tuple[int, int, int]) -> None:
+    def __init__(self, data: np.ndarray, resolution: float, origin: tuple[float, float, float]) -> None:
         self.data = data
         self.resolution = resolution  # meters per pixel
-        self.origin = origin  # x, y, yaw.  where (x, y) is the bottom-left of image
+        self.origin = _parse_ros_origin(origin)  # x, y, yaw.  where (x, y) is the bottom-left of image
         self._width_pixels = data.shape[1]
         self._height_pixels = data.shape[0]
         self._freespace_mask_cache = data == OccupancyMapDataValue.FREESPACE
@@ -183,7 +213,8 @@ free_thresh: {free_thresh}
         return self.ROS_YAML_TEMPLATE.format(
             image_filename=self.ROS_IMAGE_FILENAME,
             resolution=self.resolution,
-            origin=self.origin,
+            # A YAML flow sequence, not `str(tuple)` — the latter reads back as a scalar string.
+            origin=[float(value) for value in self.origin],
             negate=1 if negate else 0,
             occupied_thresh=ROS_OCCUPIED_THRESH_DEFAULT,
             free_thresh=ROS_FREESPACE_THRESH_DEFAULT,

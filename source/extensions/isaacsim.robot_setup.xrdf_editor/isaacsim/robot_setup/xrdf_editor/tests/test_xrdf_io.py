@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
+from collections import OrderedDict
 
 import isaacsim.core.experimental.utils.stage as stage_utils
 import isaacsim.robot_motion.cumotion as cu_mg
@@ -47,6 +48,7 @@ from isaacsim.robot_setup.xrdf_editor import (
     is_xrdf_file,
     is_yaml_file,
 )
+from isaacsim.robot_setup.xrdf_editor.collision_sphere_editor import CollisionSphereEditor
 from isaacsim.robot_setup.xrdf_editor.constants import (
     COLLISION_KEY_V1,
     COLLISION_KEY_V2,
@@ -77,7 +79,7 @@ from isaacsim.robot_setup.xrdf_editor.yaml_utils import (
 )
 from isaacsim.storage.native import get_assets_root_path
 
-_ROBOT_USD = "Isaac/Robots/UniversalRobots/ur10e/ur10e.usd"
+_ROBOT_USD = "Isaac/Robots_Multiphysics/UniversalRobots/ur10e/ur10e.usda"
 
 
 def _articulation_base_path(stage: object) -> str | None:
@@ -315,6 +317,19 @@ class TestXrdfIoPure(omni.kit.test.AsyncTestCase):
                 atol=1e-3,
             )
             np.testing.assert_allclose(result.joint_positions, inputs.joint_positions, atol=1e-3)
+
+    async def test_write_xrdf_file_empty_spheres_serializes_mapping(self) -> None:
+        """Empty generated sphere groups must round-trip as a mapping, not YAML null."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "robot.xrdf")
+            inputs = self._build_minimal_inputs(path)
+            write_xrdf_file(inputs)
+
+            with open(path) as f:
+                parsed = yaml.safe_load(f)
+
+            spheres = parsed["geometry"][DEFAULT_GEOMETRY_GROUP_NAME]["spheres"]
+            self.assertEqual(spheres, {})
 
     async def test_is_valid_xrdf_file_rejects_non_xrdf(self) -> None:
         """Test is valid xrdf file rejects non xrdf."""
@@ -941,6 +956,192 @@ class TestXrdfIoPure(omni.kit.test.AsyncTestCase):
             )
             with self.assertRaises(ValueError):
                 write_lula_robot_description_file(inputs)
+
+
+class TestXrdfNestedLinkExport(omni.kit.test.AsyncTestCase):
+    """XRDF export for robots with a link nested inside another link."""
+
+    _ROBOT_PATH = "/World/robot"
+    _BASE_LINK_PATH = "/World/robot/base_link"
+    _ARM_LINK_PATH = "/World/robot/base_link/arm_link"
+    # `arm_link` is a link of the articulation even though its prim lives under `base_link`.
+    _ORDERED_LINKS = ["base_link", "arm_link"]
+
+    async def setUp(self) -> None:
+        """Set up test fixtures."""
+        super().setUp()
+        await stage_utils.create_new_stage_async()
+        stage_utils.define_prim(self._ROBOT_PATH, "Xform")
+        stage_utils.define_prim(self._BASE_LINK_PATH, "Xform")
+        stage_utils.define_prim(self._ARM_LINK_PATH, "Xform")
+        self.editor = CollisionSphereEditor()
+
+    async def tearDown(self) -> None:
+        """Clean up test fixtures."""
+        self.editor.on_shutdown()
+        super().tearDown()
+
+    def _write_inputs(self, path: str, merge_existing: str | None = None) -> XrdfWriteInputs:
+        return XrdfWriteInputs(
+            path=path,
+            format_version=XRDF_VERSION_2,
+            articulation_base_path=self._ROBOT_PATH,
+            dof_names=["j0"],
+            active_joints_mask=np.array([True]),
+            joint_positions=np.array([0.0]),
+            acceleration_limits=np.array([1.0]),
+            jerk_limits=np.array([100.0]),
+            ordered_links=list(self._ORDERED_LINKS),
+            ignore_dict={},
+            sphere_dict_writer=self.editor.write_spheres_to_dict,
+            merge_existing=merge_existing,
+            articulation_frames=set(self._ORDERED_LINKS),
+        )
+
+    async def test_nested_link_spheres_exported_under_link_name(self) -> None:
+        """Test a nested link's spheres are written under its link name."""
+        self.editor.add_sphere(self._BASE_LINK_PATH, np.zeros(3), 0.10)
+        self.editor.add_sphere(self._ARM_LINK_PATH, np.zeros(3), 0.05)
+
+        result = build_xrdf_dict(self._write_inputs("/tmp/never-written.xrdf"))
+        spheres = result["geometry"][DEFAULT_GEOMETRY_GROUP_NAME]["spheres"]
+
+        self.assertEqual(sorted(spheres.keys()), ["arm_link", "base_link"])
+
+    async def test_merge_export_preserves_nested_link_spheres(self) -> None:
+        """Test a merge-export keeps the nested link's spheres under a resolvable key.
+
+        `build_xrdf_dict` clears stale sphere entries by real link name before the writer
+        repopulates them. A writer that keys the nested link by its path fragment therefore
+        deletes the merge source's `arm_link` entry and leaves behind a key that names no
+        link in the robot description.
+        """
+        self.editor.add_sphere(self._ARM_LINK_PATH, np.zeros(3), 0.05)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            existing_path = os.path.join(tmpdir, "existing.xrdf")
+            existing = {
+                "format": XRDF_FORMAT,
+                "format_version": XRDF_VERSION_2,
+                COLLISION_KEY_V2: {"geometry": DEFAULT_GEOMETRY_GROUP_NAME},
+                "geometry": {
+                    DEFAULT_GEOMETRY_GROUP_NAME: {
+                        "spheres": {"arm_link": [{"center": [0.0, 0.0, 0.0], "radius": 0.99}]}
+                    }
+                },
+            }
+            with open(existing_path, "w") as f:
+                yaml.safe_dump(existing, f)
+
+            result = build_xrdf_dict(self._write_inputs(os.path.join(tmpdir, "out.xrdf"), existing_path))
+            spheres = result["geometry"][DEFAULT_GEOMETRY_GROUP_NAME]["spheres"]
+
+            self.assertIn("arm_link", spheres)
+            self.assertNotIn("base_link/arm_link", spheres)
+            # The stale 0.99 entry is replaced by what is actually authored on the stage.
+            self.assertEqual(len(spheres["arm_link"]), 1)
+            self.assertAlmostEqual(spheres["arm_link"][0]["radius"], 0.05, places=4)
+
+    async def test_merge_export_drops_legacy_path_fragment_key(self) -> None:
+        """Test a merge source written before 3.7.0 does not duplicate the link.
+
+        Older editors keyed the nested link as `base_link/arm_link`. That key is
+        not a link name, so clearing only exact link names leaves it in the merged
+        output alongside the freshly written `arm_link`, giving one link two sets
+        of collision geometry.
+        """
+        self.editor.add_sphere(self._ARM_LINK_PATH, np.zeros(3), 0.05)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            existing_path = os.path.join(tmpdir, "existing.xrdf")
+            existing = {
+                "format": XRDF_FORMAT,
+                "format_version": XRDF_VERSION_2,
+                COLLISION_KEY_V2: {"geometry": DEFAULT_GEOMETRY_GROUP_NAME},
+                "geometry": {
+                    DEFAULT_GEOMETRY_GROUP_NAME: {
+                        "spheres": {"base_link/arm_link": [{"center": [0.0, 0.0, 0.0], "radius": 0.99}]}
+                    }
+                },
+            }
+            with open(existing_path, "w") as f:
+                yaml.safe_dump(existing, f)
+
+            result = build_xrdf_dict(self._write_inputs(os.path.join(tmpdir, "out.xrdf"), existing_path))
+            spheres = result["geometry"][DEFAULT_GEOMETRY_GROUP_NAME]["spheres"]
+
+            self.assertNotIn("base_link/arm_link", spheres)
+            self.assertEqual(len(spheres["arm_link"]), 1)
+            self.assertAlmostEqual(spheres["arm_link"][0]["radius"], 0.05, places=4)
+
+    async def test_merge_export_keeps_passthrough_frames_for_other_links(self) -> None:
+        """Test sphere entries for frames outside this articulation are preserved."""
+        self.editor.add_sphere(self._ARM_LINK_PATH, np.zeros(3), 0.05)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            existing_path = os.path.join(tmpdir, "existing.xrdf")
+            existing = {
+                "format": XRDF_FORMAT,
+                "format_version": XRDF_VERSION_2,
+                COLLISION_KEY_V2: {"geometry": DEFAULT_GEOMETRY_GROUP_NAME},
+                "geometry": {
+                    DEFAULT_GEOMETRY_GROUP_NAME: {
+                        "spheres": {"attached_tool": [{"center": [0.0, 0.0, 0.0], "radius": 0.42}]}
+                    }
+                },
+            }
+            with open(existing_path, "w") as f:
+                yaml.safe_dump(existing, f)
+
+            result = build_xrdf_dict(self._write_inputs(os.path.join(tmpdir, "out.xrdf"), existing_path))
+            spheres = result["geometry"][DEFAULT_GEOMETRY_GROUP_NAME]["spheres"]
+
+            self.assertIn("attached_tool", spheres)
+            self.assertAlmostEqual(spheres["attached_tool"][0]["radius"], 0.42, places=4)
+
+
+class TestEditorStateArticulationFrames(omni.kit.test.AsyncTestCase):
+    """Buffer-distance frame names derived from the discovered link inventory."""
+
+    _ROBOT_PATH = "/World/robot"
+
+    async def setUp(self) -> None:
+        """Set up test fixtures."""
+        super().setUp()
+        await stage_utils.create_new_stage_async()
+        self.state = EditorState()
+        self.state.articulation_base_path = self._ROBOT_PATH
+
+    async def test_frames_use_link_names_not_subpaths(self) -> None:
+        """Test a nested link contributes its link name, not its path fragment.
+
+        XRDF `buffer_distance` blocks are keyed by link name, so a frame of
+        `base_link/arm_link` never matches and the buffer is silently skipped.
+        """
+        self.state.link_to_meshes = OrderedDict([("/base_link", ["/visuals"]), ("/base_link/arm_link", ["/visuals"])])
+        self.state.link_name_by_path = {
+            self._ROBOT_PATH + "/base_link": "base_link",
+            self._ROBOT_PATH + "/base_link/arm_link": "arm_link",
+        }
+
+        self.assertEqual(self.state.articulation_frames(), {"base_link", "arm_link"})
+
+    async def test_frames_keep_links_whose_prims_share_a_name_distinct(self) -> None:
+        """Test two links whose prims share a name do not collapse to one frame."""
+        self.state.link_to_meshes = OrderedDict([("/arm_a/tool", ["/visuals"]), ("/arm_b/tool", ["/visuals"])])
+        self.state.link_name_by_path = {
+            self._ROBOT_PATH + "/arm_a/tool": "tool",
+            self._ROBOT_PATH + "/arm_b/tool": "tool_0",
+        }
+
+        self.assertEqual(self.state.articulation_frames(), {"tool", "tool_0"})
+
+    async def test_frames_fall_back_to_prim_name_without_a_mapping(self) -> None:
+        """Test frames still resolve when no articulation mapping is available."""
+        self.state.link_to_meshes = OrderedDict([("/base_link", ["/visuals"])])
+        self.state.link_name_by_path = {}
+
+        self.assertEqual(self.state.articulation_frames(), {"base_link"})
 
 
 class TestXrdfPipelineIntegration(omni.kit.test.AsyncTestCase):

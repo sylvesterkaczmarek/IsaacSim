@@ -1,0 +1,13 @@
+[[dependency]]
+python = "../_build/target-deps/python"
+packages = [
+    "pyzmq==27.1.0",    # SWIPAT: https://nvbugs/6040381
+    "protobuf==7.34.1", # SWIPAT: https://nvbugs/6040386
+]
+
+target = "../_build/target-deps/pip_zmq_prebundle"
+platforms = ["linux-x86_64", "linux-aarch64", "windows-x86_64"]
+download_only = false
+install_dependencies = false
+append_to_install_folder = true
+gather_licenses_path = "../_build/PACKAGE-LICENSES/PIP-prebundled-LICENSES.txt"

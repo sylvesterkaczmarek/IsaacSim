@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides Franka controller examples for isaacsim.robot.manipulators."""
+
 from isaacsim.robot.manipulators.examples.franka.controllers.pick_place_controller import (
     PickPlaceController as PickPlaceController,
 )

@@ -19,9 +19,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 
 import carb
 import omni.kit.test
+from isaacsim.code_editor.python_server import (
+    ServerState,
+    get_server_status,
+    restart_server,
+    start_server,
+    stop_server,
+)
 
 from ._auth import add_auth_header
 
@@ -84,6 +92,35 @@ class TestSockets(omni.kit.test.AsyncTestCase):
         print("response:", data)
         self.assertEqual("ok", data.get("status"))
         self.assertEqual(_MESSAGE, data.get("output"))
+
+    async def test_listener_lifecycle(self) -> None:
+        """Verify stop/start, restart publication, and failed-restart rollback."""
+        settings = carb.settings.get_settings()
+        original_host = settings.get(f"{_SETTINGS_PREFIX}/host")
+        original_port = settings.get(f"{_SETTINGS_PREFIX}/port")
+        blocker = socket.socket()
+        try:
+            self.assertTrue(await stop_server())
+            self.assertEqual(ServerState.STOPPED, get_server_status().state)
+            self.assertTrue(await start_server())
+
+            blocker.bind((_HOST, 0))
+            blocker.listen()
+            blocked_port = blocker.getsockname()[1]
+            self.assertFalse(await restart_server(_HOST, blocked_port))
+            self.assertEqual(original_port, get_server_status().bound_endpoints[0].port)
+
+            blocker.close()
+            with socket.socket() as candidate:
+                candidate.bind((_HOST, 0))
+                new_port = candidate.getsockname()[1]
+            self.assertTrue(await restart_server(_HOST, new_port))
+            configured = settings.get(f"{_SETTINGS_PREFIX}/host"), settings.get(f"{_SETTINGS_PREFIX}/port")
+            self.assertEqual((_HOST, new_port), configured)
+            self.assertEqual(new_port, get_server_status().bound_endpoints[0].port)
+        finally:
+            blocker.close()
+            await restart_server(original_host, original_port)
 
     async def test_tcp_socket_missing_auth_token(self) -> None:
         """Verify that unauthenticated requests are rejected before execution."""

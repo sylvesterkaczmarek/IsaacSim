@@ -178,7 +178,7 @@ class TestRos2ServicePrim(ROS2TestCase):
         for i, spec in enumerate(specs):
             name = f"attr_{i}"
             prim.CreateAttribute(name, spec[0])
-            attributes.append((name, spec[1]))
+            attributes.append((name, spec[1], spec[0]))
         return attributes
 
     def check_values(self, a: Any, b: Any) -> None:
@@ -386,3 +386,57 @@ class TestRos2ServicePrim(ROS2TestCase):
             json.loads(result_get.value)
 
             self.check_values(spec[1], result_get.value)
+
+        def find_attribute(type_name: Any) -> tuple[str, str]:
+            for attr_name, expected_value, attr_type_name in specs:
+                if attr_type_name == type_name:
+                    return attr_name, expected_value
+            raise AssertionError(f"Missing test attribute for {type_name}")
+
+        invalid_matrix_specs = [
+            (Sdf.ValueTypeNames.Matrix2d, "5"),
+            (Sdf.ValueTypeNames.Matrix3d, "5"),
+            (Sdf.ValueTypeNames.Matrix4d, "5"),
+            (Sdf.ValueTypeNames.Matrix4d, "[]"),
+            (Sdf.ValueTypeNames.Matrix4d, "{}"),
+        ]
+
+        for type_name, invalid_value in invalid_matrix_specs:
+            attr_name, expected_value = find_attribute(type_name)
+
+            request_set = isaac_ros2_messages.srv.SetPrimAttribute.Request()
+            request_set.path = prim_path
+            request_set.attribute = attr_name
+            request_set.value = invalid_value
+
+            future = client_set.call_async(request_set)
+
+            condition_met = await self.simulate_until_condition(future.done, max_frames=300, per_frame_callback=spin)
+            result_set = future.result()
+
+            print("(set invalid matrix) request:", request_set)
+            print("(set invalid matrix) result:", result_set)
+
+            self.assertTrue(condition_met, f"Timed out waiting for SetPrimAttribute response for {attr_name}")
+            self.assertIsNotNone(result_set)
+            self.assertFalse(result_set.success)
+            self.assertEqual(result_set.message, "Unable to deserialize the attribute")
+
+            request_get = isaac_ros2_messages.srv.GetPrimAttribute.Request()
+            request_get.path = prim_path
+            request_get.attribute = attr_name
+
+            future = client_get.call_async(request_get)
+
+            condition_met = await self.simulate_until_condition(future.done, max_frames=300, per_frame_callback=spin)
+            result_get = future.result()
+
+            print("(get after invalid matrix) request:", request_get)
+            print("(get after invalid matrix) result:", result_get)
+
+            self.assertTrue(condition_met, f"Timed out waiting for GetPrimAttribute response for {attr_name}")
+            self.assertIsNotNone(result_get)
+            self.assertTrue(result_get.success)
+            self.assertEqual(result_get.message, "")
+
+            self.check_values(expected_value, result_get.value)

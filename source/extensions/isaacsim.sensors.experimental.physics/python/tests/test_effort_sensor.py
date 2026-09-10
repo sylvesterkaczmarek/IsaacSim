@@ -241,6 +241,86 @@ class TestEffortSensor(omni.kit.test.AsyncTestCase):
         self.assertEqual(self.effort_sensor.data_buffer_size, 5)
         self.assertEqual(len(self.effort_sensor.sensor_reading_buffer), 5)
 
+    async def test_change_buffer_size_accepts_integer_like(self) -> None:
+        """Verify buffer sizes that implement __index__, such as numpy integers, are accepted."""
+        await self.create_simple_articulation()
+
+        self.effort_sensor = EffortSensor("/Articulation/Arm/RevoluteJoint")
+        self._timeline.play()
+
+        for _ in range(10):
+            await omni.kit.app.get_app().next_update_async()
+
+        self.effort_sensor.change_buffer_size(np.int64(7))
+
+        self.assertEqual(self.effort_sensor.data_buffer_size, 7)
+        self.assertEqual(len(self.effort_sensor.sensor_reading_buffer), 7)
+
+    async def test_change_buffer_size_rejects_invalid_size(self) -> None:
+        """Verify invalid buffer sizes raise and leave the sensor buffer untouched."""
+        await self.create_simple_articulation()
+
+        self.effort_sensor = EffortSensor("/Articulation/Arm/RevoluteJoint")
+        self._timeline.play()
+
+        for _ in range(10):
+            await omni.kit.app.get_app().next_update_async()
+
+        self.effort_sensor.change_buffer_size(8)
+        original_buffer = self.effort_sensor.sensor_reading_buffer
+
+        for size, expected in [
+            (0, ValueError),
+            (-1, ValueError),
+            (3.0, TypeError),
+            ("5", TypeError),
+            (None, TypeError),
+            (True, TypeError),
+            (np.bool_(True), TypeError),
+        ]:
+            with self.subTest(size=size):
+                with self.assertRaises(expected):
+                    self.effort_sensor.change_buffer_size(size)
+                # the rejected call must not have mutated any buffer state
+                self.assertIs(self.effort_sensor.sensor_reading_buffer, original_buffer)
+                self.assertEqual(self.effort_sensor.data_buffer_size, 8)
+                self.assertEqual(self.effort_sensor.sensor_reading_buffer.maxlen, 8)
+
+    async def test_readings_land_in_buffer_after_resize(self) -> None:
+        """Verify live readings still reach the buffer after a valid resize."""
+        await self.create_simple_articulation()
+
+        self.effort_sensor = EffortSensor("/Articulation/Arm/RevoluteJoint")
+        self._timeline.play()
+
+        for _ in range(10):
+            await omni.kit.app.get_app().next_update_async()
+
+        self.effort_sensor.change_buffer_size(3)
+        self.assertEqual(len(self.effort_sensor.sensor_reading_buffer), 3)
+
+        reading = self.effort_sensor.get_sensor_reading()
+        self.assertTrue(reading.is_valid)
+
+        # `get_sensor_reading` appendleft's onto the resized buffer, so the newest entry is at index 0
+        self.assertEqual(len(self.effort_sensor.sensor_reading_buffer), 3)
+        self.assertIs(self.effort_sensor.sensor_reading_buffer[0], reading)
+
+    async def test_deprecated_methods_warn(self) -> None:
+        """Verify the deprecated reconfiguration methods emit a DeprecationWarning."""
+        await self.create_simple_articulation()
+
+        self.effort_sensor = EffortSensor("/Articulation/Arm/RevoluteJoint")
+        self._timeline.play()
+
+        for _ in range(10):
+            await omni.kit.app.get_app().next_update_async()
+
+        with self.assertWarns(DeprecationWarning):
+            self.effort_sensor.change_buffer_size(5)
+        with self.assertWarns(DeprecationWarning):
+            self.effort_sensor.update_dof_name("RevoluteJoint")
+
     async def test_sensor_reading_defaults(self) -> None:
         """Verify EffortSensorReading default construction values."""
         self.effort_sensor = None

@@ -51,7 +51,7 @@ call "%~dp0python.bat" "%~dp0standalone_examples\testing\isaacsim.simulation_app
     --portable-root "%PORTABLE_ROOT%" ^
     --/log/flushStandardStreamOutput=1 ^
     --no-window ^
-    --silent
+    --silent 
 if %ERRORLEVEL% neq 0 (echo "Error warming up python app shader cache.") else (echo "Python app shader cache is warmed up.")
 
 :: Always succeed in case kit crashed or hanged

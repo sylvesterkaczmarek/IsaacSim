@@ -17,10 +17,14 @@
 
 import asyncio
 import weakref
+from typing import Any
 
 import carb
 import omni.ext
+from carb import eventdispatcher
 from omni.kit.window.content_browser import get_content_window
+from omni.kit.window.file_importer import get_file_importer
+from omni.kit.window.filepicker import UI_READY_GLOBAL_EVENT
 
 from .detail_view import ExtendedFileInfo
 from .isaac_collection import IsaacCollection
@@ -37,7 +41,59 @@ class Extension(omni.ext.IExt):
         """
         carb.log_info(f"on_startup {ext_id}")
         self._content_browser_ref = weakref.ref(get_content_window(), lambda ref: self.destroy())
+        self._file_picker_collection = None
+        self._file_picker_dialog_ref = None
+        self._file_picker_ui_ready_sub = eventdispatcher.get_eventdispatcher().observe_event(
+            observer_name="isaacsim.gui.content_browser.file_picker",
+            event_name=UI_READY_GLOBAL_EVENT,
+            on_event=self._on_file_picker_ui_ready,
+        )
         self._add_isim_content()
+
+    def _on_file_picker_ui_ready(self, _event: eventdispatcher.Event) -> None:
+        """Add the Isaac Sim collection to a newly created File Importer dialog."""
+        file_importer = get_file_importer()
+        dialog = file_importer.get_dialog() if file_importer else None
+        if not dialog:
+            return
+
+        if self._file_picker_dialog_ref and self._file_picker_dialog_ref() is dialog:
+            return
+
+        self._deregister_file_picker_collection()
+
+        file_picker_api = self._get_file_picker_api(dialog)
+        if not file_picker_api:
+            return
+
+        collection = IsaacCollection()
+        if file_picker_api.register_collection_item(collection):
+            self._file_picker_collection = collection
+            self._file_picker_dialog_ref = weakref.ref(dialog)
+
+    @staticmethod
+    def _get_file_picker_api(dialog: Any) -> Any | None:
+        """Get the API owned by a File Picker dialog.
+
+        Args:
+            dialog: File Picker dialog to inspect.
+
+        Returns:
+            File Picker API when available, otherwise None.
+        """
+        # `FilePickerDialog` does not expose its `FilePickerAPI` publicly yet.
+        widget = getattr(dialog, "_widget", None)
+        return getattr(widget, "api", None) if widget else None
+
+    def _deregister_file_picker_collection(self) -> None:
+        """Remove the Isaac Sim collection from the previously tracked File Picker dialog."""
+        dialog = self._file_picker_dialog_ref() if self._file_picker_dialog_ref else None
+        file_picker_api = self._get_file_picker_api(dialog) if dialog else None
+        if file_picker_api and self._file_picker_collection:
+            file_picker_api.deregister_collection_item(self._file_picker_collection)
+
+        self._file_picker_collection = None
+        self._file_picker_dialog_ref = None
 
     def _add_isim_content(self) -> None:
         """Adds Isaac Sim content to the content browser.
@@ -93,6 +149,9 @@ class Extension(omni.ext.IExt):
     def on_shutdown(self) -> None:
         """Method called when the extension is disabled."""
         carb.log_info(f"on_shutdown")
+
+        self._deregister_file_picker_collection()
+        self._file_picker_ui_ready_sub = None
         content_browser = self._content_browser_ref()
         if content_browser:
             content_browser.api.delete_detail_frame("File Info")

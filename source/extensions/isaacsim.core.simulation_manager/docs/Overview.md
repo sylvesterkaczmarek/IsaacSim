@@ -96,6 +96,11 @@ Available events:
 
 The extension integrates with **omni.physics** and **omni.physx.tensors** to provide tensor-based physics simulation views. It uses **omni.physics.stageupdate** for synchronizing USD data with physics simulations and supports both PhysX and Newton physics engines through their respective USD schema extensions.
 
+## Settings
+
+- `exts."isaacsim.core.simulation_manager".default_engine` selects the default physics engine.
+- `exts."isaacsim.core.simulation_manager".enable_default_callbacks` controls whether the extension registers its default timeline and stage lifecycle callbacks during startup. Disable this setting when another manager owns the simulation lifecycle.
+
 ## Functionality
 
 ### Time and State Management

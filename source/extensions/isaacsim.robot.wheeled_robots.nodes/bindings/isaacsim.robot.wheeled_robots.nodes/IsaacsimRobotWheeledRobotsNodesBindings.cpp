@@ -15,7 +15,7 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/robot/wheeled_robots/nodes/IWheeledRobotsNodes.h>
+#include <isaacsim/robot/wheeled_robots/nodes/IWheeledRobotsNodes.hpp>
 
 CARB_BINDINGS("isaacsim.robot.wheeled_robots.nodes.python")
 

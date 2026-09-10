@@ -1,4 +1,29 @@
 # Changelog
+
+## [1.11.0] - 2026-07-23
+### Added
+- `Ros2ContextHandle.getDomainId`: add an API for querying the effective ROS domain ID.
+
+## [1.10.2] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [1.10.1] - 2026-07-15
+### Added
+- `ROS2TestCase.simulate_until_condition`: add an optional timeout failure message for predicate-based waits.
+
+## [1.10.0] - 2026-07-13
+### Added
+- `python.sh` and `python.bat` now match `isaac-sim.sh` and `isaac-sim.bat` by automatically configuring bundled ROS 2 libraries when no ROS environment is set; pass `--no-ros-env` to disable this behavior.
+
+## [1.9.6] - 2026-07-10
+### Changed
+- Staged ROS 2 package metadata and vendor libraries required by ros2_control.
+
+## [1.9.5] - 2026-06-29
+### Changed
+- Publish ROS 2 utility APIs explicitly and stop publishing the Kit lifecycle class.
+
 ## [1.9.4] - 2026-06-12
 ### Fixed
 - `camera_info_utils.compute_relative_pose`: defer the `cv2` import to first use.
@@ -70,7 +95,7 @@
 ## [1.7.1] - 2026-04-03
 ### Fixed
 - Added explicit import of `_ros2_core` bindings module for stubgen discoverability
-- Added Doxygen `@cond` to hide internal anonymous namespace in `Ros2Distro.h`
+- Added Doxygen `@cond` to hide internal anonymous namespace in `Ros2Distro.hpp`
 
 ## [1.7.0] - 2026-04-01
 ### Changed
@@ -79,7 +104,7 @@
 
 ## [1.6.1] - 2026-03-30
 ### Changed
-- Added `LibraryLoader.h` include to `Ros2Types.h` for SRTX integration support
+- Added `LibraryLoader.hpp` include to `Ros2Types.hpp` for SRTX integration support
 
 ## [1.6.0] - 2026-03-17
 ### Changed

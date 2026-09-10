@@ -15,6 +15,7 @@
 
 """Isaac Sim extension providing UI interface for cuMotion trajectory optimization examples with robot motion planning capabilities."""
 
-from .extension import *
+from .extension import Extension as Extension
+from .extension import UIBuilder as UIBuilder
 
-__all__ = ["UIBuilder"]
+__all__ = []

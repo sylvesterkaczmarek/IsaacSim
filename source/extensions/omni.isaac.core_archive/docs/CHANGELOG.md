@@ -1,5 +1,9 @@
 # Changelog
 
+## [5.4.0] - 2026-07-07
+### Added
+- Add py_trees, pydot, and transitions for the state-machine tutorials.
+
 ## [5.3.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

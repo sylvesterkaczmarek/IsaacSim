@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "Ros2SrtxCameraInfoPublisher.h"
+#include "Ros2SrtxCameraInfoPublisher.hpp"
 
 #include <carb/profiler/Profile.h>
 

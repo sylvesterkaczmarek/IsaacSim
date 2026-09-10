@@ -40,13 +40,13 @@
 
 # NOTE - For any new packages added to this list, please make sure that the license is compatible with Omniverse (i.e. avoid GPL/LGPL) and
 # that a SWIPAT bug report is filed for legal to validate if there is no existing ticket.
-# The SWIPAT template is here: http://nvbugs/2732212
 # Dependencies for aiohttp should not be installed by default as we do not want to pull in chardet due to its license. Use cchardet instead
 
 # Target kit 109.x
 [[dependency]]
 python = "../_build/target-deps/python"
 packages = [
+    "anyio==4.14.2",                # SWIPAT filed under: https://nvbugs/4575575 # Used by: (dependency of starlette)
     "llvmlite==0.46.0",             # SWIPAT filed under: https://nvbugs/3433740 # Used by: (dependency of numba)
     "nest_asyncio==1.6.0",          # SWIPAT filed under: https://nvbugs/3433748 # Used by: isaacsim.ros2.sim_control, isaacsim.simulation_app
     "matplotlib==3.10.8",           # SWIPAT filed under: https://nvbugs/3430500 # Used by: isaacsim.sensors.rtx
@@ -58,9 +58,12 @@ packages = [
     "packaging==26.0",              # SWIPAT filed under: https://nvbugs/3433815 # Used by: isaacsim.asset.exporter.urdf, isaacsim.ros2.core, isaacsim.ucx.core
     "osqp==1.0.5",                  # SWIPAT filed under: https://nvbugs/3577752 # Used by: isaacsim.robot.wheeled_robots
     "qdldl==0.1.7.post5",           # SWIPAT filed under: https://nvbugs/3577749 # Used by: (dependency of osqp)
-    "pyperclip==1.11.0",            # SWIPAT filed under: https://nvbugs/5326856 # Used by: isaacsim.app.about, isaacsim.asset.importer.urdf.ui, isaacsim.gui.components, isaacsim.robot_setup.gain_tuner
+    "pyperclip==1.11.0",            # SWIPAT filed under: https://nvbugs/5326856 # Used by: isaacsim.app.about, isaacsim.asset.importer.urdf.ui, isaacsim.gui.components, isaacsim.robot_setup.gain_tuner.ui
+    "py_trees==2.4.0",              # SWIPAT filed under: http://nvbugs/6274196 # Used by: state-machine tutorial examples
+    "pydot==4.0.1",                 # SWIPAT filed under: http://nvbugs/6274196 # Used by: (dependency of py_trees)
     "python-dateutil==2.9.0.post0", # SWIPAT filed under: https://nvbugs/5303032 # Used by: (dependency of aiobotocore, botocore, matplotlib)
     "six==1.17.0",                  # SWIPAT filed under: https://nvbugs/5303087 # Used by: (dependency of azure-core, azure-identity, isodate, python-dateutil)
+    "transitions==0.9.3",           # SWIPAT filed under: http://nvbugs/6274196 # Used by: state-machine tutorial examples
 ]
 
 target = "../_build/target-deps/isaac_core_prebundle"

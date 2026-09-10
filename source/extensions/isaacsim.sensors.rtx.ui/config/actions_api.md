@@ -14,7 +14,6 @@
 | create_lidar_SICK_LMS5xx                |   | Create SICK LMS5xx RTX Lidar sensor                       |
 | create_lidar_SICK_LRS4000               |   | Create SICK LRS4000 RTX Lidar sensor                      |
 | create_lidar_SICK_MRS1000               |   | Create SICK MRS1000 RTX Lidar sensor                      |
-| create_lidar_SICK_TIM781                |   | Create SICK TIM781 RTX Lidar sensor                       |
 | create_lidar_SICK_microScan3            |   | Create SICK microScan3 RTX Lidar sensor                   |
 | create_lidar_SICK_multiScan100          |   | Create SICK multiScan100 RTX Lidar sensor                 |
 | create_lidar_SICK_nanoScan3             |   | Create SICK nanoScan3 RTX Lidar sensor                    |

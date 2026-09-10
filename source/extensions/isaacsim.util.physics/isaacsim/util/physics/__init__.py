@@ -15,6 +15,6 @@
 
 """Utilities for physics-related functionality in Isaac Sim."""
 
-from .extension import *
+from .extension import Extension as Extension
 
 __all__ = []

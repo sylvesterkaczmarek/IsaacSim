@@ -22,8 +22,11 @@ from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any, get_origin, get_type_hints
 
+import isaacsim.core.experimental.utils.app as app_utils
+
 from .coordinate_utils import CoordinateSystem
 from .markers_manager import MarkersManager
+from .visual_cues_manager import VisualCuesManager
 from .xr_anchor_manager import AnchorRotationMode
 
 
@@ -66,6 +69,9 @@ class GraspSideProfile:
     enabled: bool = False
     prim_path: str = ""
     config_path: str = ""
+    drive_mode: str = "trigger"
+    retargeter_kind: str = ""
+    joint_aliases: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -85,6 +91,25 @@ class LocomotionProfile:
 
 
 @dataclass
+class VisualCueSideProfile:
+    """Drop-line settings for one side."""
+
+    enabled: bool = False
+    prim_path: str = ""
+
+
+@dataclass
+class VisualCuesProfile:
+    """Visual cue panel settings (2D depth aids)."""
+
+    reference_z: float = VisualCuesManager.DEFAULT_REFERENCE_Z
+    opacity: float = VisualCuesManager.DEFAULT_OPACITY
+    size: float = VisualCuesManager.DEFAULT_SIZE
+    left: VisualCueSideProfile = field(default_factory=VisualCueSideProfile)
+    right: VisualCueSideProfile = field(default_factory=VisualCueSideProfile)
+
+
+@dataclass
 class TeleopProfile:
     """Unified teleop profile.
 
@@ -98,6 +123,7 @@ class TeleopProfile:
     ik: BimanualControllerProfile = field(default_factory=BimanualControllerProfile)
     grasp: GraspControllerProfile = field(default_factory=GraspControllerProfile)
     locomotion: LocomotionProfile = field(default_factory=LocomotionProfile)
+    visual_cues: VisualCuesProfile = field(default_factory=VisualCuesProfile)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a YAML-serializable representation.
@@ -152,10 +178,7 @@ def get_builtin_teleop_profiles_dir() -> str:
         The requested value.
     """
     try:
-        import omni.kit.app
-
-        ext_manager = omni.kit.app.get_app().get_extension_manager()
-        ext_path = ext_manager.get_extension_path_by_module("isaacsim.replicator.teleop")
+        ext_path = app_utils.get_extension_path("isaacsim.replicator.teleop")
         if ext_path:
             return str(Path(ext_path) / "data" / "teleop_profiles")
     except Exception:
@@ -164,19 +187,19 @@ def get_builtin_teleop_profiles_dir() -> str:
 
 
 def get_last_teleop_profile_path() -> str:
-    """Return the extension-managed path for the auto-saved last profile.
+    """Return the user-writable path for the auto-saved last profile.
 
-    This is ``<builtin data>/teleop_profiles/last_profile.yaml``. The repo ships a
-    default YAML at that path; the Teleop window overwrites it when the session state
-    is persisted, so treat it as the autosave slot rather than a static preset.
+    The autosave is kept under Kit's per-user ``${data}`` directory so opening
+    and closing the Teleop window never modifies an installed extension or a
+    source checkout.
 
     Returns:
         The requested value.
     """
-    profiles_dir = get_builtin_teleop_profiles_dir()
-    if not profiles_dir:
-        return ""
-    return str(Path(profiles_dir) / "last_profile.yaml")
+    import carb.tokens
+
+    data_dir = carb.tokens.get_tokens_interface().resolve("${data}")
+    return str(Path(data_dir) / "IsaacSim" / "teleop" / "last_profile.yaml")
 
 
 def scan_teleop_profiles(directory: str) -> list[tuple[str, str]]:

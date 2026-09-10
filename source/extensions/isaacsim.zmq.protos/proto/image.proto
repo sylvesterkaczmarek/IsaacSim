@@ -1,0 +1,60 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package isaacsim.zmq;
+
+// GpuIpcArray describes a CUDA-IPC-exported device array. The mem_handle is a
+// cudaIpcMemHandle_t blob (typically 64 bytes) from cudaIpcGetMemHandle. The
+// consumer opens it with cudaIpcOpenMemHandle / warp.from_ipc_handle and reads
+// the pixels directly from the producer's GPU memory (zero copy). Same host only.
+message GpuIpcArray {
+    bytes          mem_handle = 1;  // cudaIpcMemHandle_t bytes
+    string         dtype      = 2;  // "uint8", "float32", ...
+    repeated int64 shape      = 3;  // e.g. [H, W, 4] for RGBA8, [H, W] for 32FC1 depth
+    repeated int64 strides    = 4;  // optional; empty -> contiguous
+}
+
+// GpuIpcImage bundles the two halves of the CUDA-IPC transport so they always travel together:
+// the exported device array plus the event the consumer must wait on before reading it.
+message GpuIpcImage {
+    GpuIpcArray array            = 1;  // exported device array (mem_handle, dtype, shape, strides)
+    bytes       ipc_event_handle = 2;  // cudaIpcEventHandle_t; wait on it before reading `array`
+}
+
+// Image carries a single image frame (color or depth).
+// The encoding field distinguishes content type:
+//   "rgba8"  — RGBA 8-bit color
+//   "rgb8"   — RGB 8-bit color
+//   "32FC1"  — 32-bit float depth (distance_to_camera)
+//
+// Pixels travel one of two ways, modeled as a oneof so exactly one is ever set:
+//   - data: raw CPU bytes (works cross-host; the fallback path).
+//   - gpu:  zero-copy CUDA IPC (same host only). The consumer opens gpu.array.mem_handle,
+//           waits on gpu.ipc_event_handle, then reads pixels in place.
+message Image {
+    double timestamp = 1;  // Frame timestamp (seconds)
+    uint32 width     = 2;  // Image width in pixels
+    uint32 height    = 3;  // Image height in pixels
+    string encoding  = 4;  // Encoding string: "rgba8", "rgb8", "32FC1"
+    uint64 frame_id  = 7;  // Monotonic per producer-node (consumer cache epoch; set on the gpu path)
+
+    // Exactly one pixel transport is populated per frame.
+    oneof pixel_transport {
+        bytes       data = 5;  // Raw pixel data (CPU bytes path)
+        GpuIpcImage gpu  = 6;  // Zero-copy CUDA IPC (same-host path)
+    }
+}

@@ -1,5 +1,5 @@
 [package]
-version = "0.2.10"
+version = "0.3.0"
 category = "Simulation"
 title = "MobilityGen"
 description = "A toolset for generating mobility data for robots."
@@ -12,7 +12,6 @@ writeTarget.kit = true
 writeTarget.platform = true
 
 [dependencies]
-"isaacsim.asset.gen.omap" = {}
 "isaacsim.core.experimental.objects" = {}
 "isaacsim.core.experimental.prims" = {}
 "isaacsim.core.experimental.utils" = {}
@@ -22,7 +21,6 @@ writeTarget.platform = true
 "isaacsim.replicator.nurec_utils" = {}
 "omni.kit.pip_archive" = {}
 "omni.kit.usd.collect" = {}
-"omni.kit.usdz_export" = {}
 "omni.replicator.core" = {}
 
 [[python.module]]
@@ -37,6 +35,10 @@ dependencies = [
 ]
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [[test]]

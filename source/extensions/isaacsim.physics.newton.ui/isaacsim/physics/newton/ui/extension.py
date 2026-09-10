@@ -17,10 +17,17 @@
 
 import omni.ext
 import omni.kit.property.physics as property
+import omni.kit.property.usd as usd_property
 from omni.physics.isaacsimready import get_capability_manager, get_variant_switcher
 
+from .array_widget import close_all_editors
 from .mujoco_schemas import MujocoUiDefinitions, get_mujoco_schema_names
+from .mujoco_widgets import MujocoWidgets
+from .mujoco_widgets import ignored_schemas as ignored_mujoco_schemas
+from .newton_menu import NewtonMenu
 from .newton_schemas import NewtonUiDefinitions, get_newton_schema_names
+from .newton_widgets import NewtonWidgets
+from .newton_widgets import ignored_schemas as ignored_newton_schemas
 
 
 class PhysicsNewtonUIExtension(omni.ext.IExt):
@@ -47,6 +54,8 @@ class PhysicsNewtonUIExtension(omni.ext.IExt):
         capability_manager.register_schema_type_names(prim_types)
         capability_manager.register_api_schema_names(api_schemas)
 
+        # remove the newton schema registered by physx
+        property.unregister_parent_schema("newton")
         # Register newton widgets first, this will put them on top of the mujoco widgets
         property.register_parent_schema(
             "newton",
@@ -71,6 +80,14 @@ class PhysicsNewtonUIExtension(omni.ext.IExt):
             MujocoUiDefinitions.ignore,
         )
 
+        # The parent-schema manager omits ignored schemas from its private ownership list.
+        # These schemas are ignored only because the custom widgets below render them.
+        usd_property.register_schema(
+            "NewtonCustomPhysicsWidgets",
+            sorted(ignored_newton_schemas | ignored_mujoco_schemas),
+            options=usd_property.RegisteredSchemaCodes.PRIVATE,
+        )
+
         # Register simulator-to-variant mappings and the parent schema group
         get_variant_switcher().register_simulator_variant("PhysX", "physx")
         get_variant_switcher().register_simulator_variant("Newton", "mujoco")
@@ -81,9 +98,27 @@ class PhysicsNewtonUIExtension(omni.ext.IExt):
             ["mjcPhysics", "newton"],
         )
 
+        self._newton_widgets = NewtonWidgets()
+        self._newton_widgets.register(property)
+        self._mujoco_widgets = MujocoWidgets()
+        self._mujoco_widgets.register(property)
+
+        self._menu = NewtonMenu()
+        self._menu.on_startup()
+
     def on_shutdown(self) -> None:
         """Unregister Newton and Mujoco property schema groups and widgets."""
-        # Unregister PhysX property widgets
+        # Defer destruction of any open array editor windows out of the shutdown call stack.
+        close_all_editors()
+        # Unregister property widgets
+        self._mujoco_widgets.unregister(property)
+        self._mujoco_widgets = None
+        self._newton_widgets.unregister(property)
+        self._newton_widgets = None
         property.unregister_parent_schema_group("Newton")
         property.unregister_parent_schema("newton")
         property.unregister_parent_schema("mjcPhysics")
+        # Technically, we probably need to re-register newton schema from physx
+        # however, if we assume user will only use newton with this extension enabled, i think it is ok not to.
+        self._menu.on_shutdown()
+        self._menu = None

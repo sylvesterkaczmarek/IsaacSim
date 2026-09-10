@@ -14,7 +14,7 @@ The extension offers five specialized motion planning examples:
 
 **Trajectory Optimization** - Implements trajectory optimization techniques with real-time visualization and both C-space and task-space target planning.
 
-**World Interface** - Offers comprehensive world management controls with different synchronization modes for motion updates including synchronize, synchronize_transforms, and synchronize_properties.
+**World Interface** - Demonstrates obstacle discovery, planning-world initialization, and runtime obstacle-transform synchronization.
 
 Each example includes world controls for loading scenes and resetting scenarios, along with run controls for executing motion planning demonstrations. The interfaces support both manual configuration through joint sliders and automated planning to target positions or objects.
 
@@ -34,10 +34,9 @@ Each module provides a {class}`UIBuilder <isaacsim.robot_motion.cumotion.example
 
 All five modules share a common extension structure that:
 
-- Registers menu items under the "cuMotion Examples" menu hierarchy
-- Creates scrollable window interfaces docked to the left viewport
-- Manages timeline events (play/pause/stop) for synchronized motion execution
-- Subscribes to physics step events for real-time motion updates
+- Registers each example in **Window > Examples > Robotics Examples** under **Motion Generation > cuMotion**
+- Renders each example's controls in the Robotics Examples details panel
+- Manages timeline stop events for synchronized motion execution
 - Handles stage opening/closing events for proper initialization
 
 ## Integration

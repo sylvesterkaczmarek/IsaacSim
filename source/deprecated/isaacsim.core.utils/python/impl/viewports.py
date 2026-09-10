@@ -181,10 +181,10 @@ def get_viewport_names(usd_context_name: str = None) -> list[str]:
     """Get list of all viewport names.
 
     Args:
-        usd_context_name:  usd context to use.
+        usd_context_name: USD context to use.
 
     Returns:
-        List of viewport names
+        Viewport names.
     """
     viewport_names = []
     try:
@@ -216,13 +216,14 @@ def get_viewport_names(usd_context_name: str = None) -> list[str]:
 def get_id_from_index(index: int) -> int | None:
     """Get the viewport id for a given index.
 
-    This function was added for backwards compatibility for VP2 as viewport IDs are not the same as the viewport index.
+    This function was added for backwards compatibility for VP2 because viewport IDs are not the same as the
+    viewport index.
 
     Args:
-        index: viewport index to retrieve ID for
+        index: Viewport index to retrieve ID for.
 
     Returns:
-        viewport id : Returns None if window index was not found
+        The viewport id, or None if the window index was not found.
     """
     try:
         from omni.kit.viewport.window import get_viewport_window_instances
@@ -257,11 +258,11 @@ def get_window_from_id(id: object, usd_context_name: str = None) -> object | Non
     """Find window that matches a given viewport id.
 
     Args:
-        id: Viewport ID to get window for
-        usd_context_name: usd context to use.
+        id: Viewport ID to get window for.
+        usd_context_name: USD context to use.
 
     Returns:
-        Window : Returns None if window with matching ID was not found
+        The matching window, or None if a window with the matching ID was not found.
     """
     if id is None:
         return None
@@ -295,11 +296,11 @@ def get_window_from_id(id: object, usd_context_name: str = None) -> object | Non
 
 
 def destroy_all_viewports(usd_context_name: str = None, destroy_main_viewport: bool = True) -> None:
-    """Destroys all viewport windows.
+    """Destroy all viewport windows.
 
     Args:
-        usd_context_name: usd context to use.
-        destroy_main_viewport: set to False to not destroy the default viewport. Defaults to True (destroy all viewports including the default one).
+        usd_context_name: USD context to use.
+        destroy_main_viewport: Whether to destroy the default viewport.
     """
     from omni.kit.viewport.window import get_viewport_window_instances
 
@@ -358,13 +359,11 @@ def get_intrinsics_matrix(viewport_api: Any) -> np.ndarray:
     """Get intrinsic matrix for the camera attached to a specific viewport.
 
     Args:
-        viewport_api: Handle to viewport api
+        viewport_api: Handle to viewport API.
 
     Returns:
-        the intrinsic matrix associated with the specified viewport
-                The following image convention is assumed:
-                    +x should point to the right in the image
-                    +y should point down in the image
+        The intrinsic matrix associated with the specified viewport.
+        The image convention assumes +x points to the right in the image and +y points down in the image.
     """
     stage = get_current_stage()
     prim = stage.GetPrimAtPath(viewport_api.get_active_camera())
@@ -383,17 +382,17 @@ def set_intrinsics_matrix(viewport_api: Any, intrinsics_matrix: np.ndarray, foca
     """Set intrinsic matrix for the camera attached to a specific viewport.
 
     Note:
-        We assume cx and cy are centered in the camera
-        horizontal_aperture_offset and vertical_aperture_offset are computed and set on the camera prim but are not used
+        We assume cx and cy are centered in the camera.
+        horizontal_aperture_offset and vertical_aperture_offset are computed and set on the camera prim but are not used.
 
     Args:
-        viewport_api: Handle to viewport api
-        intrinsics_matrix: A 3x3 intrinsic matrix
-        focal_length: Default focal length to use when computing aperture values.
+        viewport_api: Handle to viewport api.
+        intrinsics_matrix: A 3x3 intrinsic matrix.
+        focal_length: Focal length to use when computing aperture values.
 
     Raises:
         ValueError: If intrinsic matrix is not a 3x3 matrix.
-        ValueError: If camera prim is not valid
+        ValueError: If camera prim is not valid.
     """
     if intrinsics_matrix.shape != (3, 3):
         raise ValueError("intrinsics_matrix must be 3x3")
@@ -427,9 +426,9 @@ def backproject_depth(depth_image: np.array, viewport_api: Any, max_clip_depth: 
     """Backproject depth image to image space.
 
     Args:
-        depth_image: Depth image buffer
-        viewport_api: Handle to viewport api
-        max_clip_depth: Depth values larger than this will be clipped
+        depth_image: Depth image buffer.
+        viewport_api: Handle to viewport API.
+        max_clip_depth: Depth values larger than this will be clipped.
 
     Returns:
         3D point cloud with shape (height * width, 3) in camera space.
@@ -458,12 +457,12 @@ def project_depth_to_worldspace(depth_image: np.array, viewport_api: Any, max_cl
     """Project depth image to world space.
 
     Args:
-        depth_image: Depth image buffer
-        viewport_api: Handle to viewport api
-        max_clip_depth: Depth values larger than this will be clipped
+        depth_image: Depth image buffer.
+        viewport_api: Handle to viewport API.
+        max_clip_depth: Depth values larger than this will be clipped.
 
     Returns:
-        List of points from depth in world space
+        Points from depth in world space.
     """
     stage = get_current_stage()
     prim = stage.GetPrimAtPath(viewport_api.get_active_camera())
@@ -490,15 +489,17 @@ def create_viewport_for_camera(
     position_x: int = 0,
     position_y: int = 0,
 ) -> object:
-    """Create a new viewport and peg it to a specific camera specified by camera_prim_path. If the viewport already exists with the specified viewport_name, that viewport will be replaced with the new camera view.
+    """Create a new viewport and peg it to a specific camera specified by camera_prim_path.
+
+    If a viewport exists with viewport_name, it is replaced with the new camera view.
 
     Args:
-        viewport_name: name of the viewport. If not provided, it will default to camera name.
-        camera_prim_path: name of the prim path of the camera
-        width: width of the viewport window, in pixels.
-        height: height of the viewport window, in pixels.
-        position_x: location x of the viewport window.
-        position_y: location y of the viewport window.
+        viewport_name: Name of the viewport.
+        camera_prim_path: Prim path of the camera.
+        width: Width of the viewport window, in pixels.
+        height: Height of the viewport window, in pixels.
+        position_x: X location of the viewport window.
+        position_y: Y location of the viewport window.
 
     Returns:
         The created viewport window.
@@ -529,12 +530,12 @@ def create_viewport_for_camera(
 
 
 def set_active_viewport_camera(camera_prim_path: str) -> None:
-    """Sets the camera for the active viewport.
+    """Set the camera for the active viewport.
 
     This method sets the active viewport to display the camera at the specified prim path.
 
     Args:
-        camera_prim_path: name of the prim path of the camera
+        camera_prim_path: Prim path of the camera.
     """
     try:
         from omni.kit.viewport.utility import get_active_viewport

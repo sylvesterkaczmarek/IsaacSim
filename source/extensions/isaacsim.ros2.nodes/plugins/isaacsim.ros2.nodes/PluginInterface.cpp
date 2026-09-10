@@ -18,12 +18,18 @@
 
 #include <carb/Framework.h>
 #include <carb/PluginUtils.h>
+#include <carb/logging/Log.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/ros2/nodes/IRos2Nodes.h>
+#include <isaacsim/ros2/nodes/IRos2Nodes.hpp>
+#include <isaacsim/ros2/nodes/TfAggregationManager.h>
 #include <omni/fabric/IToken.h>
 #include <omni/graph/core/NodeTypeRegistrar.h>
 #include <omni/graph/core/ogn/Registration.h>
+#include <omni/kit/IStageUpdate.h>
+#include <omni/kit/KitUpdateOrder.h>
+
+#include <memory>
 
 namespace
 {
@@ -36,6 +42,30 @@ namespace
  */
 const struct carb::PluginImplDesc g_kPluginDesc = { "isaacsim.ros2.nodes", "Isaac Sim ROS2 Nodes", "NVIDIA",
                                                     carb::PluginHotReload::eEnabled, "dev" };
+
+std::unique_ptr<isaacsim::ros2::nodes::TfAggregationManager> g_tfAggregationManager = nullptr;
+omni::kit::StageUpdatePtr g_stageUpdate = nullptr;
+omni::kit::StageUpdateNode* g_tfAggregationStageUpdateNode = nullptr;
+
+void CARB_ABI onTfAggregationStageUpdate(float currentTime,
+                                         float elapsedSecs,
+                                         const omni::kit::StageUpdateSettings* settings,
+                                         void* userData)
+{
+    (void)currentTime;
+    (void)elapsedSecs;
+    (void)userData;
+
+    if (settings && !settings->playComputegraph)
+    {
+        return;
+    }
+
+    if (g_tfAggregationManager)
+    {
+        g_tfAggregationManager->flushAll();
+    }
+}
 
 } // anonymous namespace
 
@@ -53,7 +83,10 @@ CARB_PLUGIN_IMPL(g_kPluginDesc, isaacsim::ros2::nodes::IRos2Nodes)
  * Declares that this plugin depends on the graph registry, token system, and settings interfaces.
  * These dependencies must be available before this plugin can be loaded.
  */
-CARB_PLUGIN_IMPL_DEPS(omni::graph::core::IGraphRegistry, omni::fabric::IToken, carb::settings::ISettings)
+CARB_PLUGIN_IMPL_DEPS(omni::graph::core::IGraphRegistry,
+                      omni::fabric::IToken,
+                      carb::settings::ISettings,
+                      omni::kit::IStageUpdate)
 
 /**
  * @brief OGN node declaration
@@ -81,7 +114,40 @@ void fillInterface(isaacsim::ros2::nodes::IRos2Nodes& iface)
  * Called by the Carbonite framework when the plugin is loaded.
  * Initializes the OGN nodes provided by this plugin.
  */
-CARB_EXPORT void carbOnPluginStartup(){ INITIALIZE_OGN_NODES() }
+CARB_EXPORT void carbOnPluginStartup()
+{
+    INITIALIZE_OGN_NODES()
+
+    auto* stageUpdateInterface = carb::getCachedInterface<omni::kit::IStageUpdate>();
+    if (!stageUpdateInterface)
+    {
+        CARB_LOG_WARN("ROS2 TF aggregation could not acquire IStageUpdate; aggregate publishing is disabled");
+        return;
+    }
+
+    g_stageUpdate = stageUpdateInterface->getStageUpdate();
+    if (!g_stageUpdate)
+    {
+        CARB_LOG_WARN("ROS2 TF aggregation could not acquire StageUpdate; aggregate publishing is disabled");
+        return;
+    }
+
+    omni::kit::StageUpdateNodeDesc desc = { nullptr };
+    desc.displayName = "IsaacRos2TfAggregation";
+    desc.order = omni::kit::update::eIUsdStageUpdateOmnigraph + 1;
+    desc.onUpdate = onTfAggregationStageUpdate;
+
+    g_tfAggregationStageUpdateNode = g_stageUpdate->createStageUpdateNode(desc);
+    if (!g_tfAggregationStageUpdateNode)
+    {
+        CARB_LOG_WARN("ROS2 TF aggregation failed to create its StageUpdate node; aggregate publishing is disabled");
+        g_stageUpdate = nullptr;
+        return;
+    }
+
+    g_tfAggregationManager = std::make_unique<isaacsim::ros2::nodes::TfAggregationManager>();
+    isaacsim::ros2::nodes::setTfAggregationManager(g_tfAggregationManager.get());
+}
 
 /**
  * @brief Plugin shutdown function
@@ -91,5 +157,15 @@ CARB_EXPORT void carbOnPluginStartup(){ INITIALIZE_OGN_NODES() }
  */
 CARB_EXPORT void carbOnPluginShutdown()
 {
+    if (g_stageUpdate && g_tfAggregationStageUpdateNode)
+    {
+        g_stageUpdate->destroyStageUpdateNode(g_tfAggregationStageUpdateNode);
+    }
+    g_tfAggregationStageUpdateNode = nullptr;
+    g_stageUpdate = nullptr;
+
+    isaacsim::ros2::nodes::setTfAggregationManager(nullptr);
+    g_tfAggregationManager.reset();
+
     RELEASE_OGN_NODES()
 }

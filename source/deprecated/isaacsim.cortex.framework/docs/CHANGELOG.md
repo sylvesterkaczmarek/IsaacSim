@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.20] - 2026-07-09
+### Changed
+- Add migration guidance for replacing the deprecated Cortex framework.
+
+## [1.0.19] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [1.0.18] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

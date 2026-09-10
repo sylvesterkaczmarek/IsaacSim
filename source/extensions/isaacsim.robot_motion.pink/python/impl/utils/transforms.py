@@ -92,24 +92,36 @@ def map_joint_positions_to_pinocchio(
 
     Returns:
         Full Pinocchio configuration vector of size ``model.nq``.
+
+    Raises:
+        ValueError: If an input vector has the wrong size, or a named joint has more
+            than one degree of freedom.
     """
     if q_current is not None:
-        q = q_current.copy()
+        q = _to_numpy(q_current).flatten().copy()
+        if q.size != model.nq:
+            raise ValueError(f"Expected q_current of size {model.nq}, got {q.size}.")
     else:
         q = pin.neutral(model)
 
     positions = _to_numpy(joint_positions).flatten()
+    if positions.size != len(joint_names):
+        raise ValueError(
+            f"Expected one position for each of {len(joint_names)} joint names, got {positions.size} positions."
+        )
 
     for i, name in enumerate(joint_names):
         if not model.existJointName(name):
             continue
         joint_id = model.getJointId(name)
-        idx_q = model.joints[joint_id].idx_q
-        nq = model.joints[joint_id].nq
-        if nq == 1:
+        joint = model.joints[joint_id]
+        idx_q = joint.idx_q
+        if joint.nq == 1 and joint.nv == 1:
             q[idx_q] = positions[i]
-        elif nq > 1 and i + nq <= len(positions):
-            q[idx_q : idx_q + nq] = positions[i : i + nq]
+        elif _is_continuous_revolute_joint(joint):
+            q[idx_q : idx_q + 2] = [np.cos(positions[i]), np.sin(positions[i])]
+        else:
+            _raise_unsupported_joint(name, joint)
 
     return q
 
@@ -121,6 +133,7 @@ def map_pinocchio_velocity_to_joint_state(
     robot_joint_space: list[str],
     dt: float,
     q_current: np.ndarray,
+    current_joint_positions: np.ndarray,
 ) -> mg.JointState:
     """Convert a Pinocchio tangent velocity to an Isaac Sim JointState with integrated positions.
 
@@ -134,10 +147,30 @@ def map_pinocchio_velocity_to_joint_state(
         robot_joint_space: Full ordered joint-space of the robot in Isaac Sim.
         dt: Integration timestep in seconds.
         q_current: Current configuration vector (pre-integration).
+        current_joint_positions: Current Isaac Sim positions for ``controlled_joint_names``.
+            These preserve the unwrapped angle of continuous joints.
 
     Returns:
         JointState containing integrated target positions and velocities for controlled joints.
+
+    Raises:
+        ValueError: If an input vector has the wrong size, or a named joint has more
+            than one degree of freedom.
     """
+    velocity = _to_numpy(velocity).flatten()
+    q_current = _to_numpy(q_current).flatten()
+    current_joint_positions = _to_numpy(current_joint_positions).flatten()
+
+    if velocity.size != model.nv:
+        raise ValueError(f"Expected velocity of size {model.nv}, got {velocity.size}.")
+    if q_current.size != model.nq:
+        raise ValueError(f"Expected q_current of size {model.nq}, got {q_current.size}.")
+    if current_joint_positions.size != len(controlled_joint_names):
+        raise ValueError(
+            f"Expected one current position for each of {len(controlled_joint_names)} controlled joint names, "
+            f"got {current_joint_positions.size} positions."
+        )
+
     q_new = pin.integrate(model, q_current, velocity * dt)
 
     target_positions = np.zeros(len(controlled_joint_names))
@@ -147,9 +180,19 @@ def map_pinocchio_velocity_to_joint_state(
         if not model.existJointName(name):
             continue
         joint_id = model.getJointId(name)
-        idx_q = model.joints[joint_id].idx_q
-        idx_v = model.joints[joint_id].idx_v
-        target_positions[i] = q_new[idx_q]
+        joint = model.joints[joint_id]
+        idx_q = joint.idx_q
+        idx_v = joint.idx_v
+        if joint.nq == 1 and joint.nv == 1:
+            target_positions[i] = q_new[idx_q]
+        elif _is_continuous_revolute_joint(joint):
+            wrapped_position = np.arctan2(q_new[idx_q + 1], q_new[idx_q])
+            unwrapped_reference = current_joint_positions[i] + velocity[idx_v] * dt
+            target_positions[i] = wrapped_position + 2.0 * np.pi * np.round(
+                (unwrapped_reference - wrapped_position) / (2.0 * np.pi)
+            )
+        else:
+            _raise_unsupported_joint(name, joint)
         target_velocities[i] = velocity[idx_v]
 
     return mg.JointState.from_name(
@@ -157,6 +200,34 @@ def map_pinocchio_velocity_to_joint_state(
         positions=(controlled_joint_names, wp.from_numpy(target_positions.astype(np.float32))),
         velocities=(controlled_joint_names, wp.from_numpy(target_velocities.astype(np.float32))),
         efforts=None,
+    )
+
+
+def _is_continuous_revolute_joint(joint: pin.JointModel) -> bool:
+    """Check whether a Pinocchio joint uses the unit-circle configuration representation.
+
+    Args:
+        joint: Pinocchio joint model to inspect.
+
+    Returns:
+        True when the joint has one tangent degree of freedom represented by cosine and sine.
+    """
+    return joint.nq == 2 and joint.nv == 1
+
+
+def _raise_unsupported_joint(name: str, joint: pin.JointModel) -> None:
+    """Raise an error for a joint that cannot be represented by one Isaac Sim position.
+
+    Args:
+        name: Joint name.
+        joint: Pinocchio joint model to report.
+
+    Raises:
+        ValueError: Always raised because the joint has an unsupported number of degrees of freedom.
+    """
+    raise ValueError(
+        f"Joint '{name}' has unsupported Pinocchio dimensions nq={joint.nq}, nv={joint.nv}. "
+        "Only one-degree-of-freedom joints are supported."
     )
 
 

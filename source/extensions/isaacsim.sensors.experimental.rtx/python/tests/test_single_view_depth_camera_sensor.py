@@ -16,17 +16,29 @@
 """Tests for the SingleViewDepthCameraSensor class."""
 
 import os
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 import cv2
 import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
+import omni.kit.app
 import omni.kit.test
 import warp as wp
 from isaacsim.core.experimental.prims.tests.common import check_allclose, cprint, draw_sample
 from isaacsim.core.rendering_manager import ViewportManager
-from isaacsim.sensors.experimental.rtx import SingleViewDepthCameraSensor, draw_annotator_data_to_image
+from isaacsim.sensors.experimental.rtx import (
+    CameraSensor,
+    RtxCamera,
+    SingleViewDepthCameraSensor,
+    draw_annotator_data_to_image,
+)
+from pxr import Gf, UsdRender
 
+from .common import normalize_semantics
 from .test_camera_sensor import parametrize, populate_stage
 
 RESOLUTION = (256, 320)  # following OpenCV/NumPy convention (height, width)
@@ -374,7 +386,9 @@ class TestSingleViewDepthCameraSensor(omni.kit.test.AsyncTestCase):
                                 id = key
                                 break
                         self.assertIsNotNone(id, f"Label '{expected_label}' not found in idToLabels")
-                        self.assertEqual(idToSemantics[id], expected_semantics)
+                        self.assertEqual(
+                            normalize_semantics(idToSemantics[id]), normalize_semantics(expected_semantics)
+                        )
                 elif annotator == "semantic_segmentation":
                     expected_values = [
                         {"class": "BACKGROUND"},
@@ -392,8 +406,13 @@ class TestSingleViewDepthCameraSensor(omni.kit.test.AsyncTestCase):
                         ["0", "1", "2", "3", "4"],
                         msg=f"Annotator info mismatch for '{annotator}'",
                     )
+                    normalized_expected_values = [normalize_semantics(value) for value in expected_values]
                     for value in info["idToLabels"].values():
-                        self.assertIn(value, expected_values, msg=f"Annotator info mismatch for '{annotator}'")
+                        self.assertIn(
+                            normalize_semantics(value),
+                            normalized_expected_values,
+                            msg=f"Annotator info mismatch for '{annotator}'",
+                        )
                 else:
                     self.assertDictEqual({}, info, msg=f"Annotator info mismatch for '{annotator}'")
 
@@ -406,3 +425,212 @@ class TestSingleViewDepthCameraSensor(omni.kit.test.AsyncTestCase):
                 os.makedirs(filedir, exist_ok=True)
                 print(f"Saving image to {filepath}")
                 cv2.imwrite(filepath, image)
+
+
+# render var source names authored on the fixture asset's render product, in orderedVars order
+_ASSET_RENDER_VARS = [
+    "DepthSensorDistance",
+    "DepthSensorImager",
+    "DepthSensorPointCloudColor",
+    "DepthSensorPointCloudPosition",
+]
+# annotator keys those render vars map back to
+_ASSET_ANNOTATORS = [
+    "depth_sensor_distance",
+    "depth_sensor_imager",
+    "depth_sensor_point_cloud_color",
+    "depth_sensor_point_cloud_position",
+]
+
+
+class TestSingleViewDepthCameraSensorAttach(omni.kit.test.AsyncTestCase):
+    """Tests for attaching to a pre-authored render product in an all-inclusive USD asset (ISIM-5035)."""
+
+    async def setUp(self) -> None:
+        """Method called to prepare the test fixture."""
+        super().setUp()
+        self.maxDiff = None
+        self._temp_dir = TemporaryDirectory(ignore_cleanup_errors=True)
+        self._asset_baseline = 42.0
+        self._asset_resolution = (480, 320)  # (height, width)
+        self._asset_path = await self._build_depth_asset()
+
+    async def tearDown(self) -> None:
+        """Method called immediately after the test method has been called."""
+        try:
+            stage_utils.close_stage()
+        except Exception:
+            pass
+        self._temp_dir.cleanup()
+        super().tearDown()
+
+    async def _build_depth_asset(self) -> str:
+        """Author a minimal all-inclusive depth-sensor USD asset and export it to a temp file.
+
+        The asset contains a Camera (with OmniSensorAPI), a RenderProduct with
+        ``OmniSensorDepthSensorSingleViewAPI`` applied (authored resolution, camera relationship, and
+        depth-sensor attributes), and the four depth-sensor RenderVar prims wired via ``orderedVars``.
+
+        Returns:
+            Path to the exported depth-sensor asset.
+        """
+        await stage_utils.create_new_stage_async()
+        stage = stage_utils.get_current_stage()
+        # asset root prim (default prim, so it composes under the reference target path)
+        root = stage.DefinePrim("/Sensor", "Xform")
+        stage.SetDefaultPrim(root)
+        # depth camera
+        camera = stage.DefinePrim("/Sensor/Depth", "Camera")
+        camera.ApplyAPI("OmniSensorAPI")
+        # render product with the depth-sensor schema + a depth-sensor attribute authored
+        render_product = SingleViewDepthCameraSensor.add_template_render_product(
+            parent_prim_path="/Sensor/TemplateRenderProduct",
+            camera_prim_path="/Sensor/Depth",
+            **{"omni:rtx:post:depthSensor:baselineMM": self._asset_baseline},
+        )
+        # authored resolution is stored as (width, height)
+        UsdRender.Product(render_product).CreateResolutionAttr(
+            Gf.Vec2i(self._asset_resolution[1], self._asset_resolution[0])
+        )
+        # render var prims declared via orderedVars
+        var_paths = []
+        for source_name in _ASSET_RENDER_VARS:
+            var = UsdRender.Var.Define(stage, f"/Sensor/TemplateRenderProduct/{source_name}")
+            var.CreateSourceNameAttr(source_name)
+            var_paths.append(var.GetPath())
+        UsdRender.Product(render_product).CreateOrderedVarsRel().SetTargets(var_paths)
+        # export the authored asset (composite asset → .usd so RtxCamera.create references it as an Xform)
+        asset_path = str(Path(self._temp_dir.name) / "depth_asset.usd")
+        stage.Export(asset_path)
+        return asset_path
+
+    async def test_attaches_to_pre_authored_render_product(self) -> None:
+        """Attaching to the asset's render product uses that prim directly and derives its config."""
+        await stage_utils.create_new_stage_async()
+        await ViewportManager.wait_for_viewport_async()
+        stage_utils.define_prim("/World", "Xform")
+        camera = RtxCamera.create(path="/World/Sensor", usd_path=self._asset_path)
+        sensor = SingleViewDepthCameraSensor(camera)
+        try:
+            render_product_path = str(sensor.render_product.GetPath())
+            # the sensor renders through the asset's render product, not a fresh /Render product
+            self.assertEqual(render_product_path, "/World/Sensor/TemplateRenderProduct/Depth_render_product")
+            self.assertFalse(render_product_path.startswith("/Render"))
+            # resolution and annotators are derived from the asset
+            self.assertEqual(sensor.resolution, self._asset_resolution)
+            self.assertEqual(sorted(sensor.annotators), sorted(_ASSET_ANNOTATORS))
+            # depth-sensor parameters are read straight from the asset's render product (no copy step)
+            self.assertAlmostEqual(sensor.get_sensor_baseline(), self._asset_baseline)
+        finally:
+            # tearing the sensor down must not delete the asset-owned render product prim
+            sensor._invalidate_sensor()
+            del sensor
+            await omni.kit.app.get_app().next_update_async()
+        stage = stage_utils.get_current_stage()
+        self.assertTrue(stage.GetPrimAtPath("/World/Sensor/TemplateRenderProduct/Depth_render_product").IsValid())
+
+    @unittest.expectedFailure  # NVBUG-6641439
+    async def test_rename_asset_preserves_attached_synthetic_data_graph(self) -> None:
+        """Renaming an asset with an attached nested render product keeps its graph valid."""
+        from omni.syntheticdata import SyntheticData, SyntheticDataStage
+
+        await stage_utils.create_new_stage_async()
+        await ViewportManager.wait_for_viewport_async()
+        stage_utils.define_prim("/World", "Xform")
+        camera = RtxCamera.create(path="/World/Sensor", usd_path=self._asset_path)
+        sensor = SingleViewDepthCameraSensor(camera)
+        synthetic_data = SyntheticData.Get()
+        try:
+            render_product_path = str(sensor.render_product.GetPath())
+            node_graph = synthetic_data.get_graph(SyntheticDataStage.POST_RENDER, render_product_path)
+            node_graph.get_wrapped_graph()
+            moved, moved_path = stage_utils.move_prim("/World/Sensor", "/World/RenamedSensor")
+            self.assertTrue(moved)
+            self.assertEqual(moved_path, "/World/RenamedSensor")
+            self.assertTrue(
+                stage_utils.get_current_stage()
+                .GetPrimAtPath("/World/RenamedSensor/TemplateRenderProduct/Depth_render_product")
+                .IsValid()
+            )
+            node_graph.get_wrapped_graph()
+        finally:
+            synthetic_data.reset(usd=False)
+            sensor._invalidate_sensor()
+
+    async def test_attaches_when_camera_wrapped_directly(self) -> None:
+        """A camera wrapped directly (no RtxCamera.create) still attaches via a stage-wide search."""
+        await stage_utils.create_new_stage_async()
+        await ViewportManager.wait_for_viewport_async()
+        stage_utils.define_prim("/World", "Xform")
+        # reference the asset as an Xform and wrap its depth camera directly (no _asset_root_path)
+        stage_utils.add_reference_to_stage(usd_path=self._asset_path, path="/World/Sensor", prim_type="Xform")
+        camera = RtxCamera("/World/Sensor/Depth")
+        sensor = SingleViewDepthCameraSensor(camera)
+        try:
+            render_product_path = str(sensor.render_product.GetPath())
+            self.assertEqual(render_product_path, "/World/Sensor/TemplateRenderProduct/Depth_render_product")
+            self.assertEqual(sensor.resolution, self._asset_resolution)
+            self.assertEqual(sorted(sensor.annotators), sorted(_ASSET_ANNOTATORS))
+            self.assertAlmostEqual(sensor.get_sensor_baseline(), self._asset_baseline)
+        finally:
+            sensor._invalidate_sensor()
+            del sensor
+            await omni.kit.app.get_app().next_update_async()
+
+    async def test_creates_new_render_product_without_asset(self) -> None:
+        """A camera with no matching pre-authored render product falls back to creating a new one."""
+        await stage_utils.create_new_stage_async()
+        await ViewportManager.wait_for_viewport_async()
+        stage_utils.define_prim("/World", "Xform")
+        # a bare camera with no authored depth render product on the stage
+        camera = RtxCamera("/World/Camera")
+        sensor = SingleViewDepthCameraSensor(camera, resolution=(256, 320), annotators=["depth_sensor_distance"])
+        try:
+            # the create-new path produces a render product under /Render
+            self.assertTrue(str(sensor.render_product.GetPath()).startswith("/Render"))
+            self.assertEqual(sensor.resolution, (256, 320))
+        finally:
+            sensor._invalidate_sensor()
+            del sensor
+            await omni.kit.app.get_app().next_update_async()
+
+    async def test_explicit_resolution_and_annotators_when_attaching(self) -> None:
+        """Explicit annotators are honored, and a mismatched resolution is overridden by the asset's."""
+        await stage_utils.create_new_stage_async()
+        await ViewportManager.wait_for_viewport_async()
+        stage_utils.define_prim("/World", "Xform")
+        camera = RtxCamera.create(path="/World/Sensor", usd_path=self._asset_path)
+        sensor = SingleViewDepthCameraSensor(camera, resolution=(123, 456), annotators=["depth_sensor_distance"])
+        try:
+            # the asset's authored resolution wins over the mismatched requested resolution
+            self.assertEqual(sensor.resolution, self._asset_resolution)
+            # explicitly requested annotators are used as-is (not derived from the asset)
+            self.assertEqual(sensor.annotators, ["depth_sensor_distance"])
+        finally:
+            sensor._invalidate_sensor()
+            del sensor
+            await omni.kit.app.get_app().next_update_async()
+
+    async def test_plain_camera_sensor_attaches_to_pre_authored_render_product(self) -> None:
+        """A plain CameraSensor attaches to any pre-authored RenderProduct targeting its camera.
+
+        With ``_ASSET_RP_SCHEMA`` unset, the schema is not used as a filter, so a base
+        :class:`CameraSensor` still attaches to the asset's pre-authored render product
+        (deriving its resolution) rather than creating a fresh one.
+        """
+        await stage_utils.create_new_stage_async()
+        await ViewportManager.wait_for_viewport_async()
+        stage_utils.define_prim("/World", "Xform")
+        camera = RtxCamera.create(path="/World/Sensor", usd_path=self._asset_path)
+        sensor = CameraSensor(camera, resolution=(256, 320), annotators=["rgb"])
+        try:
+            # no schema filter: attaches to the asset's render product instead of creating a new one
+            render_product_path = str(sensor.render_product.GetPath())
+            self.assertEqual(render_product_path, "/World/Sensor/TemplateRenderProduct/Depth_render_product")
+            self.assertFalse(render_product_path.startswith("/Render"))
+            # resolution is derived from the asset, overriding the requested value
+            self.assertEqual(sensor.resolution, self._asset_resolution)
+        finally:
+            sensor._invalidate_sensor()
+            del sensor
+            await omni.kit.app.get_app().next_update_async()

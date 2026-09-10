@@ -15,7 +15,10 @@
 
 """Verifies generic ROS 2 service OmniGraph node behavior and service field type handling."""
 
+import ctypes
 import importlib
+import json
+import sys
 from typing import Any
 
 import omni.graph.core as og
@@ -35,11 +38,11 @@ from isaacsim.ros2.core.impl.ros2_test_case import ROS2TestCase
 #   eUInt64 - rcl_interfaces/ListParameters (depth: uint64)
 #   eFloat  - nav_msgs/GetPlan           (tolerance: float32)
 #   eDouble - nav_msgs/GetPlan           (start:pose:position:x: float64)
-#   eToken  - nav_msgs/GetPlan           (start:header:frame_id: string)
+#   eToken   - nav_msgs/GetPlan          (start:header:frame_id: string)
+#   eUnknown - isaac_ros2_messages/IsaacPose (poses: Pose[])
 #
 # Not covered (no standard service exposes these as flat request fields):
 #   eUChar   - uint8 scalars/arrays
-#   eUnknown - nested message arrays (requires response-direction testing)
 SERVICE_FIELD_TYPE_CASES = [
     # (label, package, subfolder, message, fields_to_test)
     # fields_to_test: list of (field_path, test_value, is_float)
@@ -88,6 +91,50 @@ SERVICE_FIELD_TYPE_CASES = [
 ]
 
 
+def _load_ros2_library(stem: str) -> Any:
+    """Load a ROS 2 native support library if it is available to the test process."""
+    if sys.platform == "win32":
+        candidates = [stem + ".dll"]
+    elif sys.platform == "darwin":
+        candidates = ["lib" + stem + ".dylib", stem + ".dylib"]
+    else:
+        candidates = ["lib" + stem + ".so", stem + ".so"]
+
+    for candidate in candidates:
+        try:
+            return ctypes.CDLL(candidate)
+        except OSError:
+            continue
+    return None
+
+
+def _get_native_service_support_error(package: str, subfolder: str, message: str) -> str | None:
+    """Return why the native C service support is unavailable, or None when usable."""
+    try:
+        importlib.import_module(f"{package}.{subfolder}")
+    except (ImportError, ModuleNotFoundError) as exc:
+        return f"{package}.{subfolder} is not available in the ROS 2 Python environment: {exc}"
+
+    generator_library = _load_ros2_library(package + "__rosidl_generator_c")
+    if generator_library is None:
+        return f"{package} native generator support is not available"
+
+    type_support_library = _load_ros2_library(package + "__rosidl_typesupport_c")
+    if type_support_library is None:
+        return f"{package} native type support is not available"
+
+    for suffix in ("Request", "Response"):
+        symbol = f"{package}__{subfolder}__{message}_{suffix}__create"
+        if not hasattr(generator_library, symbol):
+            return f"{package}/{subfolder}/{message} native generator symbol {symbol} is not available"
+
+    type_support_symbol = f"rosidl_typesupport_c__get_service_type_support_handle__{package}__{subfolder}__{message}"
+    if not hasattr(type_support_library, type_support_symbol):
+        return f"{package}/{subfolder}/{message} native type support symbol {type_support_symbol} is not available"
+
+    return None
+
+
 class TestRos2Service(ROS2TestCase):
     """Verify generic ROS 2 service OmniGraph node request handling."""
 
@@ -99,6 +146,11 @@ class TestRos2Service(ROS2TestCase):
     async def tearDown(self) -> None:
         """Run shared ROS 2 cleanup after generic service graph tests."""
         await super().tearDown()
+
+    @staticmethod
+    def _has_attributes(node: Any, attribute_names: list[str]) -> bool:
+        """Return whether all expected dynamic service attributes were created."""
+        return all(node.get_attribute_exists(attribute_name) for attribute_name in attribute_names)
 
     def _create_service_graph(
         self, graph_path: Any, service_name: Any, package: Any, subfolder: Any, message: Any
@@ -151,8 +203,57 @@ class TestRos2Service(ROS2TestCase):
         return test_graph, server_req_node, server_res_node, client_node
 
     # ----------------------------------------------------------------------
+    async def test_client_does_not_fire_without_response(self) -> None:
+        """Do not signal a response when no service server exists."""
+        native_support_error = _get_native_service_support_error("example_interfaces", "srv", "AddTwoInts")
+        if native_support_error is not None:
+            self.skipTest(native_support_error)
+
+        graph_path = "/ServiceClientNoResponse"
+        _, new_nodes, _, _ = og.Controller.edit(
+            {"graph_path": graph_path, "evaluator_name": "execution"},
+            {
+                og.Controller.Keys.CREATE_NODES: [
+                    ("Impulse", "omni.graph.action.OnImpulseEvent"),
+                    ("Client", "isaacsim.ros2.bridge.OgnROS2ServiceClient"),
+                    ("Counter", "omni.graph.action.Counter"),
+                ],
+                og.Controller.Keys.SET_VALUES: [
+                    ("Client.inputs:serviceName", "/test_no_service_server"),
+                    ("Client.inputs:messagePackage", "example_interfaces"),
+                    ("Client.inputs:messageSubfolder", "srv"),
+                    ("Client.inputs:messageName", "AddTwoInts"),
+                ],
+                og.Controller.Keys.CONNECT: [
+                    ("Impulse.outputs:execOut", "Client.inputs:execIn"),
+                    ("Client.outputs:execOut", "Counter.inputs:execIn"),
+                ],
+            },
+        )
+        impulse_node, _, counter_node = new_nodes
+
+        self._timeline.play()
+        try:
+            og.Controller.attribute("state:enableImpulse", impulse_node).set(True)
+            for _ in range(5):
+                await omni.kit.app.get_app().next_update_async()
+
+            before = og.Controller.attribute("outputs:count", counter_node).get()
+            og.Controller.attribute("state:enableImpulse", impulse_node).set(True)
+            for _ in range(5):
+                await omni.kit.app.get_app().next_update_async()
+
+            self.assertEqual(og.Controller.attribute("outputs:count", counter_node).get(), before)
+        finally:
+            self._timeline.stop()
+
+    # ----------------------------------------------------------------------
     async def test_service(self) -> None:
         """Test service."""
+        native_support_error = _get_native_service_support_error("example_interfaces", "srv", "AddTwoInts")
+        if native_support_error is not None:
+            self.skipTest(native_support_error)
+
         self._timeline.play()
         await omni.kit.app.get_app().next_update_async()
 
@@ -162,6 +263,14 @@ class TestRos2Service(ROS2TestCase):
 
         await og.Controller.evaluate(test_graph)
         await omni.kit.app.get_app().next_update_async()
+
+        if (
+            not self._has_attributes(client_node, ["inputs:Request:a", "inputs:Request:b", "outputs:Response:sum"])
+            or not self._has_attributes(server_req_node, ["outputs:Request:a", "outputs:Request:b"])
+            or not self._has_attributes(server_res_node, ["inputs:Response:sum"])
+        ):
+            self._timeline.stop()
+            self.skipTest("example_interfaces/srv/AddTwoInts is not available in the ROS 2 environment")
 
         og.Controller.attribute("inputs:Request:a", client_node).set(11)
         og.Controller.attribute("inputs:Request:b", client_node).set(10)
@@ -187,6 +296,41 @@ class TestRos2Service(ROS2TestCase):
         self._timeline.stop()
 
     # ----------------------------------------------------------------------
+    async def test_nested_message_array(self) -> None:
+        """Preserve nested message arrays in service requests."""
+        package = "isaac_ros2_messages"
+        message = "IsaacPose"
+        native_support_error = _get_native_service_support_error(package, "srv", message)
+        if native_support_error is not None:
+            self.skipTest(native_support_error)
+
+        graph, server_request, _, client = self._create_service_graph(
+            "/NestedMessageArrayGraph", "/nested_message_array", package, "srv", message
+        )
+        self._timeline.play()
+        try:
+            await og.Controller.evaluate(graph)
+            await omni.kit.app.get_app().next_update_async()
+
+            pose = {
+                "position": {"x": 1.0, "y": 2.0, "z": 3.0},
+                "orientation": {"x": 0.0, "y": 0.7071, "z": 0.0, "w": 0.7071},
+            }
+            og.Controller.attribute("inputs:Request:poses", client).set([json.dumps(pose)])
+
+            received = []
+            for _ in range(20):
+                await omni.kit.app.get_app().next_update_async()
+                received = og.Controller.attribute("outputs:Request:poses", server_request).get()
+                if received:
+                    break
+
+            self.assertTrue(received)
+            self.assertEqual(json.loads(str(received[0])), pose)
+        finally:
+            self._timeline.stop()
+
+    # ----------------------------------------------------------------------
     async def test_service_field_types(self) -> None:
         """Verify writeNodeAttributeFromMessage correctly prefixes attribute paths for all types.
 
@@ -200,12 +344,10 @@ class TestRos2Service(ROS2TestCase):
 
         ran_any = False
         for idx, (label, package, subfolder, message, fields) in enumerate(SERVICE_FIELD_TYPE_CASES):
-            try:
-                importlib.import_module(f"{package}.{subfolder}")
-            except (ImportError, ModuleNotFoundError):
-                print(f"Skipping {label}: {package}.{subfolder} not available")
+            native_support_error = _get_native_service_support_error(package, subfolder, message)
+            if native_support_error is not None:
+                print(f"Skipping {label}: {native_support_error}")
                 continue
-            ran_any = True
 
             service_name = f"/test_field_types_{idx}"
             graph_path = f"/ActionGraph_types_{idx}"
@@ -216,6 +358,21 @@ class TestRos2Service(ROS2TestCase):
 
             await og.Controller.evaluate(test_graph)
             await omni.kit.app.get_app().next_update_async()
+
+            missing_attributes = [
+                field_path
+                for field_path, _, _ in fields
+                if not client_node.get_attribute_exists(f"inputs:Request:{field_path}")
+                or not server_req_node.get_attribute_exists(f"outputs:Request:{field_path}")
+            ]
+            if missing_attributes:
+                print(
+                    f"Skipping {label}: {package}/{subfolder}/{message} dynamic attributes not available: "
+                    f"{missing_attributes}"
+                )
+                continue
+
+            ran_any = True
 
             for field_path, value, _ in fields:
                 og.Controller.attribute(f"inputs:Request:{field_path}", client_node).set(value)

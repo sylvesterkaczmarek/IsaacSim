@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.10] - 2026-08-13
+### Fixed
+- Fixed issues for deprecated sensors consistent with the test in their experimental counterparts
+
+## [1.1.9] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
 ## [1.1.8] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.
@@ -125,7 +133,7 @@
 
 ## [0.3.23] - 2025-06-18
 ### Changed
-- Track change from isaacsim.core.include Pose.h
+- Track change from isaacsim.core.include Pose.hpp
 
 ## [0.3.22] - 2025-05-31
 ### Changed
@@ -137,7 +145,7 @@
 
 ## [0.3.20] - 2025-05-15
 ### Changed
-- UsdUtilities.h was updated
+- UsdUtilities.hpp was updated
 
 ## [0.3.19] - 2025-05-11
 ### Changed

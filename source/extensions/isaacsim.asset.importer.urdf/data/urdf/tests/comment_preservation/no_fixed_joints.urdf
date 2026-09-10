@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="test">
+  <!-- arbitrary robot comment -->
+  <link name="base"/>
+  <link name="link1">
+    <visual>
+      <geometry><box size="1 1 1"/></geometry>
+      <!-- isaac:source_geometry {"type": "Cube"} -->
+    </visual>
+  </link>
+  <joint name="j1" type="revolute">
+    <parent link="base"/>
+    <child link="link1"/>
+    <axis xyz="0 0 1"/>
+    <!-- isaac:source_joint {"type": "D6Joint"} -->
+    <!-- isaac:source_drive {"source": "physx"} -->
+  </joint>
+</robot>

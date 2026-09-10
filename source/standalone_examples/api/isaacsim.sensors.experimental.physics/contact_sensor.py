@@ -45,7 +45,7 @@ if assets_root_path is None:
 stage_utils.set_stage_units(meters_per_unit=1.0)
 GroundPlane("/World/GroundPlane")
 DistantLight("/World/DistantLight").set_intensities(1000)
-asset_path = assets_root_path + "/Isaac/Robots/IsaacSim/Ant/ant.usd"
+asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/IsaacSim/Ant/ant.usda"
 stage_utils.add_reference_to_stage(usd_path=asset_path, path="/World/Ant")
 
 ant = Articulation("/World/Ant/torso", translations=np.array([[0, 0, 1.5]]), reset_xform_op_properties=True)

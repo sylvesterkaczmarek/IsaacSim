@@ -1,7 +1,7 @@
 display_name = "Isaac Policy Based Robot Control Examples"
 
 [package]
-version = "5.2.12"
+version = "7.2.0"
 category = "Simulation"
 title = "Reinforcement Learning Inference Example for Robots in Isaac Sim"
 description = "The Policy Based Robot Control Examples extension provides utilities for deploying reinforcement learning policies in Isaac Sim, as well as locomotion examples for humanoid and quadruped robots."
@@ -13,14 +13,22 @@ icon = "data/icon.png"
 writeTarget.kit = true
 
 [dependencies]
+"isaacsim.core.experimental.actuators" = {}
 "isaacsim.core.experimental.prims" = {}
 "isaacsim.core.experimental.utils" = {}
 "isaacsim.examples.base" = {}
 "isaacsim.examples.browser" = {}
+"isaacsim.pip.newton" = {}
+"isaacsim.pip.onnx" = {}
+"isaacsim.robot_motion.experimental.motion_generation" = {}
 "isaacsim.storage.native" = {}
+"omni.isaac.ml_archive" = {}
 
 [[python.module]]
 name = "isaacsim.robot.policy.examples"
+
+[[python.module]]
+name = "isaacsim.robot.policy.examples.interactive.anymal"
 
 [[python.module]]
 name = "isaacsim.robot.policy.examples.interactive.franka"
@@ -44,12 +52,16 @@ args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 name = "physx"
 enabled = true
-timeout = 900
+timeout = 2400
 dependencies = [
-    "omni.isaac.ml_archive",
+    "isaacsim.test.utils",
 ]
 args = [
     "--enable",
@@ -101,24 +113,30 @@ args = [
 pythonTests.include = [
     "isaacsim.robot.policy.examples.tests.test_anymal*",
     "isaacsim.robot.policy.examples.tests.test_franka*",
-    "isaacsim.robot.policy.examples.tests.test_go2*",
     "isaacsim.robot.policy.examples.tests.test_h1*",
+    "isaacsim.robot.policy.examples.tests.test_go2*",
     "isaacsim.robot.policy.examples.tests.test_spot*",
+    "isaacsim.robot.policy.examples.tests.test_application*",
+    "isaacsim.robot.policy.examples.tests.test_interactive_utils*",
+    "isaacsim.robot.policy.examples.tests.test_env_config*",
+    "isaacsim.robot.policy.examples.tests.test_public_api*",
+    "isaacsim.robot.policy.examples.tests.test_binding_descriptors*",
+    "isaacsim.robot.policy.examples.tests.test_cartpole*",
 ]
+
 stdoutFailPatterns.exclude = [
-    '*[Error] [carb] [Plugin: omni.sensors.nv.lidar.ext.plugin] Dependency: [omni::sensors::lidar::IGenericModelOutputIOFactory v0.1] failed to be resolved.*', # feature not included in Windows    
+    '*[Error] [carb] [Plugin: omni.sensors.nv.lidar.ext.plugin] Dependency: [omni::sensors::lidar::IGenericModelOutputIOFactory v0.1] failed to be resolved.*', # feature not included in Windows
     '*[Error] [isaacsim.core.nodes.impl.extension] Could not register node templates failed to register node template. Connection template name rpFabricTime is not in the registry*',
     '*The NumPy module was reloaded*',
 ]
 
 [[test]]
 name = "newton"
-timeout = 1800
+timeout = 3600
 dependencies = [
     "isaacsim.physics.newton",
     "isaacsim.physics.newton.tensors",
     "isaacsim.test.utils", # Used to suppress NumPy coverage errors
-    "omni.isaac.ml_archive"
 ]
 args = [
     "--enable",
@@ -170,18 +188,22 @@ args = [
     "--/exts/isaacsim.core.simulation_manager/default_engine=newton",
 ]
 pythonTests.include = [
-    # "isaacsim.robot.policy.examples.tests.test_anymal*",
-    # "isaacsim.robot.policy.examples.tests.test_franka*", # TODO: bring Franka policy for Newton
+    # Engine-neutral unit and fixture-replay modules run once in the PhysX section above.
+    "isaacsim.robot.policy.examples.tests.test_anymal*",
+    "isaacsim.robot.policy.examples.tests.test_franka*",
     "isaacsim.robot.policy.examples.tests.test_go2*",
     "isaacsim.robot.policy.examples.tests.test_h1*",
-    # "isaacsim.robot.policy.examples.tests.test_spot*",
+    "isaacsim.robot.policy.examples.tests.test_spot*",
+    "isaacsim.robot.policy.examples.tests.test_application*",
+    # "isaacsim.robot.policy.examples.tests.test_cartpole*",
 ]
+
 stdoutFailPatterns.exclude = [
     '*[Error] [carb] [Plugin: omni.sensors.nv.lidar.ext.plugin] Dependency: [omni::sensors::lidar::IGenericModelOutputIOFactory v0.1] failed to be resolved.*',
     '*[Error] [isaacsim.core.nodes.impl.extension] Could not register node templates failed to register node template. Connection template name rpFabricTime is not in the registry*',
     '*The NumPy module was reloaded*',
     '*Error while parsing function*',
-    '*UserWarning: NarrowPhase running on CPU: mesh-mesh contacts will be skipped*'
+    '*UserWarning: NarrowPhase running on CPU: mesh-mesh contacts will be skipped*',
 ]
 
 [documentation]

@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides SimulationContext, PhysicsContext, and World APIs for physics settings, simulation control, scenes, tasks, callbacks, and data logging."""
+
 import builtins
 
 from isaacsim.core.api.physics_context.physics_context import PhysicsContext as PhysicsContext

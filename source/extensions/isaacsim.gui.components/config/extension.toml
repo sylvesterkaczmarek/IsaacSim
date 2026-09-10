@@ -1,5 +1,5 @@
 [package]
-version = "1.8.5"
+version = "1.8.9"
 category = "Simulation"
 title = "Isaac Sim UI Utilities"
 description = "Core UI Elements for Isaac Sim"
@@ -41,8 +41,7 @@ dependencies = [
     "omni.kit.ui_test",
     "omni.kit.viewport.window",
     "omni.physics.physx",
-    "omni.physics.stageupdate",
-    "omni.physx"
+    "omni.physics.stageupdate"
 ]
 args = [
     "--enable",

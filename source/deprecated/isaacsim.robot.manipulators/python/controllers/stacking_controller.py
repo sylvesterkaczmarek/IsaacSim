@@ -56,12 +56,12 @@ class StackingController(BaseController):
         """Executes the stacking sequence by picking and placing cubes in the specified order.
 
         Args:
-            observations: Dictionary containing robot and cube observations including positions and joint states.
+            observations: Robot and cube observations including positions and joint states.
             end_effector_orientation: Optional orientation for the end effector during manipulation.
             end_effector_offset: Optional position offset for the end effector during manipulation.
 
         Returns:
-            Articulation action containing joint positions for the robot.
+            Robot joint position command for the current stacking step.
         """
         if self._current_cube >= len(self._picking_order_cube_names):
             target_joint_positions = [None] * observations[self._robot_observation_name]["joint_positions"].shape[0]

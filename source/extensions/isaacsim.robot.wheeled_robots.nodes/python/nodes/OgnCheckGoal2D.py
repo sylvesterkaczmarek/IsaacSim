@@ -19,7 +19,7 @@ import isaacsim.core.experimental.utils.transform as transform_utils
 import numpy as np
 import omni.graph.core as og
 from isaacsim.core.nodes import BaseResetNode
-from isaacsim.robot.experimental.wheeled_robots.controllers import normalize_angle
+from isaacsim.robot.experimental.wheeled_robots import normalize_angle
 from isaacsim.robot.wheeled_robots.nodes.ogn.OgnCheckGoal2DDatabase import OgnCheckGoal2DDatabase
 
 
@@ -103,7 +103,10 @@ class OgnCheckGoal2D:
 
         # compare & output if diff between current pos/rot and target pos/rot is above threshold limits
         t = db.inputs.thresholds
-        db.outputs.reachedGoal = [np.hypot(x - state.target[0], y - state.target[1]) <= t[0], rot <= t[1]]
+        db.outputs.reachedGoal = [
+            np.hypot(x - state.target[0], y - state.target[1]) <= t[0],
+            abs(normalize_angle(rot - state.target[2])) <= t[1],
+        ]
 
         # begin next node (steering control)
         db.outputs.execOut = og.ExecutionAttributeState.ENABLED

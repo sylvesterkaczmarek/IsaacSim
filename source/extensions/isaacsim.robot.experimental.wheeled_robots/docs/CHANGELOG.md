@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.14] - 2026-08-25
+### Fixed
+- Reject zero or non-finite `wheel_base` values in `AckermannController`.
+- Reject negative wheel-velocity, steering-angle, acceleration, and steering-rate limits instead of silently converting them to positive values.
+
+## [0.2.13] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [0.2.12] - 2026-06-23
+### Removed
+- Removed the unused `omni.physx` dependency. The extension does not reference any `omni.physx` API directly.
+
 ## [0.2.11] - 2026-06-10
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

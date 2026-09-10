@@ -20,6 +20,8 @@ import tempfile
 from typing import Any
 
 import carb.settings
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit
 import omni.usd
 from isaacsim.test.utils.file_validation import validate_folder_contents
@@ -38,9 +40,9 @@ class TestDataAugmentation(omni.kit.test.AsyncTestCase):
 
     async def setUp(self) -> None:
         """Create a fresh stage and preserve DLSS quality settings for augmentation captures."""
-        await omni.kit.app.get_app().next_update_async()
-        omni.usd.get_context().new_stage()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
         self.original_dlss_exec_mode = carb.settings.get_settings().get("rtx/post/dlss/execMode")
 
     async def tearDown(self) -> Any:
@@ -49,10 +51,10 @@ class TestDataAugmentation(omni.kit.test.AsyncTestCase):
         Returns:
             None.
         """
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
         carb.settings.get_settings().set("rtx/post/dlss/execMode", self.original_dlss_exec_mode)
 
     async def test_data_augmentation_annotator(self) -> Any:

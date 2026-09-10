@@ -32,7 +32,9 @@ from isaacsim.core.experimental.prims.tests.common import check_allclose, cprint
 from isaacsim.core.rendering_manager import ViewportManager
 from isaacsim.sensors.experimental.rtx import CameraSensor, draw_annotator_data_to_image
 
-RESOLUTION = (256, 320)  # following OpenCV/NumPy convention (height, width)
+from .common import FakeAnnotator, normalize_semantics
+
+RESOLUTION = (320, 400)  # following OpenCV/NumPy convention (height, width)
 EXPECTED_ANNOTATOR_SPEC = {
     "bounding_box_2d_loose": {"type": np.ndarray},
     "bounding_box_2d_tight": {"type": np.ndarray},
@@ -168,6 +170,65 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
 
     # --------------------------------------------------------------------
 
+    async def test_image_annotator_buffer_mismatch_is_reported(self) -> None:
+        """Report mismatched image annotator buffers before reshaping."""
+        sensor = CameraSensor.__new__(CameraSensor)
+        sensor._resolution = (2, 3)
+        sensor._hydra_texture = type("HydraTexture", (), {"path": "/Render/Fake"})()
+        sensor._annotators_spec = {"rgb": {"name": "rgb", "channels": 4, "output_channels": 3, "dtype": wp.uint8}}
+        sensor._annotators = {"rgb": FakeAnnotator(np.zeros(23, dtype=np.uint8))}
+
+        try:
+            with self.assertRaisesRegex(RuntimeError, "returned 23 elements, expected 24"):
+                sensor.get_data("rgb")
+        finally:
+            sensor._writers = {}
+            sensor._annotators = {}
+            sensor._hydra_texture = None
+
+    async def test_get_data_returns_none_during_warm_up(self) -> None:
+        """Return ``None`` and preserve info while the annotator has no payload."""
+        sensor = CameraSensor.__new__(CameraSensor)
+        sensor._resolution = (2, 3)
+        sensor._hydra_texture = None
+        sensor._data_ready = False
+        sensor._annotators_spec = {"rgb": {"name": "rgb", "channels": 4, "output_channels": 3, "dtype": wp.uint8}}
+        sensor._annotators = {"rgb": FakeAnnotator({"data": None, "info": {"frameId": 7}})}
+
+        try:
+            self.assertEqual(sensor.get_data("rgb"), (None, {"frameId": 7}))
+            # `has_data()` is gated on the render product, so assert the latch a missing payload drives
+            self.assertFalse(sensor._data_ready)
+        finally:
+            sensor._writers = {}
+            sensor._annotators = {}
+            sensor._hydra_texture = None
+
+    async def test_has_data(self) -> None:
+        """Report completed render data before a frame is fetched."""
+        await populate_stage(1, "wrap")
+        sensor = CameraSensor("/World/A_0", resolution=RESOLUTION, annotators=["rgb"])
+        try:
+            self.assertFalse(sensor.has_data())
+            app_utils.play(commit=True)
+            for _ in range(20):
+                await app_utils.update_app_async()
+                if sensor.has_data():
+                    break
+            self.assertTrue(sensor.has_data())
+            data, _ = sensor.get_data("rgb")
+            self.assertIsNotNone(data)
+            # the state is scoped to the attached annotators and to owning the render product
+            sensor.detach_annotators("rgb")
+            self.assertFalse(sensor.has_data())
+            sensor._invalidate_sensor()
+            self.assertFalse(sensor.has_data())
+        finally:
+            app_utils.stop(commit=True)
+            await app_utils.update_app_async()
+            del sensor
+            await app_utils.update_app_async(steps=3)
+
     @parametrize(
         prim_class=CameraSensor,
         prim_class_kwargs={"resolution": RESOLUTION, "annotators": list(EXPECTED_ANNOTATOR_SPEC.keys())},
@@ -265,7 +326,9 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
                                 id = key
                                 break
                         self.assertIsNotNone(id, f"Label '{expected_label}' not found in idToLabels")
-                        self.assertEqual(idToSemantics[id], expected_semantics)
+                        self.assertEqual(
+                            normalize_semantics(idToSemantics[id]), normalize_semantics(expected_semantics)
+                        )
                 elif annotator == "semantic_segmentation":
                     expected_values = [
                         {"class": "BACKGROUND"},
@@ -283,8 +346,13 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
                         ["0", "1", "2", "3", "4"],
                         msg=f"Annotator info mismatch for '{annotator}'",
                     )
+                    normalized_expected_values = [normalize_semantics(value) for value in expected_values]
                     for value in info["idToLabels"].values():
-                        self.assertIn(value, expected_values, msg=f"Annotator info mismatch for '{annotator}'")
+                        self.assertIn(
+                            normalize_semantics(value),
+                            normalized_expected_values,
+                            msg=f"Annotator info mismatch for '{annotator}'",
+                        )
                 else:
                     self.assertDictEqual({}, info, msg=f"Annotator info mismatch for '{annotator}'")
 
@@ -324,3 +392,113 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
                 break
         self.assertIsNotNone(data, "No RGB data available after 10 steps with render_vars=['HdrColor']")
         self.assertEqual(data.shape, (*RESOLUTION, 3))
+
+    async def test_multiple_camera_sensors_return_depth(self) -> None:
+        """Two camera sensors with independent render products both return depth data."""
+        await stage_utils.create_new_stage_async()
+        await ViewportManager.wait_for_viewport_async()
+        sphere_light = SphereLight("/World/SphereLight", positions=[1.0, -1.0, 1.0])
+        sphere_light.set_intensities(intensities=100000)
+        GroundPlane("/World/GroundPlane")
+        Cube("/World/Cube", sizes=0.5, positions=[0.0, 0.0, 0.25], colors=[0.0, 1.0, 0.0])
+        sensors = [
+            CameraSensor("/World/Camera_0", resolution=RESOLUTION, annotators=["rgb", "distance_to_image_plane"]),
+            CameraSensor("/World/Camera_1", resolution=RESOLUTION, annotators=["rgb", "distance_to_image_plane"]),
+        ]
+        camera_views = (
+            ([3.0, 1.25, 1.0], [0.0, 0.0, 0.25]),
+            ([-3.0, -1.25, 1.0], [0.0, 0.0, 0.25]),
+        )
+        for sensor, (eye, target) in zip(sensors, camera_views):
+            ViewportManager.set_camera_view(sensor.camera.paths[0], eye=eye, target=target)
+
+        app_utils.play(commit=True)
+        await app_utils.update_app_async()
+        try:
+            ready = [False] * len(sensors)
+            for _ in range(20):
+                await app_utils.update_app_async()
+                for i, sensor in enumerate(sensors):
+                    data, _ = sensor.get_data("distance_to_image_plane")
+                    if data is not None:
+                        ready[i] = True
+                        self.assertEqual(data.shape, (*RESOLUTION, 1))
+                if all(ready):
+                    break
+            self.assertEqual(ready, [True, True], "No depth data available from every camera sensor")
+        finally:
+            app_utils.stop(commit=True)
+            await app_utils.update_app_async()
+            sensors.clear()
+            await app_utils.update_app_async(steps=3)
+
+    async def _create_unlabelled_pointcloud_scene(self, **sensor_kwargs: Any) -> CameraSensor:
+        """Create an unlabeled cube scene for pointcloud annotator tests.
+
+        Args:
+            **sensor_kwargs: Additional arguments for the camera sensor.
+
+        Returns:
+            Camera sensor configured for point-cloud output.
+        """
+        await stage_utils.create_new_stage_async()
+        await ViewportManager.wait_for_viewport_async()
+        sphere_light = SphereLight("/World/SphereLight", positions=[1.0, -1.0, 1.0])
+        sphere_light.set_intensities(intensities=100000)
+        Cube("/World/Cube", sizes=0.5, positions=[0.0, 0.0, 0.25], colors=[0.0, 1.0, 0.0])
+        sensor = CameraSensor(
+            "/World/Camera",
+            resolution=(320, 320),
+            annotators=["pointcloud"],
+            **sensor_kwargs,
+        )
+        ViewportManager.set_camera_view(sensor.camera.paths[0], eye=[3.0, 1.25, 1.0], target=[0.0, 0.0, 0.25])
+        app_utils.play(commit=True)
+        await app_utils.update_app_async()
+        return sensor
+
+    async def test_pointcloud_includes_unlabelled_by_default(self) -> None:
+        """Pointcloud annotator returns unlabeled geometry by default."""
+        sensor = await self._create_unlabelled_pointcloud_scene()
+        try:
+            data = None
+            for _ in range(20):
+                await app_utils.update_app_async()
+                data, _ = sensor.get_data("pointcloud")
+                if data is not None:
+                    break
+            self.assertIsNotNone(data, "No pointcloud data available for unlabeled geometry")
+            self.assertEqual(data.shape[1], 3)
+            self.assertGreater(data.shape[0], 0)
+        finally:
+            app_utils.stop(commit=True)
+            await app_utils.update_app_async()
+            del sensor
+            await app_utils.update_app_async(steps=3)
+
+    async def test_pointcloud_init_params_can_exclude_unlabelled(self) -> None:
+        """Pointcloud annotator init params can restore semantic-only filtering."""
+        sensor = await self._create_unlabelled_pointcloud_scene(
+            annotator_init_params={"pointcloud": {"includeUnlabelled": False}}
+        )
+        try:
+            data = None
+            for _ in range(20):
+                await app_utils.update_app_async()
+                data, _ = sensor.get_data("pointcloud")
+                if data is not None:
+                    break
+            self.assertIsNone(data, "Pointcloud data should be filtered out for unlabeled geometry")
+        finally:
+            app_utils.stop(commit=True)
+            await app_utils.update_app_async()
+            del sensor
+            await app_utils.update_app_async(steps=3)
+
+    async def test_resolution_required_without_pre_authored_render_product(self) -> None:
+        """Constructing a CameraSensor without a resolution and no pre-authored render product raises ValueError."""
+        await stage_utils.create_new_stage_async()
+        prim = stage_utils.define_prim("/World/Camera", "Camera")
+        prim.ApplyAPI("OmniSensorAPI")
+        with self.assertRaises(ValueError):
+            CameraSensor("/World/Camera", annotators=[])

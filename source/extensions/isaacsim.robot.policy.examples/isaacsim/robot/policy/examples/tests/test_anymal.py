@@ -13,7 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Test module for validating Anymal quadruped robot policy functionality on both CPU and GPU devices."""
+"""Behavioral tests for the bundled ANYmal flat-terrain policy on the runner deployment path.
+
+These are the retained ANYmal movement suites of the refactor's verification matrix: the same
+spawn/forward/turn criteria that drove the removed ``AnymalFlatTerrainPolicy`` class now drive
+the generic ``RobotPolicyRunner`` with the bundled ANYmal spec, on both CPU and GPU simulation
+devices.
+"""
 
 import asyncio
 
@@ -27,22 +33,21 @@ import numpy as np
 #   For most things refer to unittest docs: https://docs.python.org/3/library/unittest.html
 import omni.kit.test
 import omni.timeline
-from isaacsim.core.deprecation_manager import import_module
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.core.simulation_manager.impl.isaac_events import IsaacEvents
-from isaacsim.robot.policy.examples.robots.anymal import AnymalFlatTerrainPolicy
+from isaacsim.robot.policy.examples.bundled.anymal import get_anymal_spec
+from isaacsim.robot.policy.examples.runtime import RobotPolicyRunner
 from isaacsim.storage.native import get_assets_root_path
 from pxr import UsdPhysics
 
-torch = import_module("torch")
-
 
 class TestAnymalCPU(omni.kit.test.AsyncTestCase):
-    """Test class for validating Anymal robot functionality on CPU.
+    """Test class for validating the ANYmal runner deployment on CPU.
 
-    This test class provides comprehensive validation of the Anymal robot's basic operations including
-    spawning, movement commands, and physics integration when running on CPU devices. It inherits from
-    omni.kit.test.AsyncTestCase to support asynchronous testing patterns required for Isaac Sim operations.
+    This test class provides comprehensive validation of the ANYmal robot's basic operations
+    including spawning, movement commands, and physics integration when running on CPU devices.
+    It inherits from omni.kit.test.AsyncTestCase to support asynchronous testing patterns
+    required for Isaac Sim operations.
 
     The test suite validates:
         - Robot spawning and proper USD stage integration
@@ -51,29 +56,29 @@ class TestAnymalCPU(omni.kit.test.AsyncTestCase):
         - Rotational commands and heading change validation
         - Physics callback registration and simulation stepping
 
-    Each test method sets up a clean simulation environment with a physics scene, ground plane, and
-    the AnymalFlatTerrainPolicy robot instance. The tests use torch tensors on CPU for command inputs
-    and verify robot behavior through position and orientation changes over simulation steps.
+    Each test method sets up a clean simulation environment with a physics scene, ground plane,
+    and a ``RobotPolicyRunner`` deploying the bundled ANYmal spec. The tests verify robot behavior
+    through position and orientation changes over simulation steps.
     """
 
-    def get_device(self) -> object:
-        """Return the device to use for tensors. Override in subclasses.
+    def get_device(self) -> str:
+        """Return the simulation device. Override in subclasses.
 
         Returns:
-            The device to use for tensors.
+            The simulation device string.
         """
-        return torch.device("cpu")
+        return "cpu"
 
     async def setUp(self) -> None:
         """Set up the test environment with physics scene, simulation manager, and ground plane."""
+        self._physics_callback_id = None
+        self._anymal = None
         await stage_utils.create_new_stage_async()
         # This needs to be set so that kit updates match physics updates
         self._physics_rate = 200
 
-        device_str = str(self.get_device())
-        backend = "torch" if device_str != "cpu" else "numpy"
-
-        print(f"Setting up test with device: {device_str}, backend: {backend}")
+        device_str = self.get_device()
+        print(f"Setting up test with device: {device_str}")
 
         self._physics_dt = 1 / self._physics_rate
         stage_utils.define_prim("/World/PhysicsScene", "PhysicsScene")
@@ -81,12 +86,12 @@ class TestAnymalCPU(omni.kit.test.AsyncTestCase):
         # spawn simulation manager
         SimulationManager.set_physics_sim_device(device_str)
         SimulationManager.set_physics_dt(self._physics_dt)
-        ground_plane = stage_utils.add_reference_to_stage(
+        stage_utils.add_reference_to_stage(
             usd_path=get_assets_root_path() + "/Isaac/Environments/Grid/default_environment.usd",
             path="/World/ground",
         )
 
-        self._base_command = torch.zeros(3, dtype=torch.float32, device=self.get_device())
+        self._base_command = np.zeros(3, dtype=np.float32)
         self._stage = omni.usd.get_context().get_stage()
         self._timeline = omni.timeline.get_timeline_interface()
         await omni.kit.app.get_app().next_update_async()
@@ -95,24 +100,29 @@ class TestAnymalCPU(omni.kit.test.AsyncTestCase):
         """Clean up the test environment by stopping timeline and deregistering physics callbacks."""
         await omni.kit.app.get_app().next_update_async()
         self._timeline.stop()
-        SimulationManager.deregister_callback(self._physics_callback_id)
+        if self._anymal is not None:
+            self._anymal.close()
+        if self._physics_callback_id is not None:
+            SimulationManager.deregister_callback(self._physics_callback_id)
+            self._physics_callback_id = None
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
             print("tearDown, assets still loading, waiting to finish...")
             await asyncio.sleep(1.0)
         await omni.kit.app.get_app().next_update_async()
+        await omni.usd.get_context().close_stage_async()
 
     async def test_anymal_add(self) -> None:
-        """Test spawning an Anymal robot and verifying its DOFs and stage prims."""
+        """Test spawning an ANYmal robot and verifying its DOFs and stage prims."""
         await self.spawn_anymal()
         await omni.kit.app.get_app().next_update_async()
 
-        self.assertEqual(self._anymal.robot.num_dofs, 12)
+        self.assertEqual(self._anymal.articulation.num_dofs, 12)
 
         root_prim = stage_utils.get_current_stage().GetPrimAtPath(self._prim_path)
         self.assertIsNotNone(root_prim, f"Robot root prim should exist at {self._prim_path}")
         self.assertTrue(root_prim.IsValid(), "Robot root prim should be valid")
 
-        articulation_root_path = self._anymal.robot.paths[0]
+        articulation_root_path = self._anymal.articulation.paths[0]
         articulation_prim = stage_utils.get_current_stage().GetPrimAtPath(articulation_root_path)
         self.assertTrue(
             prim_utils.has_api(articulation_prim, UsdPhysics.ArticulationRootAPI),
@@ -125,40 +135,41 @@ class TestAnymalCPU(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
 
         # Get current poses and convert to numpy arrays for efficient operations
-        start_positions_wp, _ = self._anymal.robot.get_world_poses()
+        start_positions_wp, _ = self._anymal.articulation.get_world_poses()
 
         self.start_pos = start_positions_wp.numpy()[0]
 
-        self._base_command = torch.tensor([1, 0, 0], dtype=torch.float32, device=self.get_device())
+        self._base_command = np.array([1, 0, 0], dtype=np.float32)
 
         for _ in range(120):
             await omni.kit.app.get_app().next_update_async()
 
         # Get current poses and convert to numpy arrays for efficient operations
-        current_positions_wp, _ = self._anymal.robot.get_world_poses()
+        current_positions_wp, _ = self._anymal.articulation.get_world_poses()
 
         self.current_pos = current_positions_wp.numpy()[0]
 
         delta = abs(self.current_pos[0] - self.start_pos[0])
         self.assertGreater(delta, 0.4)
         self.assertLess(delta, 2.0)
+        self.assertGreater(self.current_pos[2], 0.45)
 
     async def test_robot_turn_command(self) -> None:
         """Test robot turning by sending a turn command and verifying orientation change."""
         await self.spawn_anymal()
         await omni.kit.app.get_app().next_update_async()
 
-        # Get current poses and convert to torch tensors for efficient operations
-        _, start_orientations_wp = self._anymal.robot.get_world_poses()
+        # Get current poses and convert to numpy arrays for efficient operations
+        _, start_orientations_wp = self._anymal.articulation.get_world_poses()
 
         self.start_orientation = start_orientations_wp.numpy()[0]
 
-        self._base_command = torch.tensor([0, 0, 1], dtype=torch.float32, device=self.get_device())
+        self._base_command = np.array([0, 0, 1], dtype=np.float32)
         # Simulate for 2 seconds (120 steps at 60 Hz default)
         for _ in range(120):
             await omni.kit.app.get_app().next_update_async()
 
-        _, current_orientations_wp = self._anymal.robot.get_world_poses()
+        _, current_orientations_wp = self._anymal.articulation.get_world_poses()
 
         self.current_orientation = current_orientations_wp.numpy()[0]
 
@@ -180,14 +191,15 @@ class TestAnymalCPU(omni.kit.test.AsyncTestCase):
         self.assertGreater(heading_delta, 1.4)
 
     async def spawn_anymal(self, name: str = "anymal") -> None:
-        """Spawn an Anymal robot in the simulation environment.
+        """Spawn an ANYmal robot in the simulation environment.
 
         Args:
             name: Name of the robot prim to create.
         """
         self._prim_path = "/World/" + name
 
-        self._anymal = AnymalFlatTerrainPolicy(prim_path=self._prim_path, position=[0, 0, 0.60])
+        self._anymal = RobotPolicyRunner(get_anymal_spec(), prim_path=self._prim_path, position=[0, 0, 0.60])
+        self._anymal.spawn()
         self._timeline.play()
         await omni.kit.app.get_app().next_update_async()
 
@@ -200,37 +212,35 @@ class TestAnymalCPU(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
 
     def on_physics_step(self, step_size: float, context: object) -> None:
-        """Physics step callback that applies base commands to the Anymal robot.
+        """Physics step callback that applies base commands to the ANYmal robot.
 
         Args:
             step_size: Time step size for physics simulation.
             context: Simulation context information.
         """
         if self._anymal:
-            self._anymal.forward(step_size, self._base_command)
+            self._anymal.step(step_size, self._base_command)
 
 
 class TestAnymalGPU(TestAnymalCPU):
-    """GPU-based test suite for the Anymal quadruped robot policy.
+    """GPU-based test suite for the ANYmal quadruped runner deployment.
 
-    This test class extends TestAnymalCPU to run all Anymal robot tests on GPU hardware using CUDA tensors.
-    It validates robot spawning, movement commands, and turning behaviors with GPU-accelerated computation for
-    performance testing and GPU-specific functionality verification.
+    This test class extends TestAnymalCPU to run all ANYmal robot tests on GPU hardware using
+    the CUDA simulation device. It validates robot spawning, movement commands, and turning
+    behaviors with GPU-accelerated computation for performance testing and GPU-specific
+    functionality verification.
 
     The test suite includes:
     - Robot spawning and initialization validation
     - Forward movement command testing with position delta verification
     - Turning command testing with orientation change validation
     - ArticulationRootAPI and prim structure verification
-
-    All tensor operations and physics simulations run on CUDA device, making it suitable for testing
-    GPU-accelerated robot control policies and simulation performance.
     """
 
-    def get_device(self) -> object:
-        """Return the device to use for tensors.
+    def get_device(self) -> str:
+        """Return the simulation device.
 
         Returns:
-            The GPU device for tensor operations.
+            The CUDA simulation device string.
         """
-        return torch.device("cuda")
+        return "cuda"

@@ -14,13 +14,13 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 #include <omni/physx/ContactEvent.h>
 // clang-format on
 
 #include <carb/profiler/Profile.h>
 
-#include <isaacsim/sensors/physics/ContactManager.h>
+#include <isaacsim/sensors/physics/ContactManager.hpp>
 
 
 namespace isaacsim

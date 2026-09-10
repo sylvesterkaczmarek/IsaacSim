@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "Tf2Impl.h"
+#include "Tf2Impl.hpp"
 
 namespace isaacsim
 {

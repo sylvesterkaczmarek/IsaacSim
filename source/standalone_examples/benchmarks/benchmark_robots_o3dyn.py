@@ -86,7 +86,7 @@ benchmark = BaseIsaacBenchmark(
 )
 benchmark.set_phase("loading", start_recording_frametime=False, start_recording_runtime=True)
 
-robot_path = benchmark.assets_root_path + "/Isaac/Robots/Fraunhofer/O3dyn/o3dyn.usd"
+robot_path = benchmark.assets_root_path + "/Isaac/Robots_Multiphysics/Fraunhofer/O3dyn/o3dyn.usda"
 scene_path = benchmark.assets_root_path + "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd"
 benchmark.fully_load_stage(scene_path)
 

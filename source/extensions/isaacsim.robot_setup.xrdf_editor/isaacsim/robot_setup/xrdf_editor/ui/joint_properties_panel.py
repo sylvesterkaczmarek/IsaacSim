@@ -21,7 +21,7 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 import omni.ui as ui
-from isaacsim.gui.components.element_wrappers import CollapsableFrame, DropDown, FloatField
+from isaacsim.gui.components import CollapsableFrame, DropDown, FloatField
 from isaacsim.gui.components.ui_utils import get_style
 
 if TYPE_CHECKING:

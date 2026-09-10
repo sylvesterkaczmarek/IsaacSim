@@ -44,13 +44,13 @@ class Extension(omni.ext.IExt):
     for stage and timeline events.
 
     The extension creates a dockable window with custom UI elements built through the UIBuilder class.
-    It automatically subscribes to physics step events when the timeline is playing and manages cleanup
-    of resources when the window is closed or the stage changes.
+    It subscribes to physics step events when the timeline is playing and responds to window visibility and stage
+    changes.
 
     Key features:
     - Creates a scrolling window interface docked to the left bottom of the viewport
-    - Registers menu actions for opening/closing the extension window
-    - Handles stage open/close events with automatic cleanup
+    - Registers menu actions for opening or closing the extension window
+    - Handles stage open and close events
     - Subscribes to physics step events during timeline playback
     - Integrates with the UIBuilder class for custom UI construction
     """

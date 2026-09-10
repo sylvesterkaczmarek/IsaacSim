@@ -14,12 +14,12 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include "GenericModelOutput.h"
-#include "isaacsim/core/includes/BaseResetNode.h"
-#include "isaacsim/core/includes/Buffer.h"
+#include "isaacsim/core/includes/BaseResetNode.hpp"
+#include "isaacsim/core/includes/Buffer.hpp"
 
 #include <carb/tasking/ITasking.h>
 #include <carb/tasking/TaskingUtils.h>

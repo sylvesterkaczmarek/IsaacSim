@@ -19,8 +19,7 @@ version = "1.0.0"
 description = "USD to URDF exporter for articulated robots"
 requires-python = ">=3.12"
 dependencies = [
-    "isaacsim-asset-importer-utils==1.0.0",
-    "usd-exchange>=2.2.2",
+    "usd-exchange==2.3.0",
 ]
 readme = "docs/Overview.md"
 license = "Apache-2.0"

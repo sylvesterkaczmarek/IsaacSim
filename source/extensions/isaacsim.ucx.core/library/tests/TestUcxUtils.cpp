@@ -19,9 +19,9 @@ Test is implemented using the doctest C++ testing framework:
 */
 
 #include <doctest/doctest.h>
-#include <isaacsim/ucx/core/UcxListener.h>
-#include <isaacsim/ucx/core/UcxListenerRegistry.h>
-#include <isaacsim/ucx/core/UcxUtils.h>
+#include <isaacsim/ucx/core/UcxListener.hpp>
+#include <isaacsim/ucx/core/UcxListenerRegistry.hpp>
+#include <isaacsim/ucx/core/UcxUtils.hpp>
 #include <ucxx/api.h>
 
 #include <chrono>

@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Scope the NVIDIA npm registry, scaffold the app, then clean up the credential
 RUN echo '@nvidia:registry=https://edge.urm.nvidia.com/artifactory/api/npm/omniverse-client-npm/' >> /root/.npmrc \
-    && npx @nvidia/create-ov-web-rtc-app@1.14.2 --name web-viewer --sample local-sample --outputDir /app \
+    && npx @nvidia/create-ov-web-rtc-app@2.1.5 --name=web-viewer --sample=local-sample --external --outputDir=/app sample-app --framework=react \
     && rm -f /root/.npmrc
 
 WORKDIR /app/web-viewer
@@ -21,8 +21,11 @@ ARG ISAACSIM_HOST=127.0.0.1
 ARG ISAACSIM_SIGNAL_PORT=49100
 ARG ISAACSIM_STREAM_PORT=47998
 
-RUN sed -i "s/signalingServer: [^,]*/signalingServer: '${ISAACSIM_HOST}'/" src/main.ts \
-    && sed -i "/signalingServer:/a\\    signalingPort: ${ISAACSIM_SIGNAL_PORT},\n    mediaServer: '${ISAACSIM_HOST}',\n    mediaPort: ${ISAACSIM_STREAM_PORT},\n    forceWSS: false," src/main.ts
+RUN grep -qF "signalingServer: '127.0.0.1'," src/main.tsx \
+    && sed -i "s/signalingServer: [^,]*/signalingServer: '${ISAACSIM_HOST}'/" src/main.tsx \
+    && sed -i "/signalingServer:/a\\    signalingPort: ${ISAACSIM_SIGNAL_PORT},\n    mediaServer: '${ISAACSIM_HOST}',\n    mediaPort: ${ISAACSIM_STREAM_PORT},\n    forceWSS: false," src/main.tsx \
+    && grep -qF "signalingPort: ${ISAACSIM_SIGNAL_PORT}," src/main.tsx \
+    && grep -qF "mediaPort: ${ISAACSIM_STREAM_PORT}," src/main.tsx
 
 # Patch: preserve browser shortcuts (DevTools, refresh) from being swallowed by the stream.
 # F11: fullscreen toggle via Fullscreen API. On Mac, Fn+F11 sends F11; we also check e.code.
@@ -30,7 +33,8 @@ RUN sed -i "s/signalingServer: [^,]*/signalingServer: '${ISAACSIM_HOST}'/" src/m
 # F12: stopPropagation so stream does not see it (DevTools may need focus outside stream).
 # F7: prevent Chrome caret-browsing dialog only.
 # Clipboard shortcuts (Ctrl+C/V/X) are intentionally left for the streaming library to handle.
-RUN sed -i '/void app.initialize/i\
+RUN grep -qF 'void app.initialize();' src/main.tsx \
+    && sed -i '/void app.initialize/i\
 const sc = document.getElementById("stream-container");\
 if (sc) {\
     sc.addEventListener("keydown", (e: KeyboardEvent) => {\
@@ -42,7 +46,8 @@ if (sc) {\
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && ["i","j","c"].includes(e.key.toLowerCase())) { e.stopPropagation(); return; }\
         if (e.metaKey && e.altKey && ["i","j","c"].includes(e.key.toLowerCase())) { e.stopPropagation(); return; }\
     }, true);\
-}' src/main.ts
+}' src/main.tsx \
+    && grep -qF 'const sc = document.getElementById("stream-container");' src/main.tsx
 
 RUN npm install --ignore-scripts
 RUN npm run build
@@ -77,4 +82,4 @@ EXPOSE 8210
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8210/ || exit 1
 
-CMD ["npx", "vite", "preview", "--host", "--port", "8210"]
+CMD ["./node_modules/.bin/vite", "preview", "--host", "--port", "8210"]

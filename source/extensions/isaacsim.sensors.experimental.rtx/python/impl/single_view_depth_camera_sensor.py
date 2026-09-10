@@ -22,11 +22,18 @@ from typing import Any, Literal, get_args
 import carb
 import isaacsim.core.experimental.utils.prim as prim_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
+import omni.replicator.core as rep
 from pxr import Sdf, Usd
 
 from ._camera_common import CAMERA_ANNOTATOR_SPEC as ANNOTATOR_SPEC
 from .camera_sensor import CameraSensor
 from .rtx_camera import RtxCamera
+
+_DEPTH_SENSOR_INPUT_RENDER_VARS = (
+    "Camera3dPositionSD",
+    "DistanceToImagePlaneSD",
+    "LdrColor",
+)
 
 ANNOTATOR = Literal[
     "bounding_box_2d_loose",
@@ -55,16 +62,33 @@ class SingleViewDepthCameraSensor(CameraSensor):
     The sensor is implemented as a post-process operation in the renderer, where the `OmniSensorDepthSensorSingleViewAPI`
     schema is applied to the USD render product prim rather than to the camera prim.
 
+    When the camera is loaded from a USD asset (via :meth:`RtxCamera.create` with a ``usd_path``) that
+    already contains a ``RenderProduct`` with the ``OmniSensorDepthSensorSingleViewAPI`` schema applied
+    and a ``camera`` relationship targeting the wrapped camera, this class attaches a hydra texture
+    directly to that pre-authored render product and renders through it, rather than creating a new
+    render product. In that case the sensor's ``resolution`` and ``annotators`` are derived from the
+    asset (the authored ``resolution`` attribute and the render product's ``orderedVars``) when not
+    explicitly provided.
+
     Args:
         path: ``Camera`` object or single path to existing or non-existing (one of both) USD Camera prim.
             Can include regular expression for matching a prim.
         resolution: Resolution of the sensor (following OpenCV/NumPy convention: ``(height, width)``).
-        annotators: Annotator/sensor types to configure.
+            Optional when attaching to a pre-authored render product (the asset's authored resolution
+            is used); required otherwise.
+        annotators: Annotator/sensor types to configure. Optional when attaching to a pre-authored
+            render product (derived from its render vars) if not provided.
+        annotator_init_params: Per-annotator initialization parameters forwarded to Replicator annotators.
+            Semantic filtering is the exception: ``semanticTypes``/``semanticFilter`` applies to the whole
+            render product, so bounding box and segmentation annotators sharing one render product cannot
+            be filtered independently.
 
     Raises:
         ValueError: If no prim is found matching the specified path.
         ValueError: If the input argument refers to more than one camera prim.
         ValueError: If an unsupported annotator type is specified.
+        ValueError: If ``resolution`` is not provided and the sensor is not attaching to a
+            pre-authored render product.
 
     Example:
 
@@ -85,80 +109,68 @@ class SingleViewDepthCameraSensor(CameraSensor):
         >>> app_utils.play(commit=True)
     """
 
+    _ASSET_RP_SCHEMA = "OmniSensorDepthSensorSingleViewAPI"
+
     def __init__(
         self,
         path: str | RtxCamera,
         *,
         # CameraSensor
-        resolution: tuple[int, int],
-        annotators: ANNOTATOR | list[ANNOTATOR],
+        resolution: tuple[int, int] | None = None,
+        annotators: ANNOTATOR | list[ANNOTATOR] | None = None,
+        annotator_init_params: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         # define properties
         self._annotators_spec = {annotator: ANNOTATOR_SPEC[annotator] for annotator in get_args(ANNOTATOR)}
         # initialize base class
-        super().__init__(path, resolution=resolution, annotators=annotators)
+        super().__init__(
+            path, resolution=resolution, annotators=annotators, annotator_init_params=annotator_init_params
+        )
         # initialize instance
         self._render_product_prim = prim_utils.get_prim_at_path(self.render_product)
         self._render_product_prim.ApplyAPI("OmniSensorDepthSensorSingleViewAPI")
-        # - update render settings
+        self._configure_depth_sensor_render_settings()
+
+    def _create_render_product_and_attach(
+        self,
+        annotators: str | list[str],
+        *,
+        render_vars: list[str] | None = None,
+        annotator_init_params: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
+        """Create a depth-sensor render product with its required input render variables.
+
+        Args:
+            annotators: Annotator/sensor types to attach.
+            render_vars: Render variables to pass to the render product.
+            annotator_init_params: Per-annotator initialization parameters forwarded to Replicator annotators.
+                Semantic filtering is the exception: ``semanticTypes``/``semanticFilter`` applies to the whole
+                render product, so bounding box and segmentation annotators sharing one render product cannot
+                be filtered independently.
+        """
+        if self._resolution is None:
+            raise ValueError("'resolution' is required when creating a new render product.")
+        render_vars = list(render_vars or [])
+        for render_var in _DEPTH_SENSOR_INPUT_RENDER_VARS:
+            if render_var not in render_vars:
+                render_vars.append(render_var)
+        self._hydra_texture = rep.create.render_product(
+            camera=self.authoring_object.paths[0],
+            resolution=(self._resolution[1], self._resolution[0]),  # (width, height)
+            name=f"camera_sensor_{hash(self)}",
+            render_vars=render_vars,
+        )
+        self._render_product_prim = prim_utils.get_prim_at_path(self._hydra_texture.path)
+        self._render_product_prim.ApplyAPI("OmniSensorDepthSensorSingleViewAPI")
+        self._configure_depth_sensor_render_settings()
+        self.attach_annotators(annotators, annotator_init_params=annotator_init_params)
+
+    def _configure_depth_sensor_render_settings(self) -> None:
+        """Configure render settings consumed by depth sensor render products."""
         settings = carb.settings.get_settings()
         settings.set("/exts/omni.usd.schema.render_settings/rtx/renderSettings/apiSchemas/autoApply", None)
         settings.set("/exts/omni.usd.schema.render_settings/rtx/camera/apiSchemas/autoApply", None)
         settings.set("/exts/omni.usd.schema.render_settings/rtx/renderProduct/apiSchemas/autoApply", None)
-        # copy depth sensor attributes from any pre-existing template render product in a loaded USD asset
-        self._populate_from_asset_template()
-
-    """
-    Methods.
-    """
-
-    def _populate_from_asset_template(self) -> None:
-        """Copy depth sensor attributes from a template render product embedded in a loaded USD asset.
-
-        When the :class:`RtxCamera` was created via :meth:`RtxCamera.create` with a ``usd_path``,
-        the referenced asset may contain ``RenderProduct`` prims with the
-        ``OmniSensorDepthSensorSingleViewAPI`` schema applied and pre-configured depth sensor
-        attributes (baseline, focal length, noise, etc.). This method discovers those template
-        prims by searching the asset subtree for render products whose ``camera`` relationship
-        targets the wrapped camera prim, then copies their ``omni:rtx:post:depthSensor:*``
-        attributes to the render product created by this sensor instance.
-
-        If the :class:`RtxCamera` was not loaded from a USD asset (``_asset_root_path`` is
-        ``None``) or no matching template render product is found, this method is a no-op.
-        """
-        asset_root_path = getattr(self.authoring_object, "_asset_root_path", None)
-        if asset_root_path is None:
-            return
-
-        stage = stage_utils.get_current_stage(backend="usd")
-        camera_prim_path = self.authoring_object.paths[0]
-        root_prim = stage.GetPrimAtPath(asset_root_path)
-        if not root_prim.IsValid():
-            carb.log_warn(
-                f"Asset root prim at '{asset_root_path}' is not valid. "
-                "Cannot copy depth sensor attributes from template render product."
-            )
-            return
-
-        for child in Usd.PrimRange(root_prim):
-            if (
-                child.GetTypeName() == "RenderProduct"
-                and child.HasAPI("OmniSensorDepthSensorSingleViewAPI")
-                and child.HasRelationship("camera")
-            ):
-                targets = child.GetRelationship("camera").GetTargets()
-                if len(targets) == 1 and str(targets[0]) == camera_prim_path:
-                    for attr in child.GetAttributes():
-                        attr_name = attr.GetName()
-                        if attr_name.startswith("omni:rtx:post:depthSensor:"):
-                            if self._render_product_prim.HasAttribute(attr_name):
-                                self._render_product_prim.GetAttribute(attr_name).Set(attr.Get())
-                            else:
-                                carb.log_warn(
-                                    f"Render product at '{self._render_product_prim.GetPath()}' "
-                                    f"does not have attribute '{attr_name}'."
-                                )
-                    break
 
     def set_sensor_baseline(self, baseline: float) -> None:
         """Set the distance between the simulated depth camera sensor, in millimeters.

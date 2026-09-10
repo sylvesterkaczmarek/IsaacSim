@@ -28,6 +28,38 @@ from isaacsim.robot_setup.xrdf_editor.collision_sphere_editor import CollisionSp
 _ROBOT_PATH = "/World/robot"
 _LINK1_PATH = "/World/robot/link1"
 _LINK2_PATH = "/World/robot/link2"
+# `link1` is a strict string prefix of both of these, so any sphere lookup that compares raw
+# path prefixes without a boundary will match them when it was asked for `link1` alone.
+_LINK10_PATH = "/World/robot/link10"
+_LINK1_TIP_PATH = "/World/robot/link1_tip"
+# Prefix-colliding articulation root, for the export guards.
+_ROBOT2_PATH = "/World/robot2"
+_ROBOT2_LINK1_PATH = "/World/robot2/link1"
+# `arm_link` is a link in its own right that lives inside another link. Any sphere lookup
+# scoped by subtree rather than by owning link treats its spheres as belonging to
+# `base_link`, and any export key derived by slicing the path writes "base_link/arm_link".
+_BASE_LINK_PATH = "/World/robot/base_link"
+_ARM_LINK_PATH = "/World/robot/base_link/arm_link"
+
+
+def _radius_of(editor: CollisionSphereEditor, sphere_path: str) -> float:
+    """Read a sphere radius as a plain float.
+
+    `set_radii` can leave the stored radii as a nested array, which makes `assertAlmostEqual`
+    raise `TypeError` instead of reporting the value it saw. Flattening keeps a wrong radius
+    an assertion failure rather than an error, and requiring a single element stops an
+    unexpected shape from being reported as a passing scalar.
+    """
+    radii = np.ravel(editor.path_2_spheres[sphere_path].get_radii().numpy())
+    if radii.size != 1:
+        raise AssertionError(f"Expected one radius for {sphere_path}, got shape {radii.shape}")
+    return float(radii[0])
+
+
+def _color_of(editor: CollisionSphereEditor, sphere_path: str) -> np.ndarray:
+    """Read a sphere display color as a flat RGB array."""
+    color = editor.path_2_spheres[sphere_path].geoms[0].GetDisplayColorAttr().Get()
+    return np.ravel(np.array(color))[:3]
 
 
 class TestCollisionSphereEditor(omni.kit.test.AsyncTestCase):
@@ -40,7 +72,24 @@ class TestCollisionSphereEditor(omni.kit.test.AsyncTestCase):
         stage_utils.define_prim(_ROBOT_PATH, "Xform")
         stage_utils.define_prim(_LINK1_PATH, "Xform")
         stage_utils.define_prim(_LINK2_PATH, "Xform")
+        stage_utils.define_prim(_LINK10_PATH, "Xform")
+        stage_utils.define_prim(_LINK1_TIP_PATH, "Xform")
+        stage_utils.define_prim(_BASE_LINK_PATH, "Xform")
+        stage_utils.define_prim(_ARM_LINK_PATH, "Xform")
         self.editor = CollisionSphereEditor()
+        # `EditorState` supplies this from the articulation whenever one is
+        # selected, so exercising the editor without it would test a
+        # configuration the UI never produces.
+        self.editor.set_link_names(
+            {
+                _LINK1_PATH: "link1",
+                _LINK2_PATH: "link2",
+                _LINK10_PATH: "link10",
+                _LINK1_TIP_PATH: "link1_tip",
+                _BASE_LINK_PATH: "base_link",
+                _ARM_LINK_PATH: "arm_link",
+            }
+        )
 
     async def tearDown(self) -> None:
         """Clean up test fixtures."""
@@ -114,6 +163,57 @@ class TestCollisionSphereEditor(omni.kit.test.AsyncTestCase):
         remaining = list(self.editor.path_2_spheres.keys())
         self.assertEqual(remaining, [link2_path])
 
+    async def test_clear_link_spheres_keeps_prefix_sibling_links(self) -> None:
+        """Test clear link spheres keeps links whose names extend the target name."""
+        # Regression: an unanchored prefix comparison made `link1` also match `link10` and
+        # `link1_tip`, silently deleting their spheres.
+        link1_path = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.05)
+        link10_path = self.editor.add_sphere(_LINK10_PATH, np.zeros(3), 0.05)
+        link1_tip_path = self.editor.add_sphere(_LINK1_TIP_PATH, np.zeros(3), 0.05)
+
+        self.editor.clear_link_spheres(_LINK1_PATH)
+
+        self.assertNotIn(link1_path, self.editor.path_2_spheres)
+        self.assertIn(link10_path, self.editor.path_2_spheres)
+        self.assertIn(link1_tip_path, self.editor.path_2_spheres)
+        for surviving_path in (link10_path, link1_tip_path):
+            prim = prim_utils.get_prim_at_path(surviving_path)
+            self.assertTrue(prim and prim.IsValid(), f"{surviving_path} should not have been deleted")
+
+    async def test_clear_link_spheres_tolerates_trailing_slash(self) -> None:
+        """Test clear link spheres accepts a link path with a trailing slash."""
+        link1_path = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.05)
+        link10_path = self.editor.add_sphere(_LINK10_PATH, np.zeros(3), 0.05)
+
+        self.editor.clear_link_spheres(_LINK1_PATH + "/")
+
+        self.assertNotIn(link1_path, self.editor.path_2_spheres)
+        self.assertIn(link10_path, self.editor.path_2_spheres)
+
+    async def test_clear_link_spheres_keeps_nested_link_spheres(self) -> None:
+        """Test clearing a link leaves the spheres of a link nested inside it."""
+        # Subtree matching deletes the nested link's spheres too, even though they belong to
+        # a link that moves independently of the one the user asked to clear.
+        base_sphere = self.editor.add_sphere(_BASE_LINK_PATH, np.zeros(3), 0.05)
+        arm_sphere = self.editor.add_sphere(_ARM_LINK_PATH, np.zeros(3), 0.05)
+
+        self.editor.clear_link_spheres(_BASE_LINK_PATH)
+
+        self.assertNotIn(base_sphere, self.editor.path_2_spheres)
+        self.assertIn(arm_sphere, self.editor.path_2_spheres)
+        prim = prim_utils.get_prim_at_path(arm_sphere)
+        self.assertTrue(prim and prim.IsValid(), f"{arm_sphere} should not have been deleted")
+
+    async def test_clear_link_spheres_on_nested_link_keeps_parent_spheres(self) -> None:
+        """Test clearing a nested link leaves its parent link's spheres."""
+        base_sphere = self.editor.add_sphere(_BASE_LINK_PATH, np.zeros(3), 0.05)
+        arm_sphere = self.editor.add_sphere(_ARM_LINK_PATH, np.zeros(3), 0.05)
+
+        self.editor.clear_link_spheres(_ARM_LINK_PATH)
+
+        self.assertNotIn(arm_sphere, self.editor.path_2_spheres)
+        self.assertIn(base_sphere, self.editor.path_2_spheres)
+
     # -------------------------------------------------------------------------
     # get_sphere_names_by_link
     # -------------------------------------------------------------------------
@@ -150,8 +250,8 @@ class TestCollisionSphereEditor(omni.kit.test.AsyncTestCase):
         radius = self.editor.path_2_spheres[sphere_path].get_radii().numpy()[0]
         self.assertAlmostEqual(radius, 0.2, places=4)
 
-    async def test_scale_spheres_only_affects_matching_prefix(self) -> None:
-        """Test scale spheres only affects matching prefix."""
+    async def test_scale_spheres_only_affects_target_link(self) -> None:
+        """Test scale spheres leaves an unrelated link untouched."""
         path1 = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.1)
         path2 = self.editor.add_sphere(_LINK2_PATH, np.zeros(3), 0.1)
         self.editor.scale_spheres(_LINK1_PATH, 3.0)
@@ -160,11 +260,104 @@ class TestCollisionSphereEditor(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(radius1, 0.3, places=4)
         self.assertAlmostEqual(radius2, 0.1, places=4)
 
+    async def test_scale_spheres_keeps_prefix_sibling_links_unscaled(self) -> None:
+        """Test scale spheres skips links whose names extend the target name."""
+        # `link1` / `link2` fixtures cannot catch this: they share no prefix, so the assertion
+        # holds even with an unanchored comparison. These names can fail.
+        target_path = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.10)
+        link10_path = self.editor.add_sphere(_LINK10_PATH, np.zeros(3), 0.07)
+        link1_tip_path = self.editor.add_sphere(_LINK1_TIP_PATH, np.zeros(3), 0.09)
+
+        self.editor.scale_spheres(_LINK1_PATH, 3.0)
+
+        self.assertAlmostEqual(_radius_of(self.editor, target_path), 0.30, places=4)
+        self.assertAlmostEqual(_radius_of(self.editor, link10_path), 0.07, places=4)
+        self.assertAlmostEqual(_radius_of(self.editor, link1_tip_path), 0.09, places=4)
+
+    async def test_scale_spheres_scales_whole_articulation_subtree(self) -> None:
+        """Test scale spheres applied to an articulation root scales every nested link."""
+        # `_on_scale_all_spheres` passes the articulation root, so subtree semantics must
+        # survive the boundary-anchored matching.
+        link1_path = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.10)
+        link2_path = self.editor.add_sphere(_LINK2_PATH, np.zeros(3), 0.20)
+
+        self.editor.scale_spheres(_ROBOT_PATH, 2.0)
+
+        self.assertAlmostEqual(_radius_of(self.editor, link1_path), 0.20, places=4)
+        self.assertAlmostEqual(_radius_of(self.editor, link2_path), 0.40, places=4)
+
+    async def test_scale_spheres_does_not_cross_prefix_colliding_articulations(self) -> None:
+        """Test scaling one articulation root leaves a prefix-colliding sibling robot alone."""
+        stage_utils.define_prim(_ROBOT2_PATH, "Xform")
+        stage_utils.define_prim(_ROBOT2_LINK1_PATH, "Xform")
+        robot_sphere = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.10)
+        robot2_sphere = self.editor.add_sphere(_ROBOT2_LINK1_PATH, np.zeros(3), 0.05)
+
+        self.editor.scale_spheres(_ROBOT_PATH, 2.0)
+
+        self.assertAlmostEqual(_radius_of(self.editor, robot_sphere), 0.20, places=4)
+        self.assertAlmostEqual(_radius_of(self.editor, robot2_sphere), 0.05, places=4)
+
     async def test_scale_spheres_records_operation(self) -> None:
         """Test scale spheres records operation."""
         self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.1)
         ops_before = len(self.editor._operations)
         self.editor.scale_spheres(_LINK1_PATH, 2.0)
+        self.assertEqual(len(self.editor._operations), ops_before + 1)
+
+    async def test_scale_spheres_scales_nested_links_from_articulation_root(self) -> None:
+        """Test Scale All still reaches links nested inside another link."""
+        base_sphere = self.editor.add_sphere(_BASE_LINK_PATH, np.zeros(3), 0.10)
+        arm_sphere = self.editor.add_sphere(_ARM_LINK_PATH, np.zeros(3), 0.20)
+
+        self.editor.scale_spheres(_ROBOT_PATH, 2.0)
+
+        self.assertAlmostEqual(_radius_of(self.editor, base_sphere), 0.20, places=4)
+        self.assertAlmostEqual(_radius_of(self.editor, arm_sphere), 0.40, places=4)
+
+    # -------------------------------------------------------------------------
+    # scale_link_spheres
+    # -------------------------------------------------------------------------
+
+    async def test_scale_link_spheres_doubles_radius(self) -> None:
+        """Test scale link spheres scales the target link."""
+        sphere_path = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.1)
+        self.editor.scale_link_spheres(_LINK1_PATH, 2.0)
+        self.assertAlmostEqual(_radius_of(self.editor, sphere_path), 0.2, places=4)
+
+    async def test_scale_link_spheres_keeps_nested_link_unscaled(self) -> None:
+        """Test scaling a link leaves a link nested inside it at its authored radius."""
+        # This is the per-link Scale button, which must not resize a nested link the user
+        # did not select. `scale_spheres` keeps subtree semantics for Scale All.
+        base_sphere = self.editor.add_sphere(_BASE_LINK_PATH, np.zeros(3), 0.10)
+        arm_sphere = self.editor.add_sphere(_ARM_LINK_PATH, np.zeros(3), 0.20)
+
+        self.editor.scale_link_spheres(_BASE_LINK_PATH, 3.0)
+
+        self.assertAlmostEqual(_radius_of(self.editor, base_sphere), 0.30, places=4)
+        self.assertAlmostEqual(_radius_of(self.editor, arm_sphere), 0.20, places=4)
+
+    async def test_scale_link_spheres_keeps_prefix_sibling_links_unscaled(self) -> None:
+        """Test scale link spheres skips links whose names extend the target name."""
+        target_path = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.10)
+        link10_path = self.editor.add_sphere(_LINK10_PATH, np.zeros(3), 0.07)
+
+        self.editor.scale_link_spheres(_LINK1_PATH, 3.0)
+
+        self.assertAlmostEqual(_radius_of(self.editor, target_path), 0.30, places=4)
+        self.assertAlmostEqual(_radius_of(self.editor, link10_path), 0.07, places=4)
+
+    async def test_scale_link_spheres_tolerates_trailing_slash(self) -> None:
+        """Test scale link spheres accepts a link path with a trailing slash."""
+        sphere_path = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.1)
+        self.editor.scale_link_spheres(_LINK1_PATH + "/", 2.0)
+        self.assertAlmostEqual(_radius_of(self.editor, sphere_path), 0.2, places=4)
+
+    async def test_scale_link_spheres_records_operation(self) -> None:
+        """Test scale link spheres records one undo entry."""
+        self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.1)
+        ops_before = len(self.editor._operations)
+        self.editor.scale_link_spheres(_LINK1_PATH, 2.0)
         self.assertEqual(len(self.editor._operations), ops_before + 1)
 
     # -------------------------------------------------------------------------
@@ -277,6 +470,64 @@ class TestCollisionSphereEditor(omni.kit.test.AsyncTestCase):
         color = np.array([0.0, 1.0, 0.0])
         self.editor.set_sphere_colors(_LINK1_PATH, color_out=color)
         np.testing.assert_array_equal(self.editor.filter_out_sphere_color, color)
+
+    async def test_set_sphere_colors_skips_prefix_sibling_links(self) -> None:
+        """Test set sphere colors leaves links whose names extend the target name unselected."""
+        # Selecting a link colors its spheres so the user can see which ones they are about to
+        # clear or scale, so a prefix sibling colored as selected misstates that.
+        target_path = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.05)
+        link10_path = self.editor.add_sphere(_LINK10_PATH, np.zeros(3), 0.05)
+        link1_tip_path = self.editor.add_sphere(_LINK1_TIP_PATH, np.zeros(3), 0.05)
+
+        self.editor.set_sphere_colors(_LINK1_PATH)
+
+        np.testing.assert_allclose(_color_of(self.editor, target_path), self.editor.filter_in_sphere_color, atol=1e-6)
+        for sibling_path in (link10_path, link1_tip_path):
+            np.testing.assert_allclose(
+                _color_of(self.editor, sibling_path), self.editor.filter_out_sphere_color, atol=1e-6
+            )
+
+    async def test_set_sphere_colors_empty_filter_selects_every_sphere(self) -> None:
+        """Test the default empty filter still colors every sphere as selected."""
+        link1_path = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.05)
+        link2_path = self.editor.add_sphere(_LINK2_PATH, np.zeros(3), 0.05)
+
+        self.editor.set_sphere_colors("")
+
+        for sphere_path in (link1_path, link2_path):
+            np.testing.assert_allclose(
+                _color_of(self.editor, sphere_path), self.editor.filter_in_sphere_color, atol=1e-6
+            )
+
+    async def test_add_sphere_colors_prefix_sibling_as_unselected(self) -> None:
+        """Test a sphere added under a prefix sibling is not colored as the selected link."""
+        self.editor.set_sphere_colors(_LINK1_PATH)
+
+        target_path = self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.05)
+        sibling_path = self.editor.add_sphere(_LINK10_PATH, np.zeros(3), 0.05)
+
+        np.testing.assert_allclose(_color_of(self.editor, target_path), self.editor.filter_in_sphere_color, atol=1e-6)
+        np.testing.assert_allclose(_color_of(self.editor, sibling_path), self.editor.filter_out_sphere_color, atol=1e-6)
+
+    async def test_set_sphere_colors_marks_nested_link_as_unselected(self) -> None:
+        """Test selecting a link does not claim the spheres of a link nested inside it."""
+        base_sphere = self.editor.add_sphere(_BASE_LINK_PATH, np.zeros(3), 0.05)
+        arm_sphere = self.editor.add_sphere(_ARM_LINK_PATH, np.zeros(3), 0.05)
+
+        self.editor.set_sphere_colors(_BASE_LINK_PATH)
+
+        np.testing.assert_allclose(_color_of(self.editor, base_sphere), self.editor.filter_in_sphere_color, atol=1e-6)
+        np.testing.assert_allclose(_color_of(self.editor, arm_sphere), self.editor.filter_out_sphere_color, atol=1e-6)
+
+    async def test_set_sphere_colors_selects_nested_link_spheres(self) -> None:
+        """Test selecting a nested link colors its own spheres as selected."""
+        base_sphere = self.editor.add_sphere(_BASE_LINK_PATH, np.zeros(3), 0.05)
+        arm_sphere = self.editor.add_sphere(_ARM_LINK_PATH, np.zeros(3), 0.05)
+
+        self.editor.set_sphere_colors(_ARM_LINK_PATH)
+
+        np.testing.assert_allclose(_color_of(self.editor, arm_sphere), self.editor.filter_in_sphere_color, atol=1e-6)
+        np.testing.assert_allclose(_color_of(self.editor, base_sphere), self.editor.filter_out_sphere_color, atol=1e-6)
 
     # -------------------------------------------------------------------------
     # write_spheres_to_dict
@@ -486,6 +737,161 @@ class TestCollisionSphereEditor(omni.kit.test.AsyncTestCase):
         self.assertIn("link1", output)
         self.assertNotIn("foreign_link", output)
         self.assertNotIn("other_robot", output)
+
+    async def test_save_spheres_skips_prefix_colliding_robot(self) -> None:
+        """Test save spheres excludes a robot whose root extends the exported root name."""
+        # Regression: `/World/robot2/link1/...` passed the containment guard for
+        # `/World/robot`, and the surviving path slice emitted a corrupt `- /link1:` key.
+        stage_utils.define_prim(_ROBOT2_PATH, "Xform")
+        stage_utils.define_prim(_ROBOT2_LINK1_PATH, "Xform")
+        self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.10)
+        self.editor.add_sphere(_ROBOT2_LINK1_PATH, np.zeros(3), 0.05)
+
+        buf = io.StringIO()
+        self.editor.save_spheres(_ROBOT_PATH, buf)
+        output = buf.getvalue()
+
+        self.assertIn("  - link1:", output)
+        self.assertNotIn("- /link1:", output)
+        self.assertEqual(output.count("radius"), 1, "only the exported robot's sphere should be written")
+
+    async def test_write_spheres_to_dict_skips_prefix_colliding_robot(self) -> None:
+        """Test write spheres to dict excludes a robot whose root extends the exported root."""
+        stage_utils.define_prim(_ROBOT2_PATH, "Xform")
+        stage_utils.define_prim(_ROBOT2_LINK1_PATH, "Xform")
+        self.editor.add_sphere(_LINK1_PATH, np.zeros(3), 0.10)
+        self.editor.add_sphere(_ROBOT2_LINK1_PATH, np.zeros(3), 0.05)
+
+        link_to_spheres = {}
+        self.editor.write_spheres_to_dict(_ROBOT_PATH, link_to_spheres)
+
+        self.assertEqual(sorted(link_to_spheres.keys()), ["link1"])
+        # Key set alone would still pass if both robots collapsed into one `link1` entry.
+        self.assertEqual(len(link_to_spheres["link1"]), 1)
+        self.assertAlmostEqual(link_to_spheres["link1"][0]["radius"], 0.10, places=4)
+
+    # -------------------------------------------------------------------------
+    # Nested links: export keys and round trip
+    # -------------------------------------------------------------------------
+
+    async def test_write_spheres_to_dict_keys_nested_link_by_name(self) -> None:
+        """Test a nested link is exported under its link name, not its path fragment."""
+        # Deriving the key by slicing the path relative to the articulation root writes
+        # "base_link/arm_link", which does not name any link in the robot description.
+        self.editor.add_sphere(_ARM_LINK_PATH, np.zeros(3), 0.05)
+
+        link_to_spheres = {}
+        self.editor.write_spheres_to_dict(_ROBOT_PATH, link_to_spheres)
+
+        self.assertEqual(sorted(link_to_spheres.keys()), ["arm_link"])
+
+    async def test_save_spheres_keys_nested_link_by_name(self) -> None:
+        """Test the Lula export writes a nested link under its link name."""
+        self.editor.add_sphere(_ARM_LINK_PATH, np.zeros(3), 0.05)
+
+        buf = io.StringIO()
+        self.editor.save_spheres(_ROBOT_PATH, buf)
+        output = buf.getvalue()
+
+        self.assertIn("  - arm_link:", output)
+        self.assertNotIn("base_link/arm_link", output)
+
+    async def test_write_spheres_to_dict_separates_parent_and_nested_link(self) -> None:
+        """Test parent and nested link spheres are exported under separate keys."""
+        self.editor.add_sphere(_BASE_LINK_PATH, np.zeros(3), 0.10)
+        self.editor.add_sphere(_ARM_LINK_PATH, np.zeros(3), 0.05)
+
+        link_to_spheres = {}
+        self.editor.write_spheres_to_dict(_ROBOT_PATH, link_to_spheres)
+
+        self.assertEqual(sorted(link_to_spheres.keys()), ["arm_link", "base_link"])
+        self.assertAlmostEqual(link_to_spheres["base_link"][0]["radius"], 0.10, places=4)
+        self.assertAlmostEqual(link_to_spheres["arm_link"][0]["radius"], 0.05, places=4)
+
+    async def test_links_sharing_a_prim_name_export_under_distinct_keys(self) -> None:
+        """Test two links whose prims share a name do not collapse into one export key.
+
+        Prim names are not unique across an articulation: `/robot/arm_a/tool` and
+        `/robot/arm_b/tool` are separate links that PhysX reports as `tool` and
+        `tool_0`. Keying the export on the prim name merges both links' spheres
+        into one entry, so one link loses its collision geometry on reload.
+        """
+        arm_a_tool = "/World/robot/arm_a/tool"
+        arm_b_tool = "/World/robot/arm_b/tool"
+        for path in ("/World/robot/arm_a", arm_a_tool, "/World/robot/arm_b", arm_b_tool):
+            stage_utils.define_prim(path, "Xform")
+        self.editor.set_link_names({arm_a_tool: "tool", arm_b_tool: "tool_0"})
+
+        self.editor.add_sphere(arm_a_tool, np.zeros(3), 0.11)
+        self.editor.add_sphere(arm_b_tool, np.zeros(3), 0.22)
+
+        link_to_spheres = {}
+        self.editor.write_spheres_to_dict(_ROBOT_PATH, link_to_spheres)
+
+        self.assertEqual(sorted(link_to_spheres.keys()), ["tool", "tool_0"])
+        self.assertAlmostEqual(link_to_spheres["tool"][0]["radius"], 0.11, places=4)
+        self.assertAlmostEqual(link_to_spheres["tool_0"][0]["radius"], 0.22, places=4)
+
+    async def test_links_sharing_a_prim_name_round_trip_to_their_own_link(self) -> None:
+        """Test each link keeps its own spheres across a save/load cycle."""
+        arm_a_tool = "/World/robot/arm_a/tool"
+        arm_b_tool = "/World/robot/arm_b/tool"
+        for path in ("/World/robot/arm_a", arm_a_tool, "/World/robot/arm_b", arm_b_tool):
+            stage_utils.define_prim(path, "Xform")
+        self.editor.set_link_names({arm_a_tool: "tool", arm_b_tool: "tool_0"})
+
+        self.editor.add_sphere(arm_a_tool, np.zeros(3), 0.11)
+        self.editor.add_sphere(arm_b_tool, np.zeros(3), 0.22)
+
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            yaml_path = os.path.join(tmp_dir, "robot_description.yaml")
+            with open(yaml_path, "w") as f:
+                self.editor.save_spheres(_ROBOT_PATH, f)
+
+            self.editor.clear_spheres()
+            self.editor.load_spheres(_ROBOT_PATH, yaml_path)
+
+            radii_by_link: dict[str, list[float]] = {}
+            for sphere_path in self.editor.path_2_spheres:
+                radii_by_link.setdefault(sphere_path.rsplit("/", 1)[0], []).append(_radius_of(self.editor, sphere_path))
+
+            self.assertEqual(sorted(radii_by_link), [arm_a_tool, arm_b_tool])
+            self.assertAlmostEqual(radii_by_link[arm_a_tool][0], 0.11, places=4)
+            self.assertAlmostEqual(radii_by_link[arm_b_tool][0], 0.22, places=4)
+        finally:
+            try:
+                os.remove(yaml_path)
+            except OSError:
+                pass
+            os.rmdir(tmp_dir)
+
+    async def test_save_load_round_trip_restores_nested_link_spheres(self) -> None:
+        """Test a nested link's spheres survive a save/load cycle on the same link.
+
+        Exporting by link name is only useful if the importer can map that name back onto a
+        link that is not a direct child of the articulation root.
+        """
+        self.editor.add_sphere(_BASE_LINK_PATH, np.array([0.10, 0.0, 0.0]), 0.10)
+        self.editor.add_sphere(_ARM_LINK_PATH, np.array([0.0, 0.20, 0.0]), 0.05)
+
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            yaml_path = os.path.join(tmp_dir, "robot_description.yaml")
+            with open(yaml_path, "w") as f:
+                self.editor.save_spheres(_ROBOT_PATH, f)
+
+            self.editor.clear_spheres()
+            self.editor.load_spheres(_ROBOT_PATH, yaml_path)
+
+            loaded_links = {path.rsplit("/", 1)[0] for path in self.editor.path_2_spheres}
+            self.assertEqual(loaded_links, {_BASE_LINK_PATH, _ARM_LINK_PATH})
+        finally:
+            try:
+                os.remove(yaml_path)
+            except OSError:
+                pass
+            os.rmdir(tmp_dir)
 
     # -------------------------------------------------------------------------
     # load_spheres error handling (Lula robot description YAML)
@@ -731,6 +1137,90 @@ class TestCollisionSphereEditor(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(link1_radii[0], base_radius_link1 + buffer, places=4)
         # `link10` must be unaffected by the buffer keyed on `link1`.
         self.assertAlmostEqual(link10_radii[0], base_radius_link10, places=4)
+
+    async def test_load_xrdf_spheres_prefers_the_link_over_a_same_named_prim(self) -> None:
+        """Test a non-link prim sharing a link's name does not capture the spheres.
+
+        Resolving a link key by searching the stage for a matching prim name can
+        return a visual or grouping prim authored earlier in the subtree. Spheres
+        then hang off geometry whose frame is not the link's, so the exported
+        collision geometry is silently in the wrong place.
+        """
+        stage_utils.define_prim("/World/robot/Looks", "Scope")
+        stage_utils.define_prim("/World/robot/Looks/arm_link", "Xform")
+
+        parsed = {
+            "format_version": 2.0,
+            "world_collision": {"geometry": "default"},
+            "geometry": {"default": {"spheres": {"arm_link": [{"center": [0.0, 0.0, 0.0], "radius": 0.05}]}}},
+        }
+        self.editor.load_xrdf_spheres(_ROBOT_PATH, parsed)
+
+        sphere_paths = list(self.editor.path_2_spheres)
+        self.assertEqual(len(sphere_paths), 1)
+        self.assertTrue(sphere_paths[0].startswith(_ARM_LINK_PATH + "/"))
+
+    async def test_load_xrdf_spheres_rejects_a_key_naming_a_non_link_prim(self) -> None:
+        """Test a key that resolves to a prim which is not a link is refused."""
+        stage_utils.define_prim("/World/robot/Looks", "Scope")
+
+        parsed = {
+            "format_version": 2.0,
+            "world_collision": {"geometry": "default"},
+            "geometry": {"default": {"spheres": {"Looks": [{"center": [0.0, 0.0, 0.0], "radius": 0.05}]}}},
+        }
+        self.editor.load_xrdf_spheres(_ROBOT_PATH, parsed)
+
+        self.assertEqual(len(self.editor.path_2_spheres), 0)
+
+    async def test_load_xrdf_spheres_accepts_legacy_path_fragment_key(self) -> None:
+        """Test keys written before 3.7.0 as path fragments still resolve."""
+        parsed = {
+            "format_version": 2.0,
+            "world_collision": {"geometry": "default"},
+            "geometry": {"default": {"spheres": {"base_link/arm_link": [{"center": [0.0, 0.0, 0.0], "radius": 0.05}]}}},
+        }
+        self.editor.load_xrdf_spheres(_ROBOT_PATH, parsed)
+
+        sphere_paths = list(self.editor.path_2_spheres)
+        self.assertEqual(len(sphere_paths), 1)
+        self.assertTrue(sphere_paths[0].startswith(_ARM_LINK_PATH + "/"))
+
+    async def test_load_xrdf_spheres_buffer_distance_applies_to_nested_link(self) -> None:
+        """Test a buffer keyed on a nested link inflates that link, not its parent.
+
+        The nested link's name does not join onto the articulation root, so a
+        resolver that only joins paths cannot find it and drops the buffer with
+        just a warning.
+        """
+        base_radius = 0.05
+        nested_radius = 0.06
+        buffer = 0.02
+
+        parsed = {
+            "format_version": 2.0,
+            "world_collision": {
+                "geometry": "default",
+                "buffer_distance": {"arm_link": buffer},
+            },
+            "geometry": {
+                "default": {
+                    "spheres": {
+                        "base_link": [{"center": [0.0, 0.0, 0.0], "radius": base_radius}],
+                        "arm_link": [{"center": [0.0, 0.0, 0.0], "radius": nested_radius}],
+                    }
+                }
+            },
+        }
+        self.editor.load_xrdf_spheres(_ROBOT_PATH, parsed)
+
+        radii_by_link: dict[str, float] = {}
+        for p, sphere in self.editor.path_2_spheres.items():
+            radii_by_link[p.rsplit("/", 1)[0]] = float(sphere.get_radii().numpy()[0])
+
+        self.assertEqual(sorted(radii_by_link), sorted([_BASE_LINK_PATH, _ARM_LINK_PATH]))
+        self.assertAlmostEqual(radii_by_link[_ARM_LINK_PATH], nested_radius + buffer, places=4)
+        self.assertAlmostEqual(radii_by_link[_BASE_LINK_PATH], base_radius, places=4)
 
     async def test_load_xrdf_spheres_spheres_value_none_is_safe(self) -> None:
         """Test load xrdf spheres spheres value none is safe."""

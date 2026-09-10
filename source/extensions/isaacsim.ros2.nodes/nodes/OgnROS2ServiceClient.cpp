@@ -14,12 +14,12 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 
-#include <isaacsim/ros2/core/Ros2Node.h>
-#include <isaacsim/ros2/nodes/Ros2OgnUtils.h>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
+#include <isaacsim/ros2/nodes/Ros2OgnUtils.hpp>
 #include <omni/fabric/FabricUSD.h>
 
 #include <OgnROS2ServiceClientDatabase.h>
@@ -47,6 +47,7 @@ public:
         const GraphContextObj& context = db.abi_context();
         auto& state = db.perInstanceState<OgnROS2ServiceClient>();
         const auto& nodeObj = db.abi_node();
+        db.outputs.execOut() = kExecutionAttributeStateDisabled;
 
         // Spin once calls reset automatically if it was not successful
         if (!state.isInitialized())
@@ -96,14 +97,24 @@ public:
         {
             state.m_messageRequest = state.m_factory->createDynamicMessage(
                 state.m_messagePackage, state.m_messageSubfolder, state.m_messageName, BackendMessageType::eRequest);
-            isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceClientDatabase, false>(
-                db, nodeObj, state.m_messagePackage, state.m_messageSubfolder, state.m_messageName,
-                state.m_messageRequest, "Request:");
+            const bool requestCreated =
+                isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceClientDatabase, false>(
+                    db, nodeObj, state.m_messagePackage, state.m_messageSubfolder, state.m_messageName,
+                    state.m_messageRequest, "Request:");
             state.m_messageResponse = state.m_factory->createDynamicMessage(
                 state.m_messagePackage, state.m_messageSubfolder, state.m_messageName, BackendMessageType::eResponse);
-            isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceClientDatabase, true>(
-                db, nodeObj, state.m_messagePackage, state.m_messageSubfolder, state.m_messageName,
-                state.m_messageResponse, "Response:");
+            const bool responseCreated =
+                isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceClientDatabase, true>(
+                    db, nodeObj, state.m_messagePackage, state.m_messageSubfolder, state.m_messageName,
+                    state.m_messageResponse, "Response:");
+
+            if (!requestCreated || !responseCreated)
+            {
+                state.m_serviceClient.reset();
+                state.m_messageRequest.reset();
+                state.m_messageResponse.reset();
+                return false;
+            }
 
             state.m_messageUpdateNeeded = false;
             state.m_serviceUpdateNeeded = true;
@@ -145,8 +156,30 @@ public:
                 }
             }
 
-            state.m_serviceClient = state.m_factory->createClient(
-                state.m_nodeHandle.get(), fullServiceName.c_str(), state.m_messageRequest->getTypeSupportHandle(), qos);
+            if (!state.m_messageRequest)
+            {
+                db.logWarning("%s/%s/%s request message is invalid", state.m_messagePackage.c_str(),
+                              state.m_messageSubfolder.c_str(), state.m_messageName.c_str());
+                state.m_serviceUpdateNeeded = false;
+                return false;
+            }
+            const void* typeSupport = state.m_messageRequest->getTypeSupportHandle();
+            if (!typeSupport)
+            {
+                db.logWarning("%s/%s/%s service type support is unavailable", state.m_messagePackage.c_str(),
+                              state.m_messageSubfolder.c_str(), state.m_messageName.c_str());
+                state.m_serviceUpdateNeeded = false;
+                return false;
+            }
+
+            state.m_serviceClient =
+                state.m_factory->createClient(state.m_nodeHandle.get(), fullServiceName.c_str(), typeSupport, qos);
+            if (!state.m_serviceClient || !state.m_serviceClient->isValid())
+            {
+                db.logWarning("Unable to create ROS 2 service client");
+                state.m_serviceClient.reset();
+                return false;
+            }
             state.m_serviceUpdateNeeded = false;
         }
 
@@ -156,20 +189,42 @@ public:
     bool serviceClient(OgnROS2ServiceClientDatabase& db, const GraphContextObj& context)
     {
         auto& state = db.perInstanceState<OgnROS2ServiceClient>();
+        if (!state.m_serviceClient)
+        {
+            db.logWarning("Service client is invalid");
+            return false;
+        }
         if (!state.m_serviceClient->isValid())
         {
             db.logWarning("Service is invalid");
             return false;
         }
+        if (!state.m_messageRequest || !state.m_messageResponse)
+        {
+            db.logWarning("Service client message is invalid");
+            return false;
+        }
 
         // Write the request field/data from the node and compose a message
-        isaacsim::ros2::omnigraph_utils::writeMessageDataFromNode(db, state.m_messageRequest, "Request:", false);
-        state.m_serviceClient->sendRequest(state.m_messageRequest->getPtr());
-        state.m_serviceClient->takeResponse(state.m_messageResponse->getPtr());
-        // write response of the node from server to the node outputs
-        isaacsim::ros2::omnigraph_utils::writeNodeAttributeFromMessage(db, state.m_messageResponse, "Response:", true);
+        if (!isaacsim::ros2::omnigraph_utils::writeMessageDataFromNode(db, state.m_messageRequest, "Request:", false))
+        {
+            return false;
+        }
+        if (!state.m_serviceClient->sendRequest(state.m_messageRequest->getPtr()))
+        {
+            return false;
+        }
 
-        db.outputs.execOut() = kExecutionAttributeStateEnabled;
+        if (state.m_serviceClient->takeResponse(state.m_messageResponse->getPtr()))
+        {
+            // Write the response from the server to the node outputs.
+            if (!isaacsim::ros2::omnigraph_utils::writeNodeAttributeFromMessage(
+                    db, state.m_messageResponse, "Response:", true))
+            {
+                return false;
+            }
+            db.outputs.execOut() = kExecutionAttributeStateEnabled;
+        }
         return true;
     }
 
@@ -210,6 +265,13 @@ private:
         NodeObj nodeObj = attrObj.iAttribute->getNode(attrObj);
         auto db = OgnROS2ServiceClientDatabase(nodeObj);
         auto& state = db.perInstanceState<OgnROS2ServiceClient>();
+        state.m_messageUpdateNeeded = true;
+        state.m_serviceUpdateNeeded = true;
+        if (!state.isInitialized())
+        {
+            return;
+        }
+
         std::string messagePackage = std::string(db.inputs.messagePackage());
         std::string messageSubfolder = std::string(db.inputs.messageSubfolder());
         std::string messageName = std::string(db.inputs.messageName());
@@ -229,12 +291,23 @@ private:
         }
         state.m_messageRequest = state.m_factory->createDynamicMessage(
             messagePackage, messageSubfolder, messageName, BackendMessageType::eRequest);
-        isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceClientDatabase, false, false>(
-            db, nodeObj, messagePackage, messageSubfolder, messageName, state.m_messageRequest, "Request:");
+        const bool requestCreated =
+            isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceClientDatabase, false, false>(
+                db, nodeObj, messagePackage, messageSubfolder, messageName, state.m_messageRequest, "Request:");
         state.m_messageResponse = state.m_factory->createDynamicMessage(
             messagePackage, messageSubfolder, messageName, BackendMessageType::eResponse);
-        isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceClientDatabase, true, false>(
-            db, nodeObj, messagePackage, messageSubfolder, messageName, state.m_messageResponse, "Response:");
+        const bool responseCreated =
+            isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceClientDatabase, true, false>(
+                db, nodeObj, messagePackage, messageSubfolder, messageName, state.m_messageResponse, "Response:");
+
+        if (!requestCreated || !responseCreated)
+        {
+            state.m_serviceClient.reset();
+            state.m_messageRequest.reset();
+            state.m_messageResponse.reset();
+            state.m_messageUpdateNeeded = true;
+            return;
+        }
 
         state.m_serviceUpdateNeeded = true;
     }

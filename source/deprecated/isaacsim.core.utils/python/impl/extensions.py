@@ -19,13 +19,13 @@ import omni.kit.app
 
 
 def get_extension_id(extension_name: str) -> str:
-    """Get extension id for a loaded extension.
+    """Get the extension id for a loaded extension.
 
     Args:
-        extension_name: name of the extension
+        extension_name: Name of the extension.
 
     Returns:
-        Full extension id
+        Full extension id.
 
     Example:
 
@@ -41,13 +41,13 @@ def get_extension_id(extension_name: str) -> str:
 
 
 def get_extension_path(ext_id: str) -> str:
-    """Get extension path for a loaded extension by its full id.
+    """Get the extension path for a loaded extension by its full id.
 
     Args:
-        ext_id: full id of extension
+        ext_id: Full id of the extension.
 
     Returns:
-        Path to loaded extension root directory
+        Path to the loaded extension root directory.
 
     Example:
 
@@ -64,13 +64,16 @@ def get_extension_path(ext_id: str) -> str:
 
 
 def get_extension_path_from_name(extension_name: str) -> str:
-    """Get extension path for a loaded extension by its name.
+    """Get the extension path for a loaded extension by its name.
 
     Args:
-        extension_name: name of the extension
+        extension_name: Name of the extension.
 
     Returns:
-        Path to loaded extension root directory
+        Path to the loaded extension root directory.
+
+    Raises:
+        RuntimeError: If the extension is not enabled or could not be found.
 
     Example:
 
@@ -92,10 +95,10 @@ def enable_extension(extension_name: str) -> bool:
     """Load an extension from the extension manager.
 
     Args:
-        extension_name: name of the extension
+        extension_name: Name of the extension.
 
     Returns:
-        True if extension could be loaded, False otherwise
+        True if the extension could be loaded, False otherwise.
 
     Example:
 
@@ -114,10 +117,10 @@ def disable_extension(extension_name: str) -> bool:
     """Unload an extension.
 
     Args:
-        extension_name: name of the extension
+        extension_name: Name of the extension.
 
     Returns:
-        True if extension could be unloaded, False otherwise
+        True if the extension could be unloaded, False otherwise.
 
     Example:
 

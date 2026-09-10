@@ -368,6 +368,58 @@ class XformPrim(Prim):
                 materials[0 if broadcast_materials else i].materials[0], bindingStrength=binding_strength
             )
 
+    def apply_physics_materials(
+        self,
+        materials: type["PhysicsMaterial"] | list[type["PhysicsMaterial"]],
+        *,
+        weaker_than_descendants: bool | list | np.ndarray | wp.array | None = None,
+        indices: int | list | np.ndarray | wp.array | None = None,
+    ) -> None:
+        """Apply physics materials to the prims, optionally preserving descendant bindings.
+
+        Backends: :guilabel:`usd`.
+
+        Args:
+            materials: Physics materials to be applied to the prims (shape ``(N,)``).
+                If the input shape is smaller than expected, data will be broadcasted (following NumPy broadcast rules).
+            weaker_than_descendants: Boolean flags indicating whether descendant bindings take precedence (shape ``(N, 1)``).
+                If the input shape is smaller than expected, data will be broadcasted (following NumPy broadcast rules).
+            indices: Indices of prims to process (shape ``(N,)``). If not defined, all wrapped prims are processed.
+
+        Raises:
+            AssertionError: Wrapped prims are not valid.
+
+        Example:
+
+        .. code-block:: python
+
+            >>> from isaacsim.core.experimental.materials import RigidBodyMaterial
+            >>>
+            >>> material = RigidBodyMaterial("/World/material/rubber", static_frictions=[0.9])
+            >>> prims.apply_physics_materials(material, weaker_than_descendants=True)
+        """
+        assert self.valid, _MSG_PRIM_NOT_VALID
+        indices = ops_utils.resolve_indices(indices, count=len(self), device="cpu")
+        if not isinstance(materials, (list, tuple)):
+            materials = [materials]
+        broadcast_materials = len(materials) == 1
+        if weaker_than_descendants is None:
+            weaker_than_descendants = [False]
+        weaker_than_descendants = ops_utils.place(weaker_than_descendants, device="cpu").numpy().reshape((-1, 1))
+        broadcast_weaker_than_descendants = weaker_than_descendants.shape[0] == 1
+        for i, index in enumerate(indices.numpy()):
+            material_binding_api = XformPrim.ensure_api([self.prims[index]], UsdShade.MaterialBindingAPI)[0]
+            binding_strength = (
+                UsdShade.Tokens.weakerThanDescendants
+                if weaker_than_descendants[0 if broadcast_weaker_than_descendants else i].item()
+                else UsdShade.Tokens.strongerThanDescendants
+            )
+            material_binding_api.Bind(
+                materials[0 if broadcast_materials else i].materials[0],
+                bindingStrength=binding_strength,
+                materialPurpose="physics",
+            )
+
     def get_applied_visual_materials(
         self, *, indices: int | list | np.ndarray | wp.array | None = None
     ) -> list[type["VisualMaterial"] | None]:
@@ -909,6 +961,87 @@ class XformPrim(Prim):
                 device=self._device,
             )
 
+    def get_world_scales(self, *, indices: int | list | np.ndarray | wp.array | None = None) -> wp.array:
+        """Get the scales in the world frame of the prims.
+
+        Backends: :guilabel:`usd`, :guilabel:`usdrt`, :guilabel:`fabric`.
+
+        Args:
+            indices: Indices of prims to process (shape ``(N,)``). If not defined, all wrapped prims are processed.
+
+        Returns:
+            Scales of the prims (shape ``(N, 3)``).
+
+        Raises:
+            AssertionError: Wrapped prims are not valid.
+
+        Example:
+
+        .. code-block:: python
+
+            >>> # get the world scales of all prims
+            >>> scales = prims.get_world_scales()
+            >>> scales.shape
+            (3, 3)
+            >>>
+            >>> # get the world scale of the first prim
+            >>> scales = prims.get_world_scales(indices=[0])
+            >>> scales.shape
+            (1, 3)
+        """
+        assert self.valid, _MSG_PRIM_NOT_VALID
+        backend = backend_utils.get_current_backend(["usd", "usdrt", "fabric"])
+        # USD API
+        if backend == "usd":
+            indices = ops_utils.resolve_indices(indices, count=len(self), device="cpu")
+            scales = np.zeros((indices.shape[0], 3), dtype=np.float32)
+            for i, index in enumerate(indices.numpy()):
+                transform = Gf.Transform(
+                    UsdGeom.Xformable(self.prims[index]).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+                )
+                scales[i] = np.asarray(transform.GetScale(), dtype=np.float32)
+            return ops_utils.place(scales, device=self._device)
+        # USDRT API (with FSD and IFabricHierarchy)
+        elif backend == "usdrt":
+            indices = ops_utils.resolve_indices(indices, count=len(self), device="cpu")
+            scales = np.zeros((indices.shape[0], 3), dtype=np.float32)
+            fabric_hierarchy = self._get_fabric_hierarchy()
+            for i, index in enumerate(indices.numpy()):
+                transform = usdrt.Gf.Transform(fabric_hierarchy.get_world_xform(usdrt.Sdf.Path(self.paths[index])))
+                scales[i] = transform.GetScale()
+            return ops_utils.place(scales, device=self._device)
+        # Fabric API
+        elif backend == "fabric":
+            self._get_fabric_hierarchy().update_world_xforms()
+            # ensure fabric data and update selection if needed
+            fabric_data = self._ensure_fabric_data("world-matrix")
+            if not _fabric.update_fabric_selection(
+                stage=self._fabric_stage,
+                data=fabric_data,
+                device=self._device,
+                attr=self._fabric_view_index_attr,
+                count=len(self),
+            ):
+                # TODO: should fall back to other backend???
+                carb.log_error(f"Failed to update fabric selection for {fabric_data['attr']}")
+                return None
+            indices = ops_utils.resolve_indices(indices, count=len(self), device=self._device)
+            scales = fabric_data["cache"]["scales"]
+            wp.launch(
+                _fabric.wk_decompose_fabric_transformation_matrix_to_warp_arrays,
+                dim=(indices.shape[0]),
+                inputs=[
+                    wp.fabricarray(fabric_data["selection"], fabric_data["attr"]),
+                    None,
+                    None,
+                    scales,
+                    indices,
+                    fabric_data["mapping"],
+                ],
+                device=self._device,
+            )
+            return scales[indices].contiguous()
+
     def get_local_scales(self, *, indices: int | list | np.ndarray | wp.array | None = None) -> wp.array:
         """Get the local scales of the prims.
 
@@ -940,13 +1073,8 @@ class XformPrim(Prim):
             scales = np.zeros((indices.shape[0], 3), dtype=np.float32)
             for i, index in enumerate(indices.numpy()):
                 prim = self.prims[index]
-                property_names = prim.GetPropertyNames()
-                assert "xformOp:scale" in property_names, (
-                    f"Undefined 'xformOp:scale' property for the {self.paths[index]} prim. "
-                    "Set the 'reset_xform_op_properties' parameter to True when initializing the class, "
-                    "or call '.reset_xform_op_properties()' manually before doing transform operations"
-                )
-                scales[i] = np.array(prim.GetAttribute("xformOp:scale").Get(), dtype=np.float32)
+                transform = Gf.Transform(UsdGeom.Xformable(prim).GetLocalTransformation(Usd.TimeCode.Default()))
+                scales[i] = np.asarray(transform.GetScale(), dtype=np.float32)
             return ops_utils.place(scales, device=self._device)
         # USDRT API (with FSD and IFabricHierarchy)
         elif backend == "usdrt":
@@ -1020,6 +1148,7 @@ class XformPrim(Prim):
             [... 'xformOp:orient', 'xformOp:scale', 'xformOp:translate', 'xformOpOrder']
         """
         assert self.valid, _MSG_PRIM_NOT_VALID
+        positions, orientations = self.get_world_poses()
         properties_to_remove = [
             "xformOp:rotateX",
             "xformOp:rotateXZY",
@@ -1072,7 +1201,6 @@ class XformPrim(Prim):
             xformable.ClearXformOpOrder()
             xformable.SetXformOpOrder([xform_op_translate, xform_op_orient, xform_op_scale])
         # set pose
-        positions, orientations = self.get_world_poses()
         self.set_world_poses(positions=positions, orientations=orientations)
 
     def reset_to_default_state(self, *, warn_on_non_default_state: bool = False) -> None:

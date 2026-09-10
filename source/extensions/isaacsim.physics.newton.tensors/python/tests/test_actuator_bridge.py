@@ -422,29 +422,44 @@ class TestNewtonActuatorBridge(omni.kit.test.AsyncTestCase):
         stand = self._get_stand_targets(robot)
         steps = 10
 
-        self._reset_state(robot, positions=stand)
-        await self._step(1)
-        small_effort = np.full((1, robot.num_dofs), 2.0, dtype=np.float32)
-        for _ in range(steps):
-            robot.set_dof_efforts(wp.from_numpy(small_effort, dtype=wp.float32))
-            await self._step(1)
-        vel_small = np.abs(robot.get_dof_velocities().numpy().flatten()).copy()
-
-        self._reset_state(robot, positions=stand)
-        await self._step(1)
-        large_effort = np.full((1, robot.num_dofs), 10.0, dtype=np.float32)
-        for _ in range(steps):
-            robot.set_dof_efforts(wp.from_numpy(large_effort, dtype=wp.float32))
-            await self._step(1)
-        vel_large = np.abs(robot.get_dof_velocities().numpy().flatten()).copy()
+        # Compare the peak speed reached during the push rather than the speed
+        # at the final step: a joint driven hard enough reaches its positional
+        # limit inside the window, and the limit constraint arrests its velocity,
+        # so the final-step speed under large effort can fall below the small-effort
+        # steady speed even though the bridge delivered the larger torque.
+        vel_small = await self._peak_dof_speed(robot, stand, 2.0, steps)
+        vel_large = await self._peak_dof_speed(robot, stand, 10.0, steps)
 
         for i in range(robot.num_dofs):
             self.assertGreater(
                 vel_large[i],
                 vel_small[i],
-                f"DOF {i}: larger effort should produce larger velocity. "
+                f"DOF {i}: larger effort should produce larger peak velocity. "
                 f"small={vel_small[i]:.4f}, large={vel_large[i]:.4f}",
             )
+
+    async def _peak_dof_speed(self, robot: Any, stand: np.ndarray, effort: float, steps: int) -> np.ndarray:
+        """Apply a constant effort from the standing pose and return peak per-DOF speed.
+
+        Args:
+            robot: Articulation view.
+            stand: Standing pose to reset to before applying effort.
+            effort: Constant effort magnitude applied to every DOF [N or N·m].
+            steps: Number of physics steps to apply the effort over.
+
+        Returns:
+            Maximum ``abs(velocity)`` observed per DOF across the applied steps.
+        """
+        self._reset_state(robot, positions=stand)
+        await self._step(1)
+        efforts = np.full((1, robot.num_dofs), effort, dtype=np.float32)
+        peak = np.zeros(robot.num_dofs, dtype=np.float32)
+        for _ in range(steps):
+            robot.set_dof_efforts(wp.from_numpy(efforts, dtype=wp.float32))
+            await self._step(1)
+            speed = np.abs(robot.get_dof_velocities().numpy().flatten())
+            peak = np.maximum(peak, speed)
+        return peak
 
     async def test_position_target_moves_joints(self) -> None:
         """Setting standing targets with SDK gains should move all DOFs from zero."""

@@ -60,7 +60,8 @@ Ensure your system is set up with the following before building Isaac Sim:
 
 - **Driver**: See [NVIDIA Driver Requirements](https://docs.omniverse.nvidia.com/dev-guide/latest/common/technical-requirements.html)
 
-- **Internet Access**: Required for downloading the Omniverse Kit SDK, extensions, and tools.
+- **Internet Access**: Required for downloading the Omniverse Kit SDK, extensions, and tools. Allow outbound HTTPS
+  access to `ovextensionsprod.blob.core.windows.net` so the build can resolve public Kit and Isaac Sim extensions.
 
 
 
@@ -266,7 +267,7 @@ A successful [build](#quick-start) is required before packaging.
 The three steps, in order:
 
 1. `python_package --create` stages per-package source trees under `_build/packages/python/` from the wheel definitions in [python_packages.toml](python_packages.toml).
-2. `comment_archive_deps` comments out references to Kit pip-archive extensions (`omni.kit.pip_archive`, `omni.isaac.core_archive`, `omni.isaac.ml_archive`, `omni.pip.compute`, `omni.pip.cloud`, `isaacsim.pip.newton`) in the generated `extension.toml` and `*.kit` files so wheel metadata is self-contained.
+2. `comment_archive_deps` comments out references to Kit pip-archive extensions (`omni.kit.pip_archive`, `omni.isaac.core_archive`, `omni.isaac.ml_archive`, `omni.pip.compute`, `omni.pip.cloud`, `isaacsim.pip.newton`, `isaacsim.pip.nv`, `isaacsim.pip.onnx`) in the generated `extension.toml` and `*.kit` files so wheel metadata is self-contained.
 3. `python_package --wheel` builds the `.whl` files into `_build/packages/dist/`.
 
 Install locally-built wheels into a Python 3.12 virtual environment:
@@ -299,7 +300,13 @@ For building a Docker image, running with Docker Compose, and web-based streamin
   export https_proxy="http://{Your IP address}:7890"
   ```
 
-  - Note: The above command should be used only if you have enabled a proxy software or behind a corporate firewall. Port 7890 should be replaced with the proxy port set by the proxy software.
+  - Use these variables only when you use proxy software or are behind a corporate firewall. Replace port 7890 with
+    the port used by your proxy.
+
+- If dependency resolution reports `found 0 packages` for a public registry such as `kit/prod/sdk` and exits with
+  code 55, verify that the build process can reach `ovextensionsprod.blob.core.windows.net` through your firewall or
+  proxy. Reaching the host with a browser or a separate command-line client does not confirm that the build inherited
+  the same proxy settings.
 
 
 ## Support
@@ -324,4 +331,3 @@ To cite Isaac Sim, click on "Cite this repository" in the right sidebar of the [
 ## Contributing
 
 We do not support direct community contributions at the moment.
-

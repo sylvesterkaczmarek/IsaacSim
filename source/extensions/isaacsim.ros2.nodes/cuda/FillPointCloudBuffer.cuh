@@ -40,17 +40,6 @@ namespace nodes
 * @param stream The stream to use.
 */
 void fillPointCloudBuffer(uint8_t* buffer, const float3* pointCloudData, const std::vector<std::tuple<void*, size_t, size_t>>& orderedFields, const size_t pointWidth, const size_t numPoints, const int maxThreadsPerBlock, const int multiProcessorCount, const int cudaDeviceIndex, cudaStream_t stream);
-
-/**
-* @brief Host-side version of fillPointCloudBuffer. Interleaves xyz + metadata fields into a
-*        contiguous buffer using carb::tasking for parallelism.
-* @param buffer The host buffer to fill.
-* @param pointCloudData The host pointer to the point cloud data, arranged as x, y, z.
-* @param orderedFields The ordered fields. Tuple of (data pointer, size, offset).
-* @param pointWidth The width of the point in bytes.
-* @param numPoints The number of points.
-*/
-void fillPointCloudBufferHost(uint8_t* buffer, const float3* pointCloudData, const std::vector<std::tuple<void*, size_t, size_t>>& orderedFields, const size_t pointWidth, const size_t numPoints);
 }
 }
 }

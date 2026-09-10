@@ -18,10 +18,23 @@
 from __future__ import annotations
 
 import ctypes
+import weakref
 
 import isaacsim.sensors.experimental.rtx.generic_model_output as generic_model_output
 import numpy as np
 import warp as wp
+
+
+def _release_backing_buffer(_buffer: object) -> None:
+    """Release a parsed GMO's backing buffer when the native structure is collected."""
+    del _buffer
+
+
+def _get_model_output_from_buffer(buffer: object) -> generic_model_output.GenericModelOutput:
+    """Parse a GMO and retain the aliased buffer for the native structure's lifetime."""
+    gmo = generic_model_output.getModelOutputFromBuffer(buffer)
+    weakref.finalize(gmo, _release_backing_buffer, buffer)
+    return gmo
 
 
 def parse_generic_model_output_data(data: wp.array) -> generic_model_output.GenericModelOutput:
@@ -58,9 +71,9 @@ def parse_generic_model_output_data(data: wp.array) -> generic_model_output.Gene
         gmo = generic_model_output.GenericModelOutput()
     # build struct from buffer
     elif isinstance(data, wp.array):
-        gmo = generic_model_output.getModelOutputFromBuffer(data.numpy())
+        gmo = _get_model_output_from_buffer(data.numpy())
     elif isinstance(data, np.ndarray):
-        gmo = generic_model_output.getModelOutputFromBuffer(data)
+        gmo = _get_model_output_from_buffer(data)
     # build struct from pointer
     else:
         carb.log_warn("parse_generic_model_output_data: Data provided as pointer")
@@ -70,7 +83,7 @@ def parse_generic_model_output_data(data: wp.array) -> generic_model_output.Gene
         size_in_bytes = int(np.frombuffer(bytes(header[16:24]), np.uint64)[0])
         # - build the GenericModelOutput struct
         buffer = (ctypes.c_char * size_in_bytes).from_address(data)
-        gmo = generic_model_output.getModelOutputFromBuffer(buffer)
+        gmo = _get_model_output_from_buffer(buffer)
     # validate struct (getModelOutputFromBuffer warns if magic number is incorrect)
     if gmo.magicNumber != generic_model_output.getMagicNumberGMO():
         carb.log_warn("parse_generic_model_output_data: Invalid magic number")

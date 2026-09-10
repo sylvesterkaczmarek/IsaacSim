@@ -1,0 +1,38 @@
+# Pip prebundle for isaacsim.asset.validation
+#
+# Delivers the SimReady foundation validation tiers as a single, pre-merged
+# implicit-namespace (PEP 420) package tree under `simready/foundation/`.
+#
+# Why a prebundle instead of the extension's [python.pipapi]:
+# Kit's runtime pipapi installs each requirement with its own `pip install
+# --target <shared-dir>` call. pip's `--target` mode refuses to write into a
+# top-level directory (`simready/`) that already exists, so once the first
+# `simready.*` wheel creates it, a second wheel's `simready/foundation/...`
+# payload is silently skipped -> `ModuleNotFoundError: No module named
+# 'simready.foundation'`. Installing BOTH tiers together in ONE pip pass into one
+# target dir avoids the per-package clobber entirely.
+#
+# Runtime dependencies are already provided by the surrounding Kit runtime and by
+# other prebundles, so install_dependencies stays false (matching the other isaac
+# pip prebundles):
+#   - usd_validation_nvidia  -> omni.asset_validator.core/pip_prebundle
+#   - pxr, numpy             -> Kit
+# The tiers' non-runtime deps (jinja2, usd_profiles_nvidia, ...) are codegen-time
+# only and are intentionally not shipped here.
+#
+# Versions are pinned exactly: the published wheels are pre-releases (0.0.1aN), and
+# pip ignores pre-releases unless the specifier pins them exactly (an exact `==`
+# pin opts into the pre-release). Bump these as new tier wheels are published.
+
+[[dependency]]
+python = "../_build/target-deps/python"
+packages = [
+    "simready-foundation-tier-core==0.0.1a6",  # SimReady foundation core validation tier
+    "simready-foundation-tier-isaac==0.0.1a6", # SimReady foundation Isaac Sim validation tier
+]
+target = "../_build/target-deps/isaac_simready_tiers_prebundle"
+platforms = ["*-x86_64", "linux-aarch64"]
+download_only = false
+install_dependencies = false
+append_to_install_folder = true
+gather_licenses_path = "../_build/PACKAGE-LICENSES/PIP-prebundled-LICENSES.txt"

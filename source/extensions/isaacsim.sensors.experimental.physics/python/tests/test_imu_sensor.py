@@ -34,7 +34,7 @@ from isaacsim.core.experimental.prims import Articulation, GeomPrim, RigidPrim, 
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.sensors.experimental.physics import IMU, IMUSensor, IMUSensorReading
 from isaacsim.storage.native import get_assets_root_path_async
-from pxr import Gf, UsdGeom, UsdUtils
+from pxr import Gf, Sdf, UsdGeom, UsdPhysics, UsdUtils
 
 from .common import (
     ANGLE_TOLERANCE_DEG,
@@ -44,6 +44,7 @@ from .common import (
     GRAVITY_TOLERANCE,
     MOON_GRAVITY,
     ORIENTATION_TOLERANCE,
+    is_physx_engine,
     reset_timeline,
     setup_ant_scene,
     step_simulation,
@@ -83,13 +84,14 @@ class TestIMUSensor(omni.kit.test.AsyncTestCase):
             self._imu_sensors[prim_path] = IMUSensor(prim_path)
         return self._imu_sensors[prim_path]
 
-    async def _setup_ant(self, physics_rate: Any = 60) -> None:
+    async def _setup_ant(self, physics_rate: Any = 60, **kwargs: Any) -> None:
         """Load the ant scene and configure ant-specific test data.
 
         Args:
             physics_rate: Physics simulation rate in Hz.
+            **kwargs: Forwarded to ``setup_ant_scene``.
         """
-        self._ant_config = await setup_ant_scene(physics_rate)
+        self._ant_config = await setup_ant_scene(physics_rate, **kwargs)
         self._stage = stage_utils.get_current_stage()
         await omni.kit.app.get_app().next_update_async()
         self.ant = XformPrim("/Ant", reset_xform_op_properties=True)
@@ -348,7 +350,7 @@ class TestIMUSensor(omni.kit.test.AsyncTestCase):
         """Test gravity m."""
         await self._setup_ant()
         await self._add_sensor_prims()
-        self.ant.set_world_poses(positions=[0, 0, 1])
+        self.ant.set_world_poses(positions=[0, 0, 1.5])
         UsdGeom.SetStageMetersPerUnit(self._stage, 1.0)
 
         await omni.kit.app.get_app().next_update_async()
@@ -369,6 +371,230 @@ class TestIMUSensor(omni.kit.test.AsyncTestCase):
             sensor_reading_no_gravity = backend.get_sensor_reading(read_gravity=False)
         self.assertAlmostEqual(sensor_reading.linear_acceleration_z, EARTH_GRAVITY, delta=GRAVITY_TOLERANCE)
         self.assertAlmostEqual(sensor_reading_no_gravity.linear_acceleration_z, 0, delta=GRAVITY_TOLERANCE)
+
+    @staticmethod
+    def _sensor_acceleration(sensor: IMUSensor, *, read_gravity: bool) -> list[float]:
+        """Read one IMU sample as a plain ``[x, y, z]`` linear acceleration list.
+
+        Args:
+            sensor: Sensor to sample.
+            read_gravity: Whether the accelerometer channel includes the gravity reaction term.
+
+        Returns:
+            Linear acceleration components in the sensor frame.
+        """
+        reading = sensor.get_sensor_reading(read_gravity=read_gravity)
+        return [
+            reading.linear_acceleration_x,
+            reading.linear_acceleration_y,
+            reading.linear_acceleration_z,
+        ]
+
+    async def test_gravity_y_up_stage_unauthored_direction(self) -> None:
+        """A resting body on a Y-up stage reads ``+g`` on y when ``gravityDirection`` is unauthored.
+
+        ``UsdPhysicsScene.gravityDirection`` defaults to ``(0, 0, 0)``, which the USD Physics
+        specification defines as a request to use the negative stage up axis. The sensor must
+        resolve that the same way the physics engine does, otherwise the gravity reaction term
+        lands on the wrong axis and the reading is wrong on two axes at once.
+
+        Restricted to PhysX: the Newton backend rotates a stage whose up axis is not Z into its
+        own Z-up frame, so the poses and velocities it reports back (and therefore the whole
+        sensor frame) are rotated relative to USD world space. Asserting USD-frame axes against
+        that backend would be testing the up-axis conversion, not the gravity fallback.
+        """
+        if not is_physx_engine():
+            return
+        await stage_utils.create_new_stage_async()
+        await omni.kit.app.get_app().next_update_async()
+        stage = stage_utils.get_current_stage()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
+        stage_utils.set_stage_units(meters_per_unit=1.0)
+        SimulationManager.setup_simulation(dt=1.0 / self._sensor_rate)
+
+        # A static collision box is used instead of GroundPlane so the ground orientation does
+        # not depend on the stage up axis. Leave the physics scene's gravity attributes
+        # unauthored: that is what puts the up-axis fallback under test.
+        ground_path = "/World/YUpGround"
+        Cube(ground_path, sizes=1.0, positions=[0.0, -0.5, 0.0], scales=[20.0, 1.0, 20.0])
+        GeomPrim(ground_path, apply_collision_apis=True)
+
+        cube_path = "/World/YUpCube"
+        Cube(cube_path, sizes=1.0, positions=[0.0, 3.0, 0.0])
+        GeomPrim(cube_path, apply_collision_apis=True)
+        RigidPrim(cube_path, masses=[1.0])
+
+        sensor = IMUSensor(
+            IMU.create(
+                cube_path + "/y_up_imu",
+                translations=[[0.0, 0.0, 0.0]],
+                orientations=[[1.0, 0.0, 0.0, 0.0]],
+            )
+        )
+        self._imu_sensors[sensor.imu.paths[0]] = sensor
+
+        await omni.kit.app.get_app().next_update_async()
+        self._timeline.play()
+
+        # Free fall pins down what the physics engine actually did: coordinate acceleration is
+        # engine-derived (a finite difference of the rigid body's velocity), so -g on y proves
+        # the engine resolved the unauthored gravity direction to the negative stage up axis.
+        await step_simulation(0.2)
+        free_fall = self._sensor_acceleration(sensor, read_gravity=False)
+        message = f"free-fall linear acceleration {free_fall}"
+        self.assertAlmostEqual(free_fall[1], -EARTH_GRAVITY, delta=GRAVITY_TOLERANCE, msg=message)
+        self.assertAlmostEqual(free_fall[2], 0.0, delta=GRAVITY_TOLERANCE, msg=message)
+
+        # In free fall an accelerometer is weightless on every axis, so the gravity reaction
+        # term has to cancel the coordinate acceleration exactly.
+        weightless = self._sensor_acceleration(sensor, read_gravity=True)
+        message = f"free-fall specific force {weightless}"
+        for axis in range(3):
+            self.assertAlmostEqual(weightless[axis], 0.0, delta=GRAVITY_TOLERANCE, msg=message)
+
+        # At rest on the ground the accelerometer measures +g on the axis opposing gravity.
+        await step_simulation(2.0)
+        resting = self._sensor_acceleration(sensor, read_gravity=True)
+        message = f"resting specific force {resting}"
+        self.assertAlmostEqual(resting[1], EARTH_GRAVITY, delta=GRAVITY_TOLERANCE, msg=message)
+        self.assertAlmostEqual(resting[0], 0.0, delta=GRAVITY_TOLERANCE, msg=message)
+        self.assertAlmostEqual(resting[2], 0.0, delta=GRAVITY_TOLERANCE, msg=message)
+
+    async def test_centripetal_acceleration_in_circular_motion(self) -> None:
+        """A body in uniform circular motion measures its centripetal acceleration.
+
+        Linear velocity has to be differentiated in the **world** frame, with the resulting
+        acceleration rotated into the sensor frame afterwards. Differentiating the sensor-frame
+        velocity instead drops the transport term ``omega x v``, and this scenario is the case
+        where that term is the whole answer: a body going round a circle with its axes locked to
+        the trajectory has the constant sensor-frame velocity ``(0, omega * r, 0)``, so a
+        sensor-frame difference reports no acceleration at all while the body is really
+        accelerating at ``omega^2 * r`` toward the centre.
+
+        A revolute joint driven at a constant rate supplies the centripetal force, so the
+        trajectory stays exact without writing poses every step. The body's ``+x`` axis is
+        pinned radially outward by the joint, which puts the inward centripetal term on ``-x``.
+
+        Restricted to PhysX: Newton does not carry the body around the world-anchored revolute
+        joint, so the commanded motion is gone within a step and no rotation is left to put the
+        transport term under test.
+        """
+        if not is_physx_engine():
+            return
+
+        radius = 2.0
+        angular_speed = 2.0  # rad/s
+
+        await stage_utils.create_new_stage_async()
+        await omni.kit.app.get_app().next_update_async()
+        stage = stage_utils.get_current_stage()
+        stage_utils.set_stage_units(meters_per_unit=1.0)
+        # One physics step per app update. Substepping would hide the defect: the sensor's world
+        # transform is only refreshed once per app update, so consecutive substeps share an
+        # orientation and their velocity difference stays in a single frame either way.
+        SimulationManager.setup_simulation(dt=1.0 / self._sensor_rate)
+
+        body_path = "/World/CarouselBody"
+        Cube(body_path, sizes=0.2, positions=[radius, 0.0, 0.0])
+        RigidPrim(body_path, masses=[1.0])
+        # Damping would apply a torque the drive has to fight, leaving a steady-state rate error.
+        body_prim = stage.GetPrimAtPath(body_path)
+        body_prim.CreateAttribute("physxRigidBody:linearDamping", Sdf.ValueTypeNames.Float).Set(0.0)
+        body_prim.CreateAttribute("physxRigidBody:angularDamping", Sdf.ValueTypeNames.Float).Set(0.0)
+
+        # No body0 means the joint anchors to the world, so localPos0 is the world-space centre
+        # of rotation and localPos1 places the body one radius out along its own +x axis.
+        joint = UsdPhysics.RevoluteJoint.Define(stage, "/World/CarouselJoint")
+        joint.CreateBody1Rel().SetTargets([body_path])
+        joint.CreateAxisAttr("Z")
+        joint.CreateLocalPos0Attr(Gf.Vec3f(0.0, 0.0, 0.0))
+        joint.CreateLocalPos1Attr(Gf.Vec3f(-radius, 0.0, 0.0))
+        # A pure velocity drive: with no stiffness the steady state needs no torque, so the rate
+        # settles on the target. Angular drive targets are in degrees per second.
+        drive = UsdPhysics.DriveAPI.Apply(joint.GetPrim(), "angular")
+        drive.CreateTypeAttr().Set(UsdPhysics.Tokens.force)
+        drive.CreateStiffnessAttr().Set(0.0)
+        drive.CreateDampingAttr().Set(1.0e6)
+        drive.CreateTargetVelocityAttr().Set(math.degrees(angular_speed))
+
+        sensor = IMUSensor(
+            IMU.create(
+                body_path + "/carousel_imu",
+                translations=[[0.0, 0.0, 0.0]],
+                orientations=[[1.0, 0.0, 0.0, 0.0]],
+                linear_acceleration_filter_size=1,
+                angular_velocity_filter_size=1,
+                orientation_filter_size=1,
+            )
+        )
+        self._imu_sensors[sensor.imu.paths[0]] = sensor
+
+        await omni.kit.app.get_app().next_update_async()
+        self._timeline.play()
+        await omni.kit.app.get_app().next_update_async()
+
+        # Pin the step ratio rather than trusting it to fall out of the dt above. Under
+        # substepping the sensor's world transform is refreshed once per app update, so the
+        # substeps after the first difference velocity against an unchanged orientation and the
+        # pre-fix code lands on the right answer by accident. This test would keep passing while
+        # discriminating nothing, so assert the condition it depends on.
+        steps_before = SimulationManager.get_num_physics_steps()
+        await omni.kit.app.get_app().next_update_async()
+        steps_per_update = SimulationManager.get_num_physics_steps() - steps_before
+        self.assertEqual(
+            steps_per_update,
+            1,
+            msg=f"carousel needs one physics step per app update to expose the transport term, got {steps_per_update}",
+        )
+
+        # Launch the arm at the commanded rate. The drive on its own takes several seconds to
+        # spin a 2 m arm up, and during the ramp the tangential term alpha x r dominates; the
+        # transport term is only isolated once the rate is constant. From the target rate the
+        # drive has no error to correct, so the motion is steady immediately.
+        RigidPrim(body_path).set_velocities(
+            linear_velocities=[[0.0, angular_speed * radius, 0.0]],
+            angular_velocities=[[0.0, 0.0, angular_speed]],
+        )
+        await step_simulation(0.5)
+
+        # Guard the setup: with no rotation there is no transport term to measure, and every
+        # assertion below would pass for the wrong reason.
+        reading = sensor.get_sensor_reading(read_gravity=False)
+        self.assertTrue(reading.is_valid, "carousel IMU reading should be valid while spinning")
+        self.assertAlmostEqual(
+            reading.angular_velocity_z,
+            angular_speed,
+            delta=ANGULAR_VEL_TOLERANCE,
+            msg=f"carousel drive should hold {angular_speed} rad/s, got {reading.angular_velocity_z}",
+        )
+        # The guard stays coarse on purpose. The reported angular velocity is the body's
+        # instantaneous rate, while the acceleration is a difference of tangential velocity over
+        # the step, and the two do not agree to better than a couple of percent while the drive
+        # settles: measured here as 1.958 rad/s against an acceleration of 8.007, which implies
+        # 2.001. Deriving the expected magnitude from the reported rate, or tightening this guard
+        # to match the magnitude tolerance, therefore fails a run whose acceleration is correct.
+        expected_centripetal = angular_speed * angular_speed * radius  # stage linear units / s^2
+
+        no_gravity = self._sensor_acceleration(sensor, read_gravity=False)
+        message = f"circular-motion coordinate acceleration {no_gravity}"
+        # The magnitude is what the transport term supplies, and it is free of the phase lag
+        # below: without the term the in-plane reading is zero rather than short.
+        in_plane = math.hypot(no_gravity[0], no_gravity[1])
+        self.assertAlmostEqual(in_plane, expected_centripetal, delta=GRAVITY_TOLERANCE, msg=message)
+        self.assertAlmostEqual(no_gravity[2], 0.0, delta=GRAVITY_TOLERANCE, msg=message)
+        # The vector points inward, along the sensor's -x. It trails that axis by a fraction of
+        # a degree per rad/s: the acceleration is the mean over the differenced step while the
+        # orientation it is rotated by is sampled one step behind, and the two do not coincide.
+        trailing_angle_deg = abs(math.degrees(math.atan2(no_gravity[1], -no_gravity[0])))
+        self.assertLess(trailing_angle_deg, 5.0, msg=message)
+
+        # The gravity reaction term rides on top of the centripetal one, both in the sensor
+        # frame; the joint axis is vertical, so gravity stays on z.
+        specific_force = self._sensor_acceleration(sensor, read_gravity=True)
+        message = f"circular-motion specific force {specific_force}"
+        in_plane = math.hypot(specific_force[0], specific_force[1])
+        self.assertAlmostEqual(in_plane, expected_centripetal, delta=GRAVITY_TOLERANCE, msg=message)
+        self.assertAlmostEqual(specific_force[2], EARTH_GRAVITY, delta=GRAVITY_TOLERANCE, msg=message)
 
     async def test_gravity_moon_m(self) -> None:
         """Test gravity moon m."""
@@ -392,6 +618,8 @@ class TestIMUSensor(omni.kit.test.AsyncTestCase):
 
     async def test_gravity_cm(self) -> None:
         """Test gravity cm."""
+        if not is_physx_engine():
+            return
         await self._setup_ant()
         await self._add_sensor_prims()
 
@@ -484,81 +712,69 @@ class TestIMUSensor(omni.kit.test.AsyncTestCase):
         )
         self.assertIsNotNone(sensor)
 
-        low_rolling_avg_size_reading = np.zeros(
-            6,
+        sensor_2 = IMUSensor(
+            IMU.create(
+                self.sphere_path + "/sphere_imu_2",
+                translations=[[0.0, 0.0, 0.0]],
+                orientations=[[1.0, 0.0, 0.0, 0.0]],
+                linear_acceleration_filter_size=20,
+                angular_velocity_filter_size=20,
+                orientation_filter_size=20,
+            )
         )
-        high_rolling_avg_size_reading = np.zeros(
-            6,
-        )
+        self.assertIsNotNone(sensor_2)
+
+        low_rolling_avg_size_reading = []
+        high_rolling_avg_size_reading = []
 
         self._timeline.play()
         # wait for the ant to settle down
         for i in range(200):
             await omni.kit.app.get_app().next_update_async()
 
-        # test 1, when the rolling average is 1, should expect larger fluctuations
+        # sample both filter widths on the same motion each step: the small
+        # window (1) should fluctuate more than the large window (20)
         for i in range(50):
             await omni.kit.app.get_app().next_update_async()
-            sensor_reading = self._get_imu_sensor(self.sphere_path + "/sphere_imu_1").get_sensor_reading()
+            low_reading = self._get_imu_sensor(self.sphere_path + "/sphere_imu_1").get_sensor_reading()
+            high_reading = self._get_imu_sensor(self.sphere_path + "/sphere_imu_2").get_sensor_reading()
 
-            if not sensor_reading.is_valid:
+            if not (low_reading.is_valid and high_reading.is_valid):
                 continue
 
-            readings = np.array(
+            low_rolling_avg_size_reading.append(
                 [
-                    sensor_reading.linear_acceleration_x,
-                    sensor_reading.linear_acceleration_y,
-                    sensor_reading.linear_acceleration_z,
-                    sensor_reading.angular_velocity_x,
-                    sensor_reading.angular_velocity_y,
-                    sensor_reading.angular_velocity_z,
+                    low_reading.linear_acceleration_x,
+                    low_reading.linear_acceleration_y,
+                    low_reading.linear_acceleration_z,
+                    low_reading.angular_velocity_x,
+                    low_reading.angular_velocity_y,
+                    low_reading.angular_velocity_z,
+                ]
+            )
+            high_rolling_avg_size_reading.append(
+                [
+                    high_reading.linear_acceleration_x,
+                    high_reading.linear_acceleration_y,
+                    high_reading.linear_acceleration_z,
+                    high_reading.angular_velocity_x,
+                    high_reading.angular_velocity_y,
+                    high_reading.angular_velocity_z,
                 ]
             )
 
-            low_rolling_avg_size_reading = np.vstack((low_rolling_avg_size_reading, readings))
+        # Ensure we collected valid readings
+        self.assertGreater(len(low_rolling_avg_size_reading), 0, "No valid sensor readings collected for low filter")
+        self.assertGreater(len(high_rolling_avg_size_reading), 0, "No valid sensor readings collected for high filter")
 
-        # Ensure we collected enough valid readings (more than just the initial zeros row)
-        self.assertGreater(
-            low_rolling_avg_size_reading.shape[0], 1, "No valid sensor readings collected for low filter"
-        )
+        low_rolling_avg_size_reading = np.array(low_rolling_avg_size_reading)
+        high_rolling_avg_size_reading = np.array(high_rolling_avg_size_reading)
 
         low_rolling_avg_size_1th_percentile = np.percentile(low_rolling_avg_size_reading, 1, axis=0)
         low_rolling_avg_size_99th_percentile = np.percentile(low_rolling_avg_size_reading, 99, axis=0)
 
         low_rolling_avg_size_diff = np.subtract(
             low_rolling_avg_size_99th_percentile, low_rolling_avg_size_1th_percentile
-        )
-
-        # test 2, when the rolling average is 20, should expect lower fluctuations
-        sensor.imu._isaac_sensor_prim.CreateLinearAccelerationFilterWidthAttr().Set(20)
-        sensor.imu._isaac_sensor_prim.CreateAngularVelocityFilterWidthAttr().Set(20)
-        sensor.imu._isaac_sensor_prim.CreateOrientationFilterWidthAttr().Set(20)
-
-        await omni.kit.app.get_app().next_update_async()
-
-        for i in range(50):
-            await omni.kit.app.get_app().next_update_async()
-            sensor_reading = self._get_imu_sensor(self.sphere_path + "/sphere_imu_1").get_sensor_reading()
-
-            if not sensor_reading.is_valid:
-                continue
-
-            readings = np.array(
-                [
-                    sensor_reading.linear_acceleration_x,
-                    sensor_reading.linear_acceleration_y,
-                    sensor_reading.linear_acceleration_z,
-                    sensor_reading.angular_velocity_x,
-                    sensor_reading.angular_velocity_y,
-                    sensor_reading.angular_velocity_z,
-                ]
-            )
-
-            high_rolling_avg_size_reading = np.vstack((high_rolling_avg_size_reading, readings))
-
-        # Ensure we collected enough valid readings (more than just the initial zeros row)
-        self.assertGreater(
-            high_rolling_avg_size_reading.shape[0], 1, "No valid sensor readings collected for high filter"
         )
 
         high_rolling_avg_size_1th_percentile = np.percentile(high_rolling_avg_size_reading, 1, axis=0)
@@ -663,7 +879,7 @@ class TestIMUSensor(omni.kit.test.AsyncTestCase):
     async def test_imu_rigidbody_grandparent(self) -> None:
         """Validate IMU readings through nested transform hierarchy changes."""
         await self._setup_ant()
-        Cube("/World/Cube", sizes=1.0, positions=[10.0, 0.0, 0.0])
+        Cube("/World/Cube", sizes=1.0, positions=[10.0, 0.0, 0.5])
         GeomPrim("/World/Cube", apply_collision_apis=True)
         RigidPrim("/World/Cube", masses=[1.0])
 
@@ -857,7 +1073,7 @@ class TestIMUSensor(omni.kit.test.AsyncTestCase):
         # Get velocities - in free fall, the cube should have non-zero negative Z velocity
         linear_vel, _ = rigid_prim.get_velocities()
 
-        linear_velocity_z = float(np.array(linear_vel[0])[2])
+        linear_velocity_z = float(linear_vel.numpy()[0, 2])
 
         # After 0.1s of free fall: v = g*t ≈ 9.81 * 0.1 ≈ -0.981 m/s (negative because falling)
         # Allow some tolerance for simulation startup
@@ -871,7 +1087,7 @@ class TestIMUSensor(omni.kit.test.AsyncTestCase):
         await step_simulation(0.2)
 
         linear_vel2, _ = rigid_prim.get_velocities()
-        linear_velocity_z2 = float(np.array(linear_vel2[0])[2])
+        linear_velocity_z2 = float(linear_vel2.numpy()[0, 2])
 
         # After 0.3s total: v ≈ 9.81 * 0.3 ≈ -2.94 m/s
         self.assertLess(
@@ -1026,7 +1242,7 @@ class TestIMUSensorRuntimeData(omni.kit.test.AsyncTestCase):
         return
 
     async def test_data_values_gravity_toggle(self) -> None:
-        """Test data values gravity toggle."""
+        """Verify a resting body reads +g with gravity and 0 without, capturing both first."""
         await reset_timeline(self._timeline, steps=2)
         data = None
         for _ in range(60):
@@ -1036,13 +1252,58 @@ class TestIMUSensorRuntimeData(omni.kit.test.AsyncTestCase):
             await omni.kit.app.get_app().next_update_async()
         self.assertIsNotNone(data)
         self.assertGreater(data["time"], 0.0)
-        self.assertAlmostEqual(float(data["linear_acceleration"][2]), EARTH_GRAVITY, delta=GRAVITY_TOLERANCE)
-
-        data_no_gravity = self._imu.get_data(read_gravity=False)
-        self.assertAlmostEqual(float(data_no_gravity["linear_acceleration"][2]), 0.0, delta=GRAVITY_TOLERANCE)
-
         orientation_norm = float(np.linalg.norm(data["orientation"]))
+
+        # Capture both toggle states before asserting, mirroring how callers compare the two
+        # readings.
+        acceleration_with_gravity = float(self._imu.get_data(read_gravity=True)["linear_acceleration"][2])
+        acceleration_without_gravity = float(self._imu.get_data(read_gravity=False)["linear_acceleration"][2])
+
+        # A resting body measures the gravity reaction as specific force and has zero
+        # coordinate acceleration.
+        self.assertAlmostEqual(acceleration_with_gravity, EARTH_GRAVITY, delta=GRAVITY_TOLERANCE)
+        self.assertAlmostEqual(acceleration_without_gravity, 0.0, delta=GRAVITY_TOLERANCE)
+
         self.assertAlmostEqual(orientation_norm, 1.0, delta=ORIENTATION_TOLERANCE)
+
+    async def test_data_frame_is_independent(self) -> None:
+        """Verify `get_data` returns a frame no later call can disturb."""
+        await reset_timeline(self._timeline, steps=2)
+        first = None
+        for _ in range(60):
+            first = self._imu.get_data()
+            if abs(float(first["linear_acceleration"][2]) - EARTH_GRAVITY) <= GRAVITY_TOLERANCE:
+                break
+            await omni.kit.app.get_app().next_update_async()
+        self.assertIsNotNone(first)
+        self.assertGreater(first["time"], 0.0)
+
+        # A later call must not touch an earlier result: neither the dict nor any of its arrays.
+        linear_acceleration = first["linear_acceleration"]
+        second = self._imu.get_data(read_gravity=False)
+        self.assertIsNot(first, second)
+        for key in ["linear_acceleration", "angular_velocity", "orientation"]:
+            self.assertIsNot(first[key], second[key])
+        self.assertAlmostEqual(float(linear_acceleration[2]), EARTH_GRAVITY, delta=GRAVITY_TOLERANCE)
+        self.assertAlmostEqual(float(second["linear_acceleration"][2]), 0.0, delta=GRAVITY_TOLERANCE)
+
+        # The channels keep their documented shapes and dtype after the slicing.
+        for key, size in [("linear_acceleration", 3), ("angular_velocity", 3), ("orientation", 4)]:
+            self.assertEqual(first[key].shape, (size,), msg=key)
+            self.assertEqual(first[key].dtype, np.float32, msg=key)
+
+        # The returned arrays are writable and caller-owned, and writing one must not disturb
+        # any other frame. Asserting against `second` rather than a fresh call is what makes
+        # this non-vacuous: a fresh call refreshes from a valid reading and would mask aliasing.
+        for key in ["linear_acceleration", "angular_velocity", "orientation"]:
+            self.assertTrue(first[key].flags.writeable, msg=key)
+        linear_acceleration[2] = -1.0
+        self.assertAlmostEqual(float(second["linear_acceleration"][2]), 0.0, delta=GRAVITY_TOLERANCE)
+
+        # Nor may it leak into the sensor's own bookkeeping and be re-served to a later caller.
+        self.assertAlmostEqual(
+            float(self._imu.get_data()["linear_acceleration"][2]), EARTH_GRAVITY, delta=GRAVITY_TOLERANCE
+        )
 
     async def test_timeline_reset(self) -> None:
         """Verify frame updates are consistent across timeline stop/start."""

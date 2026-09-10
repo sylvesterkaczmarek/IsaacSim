@@ -65,9 +65,7 @@ from pxr import Sdf, Usd, UsdGeom
 
 
 class Scene(object):
-    """Provide methods to add objects of interest in the stage to retrieve their information and set their.
-
-    reset default state in an easy way.
+    """Provides methods to add objects of interest in the stage, retrieve their information, and reset their default state in an easy way.
 
     Example:
 
@@ -78,7 +76,6 @@ class Scene(object):
         >>> scene = Scene()
         >>> scene
         <isaacsim.core.api.scenes.scene.Scene object at 0x...>
-
     """
 
     def __init__(self) -> None:
@@ -108,7 +105,6 @@ class Scene(object):
             Usd.Stage.Open(rootLayer=Sdf.Find('anon:0x...usd'),
                            sessionLayer=Sdf.Find('anon:0x...usda'),
                            pathResolverContext=<invalid repr>)
-
         """
         return get_current_stage()
 
@@ -119,7 +115,8 @@ class Scene(object):
             obj: Object to be added.
 
         Raises:
-            Exception: The object type is not supported yet.
+            Exception: If an object with the same name already exists in the scene registry.
+            TypeError: If the object type is not supported.
 
         Returns:
             Object.
@@ -133,7 +130,6 @@ class Scene(object):
             >>> prims = XFormPrim(prim_paths_expr="/World")
             >>> scene.add(prims)
             <isaacsim.core.prims.XFormPrim object at 0x...>
-
         """
         if self._scene_registry.name_exists(obj.name):
             raise Exception(f"Cannot add the object {obj.name} to the scene since its name is not unique")
@@ -220,7 +216,6 @@ class Scene(object):
 
             >>> scene.add_ground_plane()
             <isaacsim.core.api.objects.ground_plane.GroundPlane object at 0x...>
-
         """
         if Scene.object_exists(self, name=name):
             carb.log_info(f"ground floor already created with name {name}.")
@@ -275,7 +270,6 @@ class Scene(object):
             >>> scene.add_default_ground_plane()
             server...
             <isaacsim.core.api.objects.ground_plane.GroundPlane object at 0x...>
-
         """
         if Scene.object_exists(self, name=name):
             carb.log_info(f"ground floor already created with name {name}.")
@@ -307,7 +301,6 @@ class Scene(object):
         .. code-block:: python
 
             >>> scene.post_reset()
-
         """
         prim_registries_available = [
             self._scene_registry._geometry_objects,
@@ -352,7 +345,6 @@ class Scene(object):
 
         Args:
             physics_sim_view: Physics simulation view to initialize objects with.
-
         """
         for xform_name, xform_object in self._scene_registry.xforms.items():
             xform_object.initialize(physics_sim_view)
@@ -398,7 +390,7 @@ class Scene(object):
         return
 
     def remove_object(self, name: str, registry_only: bool = False) -> None:
-        """Remove and object from the scene registry and the USD stage if specified (enable by default).
+        """Remove an object from the scene registry and the USD stage if specified.
 
         Args:
             name: Name of the prim to be removed.
@@ -410,7 +402,6 @@ class Scene(object):
 
             >>> # given a default ground plane named 'default_ground_plane'
             >>> scene.remove_object("default_ground_plane")
-
         """
         prim_object = self.get_object(name=name)
         # sometimes the prim path is under a reference
@@ -445,7 +436,7 @@ class Scene(object):
         return
 
     def get_object(self, name: str) -> SingleXFormPrim:
-        """Get a registered object by its name if exists otherwise None.
+        """Get a registered object by its name if it exists, otherwise None.
 
         .. note::
 
@@ -455,7 +446,7 @@ class Scene(object):
             name: Object name.
 
         Returns:
-            Object if it exists otherwise None.
+            Object if it exists, otherwise None.
 
         Example:
 
@@ -464,7 +455,6 @@ class Scene(object):
             >>> # given a default ground plane named 'default_ground_plane'
             >>> scene.get_object("default_ground_plane")
             <isaacsim.core.api.objects.ground_plane.GroundPlane object at 0x...>
-
         """
         return self._scene_registry.get_object(name=name)
 
@@ -475,7 +465,7 @@ class Scene(object):
             name: Object name.
 
         Returns:
-            Whether the object exists in the scene registry or not.
+            Whether the object exists in the scene registry.
 
         Example:
 
@@ -484,7 +474,6 @@ class Scene(object):
             >>> # given a default ground plane named 'default_ground_plane'
             >>> scene.object_exists("default_ground_plane")
             True
-
         """
         if self._scene_registry.name_exists(name):
             return True
@@ -492,17 +481,16 @@ class Scene(object):
             return False
 
     def clear(self, registry_only: bool = False) -> None:
-        """Clear the stage from all added objects to the scene registry.
+        """Clear all objects added to the scene registry from the stage.
 
         Args:
-            registry_only: True to remove the object from the scene registry only and not the USD.
+            registry_only: True to remove objects from the scene registry only and not the USD.
 
         Example:
 
         .. code-block:: python
 
             >>> scene.clear()
-
         """
         # Group all of the stage delete events together
         with Sdf.ChangeBlock():
@@ -560,16 +548,17 @@ class Scene(object):
         .. warning::
 
             The bounding box computations should be enabled, via the ``enable_bounding_boxes_computations`` method,
-            before querying the Axis-Aligned Bounding Box (AABB) of an object
+            before querying the Axis-Aligned Bounding Box (AABB) of an object.
 
         Args:
-            name: object name
+            name: Object name.
 
         Raises:
-            Exception: If the bounding box computation is not enabled
+            Exception: If the bounding box computation is not enabled.
+            ValueError: If the registered object is a view class.
 
         Returns:
-            bounding box points (minimum and maximum)
+            Bounding box points with the minimum point and maximum point.
 
         Example:
 
@@ -582,7 +571,6 @@ class Scene(object):
             array([-50., -50.,  0.])
             >>> bbox[1]  # maximum
             array([50., 50.,  0.])
-
         """
         if not self._enable_bounding_box_computations:
             raise Exception("bounding box computations should be enabled before querying AABB of an object")
@@ -594,14 +582,13 @@ class Scene(object):
         return np.array([np.array(prim_range.GetMin()), np.array(prim_range.GetMax())])
 
     def enable_bounding_boxes_computations(self) -> None:
-        """Enable the bounding boxes computations.
+        """Enable bounding box computations for registered objects.
 
         Example:
 
         .. code-block:: python
 
             >>> scene.enable_bounding_boxes_computations()
-
         """
         self._bbox_cache = UsdGeom.BBoxCache(
             time=Usd.TimeCode.Default(), includedPurposes=[UsdGeom.Tokens.default_], useExtentsHint=False
@@ -610,14 +597,13 @@ class Scene(object):
         return
 
     def disable_bounding_boxes_computations(self) -> None:
-        """Disable the bounding boxes computations.
+        """Disable bounding box computations for registered objects.
 
         Example:
 
         .. code-block:: python
 
             >>> scene.disable_bounding_boxes_computations()
-
         """
         self._bbox_cache = None
         self._enable_bounding_box_computations = False

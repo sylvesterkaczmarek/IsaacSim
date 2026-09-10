@@ -86,6 +86,8 @@ buffer = om.get_buffer()
 _omap.release_omap_interface(om)
 ```
 
+Acquisitions are reference counted: the interface stays valid until every holder releases it exactly once.
+
 ### Utility Functions
 
 The extension provides utility functions for common operations:
@@ -220,6 +222,8 @@ generator.generate3d()
 - Verify collision geometry exists on objects
 - Check that bounds encompass the scene
 - Confirm timeline is playing during generation
+- Construct a new `Generator` after replacing the stage; a stale one produces an empty map
+- Check `get_dimensions()` before reshaping the buffer; an empty map reports `(0, 0, 0)`
 
 ### Performance Issues
 

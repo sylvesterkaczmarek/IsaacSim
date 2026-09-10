@@ -25,7 +25,7 @@ def prim_get_xform_op_order(prim: Usd.Prim) -> list[str]:
     """Returns the order of Xform ops on a given prim.
 
     Args:
-        prim: The prim to get xform op order from.
+        prim: The USD prim to get xform op order from.
 
     Returns:
         List of xform op names in order, or empty list if no ops exist.
@@ -43,7 +43,7 @@ def prim_set_xform_op_order(prim: Usd.Prim, op_order: Sequence[str]) -> Usd.Prim
     """Sets the order of Xform ops on a given prim.
 
     Args:
-        prim: The prim to set xform op order on.
+        prim: The USD prim to set xform op order on.
         op_order: Sequence of xform op names in desired order.
 
     Returns:
@@ -61,7 +61,10 @@ def prim_xform_op_move_end_to_front(prim: Usd.Prim) -> Usd.Prim:
         prim: The USD prim to modify.
 
     Returns:
-        The modified pform.
+        The modified prim.
+
+    Raises:
+        IndexError: If the prim has no xform ops.
     """
     order = prim_get_xform_op_order(prim)
     end = order.pop(-1)
@@ -74,7 +77,7 @@ def prim_get_num_xform_ops(prim: Usd.Prim) -> int:
     """Returns the number of xform ops on a given prim.
 
     Args:
-        prim: The prim to count xform ops for.
+        prim: The USD prim to count xform ops for.
 
     Returns:
         The number of xform ops.
@@ -180,12 +183,10 @@ def prim_get_local_transform(prim: Usd.Prim) -> tuple[np.ndarray, np.ndarray]:
     See https://openusd.org/release/api/class_usd_geom_xformable.html
 
     Args:
-        prim: The prim to calculate the local transformation.
+        prim: The USD prim to calculate the local transformation.
 
     Returns:
-        A tuple of:
-        - Translation vector.
-        - Rotation quaternion, i.e. 3d vector plus angle.
+        A tuple containing the translation vector and rotation quaternion.
     """
     xform = UsdGeom.Xformable(prim)
     local_transformation: Gf.Matrix4d = xform.GetLocalTransformation()
@@ -201,12 +202,10 @@ def prim_get_world_transform(prim: Usd.Prim) -> tuple[np.ndarray, np.ndarray]:
     See https://openusd.org/release/api/class_usd_geom_xformable.html
 
     Args:
-        prim: The prim to calculate the world transformation.
+        prim: The USD prim to calculate the world transformation.
 
     Returns:
-        A tuple of:
-        - Translation vector.
-        - Rotation quaternion, i.e. 3d vector plus angle.
+        A tuple containing the translation vector and rotation quaternion.
     """
     xform = UsdGeom.Xformable(prim)
     time = Usd.TimeCode.Default()  # The time at which we compute the bounding box

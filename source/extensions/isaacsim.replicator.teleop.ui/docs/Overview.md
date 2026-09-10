@@ -2,6 +2,14 @@
 
 The isaacsim.replicator.teleop.ui extension provides the desktop UI for VR teleoperation in Isaac Sim. It creates a window accessible from **Tools > Replicator > Teleop** that exposes all configuration and control surfaces for the `isaacsim.replicator.teleop` runtime.
 
+On platforms without the Isaac Teleop package, including Windows, the same
+window remains available for profiles, frame markers, Debug Mode, visual cues,
+and supported controllers. The live **Connect** button is disabled with an
+availability explanation; enable **Debug Mode** to drive targets from viewport
+markers and the synthetic input controls. MCAP replay and live OpenXR input are
+unavailable without Isaac Teleop, and PINK is omitted from the IK solver list
+when its optional backend is absent.
+
 ## Key Components
 
 ### {class}`TeleopUIExtension <isaacsim.replicator.teleop.ui.TeleopUIExtension>`
@@ -29,7 +37,7 @@ The last-used profile is automatically restored when the window opens. Profile v
 
 ### Session Panel
 
-OpenXR connection controls (**Connect** / **Disconnect**), frame marker management (**Show** / **Remove** with adjustable scale), Tracking Space prim selection with coordinate system dropdown, XR Anchor configuration (position offset, rotation mode, smoothing, fixed-height lock), and a **Debug** section with synthetic input controls (thumbstick sliders, trigger sliders, locomotion buttons) and a **Write Backend** dropdown to override the global XformPrim backend (USD / USD-RT / Fabric).
+**Connect** / **Disconnect** establish or tear down the OpenXR teleop session. Start CloudXR externally first (`python -m isaacteleop.cloudxr --accept-eula`). Frame marker management (**Show** / **Remove** with adjustable scale), Tracking Space prim selection with coordinate system dropdown, XR Anchor configuration (position offset, rotation mode, smoothing, fixed-height lock), and a **Debug** section with synthetic input controls (thumbstick, trigger, and squeeze sliders plus locomotion buttons) and a **Write Backend** dropdown to override the global XformPrim backend (USD / USD-RT / Fabric).
 
 ### Recording & Replay
 
@@ -50,7 +58,7 @@ Per-side controls for {class}`RobotIKController <isaacsim.replicator.teleop.Robo
 
 ### Grasp Controller Panel
 
-Per-side controls for {class}`GraspController <isaacsim.replicator.teleop.GraspController>`: prim path field, built-in YAML config selector, and configure/enable/disable buttons.
+Per-side controls for {class}`GraspController <isaacsim.replicator.teleop.GraspController>`: prim path field, built-in YAML config selector, and configure/enable/disable buttons. Profiles also carry the side's grasp drive mode. The default `trigger` mode drives every configured joint from one trigger value; `retargeted/trihand` independently maps trigger and squeeze to semantic thumb, index, and middle outputs, then resolves them to USD joints through profile `joint_aliases`. The built-in `floating_xarm_dex3_retargeted.yaml` profile configures this mode for the right Dex3 hand. **Validate** reports unsupported semantics and aliases missing from the grasp config or current USD stage.
 
 ### Locomotion Panel
 

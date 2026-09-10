@@ -75,6 +75,48 @@ class _DropdownModel:
         return _ItemValueModel(self._index)
 
 
+class _BoolModel:
+    """Provide a minimal checkbox model for UI tests.
+
+    Args:
+        value: Initial checkbox value.
+    """
+
+    def __init__(self, value: bool) -> None:
+        self._value = value
+
+    def get_value_as_bool(self) -> bool:
+        """Return the stored checkbox value.
+
+        Returns:
+            Stored checkbox value.
+        """
+        return self._value
+
+
+class _Timeline:
+    """Records timeline calls made by the map generation task."""
+
+    def __init__(self) -> None:
+        self.calls = []
+
+    def play(self) -> None:
+        """Record a play request."""
+        self.calls.append("play")
+
+    def stop(self) -> None:
+        """Record a stop request."""
+        self.calls.append("stop")
+
+
+class _FailingOccupancyMap:
+    """Occupancy map fake that fails during generation."""
+
+    def generate(self) -> None:
+        """Raise a synthetic generation failure."""
+        raise RuntimeError("synthetic generation failure")
+
+
 class TestOccupancyMapUI(omni.kit.test.AsyncTestCase):
     """Test suite for the Occupancy Map UI extension.
 
@@ -278,4 +320,22 @@ class TestOccupancyMapUI(omni.kit.test.AsyncTestCase):
             # but _ros_yaml_text should still be updated
             self.assertIn("image: my_map.png", window._ros_yaml_text)
         finally:
+            window.destroy()
+
+    async def test_generate_map_stops_timeline_when_generate_raises(self) -> None:
+        """Tests that the async map generation task always stops the timeline."""
+        await omni.usd.get_context().new_stage_async()
+        window = OccupancyMapWindow()
+        timeline = _Timeline()
+        real_om = window._om
+        try:
+            window._timeline = timeline
+            window._om = _FailingOccupancyMap()
+            window._models["physx_geom"] = _BoolModel(True)
+
+            await window._generate_map_async()
+
+            self.assertEqual(timeline.calls, ["stop", "play", "stop"])
+        finally:
+            window._om = real_om
             window.destroy()

@@ -17,4 +17,4 @@
 
 from .extension import Extension as Extension
 
-__all__ = []
+__all__ = ["Extension"]

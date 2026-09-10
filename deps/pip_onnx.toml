@@ -1,0 +1,24 @@
+# ONNX pip prebundle for policy inference examples.
+#
+# The GPU wheel uses the CUDA runtime libraries supplied by isaacsim.pip.nv on Linux. Windows
+# resolves those libraries from the packaged runtime, while Linux AArch64 uses the CPU wheel.
+
+[[dependency]]
+python = "../_build/target-deps/python"
+packages = ["onnxruntime-gpu==1.26.0"]
+target = "../_build/target-deps/isaac_onnx_prebundle"
+platforms = ["*-x86_64"]
+download_only = false
+install_dependencies = false
+append_to_install_folder = true
+gather_licenses_path = "../_build/PACKAGE-LICENSES/PIP-prebundled-LICENSES.txt"
+
+[[dependency]]
+python = "../_build/target-deps/python"
+packages = ["onnxruntime==1.26.0"]
+target = "../_build/target-deps/isaac_onnx_prebundle"
+platforms = ["linux-aarch64"]
+download_only = false
+install_dependencies = false
+append_to_install_folder = true
+gather_licenses_path = "../_build/PACKAGE-LICENSES/PIP-prebundled-LICENSES.txt"

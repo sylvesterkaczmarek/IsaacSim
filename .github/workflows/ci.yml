@@ -1,0 +1,184 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: CI
+
+on:
+  push:
+    branches:
+      - develop
+      - 'dev/**'
+      - 'release/**'
+      - "pull-request/[0-9]+"
+      - main
+      - 'public-main'
+      - develop
+      - 'public-develop'
+      - staging
+  workflow_dispatch:
+    inputs:
+      run_optional_tests:
+        description: "Run optional (non-blocking) test suites"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+jobs:
+  # ===========================================================================
+  # Checks
+  # ===========================================================================
+  checks:
+    uses: ./.github/workflows/checks.yml
+
+  # ===========================================================================
+  # Build Matrix (Release)
+  # ===========================================================================
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            config: release
+    uses: ./.github/workflows/build.yml
+    with:
+      platform: ${{ matrix.platform }}
+      config: ${{ matrix.config }}
+
+  # ===========================================================================
+  # Build Matrix (Coverage)
+  # ===========================================================================
+  build-cov:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            config: release
+    uses: ./.github/workflows/build-cov.yml
+    with:
+      platform: ${{ matrix.platform }}
+      config: ${{ matrix.config }}
+
+  # ===========================================================================
+  # Test Matrix - Blocking (uses coverage build)
+  # ===========================================================================
+  test-blocking:
+    needs: build-cov
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            config: release
+            suite: startuptests
+            bucket: ""
+          - platform: linux-x86_64
+            config: release
+            suite: warmuptests
+            bucket: ""
+          - platform: linux-x86_64
+            config: release
+            suite: postinstalltests
+            bucket: ""
+          - platform: linux-x86_64
+            config: release
+            suite: pythontests
+            bucket: asset
+          - platform: linux-x86_64
+            config: release
+            suite: pythontests
+            bucket: deprecated
+    uses: ./.github/workflows/test.yml
+    with:
+      platform: ${{ matrix.platform }}
+      config: ${{ matrix.config }}
+      suite: ${{ matrix.suite }}
+      bucket: ${{ matrix.bucket }}
+      coverage: true
+
+  # ===========================================================================
+  # Test Matrix - Optional (workflow_dispatch only)
+  # ===========================================================================
+  test-optional:
+    needs: build-cov
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_optional_tests }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            config: release
+            suite: pythontests
+            bucket: core
+          - platform: linux-x86_64
+            config: release
+            suite: pythontests
+            bucket: examples_tests
+          - platform: linux-x86_64
+            config: release
+            suite: pythontests
+            bucket: replicator
+          - platform: linux-x86_64
+            config: release
+            suite: pythontests
+            bucket: ros
+          - platform: linux-x86_64
+            config: release
+            suite: pythontests
+            bucket: sensors
+          - platform: linux-x86_64
+            config: release
+            suite: pythontests
+            bucket: robot
+          - platform: linux-x86_64
+            config: release
+            suite: pythontests
+            bucket: other
+          - platform: linux-x86_64
+            config: release
+            suite: nativepythontests
+            bucket: api
+          - platform: linux-x86_64
+            config: release
+            suite: nativepythontests
+            bucket: deprecated
+          - platform: linux-x86_64
+            config: release
+            suite: nativepythontests
+            bucket: testing
+          # TEMPORARILY MOVED TO OPTIONAL
+          - platform: linux-x86_64
+            config: release
+            suite: pythontests
+            bucket: utils_gui
+          - platform: linux-x86_64
+            config: release
+            suite: nativepythontests
+            bucket: replicator
+    uses: ./.github/workflows/test.yml
+    with:
+      platform: ${{ matrix.platform }}
+      config: ${{ matrix.config }}
+      suite: ${{ matrix.suite }}
+      bucket: ${{ matrix.bucket }}
+      coverage: true
+
+  # ===========================================================================
+  # Combine Coverage (runs after all tests, even if some fail)
+  # ===========================================================================
+  combine-coverage:
+    needs: [build-cov, test-blocking, test-optional]
+    if: always() && needs.build-cov.result == 'success'
+    uses: ./.github/workflows/combine-coverage.yml
+    with:
+      platform: linux-x86_64
+      config: release

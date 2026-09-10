@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.0] - 2026-07-22
+### Added
+- `OgnHSBSend`: optional `calibrationIntrinsics` (`double[]`) and `calibrationTranslation` (`double[3]`) inputs, forwarded to `HSBSender::setCalibration` and programmed into the emulated VB1940 rig EEPROM (I²C peripheral `0x51`).
+- `OgnHSBCameraHelper.py`: reads the parent USDA Camera prim to compute fx/fy/cx/cy and packs them into the new `OgnHSBSend` inputs, with a default Eagle stereo baseline.
+
+## [1.0.4] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
 ## [1.0.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

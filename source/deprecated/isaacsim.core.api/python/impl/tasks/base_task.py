@@ -24,16 +24,16 @@ from isaacsim.core.utils.stage import get_current_stage, get_stage_units
 
 
 class BaseTask(object):
-    """This class provides a way to set up a task in a scene and modularize adding objects to stage,.
+    """This class provides a way to set up a task in a scene and modularize adding objects to a stage.
 
-    getting observations needed for the behavioral layer, calculating metrics needed about the task,
-    calling certain things pre-stepping, creating multiple tasks at the same time and much more.
+    It gets observations needed for the behavioral layer, calculates metrics needed about the task,
+    calls certain things pre-stepping, creates multiple tasks at the same time and much more.
 
-    Checkout the required tutorials at https://docs.isaacsim.omniverse.nvidia.com/latest/index.html
+    Check out the required tutorials at https://docs.isaacsim.omniverse.nvidia.com/latest/index.html
 
     Args:
-        name: needs to be unique if added to the World.
-        offset: offset applied to all assets of the task.
+        name: Must be unique if added to the World.
+        offset: Offset applied to all assets of the task.
 
     Raises:
         RuntimeError: If the current USD stage or USD stage meters-to-unit conversion factor is not valid.
@@ -67,7 +67,6 @@ class BaseTask(object):
 
         Returns:
             The simulation device instance.
-
         """
         return self._device
 
@@ -77,7 +76,6 @@ class BaseTask(object):
 
         Returns:
             The scene instance associated with this task.
-
         """
         return self._scene
 
@@ -87,18 +85,14 @@ class BaseTask(object):
 
         Returns:
             The task name.
-
         """
         return self._name
 
     def set_up_scene(self, scene: Scene) -> None:
-        """Adding assets to the stage as well as adding the encapsulated objects such as SingleXFormPrim..etc.
-
-               to the task_objects happens here.
+        """Add assets to the stage and register encapsulated objects such as SingleXFormPrim in task_objects.
 
         Args:
             scene: The scene to set up with task assets.
-
         """
         self._scene = scene
         return
@@ -120,47 +114,43 @@ class BaseTask(object):
         return
 
     def get_task_objects(self) -> dict:
-        """Get all objects registered with the task.
+        """All objects registered with the task.
 
         Returns:
             Dictionary of task objects keyed by name.
-
         """
         return self._task_objects
 
     def get_observations(self) -> dict:
-        """Returns current observations from the objects needed for the behavioral layer.
+        """Current observations from the objects needed for the behavioral layer.
 
         Raises:
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
             Dictionary containing task-specific observations.
-
         """
         raise NotImplementedError
 
     def calculate_metrics(self) -> dict:
-        """Calculate and return task metrics.
+        """Calculate task metrics.
 
         Raises:
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
             Dictionary containing calculated task metrics.
-
         """
         raise NotImplementedError
 
     def is_done(self) -> bool:
-        """Returns True of the task is done.
+        """True if the task is done.
 
         Raises:
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
             True if the task is complete, False otherwise.
-
         """
         raise NotImplementedError
 
@@ -170,28 +160,23 @@ class BaseTask(object):
         Args:
             time_step_index: Current physics step index.
             simulation_time: Current simulation time in seconds.
-
         """
         return
 
     def post_reset(self) -> None:
-        """Calls while doing a .reset() on the world."""
+        """Called while doing a .reset() on the world."""
         return
 
     def get_description(self) -> str:
-        """Get a description of the task.
+        """Gets a description of the task.
 
         Returns:
-            A string describing the task.
-
+            The task description.
         """
         return ""
 
     def cleanup(self) -> None:
-        """Called before calling a reset() on the world to removed temporary objects that were added during.
-
-        simulation for instance.
-        """
+        """Called before calling reset() on the world to remove temporary objects added during simulation."""
         return
 
     def set_params(self, *args: object, **kwargs: object) -> None:
@@ -203,23 +188,21 @@ class BaseTask(object):
 
         Raises:
             NotImplementedError: Must be implemented by subclass.
-
         """
         raise NotImplementedError
 
     def get_params(self) -> dict:
         """Gets the parameters of the task.
 
-               This is defined differently for each task in order to access the task's objects and values.
-               Note that this is different from get_observations.
-               Things like the robot name, block name..etc can be defined here for faster retrieval.
-               should have the form of params_representation["param_name"] = {"value": param_value, "modifiable": bool}.
+        This is defined differently for each task in order to access the task's objects and values.
+        Note that this is different from get_observations.
+        Things like the robot name, block name, etc. can be defined here for faster retrieval.
+        Parameters should have the form of params_representation["param_name"] = {"value": param_value, "modifiable": bool}.
+
+        Returns:
+            The parameters of the task.
 
         Raises:
             NotImplementedError: Must be implemented by subclass.
-
-        Returns:
-            Defined parameters of the task.
-
         """
         raise NotImplementedError

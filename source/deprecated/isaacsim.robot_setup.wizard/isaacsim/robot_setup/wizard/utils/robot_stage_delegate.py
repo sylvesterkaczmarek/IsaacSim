@@ -48,9 +48,6 @@ class RobotContextMenu(ContextMenu):
 
         Args:
             event: Mouse event containing stage, prim path, and other context data.
-
-        Returns:
-            None if the event type is not ACTIVATE, context menu is not available, or stage is not available.
         """
         import omni.kit.menu.core
 
@@ -136,7 +133,7 @@ class RobotContextMenu(ContextMenu):
             objects: Context menu data containing prim information.
 
         Returns:
-            True if prim path has at least 4 parts (robot/link/link_name/component).
+            True if the prim path has at least 4 parts (robot/link/link_name/component).
         """
         if "prim_list" not in objects:
             return False
@@ -155,7 +152,7 @@ class RobotContextMenu(ContextMenu):
             objects: Context menu data containing the selected prim.
 
         Returns:
-            True if reference mesh was successfully registered.
+            True if the reference mesh was successfully registered.
         """
         registered_robot = RobotRegistry().get()
         if registered_robot is None:
@@ -180,7 +177,7 @@ class RobotContextMenu(ContextMenu):
             objects: Context menu data.
 
         Returns:
-            True if one or more prim is selected otherwise False.
+            True if one or more prims are selected, otherwise False.
         """
         if not any(item in objects for item in ["prim", "prim_list"]):
             return False
@@ -193,7 +190,7 @@ class RobotContextMenu(ContextMenu):
             objects: Context menu data.
 
         Returns:
-            True if one prim is selected otherwise False.
+            True if one prim is selected, otherwise False.
         """
         if "prim_list" not in objects:
             return False
@@ -206,7 +203,7 @@ class RobotContextMenu(ContextMenu):
             objects: Context menu data.
 
         Returns:
-            True if prim can be deleted otherwise False.
+            True if prims can be deleted, otherwise False.
         """
         if not any(item in objects for item in ["prim", "prim_list"]):
             return False

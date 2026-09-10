@@ -1,5 +1,5 @@
 [package]
-version = "2.0.19"
+version = "2.0.21"
 category = "Simulation"
 title = "Isaac Sim Merge Mesh"
 description = "Isaac Sim tool to facilitate combining meshes together in a single USD Prim. It provides the ability to reset the mesh origin to world origin, and combining all materials into a single list, combining materials with the same characteristics."
@@ -29,6 +29,7 @@ dependencies = [
     "omni.kit.material.library",
     "omni.kit.primitive.mesh",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]
@@ -79,3 +80,6 @@ args = [
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
 ]
+
+[documentation]
+pages = ["docs/Overview.md","docs/commands_api.md"]

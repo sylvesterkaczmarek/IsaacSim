@@ -62,9 +62,6 @@ def define_joints(joint_path: str, joint_type: str, axis: str, parent: str, chil
         parent: USD path of the parent body for the joint.
         child: USD path of the child body for the joint.
         **kwargs: Additional keyword arguments passed to the function.
-
-    Returns:
-        None if the input is invalid or the joint creation fails.
     """
     if joint_type is None or parent is None or child is None or axis is None:
         print("joint_type, parent, child, axis are required")
@@ -154,11 +151,13 @@ def apply_joint_settings(joint_path: str, **kwargs: object) -> None:
 
     Args:
         joint_path: USD path of the joint to apply settings to.
-        **kwargs: Additional keyword arguments for joint configuration including break_force, break_torque,
-            lower_limit, and upper_limit.
+        **kwargs: Additional keyword arguments for joint configuration.
 
-    Returns:
-        None if the joint prim or stage is invalid, or if the joint is a fixed joint.
+    Keyword Args:
+        break_force: Break force to set on the joint.
+        break_torque: Break torque to set on the joint.
+        lower_limit: Lower limit to set on the joint.
+        upper_limit: Upper limit to set on the joint.
     """
     stage = omni.usd.get_context().get_stage()
     joint_prim = stage.GetPrimAtPath(joint_path)
@@ -203,11 +202,15 @@ def apply_drive_settings(joint_path: str, **kwargs: object) -> None:
 
     Args:
         joint_path: USD path of the joint to apply drive settings to.
-        **kwargs: Additional keyword arguments for drive configuration including drive_type, max_force,
-            target_velocity, target_position, damping, and stiffness.
+        **kwargs: Additional keyword arguments for drive configuration.
 
-    Returns:
-        None if the joint prim or stage is invalid, or if the joint type is unsupported.
+    Keyword Args:
+        drive_type: Drive type to set on the joint drive.
+        max_force: Maximum force to set on the joint drive.
+        target_velocity: Target velocity to set on the joint drive.
+        target_position: Target position to set on the joint drive.
+        damping: Damping value to set on the joint drive.
+        stiffness: Stiffness value to set on the joint drive.
     """
     stage = omni.usd.get_context().get_stage()
     joint_prim = stage.GetPrimAtPath(joint_path)

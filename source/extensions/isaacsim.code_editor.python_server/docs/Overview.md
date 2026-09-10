@@ -14,6 +14,17 @@ Wait for `app ready` in the output, then connect from any TCP client on port 822
 
 ## Functionality
 
+### Runtime Lifecycle
+
+The extension exposes immutable status snapshots and narrow start, stop, and transactional restart APIs. A failed
+endpoint change keeps or restores the last working listener.
+
+The core extension has no UI dependency and runs in headless applications. Enable the optional
+``isaacsim.code_editor.python_server.ui`` extension for the ``PY Server`` indicator and runtime controls.
+
+Other extensions can query the same immutable runtime snapshot with
+``isaacsim.code_editor.python_server.get_server_status()``. It returns ``None`` while the extension is unavailable.
+
 ### Code Execution Server
 
 The extension creates an async TCP server that listens for incoming Python source code. When code is received, it executes within Isaac Sim's Python environment using the Executor class, which handles both statements and expressions. Results, including output, evaluated expression values, errors, and tracebacks, are transmitted back as JSON.
@@ -91,7 +102,7 @@ print("hello")
 ```python
 import asyncio, json
 
-async def send_envelope(envelope: dict, host="SERVER_HOST", port=8226, token="TOKEN") -> dict:
+async def send_envelope(envelope: dict, host="127.0.0.1", port=8226, token="TOKEN") -> dict:
     reader, writer = await asyncio.open_connection(host, port)
     envelope = {**envelope, "auth_token": token}
     writer.write(json.dumps(envelope).encode())
@@ -222,10 +233,10 @@ print(data["result"])
 import asyncio
 import json
 
-async def send_code(code: str, host: str = "SERVER_HOST", port: int = 8226, token: str = "TOKEN") -> dict:
+async def send_code(code: str, host: str = "127.0.0.1", port: int = 8226, token: str = "TOKEN") -> dict:
     """Send Python code to Isaac Sim and return the JSON response."""
     reader, writer = await asyncio.open_connection(host, port)
-    if token:
+    if token: 
         code = f"# isaacsim-python-server-token: {token}\n{code}"
     writer.write(code.encode())
     writer.write_eof()  # Signal end-of-input (required)
@@ -244,7 +255,7 @@ print(result)
 ### netcat (quick test)
 
 ```bash
-printf '# isaacsim-python-server-token: TOKEN\nprint("hello")\n' | nc -q 0 SERVER_HOST 8226
+printf '# isaacsim-python-server-token: TOKEN\nprint("hello")\n' | nc -q 0 127.0.0.1 8226
 ```
 
 ## Key Components

@@ -20,7 +20,7 @@
 #include <carb/logging/Log.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/hsb/core/IHsbCore.h>
+#include <isaacsim/hsb/core/IHsbCore.hpp>
 
 const struct carb::PluginImplDesc g_kPluginDesc = { "isaacsim.hsb.core.plugin", "Isaac HSB Core Plugin", "NVIDIA",
                                                     carb::PluginHotReload::eDisabled, "dev" };

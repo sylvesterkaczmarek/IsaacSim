@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "TestBase.h"
+#include "TestBase.hpp"
 
 #include <doctest/doctest.h>
-#include <isaacsim/ros2/core/Ros2Factory.h>
+#include <isaacsim/ros2/core/Ros2Factory.hpp>
 #include <pxr/base/gf/quatd.h>
 #include <pxr/base/gf/vec3d.h>
 

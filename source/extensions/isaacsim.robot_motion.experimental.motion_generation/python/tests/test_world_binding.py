@@ -17,10 +17,10 @@
 
 """Verify synchronization from USD obstacles into a planning-world interface.
 
-The tests cover empty and invalid bindings, collision API filtering, primitive
-property updates, mesh and triangulated-mesh insertion, oriented bounding boxes,
-transform-only versus property-only synchronization, motion-generation collision
-API tracking, and ancestor-scale validation.
+The tests cover empty and invalid bindings, collision API filtering, initial
+property extraction for all supported primitive shapes, mesh and
+triangulated-mesh insertion, oriented bounding boxes, transform synchronization,
+and ancestor-scale validation.
 """
 
 import numpy as np
@@ -35,6 +35,7 @@ from isaacsim.core.experimental.objects import (
     Sphere,
 )
 from isaacsim.core.experimental.prims import GeomPrim
+from isaacsim.core.experimental.utils import app as app_utils
 from isaacsim.core.experimental.utils.stage import create_new_stage_async
 from isaacsim.robot_motion.experimental.motion_generation import (
     ObstacleConfiguration,
@@ -43,7 +44,6 @@ from isaacsim.robot_motion.experimental.motion_generation import (
     TrackableApi,
     WorldBinding,
 )
-from omni.kit.app import get_app
 
 # a world interface which exactly mirrors the inputs it is given. This will be used to test the WorldBinding class.
 from .mirror_world_interface import MirrorOrientedBoundingBox, MirrorTriangulatedMesh, MirrorWorldInterface
@@ -53,21 +53,17 @@ from .mirror_world_interface import MirrorOrientedBoundingBox, MirrorTriangulate
 class TestWorldBinding(omni.kit.test.AsyncTestCase):
     """Test class for validating WorldBinding functionality.
 
-    This class provides comprehensive test coverage for the WorldBinding class, which synchronizes USD stage
-    objects with planning world interfaces. Tests cover initialization, synchronization, property updates,
-    and various geometric primitive types including spheres, cubes, cones, planes, capsules, cylinders,
-    and meshes.
+    This class provides comprehensive test coverage for the WorldBinding class, which initializes USD stage
+    objects in planning world interfaces and synchronizes their transforms.
 
     The test suite validates:
 
     - Basic WorldBinding initialization and error handling
-    - Transform and property synchronization between USD stage and planning world
+    - Initial obstacle-property extraction and transform synchronization
     - Collision API validation and requirements
-    - Geometric primitive property updates (radius, size, length, etc.)
     - Mesh handling for both regular and triangulated representations
     - Oriented bounding box collision representations
     - Scene validation for ancestor scaling constraints
-    - Selective synchronization of transforms vs properties
 
     Tests use a MirrorWorldInterface that mirrors input data, enabling validation of correct data
     transfer from USD stage to planning world objects.
@@ -78,23 +74,19 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         """Set up test environment before each test."""
         await create_new_stage_async()
 
-        await get_app().next_update_async()
-
-        # Initialize timeline
-        self._timeline = omni.timeline.get_timeline_interface()
+        await app_utils.update_app_async()
 
     # After running each test
     async def tearDown(self) -> None:
         """Clean up test environment after each test."""
-        # Stop timeline if running
-        if self._timeline.is_playing():
-            self._timeline.stop()
+        if app_utils.is_playing():
+            app_utils.stop()
 
         # Clean up physics callbacks if any
         if hasattr(self, "sample") and self.sample:
             self.sample.physics_cleanup()
 
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
     async def test_empty_world_binding(self) -> None:
         """Test creating WorldBinding with empty world interface and handling non-existent prims."""
@@ -106,10 +98,10 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
             tracked_collision_api=TrackableApi.PHYSICS_COLLISION,
         )
         world_binding.initialize()
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
-        # we can call synchronize, and it will run, though nothing happens.
-        world_binding.synchronize()
+        # Transform synchronization is a no-op for an empty binding.
+        world_binding.synchronize_transforms()
 
         # create a new world binding, with a tracked prim which does not exist in the stage:
         world_binding: WorldBinding[MirrorWorldInterface] = WorldBinding(
@@ -122,9 +114,9 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         # initialize should raise a RuntimeError, since the prim does not exist in the stage.
         self.assertRaises(RuntimeError, world_binding.initialize)
 
-        # world binding should not be initialized, so synchronize should raise a RuntimeError.
+        # world binding should not be initialized, so transform synchronization should raise a RuntimeError.
         self.assertFalse(world_binding._initialized)
-        self.assertRaises(RuntimeError, world_binding.synchronize)
+        self.assertRaises(RuntimeError, world_binding.synchronize_transforms)
 
     async def test_world_binding_rejects_non_collision_api(self) -> None:
         """Test that WorldBinding rejects non-collision APIs and validates API selection."""
@@ -132,10 +124,10 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         self.assertRaises(
             ValueError,
             WorldBinding,
-            MirrorWorldInterface(),
-            ObstacleStrategy(),
-            [],
-            TrackableApi.PHYSICS_RIGID_BODY,
+            world_interface=MirrorWorldInterface(),
+            obstacle_strategy=ObstacleStrategy(),
+            tracked_prims=[],
+            tracked_collision_api=TrackableApi.PHYSICS_RIGID_BODY,
         )
 
         # Empty tracked_prims still validates the API selection.
@@ -158,12 +150,8 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         world_binding_motion.initialize()
         self.assertTrue(world_binding_motion._initialized)
 
-    async def test_common_updates(self) -> None:
-        """Test that the WorldBinding class can correctly update the world interface when the common tokens change.
-
-        This includes the world transforms, the collision enabled outputs, and the local-transform which is
-        used to track the scales.
-        """
+    async def test_initialization_and_transform_updates(self) -> None:
+        """Test initial obstacle population and runtime transform synchronization."""
         # create a couple of prims to use:
         stage_sphere = Sphere(
             paths="/World/Sphere",
@@ -196,7 +184,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
             tracked_collision_api=TrackableApi.PHYSICS_COLLISION,
         )
 
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
         # Trying to initialize will raise a RuntimeError, since the prims do not have the CollisionAPI applied.
         self.assertRaises(RuntimeError, world_binding.initialize)
 
@@ -206,7 +194,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         cube_geom.apply_collision_apis()
         cube_geom.set_enabled_collisions(True)
 
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         # initialize should now succeed:
         world_binding.initialize()
@@ -232,7 +220,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.isclose(planning_world_cube.pose[0], [-1.0, -2.0, -3.0]).all())
         self.assertTrue(np.isclose(planning_world_cube.pose[1], [0.0, 1.0, 0.0, 0.0]).all())
 
-        # now, I can move the sphere and cube, and synchronize should update the world binding:
+        # Moving the sphere and cube should update the binding after transform synchronization.
         stage_sphere.set_world_poses(
             positions=[4.0, 5.0, 6.0],
             orientations=[0.0, 0.0, 1.0, 0.0],
@@ -243,7 +231,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
             orientations=[0.0, 0.0, 0.0, 1.0],
         )
         # update the sim with the new poses:
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         # before synchronizing, the planning world parameters will not match the stage parameters:
         self.assertFalse(np.isclose(planning_world_sphere.pose[0], [4.0, 5.0, 6.0]).all())
@@ -251,7 +239,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         self.assertFalse(np.isclose(planning_world_sphere.pose[1], [0.0, 0.0, 1.0, 0.0]).all())
         self.assertFalse(np.isclose(planning_world_cube.pose[1], [0.0, 0.0, 0.0, 1.0]).all())
 
-        world_binding.synchronize()
+        world_binding.synchronize_transforms()
 
         # The sphere object should have the most up to date transform of the sphere:
         self.assertIsNotNone(planning_world_sphere)
@@ -263,319 +251,67 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.isclose(planning_world_cube.pose[0], [-4.0, -5.0, -6.0]).all())
         self.assertTrue(np.isclose(planning_world_cube.pose[1], [0.0, 0.0, 0.0, 1.0]).all())
 
-        # Disabling the sphere in the real world:
+        # Runtime property changes are intentionally not synchronized.
         sphere_geom.set_enabled_collisions(enabled=False)
-        await get_app().next_update_async()
-
-        # Now, before synchronizing, the sphere still appears to be enabled:
-        self.assertTrue(planning_world_sphere.enabled)
-        world_binding.synchronize()
-        # after synchronizing, the sphere in the planning world is disabled.
-        # the cube is still enabled.
-        self.assertFalse(planning_world_sphere.enabled)
-        self.assertTrue(planning_world_cube.enabled)
-
-        # Disabling the cube in the real world:
-        cube_geom.set_enabled_collisions(enabled=False)
-        await get_app().next_update_async()
-
-        # Now, before synchronizing, the cube still appears to be enabled:
-        self.assertTrue(planning_world_cube.enabled)
-        world_binding.synchronize()
-        # after synchronizing, the sphere and cube are both disabled
-        self.assertFalse(planning_world_sphere.enabled)
-        self.assertFalse(planning_world_cube.enabled)
-
-        # reenabling both:
-        cube_geom.set_enabled_collisions(True)
-        sphere_geom.set_enabled_collisions(True)
-        await get_app().next_update_async()
-        world_binding.synchronize()
-        self.assertTrue(planning_world_sphere.enabled)
-        self.assertTrue(planning_world_cube.enabled)
-
-        # now, change the scale of the sphere:
         stage_sphere.set_local_scales([2.0, 3.0, 4.0])
-        await get_app().next_update_async()
-
-        # before synchronizing, the planning world sphere is not up-to-date:
-        self.assertIsNotNone(planning_world_sphere)
-        self.assertTrue(np.isclose(planning_world_sphere.scale, [1.0, 1.0, 1.0]).all())
-
-        # We cannot track local scale, so the sphere is not updated even after synchronizing:
-        world_binding.synchronize()
-        self.assertTrue(np.isclose(planning_world_sphere.scale, [1.0, 1.0, 1.0]).all())
-        # the cube should not have changed:
-        self.assertIsNotNone(planning_world_cube)
-        self.assertTrue(np.isclose(planning_world_cube.scale, [2.0, 2.0, 2.0]).all())
-
-        # now, change the cube scale:
         stage_cube.set_local_scales([3.0, 4.0, 5.0])
-        await get_app().next_update_async()
-
-        # before synchronizing, the planning world cube is not up-to-date:
-        self.assertIsNotNone(planning_world_cube)
-        self.assertTrue(np.isclose(planning_world_cube.scale, [2.0, 2.0, 2.0]).all())
-
-        # We cannot track local scale, so the cube is not updated even after synchronizing:
-        world_binding.synchronize()
-        self.assertIsNotNone(planning_world_cube)
-        self.assertTrue(np.isclose(planning_world_cube.scale, [2.0, 2.0, 2.0]).all())
-        # the sphere should not have changed:
-        self.assertIsNotNone(planning_world_sphere)
+        await app_utils.update_app_async()
+        world_binding.synchronize_transforms()
+        self.assertTrue(planning_world_sphere.enabled)
+        self.assertTrue(planning_world_cube.enabled)
         self.assertTrue(np.isclose(planning_world_sphere.scale, [1.0, 1.0, 1.0]).all())
+        self.assertTrue(np.isclose(planning_world_cube.scale, [2.0, 2.0, 2.0]).all())
 
-    async def test_update_sphere_properties(self) -> None:
-        """Test updating sphere radius properties through WorldBinding synchronization."""
-        # create a sphere:
-        stage_sphere = Sphere(
-            paths="/World/Sphere",
-            radii=0.05,
-            positions=[1.0, 2.0, 3.0],
-            orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[1.0, 1.0, 1.0],
-        )
+    async def test_initializes_all_primitive_shape_types(self) -> None:
+        """Test initial property extraction for primitive shape types."""
+        primitive_paths = ["/World/Cone", "/World/Plane", "/World/Capsule", "/World/Cylinder"]
 
-        GeomPrim("/World/Sphere", apply_collision_apis=True)
+        Cone(paths=primitive_paths[0], radii=0.1, heights=0.2, axes="X")
+        Plane(paths=primitive_paths[1], lengths=1.0, widths=2.0, axes="Y")
+        Capsule(paths=primitive_paths[2], radii=0.3, heights=0.4, axes="Z")
+        Cylinder(paths=primitive_paths[3], radii=0.5, heights=0.6, axes="X")
+        GeomPrim(paths=primitive_paths, apply_collision_apis=True)
+        await app_utils.update_app_async()
 
-        await get_app().next_update_async()
-
-        # create our world binding:
+        # Initialize one binding containing all primitive shape types:
+        obstacle_strategy = ObstacleStrategy()
+        obstacle_strategy.set_default_safety_tolerance(0.07)
         world_binding: WorldBinding[MirrorWorldInterface] = WorldBinding(
             world_interface=MirrorWorldInterface(),
-            obstacle_strategy=ObstacleStrategy(),
-            tracked_prims=["/World/Sphere"],
+            obstacle_strategy=obstacle_strategy,
+            tracked_prims=primitive_paths,
             tracked_collision_api=TrackableApi.PHYSICS_COLLISION,
         )
         world_binding.initialize()
-        planning_world_sphere = world_binding.get_world_interface().collision_objects["/World/Sphere"]
+        collision_objects = world_binding.get_world_interface().collision_objects
 
-        # check that the planning world sphere has the correct properties:
-        self.assertIsNotNone(planning_world_sphere)
-        self.assertAlmostEqual(planning_world_sphere.radius, 0.05)
-
-        # now, change the sphere radius:
-        stage_sphere.set_radii(0.1)
-        await get_app().next_update_async()
-
-        # before synchronizing, the planning world sphere is not up-to-date:
-        self.assertIsNotNone(planning_world_sphere)
-        self.assertAlmostEqual(planning_world_sphere.radius, 0.05)
-
-        # after synchronizing, the planning world sphere is up-to-date:
-        world_binding.synchronize()
-        self.assertIsNotNone(planning_world_sphere)
-        self.assertAlmostEqual(planning_world_sphere.radius, 0.1)
-
-    async def test_update_cube_properties(self) -> None:
-        """Test updating cube size properties through WorldBinding synchronization."""
-        stage_cube = Cube(
-            paths="/World/Cube",
-            sizes=0.15,
-            positions=[1.0, 2.0, 3.0],
-            orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[1.0, 1.0, 1.0],
-        )
-
-        GeomPrim("/World/Cube", apply_collision_apis=True)
-
-        await get_app().next_update_async()
-
-        world_binding: WorldBinding[MirrorWorldInterface] = WorldBinding(
-            world_interface=MirrorWorldInterface(),
-            obstacle_strategy=ObstacleStrategy(),
-            tracked_prims=["/World/Cube"],
-            tracked_collision_api=TrackableApi.PHYSICS_COLLISION,
-        )
-        world_binding.initialize()
-        planning_world_cube = world_binding.get_world_interface().collision_objects["/World/Cube"]
-
-        self.assertIsNotNone(planning_world_cube)
-        self.assertAlmostEqual(planning_world_cube.size, 0.15)
-
-        stage_cube.set_sizes(0.25)
-        await get_app().next_update_async()
-
-        self.assertAlmostEqual(planning_world_cube.size, 0.15)
-
-        world_binding.synchronize()
-        self.assertAlmostEqual(planning_world_cube.size, 0.25)
-
-    async def test_update_cone_properties(self) -> None:
-        """Test updating cone radius, height, and axis properties through WorldBinding synchronization."""
-        stage_cone = Cone(
-            paths="/World/Cone",
-            radii=0.1,
-            heights=0.2,
-            axes="Z",
-            positions=[1.0, 2.0, 3.0],
-            orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[1.0, 1.0, 1.0],
-        )
-
-        GeomPrim("/World/Cone", apply_collision_apis=True)
-
-        await get_app().next_update_async()
-
-        world_binding: WorldBinding[MirrorWorldInterface] = WorldBinding(
-            world_interface=MirrorWorldInterface(),
-            obstacle_strategy=ObstacleStrategy(),
-            tracked_prims=["/World/Cone"],
-            tracked_collision_api=TrackableApi.PHYSICS_COLLISION,
-        )
-        world_binding.initialize()
-        planning_world_cone = world_binding.get_world_interface().collision_objects["/World/Cone"]
-
-        self.assertIsNotNone(planning_world_cone)
+        # Verify that each shape is inserted with its authored geometry:
+        planning_world_cone = collision_objects["/World/Cone"]
         self.assertAlmostEqual(planning_world_cone.radius, 0.1)
         self.assertAlmostEqual(planning_world_cone.length, 0.2)
-        self.assertEqual(planning_world_cone.axis, "Z")
-
-        stage_cone.set_radii(0.15)
-        stage_cone.set_heights(0.3)
-        stage_cone.set_axes("X")
-        await get_app().next_update_async()
-
-        self.assertAlmostEqual(planning_world_cone.radius, 0.1)
-        self.assertAlmostEqual(planning_world_cone.length, 0.2)
-        self.assertEqual(planning_world_cone.axis, "Z")
-
-        world_binding.synchronize()
-        self.assertAlmostEqual(planning_world_cone.radius, 0.15)
-        self.assertAlmostEqual(planning_world_cone.length, 0.3)
         self.assertEqual(planning_world_cone.axis, "X")
 
-    async def test_update_plane_properties(self) -> None:
-        """Test updating plane length, width, and axis properties through WorldBinding synchronization."""
-        stage_plane = Plane(
-            paths="/World/Plane",
-            lengths=1.0,
-            widths=2.0,
-            axes="Z",
-            positions=[0.0, 0.0, 0.0],
-            orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[1.0, 1.0, 1.0],
-        )
-
-        GeomPrim("/World/Plane", apply_collision_apis=True)
-
-        await get_app().next_update_async()
-
-        world_binding: WorldBinding[MirrorWorldInterface] = WorldBinding(
-            world_interface=MirrorWorldInterface(),
-            obstacle_strategy=ObstacleStrategy(),
-            tracked_prims=["/World/Plane"],
-            tracked_collision_api=TrackableApi.PHYSICS_COLLISION,
-        )
-        world_binding.initialize()
-        planning_world_plane = world_binding.get_world_interface().collision_objects["/World/Plane"]
-
-        self.assertIsNotNone(planning_world_plane)
+        planning_world_plane = collision_objects["/World/Plane"]
         self.assertAlmostEqual(planning_world_plane.length, 1.0)
         self.assertAlmostEqual(planning_world_plane.width, 2.0)
-        self.assertEqual(planning_world_plane.axis, "Z")
+        self.assertEqual(planning_world_plane.axis, "Y")
 
-        stage_plane.set_lengths(1.5)
-        stage_plane.set_widths(2.5)
-        stage_plane.set_axes("X")
-        await get_app().next_update_async()
-
-        self.assertAlmostEqual(planning_world_plane.length, 1.0)
-        self.assertAlmostEqual(planning_world_plane.width, 2.0)
-        self.assertEqual(planning_world_plane.axis, "Z")
-
-        world_binding.synchronize()
-        self.assertAlmostEqual(planning_world_plane.length, 1.5)
-        self.assertAlmostEqual(planning_world_plane.width, 2.5)
-        self.assertEqual(planning_world_plane.axis, "X")
-
-    async def test_update_capsule_properties(self) -> None:
-        """Test updating capsule radius, height, and axis properties through WorldBinding synchronization."""
-        stage_capsule = Capsule(
-            paths="/World/Capsule",
-            radii=0.1,
-            heights=0.2,
-            axes="Z",
-            positions=[1.0, 2.0, 3.0],
-            orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[1.0, 1.0, 1.0],
-        )
-
-        capsule_geom = GeomPrim("/World/Capsule", apply_collision_apis=True)
-
-        await get_app().next_update_async()
-
-        world_binding: WorldBinding[MirrorWorldInterface] = WorldBinding(
-            world_interface=MirrorWorldInterface(),
-            obstacle_strategy=ObstacleStrategy(),
-            tracked_prims=["/World/Capsule"],
-            tracked_collision_api=TrackableApi.PHYSICS_COLLISION,
-        )
-        world_binding.initialize()
-        planning_world_capsule = world_binding.get_world_interface().collision_objects["/World/Capsule"]
-
-        self.assertIsNotNone(planning_world_capsule)
-        self.assertAlmostEqual(planning_world_capsule.radius, 0.1)
-        self.assertAlmostEqual(planning_world_capsule.length, 0.2)
+        planning_world_capsule = collision_objects["/World/Capsule"]
+        self.assertAlmostEqual(planning_world_capsule.radius, 0.3)
+        self.assertAlmostEqual(planning_world_capsule.length, 0.4)
         self.assertEqual(planning_world_capsule.axis, "Z")
 
-        stage_capsule.set_radii(0.15)
-        stage_capsule.set_heights(0.3)
-        stage_capsule.set_axes("Y")
-        await get_app().next_update_async()
-
-        self.assertAlmostEqual(planning_world_capsule.radius, 0.1)
-        self.assertAlmostEqual(planning_world_capsule.length, 0.2)
-        self.assertEqual(planning_world_capsule.axis, "Z")
-
-        world_binding.synchronize()
-        self.assertAlmostEqual(planning_world_capsule.radius, 0.15)
-        self.assertAlmostEqual(planning_world_capsule.length, 0.3)
-        self.assertEqual(planning_world_capsule.axis, "Y")
-
-    async def test_update_cylinder_properties(self) -> None:
-        """Test that cylinder property updates synchronize correctly through WorldBinding."""
-        stage_cylinder = Cylinder(
-            paths="/World/Cylinder",
-            radii=0.2,
-            heights=0.4,
-            axes="Z",
-            positions=[1.0, 2.0, 3.0],
-            orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[1.0, 1.0, 1.0],
-        )
-
-        cylinder_geom = GeomPrim("/World/Cylinder", apply_collision_apis=True)
-
-        await get_app().next_update_async()
-
-        world_binding: WorldBinding[MirrorWorldInterface] = WorldBinding(
-            world_interface=MirrorWorldInterface(),
-            obstacle_strategy=ObstacleStrategy(),
-            tracked_prims=["/World/Cylinder"],
-            tracked_collision_api=TrackableApi.PHYSICS_COLLISION,
-        )
-        world_binding.initialize()
-        planning_world_cylinder = world_binding.get_world_interface().collision_objects["/World/Cylinder"]
-
-        self.assertIsNotNone(planning_world_cylinder)
-        self.assertAlmostEqual(planning_world_cylinder.radius, 0.2)
-        self.assertAlmostEqual(planning_world_cylinder.length, 0.4)
-        self.assertEqual(planning_world_cylinder.axis, "Z")
-
-        stage_cylinder.set_radii(0.25)
-        stage_cylinder.set_heights(0.5)
-        stage_cylinder.set_axes("X")
-        await get_app().next_update_async()
-
-        self.assertAlmostEqual(planning_world_cylinder.radius, 0.2)
-        self.assertAlmostEqual(planning_world_cylinder.length, 0.4)
-        self.assertEqual(planning_world_cylinder.axis, "Z")
-
-        world_binding.synchronize()
-        self.assertAlmostEqual(planning_world_cylinder.radius, 0.25)
-        self.assertAlmostEqual(planning_world_cylinder.length, 0.5)
+        planning_world_cylinder = collision_objects["/World/Cylinder"]
+        self.assertAlmostEqual(planning_world_cylinder.radius, 0.5)
+        self.assertAlmostEqual(planning_world_cylinder.length, 0.6)
         self.assertEqual(planning_world_cylinder.axis, "X")
+
+        # Verify common collision properties for every inserted shape:
+        for prim_path in primitive_paths:
+            with self.subTest(prim_path=prim_path):
+                collision_object = collision_objects[prim_path]
+                self.assertAlmostEqual(collision_object.safety_tolerance, 0.07)
+                self.assertTrue(collision_object.enabled)
 
     async def test_add_mesh(self) -> None:
         """Test that mesh objects are correctly added and tracked in WorldBinding."""
@@ -644,7 +380,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         mesh_geom = GeomPrim("/World/Mesh", apply_collision_apis=True)
         mesh_geom.set_enabled_collisions(True)
 
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         world_binding: WorldBinding[MirrorWorldInterface] = WorldBinding(
             world_interface=MirrorWorldInterface(),
@@ -675,19 +411,19 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         )
         stage_mesh.set_local_scales([2.0, 3.0, 4.0])
         mesh_geom.set_enabled_collisions(False)
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         self.assertTrue(np.isclose(planning_world_mesh.pose[0], [1.0, 2.0, 3.0]).all())
         self.assertTrue(np.isclose(planning_world_mesh.pose[1], [1.0, 0.0, 0.0, 0.0]).all())
         self.assertTrue(np.isclose(planning_world_mesh.scale, [1.0, 1.0, 1.0]).all())
         self.assertTrue(planning_world_mesh.enabled)
 
-        # All is tracked, but the scale is not updated because we cannot track local scale:
-        world_binding.synchronize()
+        # Only transforms are synchronized; enabled state and scale retain their initialized values.
+        world_binding.synchronize_transforms()
         self.assertTrue(np.isclose(planning_world_mesh.pose[0], [-1.0, -2.0, -3.0]).all())
         self.assertTrue(np.isclose(planning_world_mesh.pose[1], [0.0, 1.0, 0.0, 0.0]).all())
         self.assertTrue(np.isclose(planning_world_mesh.scale, [1.0, 1.0, 1.0]).all())
-        self.assertFalse(planning_world_mesh.enabled)
+        self.assertTrue(planning_world_mesh.enabled)
 
     async def test_add_triangulated_mesh(self) -> None:
         """Test that triangulated mesh representation is correctly created and tracked."""
@@ -745,7 +481,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         mesh_geom = GeomPrim("/World/Mesh", apply_collision_apis=True)
         mesh_geom.set_enabled_collisions(True)
 
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         obstacle_strategy = ObstacleStrategy()
         obstacle_strategy.set_default_configuration(
@@ -783,16 +519,16 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
             orientations=[0.0, 1.0, 0.0, 0.0],
         )
         stage_mesh.set_local_scales([2.0, 3.0, 4.0])
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         self.assertTrue(planning_world_mesh.enabled)
         self.assertTrue(np.isclose(planning_world_mesh.pose[0], [0.0, 0.0, 0.0]).all())
         self.assertTrue(np.isclose(planning_world_mesh.pose[1], [1.0, 0.0, 0.0, 0.0]).all())
         self.assertTrue(np.isclose(planning_world_mesh.scale, [1.0, 1.0, 1.0]).all())
 
-        # All is tracked, but the scale is not updated because we cannot track local scale:
-        world_binding.synchronize()
-        self.assertFalse(planning_world_mesh.enabled)
+        # Only transforms are synchronized; enabled state and scale retain their initialized values.
+        world_binding.synchronize_transforms()
+        self.assertTrue(planning_world_mesh.enabled)
         self.assertTrue(np.isclose(planning_world_mesh.pose[0], [-1.0, -2.0, -3.0]).all())
         self.assertTrue(np.isclose(planning_world_mesh.pose[1], [0.0, 1.0, 0.0, 0.0]).all())
         self.assertTrue(np.isclose(planning_world_mesh.scale, [1.0, 1.0, 1.0]).all())
@@ -811,7 +547,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         cube_geom = GeomPrim(sphere_path, apply_collision_apis=True)
         cube_geom.set_enabled_collisions(True)
 
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         obstacle_strategy = ObstacleStrategy()
         obstacle_strategy.set_default_configuration(
@@ -850,16 +586,16 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
             orientations=[0.0, 0.0, 1.0, 0.0],
         )
         stage_sphere.set_local_scales([2.0, 2.0, 2.0])
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         self.assertTrue(planning_world_obb.enabled)
         self.assertTrue(np.isclose(planning_world_obb.pose[0], [0.0, 1.0, 2.0]).all())
         self.assertTrue(np.isclose(planning_world_obb.pose[1], [1.0, 0.0, 0.0, 0.0]).all())
         self.assertTrue(np.isclose(planning_world_obb.scale, [2.0, 1.0, 1.0]).all())
 
-        # All is tracked, but the scale is not updated because we cannot track local scale:
-        world_binding.synchronize()
-        self.assertFalse(planning_world_obb.enabled)
+        # Only transforms are synchronized; enabled state and scale retain their initialized values.
+        world_binding.synchronize_transforms()
+        self.assertTrue(planning_world_obb.enabled)
         self.assertTrue(np.isclose(planning_world_obb.pose[0], [3.0, 4.0, 5.0]).all())
         self.assertTrue(np.isclose(planning_world_obb.pose[1], [0.0, 0.0, 1.0, 0.0]).all())
         self.assertTrue(np.isclose(planning_world_obb.scale, [2.0, 1.0, 1.0]).all())
@@ -872,12 +608,12 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
 
     async def test_world_binding_validates_ancestor_scaling(self) -> None:
         """Integration test to verify that WorldBinding performs scene validation and rejects prims with invalid ancestor scaling."""
-        # Create a parent with non-identity scaling
+        # Create a parent with non-uniform scaling
         parent = Sphere(
             paths="/World/ScaledParent",
             positions=[0.0, 0.0, 0.0],
             orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[2.0, 2.0, 2.0],  # Non-identity scaling
+            scales=[2.0, 1.0, 2.0],  # Non-uniform scaling
         )
 
         # Create a child sphere
@@ -893,7 +629,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         child_geom = GeomPrim("/World/ScaledParent/ChildSphere", apply_collision_apis=True)
         child_geom.set_enabled_collisions(True)
 
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         # WorldBinding should reject this due to ancestor scaling validation
         world_binding: WorldBinding[MirrorWorldInterface] = WorldBinding(
@@ -925,7 +661,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         )
 
         sphere_geom = GeomPrim("/World/Sphere", apply_collision_apis=True)
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         # Create world binding
         world_binding: WorldBinding[MirrorWorldInterface] = WorldBinding(
@@ -947,7 +683,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         )
         stage_sphere.set_radii(1.0)
         sphere_geom.set_enabled_collisions(False)
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         # Before synchronizing transforms, pose should not be updated
         self.assertTrue(np.isclose(planning_world_sphere.pose[0], [1.0, 2.0, 3.0]).all())
@@ -962,59 +698,6 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         # The radii and collision enables are not updated:
         self.assertAlmostEqual(planning_world_sphere.radius, 0.05)
         self.assertTrue(planning_world_sphere.enabled)
-
-    async def test_synchronize_properties(self) -> None:
-        """Test that synchronize_properties updates shape properties using change tracking."""
-        # Create a sphere
-        stage_sphere = Sphere(
-            paths="/World/Sphere",
-            radii=0.1,
-            positions=[0.0, 0.0, 0.0],
-            orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[1.0, 1.0, 1.0],
-        )
-
-        sphere_geom = GeomPrim("/World/Sphere", apply_collision_apis=True)
-        sphere_geom.set_enabled_collisions(True)
-        await get_app().next_update_async()
-
-        # Create world binding
-        world_binding: WorldBinding[MirrorWorldInterface] = WorldBinding(
-            world_interface=MirrorWorldInterface(),
-            obstacle_strategy=ObstacleStrategy(),
-            tracked_prims=["/World/Sphere"],
-            tracked_collision_api=TrackableApi.PHYSICS_COLLISION,
-        )
-        world_binding.initialize()
-        planning_world_sphere = world_binding.get_world_interface().collision_objects["/World/Sphere"]
-
-        # Verify initial properties
-        self.assertAlmostEqual(planning_world_sphere.radius, 0.1)
-        self.assertTrue(planning_world_sphere.enabled)
-
-        # Change sphere radius, disable collision, and move the sphere.
-        stage_sphere.set_world_poses(
-            positions=[5.0, 6.0, 7.0],
-            orientations=[0.0, 1.0, 0.0, 0.0],
-        )
-        stage_sphere.set_radii(0.2)
-        sphere_geom.set_enabled_collisions(False)
-        await get_app().next_update_async()
-
-        # Before synchronizing, properties should not be updated
-        self.assertAlmostEqual(planning_world_sphere.radius, 0.1)
-        self.assertTrue(planning_world_sphere.enabled)
-
-        # Synchronize only properties
-        world_binding.synchronize_properties()
-
-        # After synchronizing, properties should be updated
-        self.assertAlmostEqual(planning_world_sphere.radius, 0.2)
-        self.assertFalse(planning_world_sphere.enabled)
-
-        # The transforms are not updated.
-        self.assertFalse(np.isclose(planning_world_sphere.pose[0], [5.0, 6.0, 7.0]).all())
-        self.assertFalse(np.isclose(planning_world_sphere.pose[1], [0.0, 1.0, 0.0, 0.0]).all())
 
     async def test_motion_generation_collision_api(self) -> None:
         """Test WorldBinding with the motion generation collision API."""
@@ -1044,7 +727,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         apply_motion_planning_api(sphere_prim, enabled=True)
         apply_motion_planning_api(cube_prim, enabled=True)
 
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         # Create world binding with motion generation collision API
         obstacle_strategy = ObstacleStrategy()
@@ -1075,27 +758,6 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.isclose(planning_world_cube.pose[1], [0.0, 1.0, 0.0, 0.0]).all())
         self.assertTrue(planning_world_cube.enabled)
 
-        # Test disabling collision via motion planning API
-        from isaacsim.robot_motion.schema import MOTION_PLANNING_ENABLED_ATTR
-
-        sphere_attr = sphere_prim.GetAttribute(MOTION_PLANNING_ENABLED_ATTR)
-        sphere_attr.Set(False)
-        await get_app().next_update_async()
-
-        # Before synchronizing, sphere still appears enabled
-        self.assertTrue(planning_world_sphere.enabled)
-        world_binding.synchronize()
-        # After synchronizing, sphere should be disabled
-        self.assertFalse(planning_world_sphere.enabled)
-        self.assertTrue(planning_world_cube.enabled)
-
-        # Re-enable sphere
-        sphere_attr.Set(True)
-        await get_app().next_update_async()
-        world_binding.synchronize()
-        self.assertTrue(planning_world_sphere.enabled)
-        self.assertTrue(planning_world_cube.enabled)
-
         # Test that initialization fails if prim doesn't have the API
         world_binding_no_api: WorldBinding[MirrorWorldInterface] = WorldBinding(
             world_interface=MirrorWorldInterface(),
@@ -1106,7 +768,7 @@ class TestWorldBinding(omni.kit.test.AsyncTestCase):
 
         # Remove the API from the sphere
         sphere_prim.RemoveAppliedSchema("IsaacMotionPlanningAPI")
-        await get_app().next_update_async()
+        await app_utils.update_app_async()
 
         # Initialize should raise RuntimeError
         self.assertRaises(RuntimeError, world_binding_no_api.initialize)

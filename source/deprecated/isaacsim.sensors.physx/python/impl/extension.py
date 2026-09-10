@@ -28,11 +28,11 @@ class Extension(omni.ext.IExt):
 
     This extension provides physics-based sensor simulation capabilities in Isaac Sim, including proximity sensors,
     LiDAR sensors, generic range sensors, and lightbeam sensors. It integrates with the physics simulation step to
-    update sensor data in real-time during physics simulation.
+    update sensor data in real time during physics simulation.
 
     The extension manages sensor interfaces and subscribes to physics step events to ensure sensors are updated
     synchronously with the physics simulation. It provides a centralized proximity sensor manager and handles
-    the lifecycle of various range sensor interfaces including LiDAR, generic range sensors, and lightbeam sensors.
+    various range sensor interfaces including LiDAR, generic range sensors, and lightbeam sensors.
     """
 
     def on_startup(self) -> None:

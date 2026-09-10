@@ -40,12 +40,11 @@ class WizardExtension(omni.ext.IExt, MenuHelperExtension):
     """Extension class that provides a robot setup wizard interface for Isaac Sim.
 
     This extension creates a guided wizard interface to help users configure and set up robots
-    within Isaac Sim. It integrates with the Omniverse Kit menu system and workspace to provide
+    within Isaac Sim. It integrates with the Omniverse Kit SDK menu system and workspace to provide
     easy access to robot configuration tools through a dedicated window interface.
 
-    The extension manages the Robot Wizard window lifecycle, handles menu integration, and provides
-    settings for automatic launch behavior. It extends both omni.ext.IExt for extension functionality
-    and MenuHelperExtension for menu integration capabilities.
+    The extension handles menu integration and provides settings for automatic launch behavior. It extends
+    both omni.ext.IExt for extension functionality and MenuHelperExtension for menu integration capabilities.
     """
 
     WINDOW_NAME = "Robot Wizard [Beta]"
@@ -90,10 +89,10 @@ class WizardExtension(omni.ext.IExt, MenuHelperExtension):
             self._window = None
 
     def show_window(self, value: bool) -> None:
-        """Show/hide Isaac Sim robot window function.
+        """Shows or hides the Isaac Sim robot window.
 
         Args:
-            value: True if window will be shown or False if window will be hidden.
+            value: True to show the window, or False to hide it.
         """
         global _robot_window_instance
 

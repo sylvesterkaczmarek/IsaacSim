@@ -23,11 +23,11 @@ from typing import Any
 import carb
 import omni.timeline
 import omni.ui as ui
-from isaacsim.core.api.world import World
+from isaacsim.core.api import World
 from isaacsim.core.prims import SingleXFormPrim as XFormPrim
 from isaacsim.core.utils.stage import create_new_stage, get_current_stage, update_stage_async
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.gui.components.element_wrappers import Button, CollapsableFrame, StateButton
+from isaacsim.gui.components import Button, CollapsableFrame, StateButton
 from isaacsim.gui.components.style import get_style
 from pxr import Sdf, UsdLux
 
@@ -113,14 +113,14 @@ class UIBuilder:
     def cleanup(self) -> None:
         """Called when the stage is closed or the extension is hot reloaded.
 
-        Perform any necessary cleanup such as removing active callback functions
+        Performs any necessary cleanup such as removing active callback functions.
         Buttons imported from isaacsim.gui.components.element_wrappers implement a cleanup function that should be called.
         """
         for ui_elem in self.wrapped_ui_elements:
             ui_elem.cleanup()
 
     def build_ui(self) -> None:
-        """Build a custom UI tool to run your extension.
+        """Builds a custom UI tool to run the extension.
 
         This function will be called any time the UI window is closed and reopened.
         """
@@ -161,16 +161,18 @@ class UIBuilder:
         self._scenario = FrankaKinematicsExample()
 
     def _add_light_to_stage(self) -> None:
-        """A new stage does not have a light by default.  This function creates a spherical light."""
+        """Creates a spherical light for a new stage that does not have a light by default."""
         sphereLight = UsdLux.SphereLight.Define(get_current_stage(), Sdf.Path("/World/SphereLight"))
         sphereLight.CreateRadiusAttr(2)
         sphereLight.CreateIntensityAttr(100000)
         XFormPrim(str(sphereLight.GetPath())).set_world_pose([6.5, 0, 12])
 
     def _on_load_btn_clicked(self) -> None:
+        """Starts loading the world for the FrankaKinematicsExample scene when the Load button is clicked."""
         asyncio.ensure_future(self._load_world_async())
 
     async def _load_world_async(self) -> None:
+        """Loads the FrankaKinematicsExample world, initializes the simulation context, and sets up the scenario."""
         prev_world = World.instance()
         if prev_world is not None:
             prev_world.clear_all_callbacks()
@@ -185,9 +187,11 @@ class UIBuilder:
         self._setup_scenario()
 
     def _on_reset_btn_clicked(self) -> None:
+        """Schedules a World reset when the Reset Button is clicked."""
         asyncio.ensure_future(self._reset_world_async())
 
     async def _reset_world_async(self) -> None:
+        """Resets the active World, pauses it, and runs post-reset scenario and UI updates."""
         world = World.instance()
         if world is None:
             carb.log_warn("Reset Button was used when there is no instance of World.")
@@ -202,6 +206,8 @@ class UIBuilder:
 
         On pressing the Load Button, a new instance of World() is created and then this function is called.
         The user should now load their assets onto the stage and add them to the World Scene.
+
+        Creates a new stage, adds lighting, sets the camera view, and adds scenario assets to the World scene.
         """
         create_new_stage()
         self._add_light_to_stage()
@@ -220,8 +226,10 @@ class UIBuilder:
         The user may assume that their assets have been loaded by their setup_scene_fn callback, that
         their objects are properly initialized, and that the timeline is paused on timestep 0.
 
-        In this example, a scenario is initialized which will move each robot joint one at a time in a loop while moving the
-        provided prim in a circle around the robot.
+        In this example, a scenario is initialized which will move each robot joint one at a time in a loop while moving
+        the provided prim in a circle around the robot.
+
+        Sets up the scenario and enables the Run Scenario StateButton and Reset Button.
         """
         self._scenario.setup()
 
@@ -237,6 +245,8 @@ class UIBuilder:
 
         They may also assume that objects that were added to the World.Scene have been moved to their default positions.
         I.e. the cube prim will move back to the position it was in when it was created in self._setup_scene().
+
+        Resets the scenario and enables the Run Scenario StateButton.
         """
         self._scenario.reset()
 
@@ -253,8 +263,8 @@ class UIBuilder:
 
         Args:
             step: The dt of the current physics step.
-            *args: Variable length argument list.
-            **kwargs: Arbitrary keyword arguments.
+            *args: Variable length argument list from the physics callback.
+            **kwargs: Arbitrary keyword arguments from the physics callback.
         """
         self._scenario.update(step)
 
@@ -264,9 +274,9 @@ class UIBuilder:
         This function was passed in as the on_a_click_fn argument.
         It is called when the StateButton is clicked while saying a_text "RUN".
 
-        This function simply plays the timeline, which means that physics steps will start happening.  After the world is loaded or reset,
-        the timeline is paused, which means that no physics steps will occur until the user makes it play either programmatically or
-        through the left-hand UI toolbar.
+        This function simply plays the timeline, which means that physics steps will start happening. After the world is
+        loaded or reset, the timeline is paused, which means that no physics steps will occur until the user makes it play
+        either programmatically or through the left-hand UI toolbar.
         """
         self._timeline.play()
 
@@ -274,13 +284,13 @@ class UIBuilder:
         """This function is attached to the Run Scenario StateButton.
 
         This function was passed in as the on_b_click_fn argument.
-        It is called when the StateButton is clicked while saying a_text "STOP".
+        It is called when the StateButton is clicked while saying b_text "STOP".
 
         Pausing the timeline on b_text is not strictly necessary for this example to run.
         Clicking "STOP" will cancel the physics subscription that updates the scenario, which means that
         the robot will stop getting new commands and the cube will stop updating without needing to
-        pause at all.  The reason that the timeline is paused here is to prevent the robot being carried
-        forward by momentum for a few frames after the physics subscription is canceled.  Pausing here makes
+        pause at all. The reason that the timeline is paused here is to prevent the robot being carried
+        forward by momentum for a few frames after the physics subscription is canceled. Pausing here makes
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
@@ -289,6 +299,8 @@ class UIBuilder:
         """This is called when the user opens a new stage from self.on_stage_event().
 
         All state should be reset.
+
+        Reinitializes the scenario state and resets the UI controls.
         """
         self._on_init()
         self._reset_ui()

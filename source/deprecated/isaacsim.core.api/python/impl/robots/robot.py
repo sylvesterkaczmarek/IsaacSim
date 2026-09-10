@@ -33,16 +33,16 @@ class Robot(SingleArticulation):
 
     Args:
         prim_path: Prim path of the Prim to encapsulate or create.
-        name: Shortname to be used as a key by Scene class.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
         position: Position in the world frame of the prim. shape is (3, ).
         translation: Translation in the local frame of the prim
             (with respect to its parent prim). shape is (3, ).
-        orientation: Quaternion orientation in the world/ local frame of the prim
+        orientation: Quaternion orientation in the world or local frame of the prim
             (depends if translation or position is specified).
             quaternion is scalar-first (w, x, y, z). shape is (4, ).
         scale: Local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: Set to false for an invisible prim in the stage while rendering.
+        visible: Set to False for an invisible prim in the stage while rendering.
         articulation_controller: A custom ArticulationController which
             inherits from it.
 
@@ -63,7 +63,6 @@ class Robot(SingleArticulation):
         >>> prim = Robot(prim_path=prim_path, name="franka_panda")
         >>> print(prim)
         <isaacsim.core.api.robots.robot.Robot object at 0x7fdd4875a1d0>
-
     """
 
     def __init__(
@@ -105,6 +104,5 @@ class Robot(SingleArticulation):
         .. code-block:: python
 
             >>> prim.post_reset()
-
         """
         SingleArticulation.post_reset(self)

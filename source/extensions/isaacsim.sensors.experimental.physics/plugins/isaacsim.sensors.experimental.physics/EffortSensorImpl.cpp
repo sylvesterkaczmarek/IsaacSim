@@ -14,18 +14,18 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "EffortSensorImpl.h"
+#include "EffortSensorImpl.hpp"
 
 #include <carb/events/EventsUtils.h>
 #include <carb/logging/Log.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/core/experimental/prims/IPrimDataReader.h>
-#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.h>
-#include <isaacsim/core/simulation_manager/ISimulationManager.h>
+#include <isaacsim/core/experimental/prims/IPrimDataReader.hpp>
+#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.hpp>
+#include <isaacsim/core/simulation_manager/ISimulationManager.hpp>
 #include <omni/fabric/FabricUSD.h>
 #include <omni/physics/simulation/IPhysicsSimulation.h>
 #include <omni/physics/simulation/IPhysicsStageUpdate.h>
@@ -299,10 +299,7 @@ EffortSensorReading EffortSensorImpl::getSensorReading(const char* jointPrimPath
         return EffortSensorReading();
     }
 
-    if (m_impl->reader && m_impl->reader->getGeneration() != m_impl->readerGeneration)
-    {
-        _recreateSensorViews();
-    }
+    _refreshReaderAndSensorViews(false);
 
     EffortSensorData& sensor = it->second;
 
@@ -332,6 +329,30 @@ void EffortSensorImpl::_clearSensors()
         }
     }
     m_impl->sensors.clear();
+}
+
+bool EffortSensorImpl::_refreshReaderAndSensorViews(bool requireInitialized)
+{
+    if (m_impl->readerManager && m_impl->stageId != 0)
+    {
+        if (!m_impl->readerManager->ensureInitialized(m_impl->stageId, -1))
+        {
+            if (requireInitialized)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            m_impl->reader = m_impl->readerManager->getReader();
+        }
+    }
+
+    if (m_impl->reader && m_impl->reader->getGeneration() != m_impl->readerGeneration)
+    {
+        _recreateSensorViews();
+    }
+    return true;
 }
 
 void EffortSensorImpl::_recreateSensorViews()
@@ -431,9 +452,9 @@ void EffortSensorImpl::_stepSensors(float dt)
         return;
     }
 
-    if (m_impl->reader && m_impl->reader->getGeneration() != m_impl->readerGeneration)
+    if (!_refreshReaderAndSensorViews(true))
     {
-        _recreateSensorViews();
+        return;
     }
 
     const double simTime = m_impl->simManager->getSimulationTime();

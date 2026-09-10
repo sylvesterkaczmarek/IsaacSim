@@ -20,13 +20,13 @@
 #define CARB_EXPORTS
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 #include <omni/usd/UtilsIncludes.h>
 
-#include "isaacsim/robot/surface_gripper/SurfaceGripperComponent.h"
-#include "isaacsim/robot/surface_gripper/SurfaceGripperManager.h"
+#include "isaacsim/robot/surface_gripper/SurfaceGripperComponent.hpp"
+#include "isaacsim/robot/surface_gripper/SurfaceGripperManager.hpp"
 // Threading utilities
-#include "isaacsim/robot/surface_gripper/ThreadUtils.h"
+#include "isaacsim/robot/surface_gripper/ThreadUtils.hpp"
 // clang-format on
 
 #include <carb/Framework.h>
@@ -34,7 +34,7 @@
 #include <carb/logging/Log.h>
 // <carb/settings/ISettings.h> include removed: settings interface not used
 
-#include <isaacsim/robot/surface_gripper/ISurfaceGripper.h>
+#include <isaacsim/robot/surface_gripper/ISurfaceGripper.hpp>
 #include <omni/fabric/usd/PathConversion.h>
 #include <omni/graph/core/ogn/Registration.h>
 #include <omni/kit/IStageUpdate.h>
@@ -76,7 +76,7 @@ bool g_firstFrame = true;
 long int g_stageID;
 } // end of anonymous namespace
 
-// Parallel utilities are provided by ThreadUtils.h
+// Parallel utilities are provided by ThreadUtils.hpp
 
 namespace surface_gripper
 {

@@ -33,7 +33,7 @@ class TestContactSensorWrapper(omni.kit.test.AsyncTestCase):
 
     # Before running each test
     async def setUp(self) -> None:
-        """Set up test fixtures."""
+        """Set up test fixtures with a new stage, physics simulation, cube, ground plane, and ContactSensor."""
         await create_new_stage_async()
         SimulationManager.setup_simulation(dt=1.0 / 60.0)
         self._timeline = omni.timeline.get_timeline_interface()
@@ -58,7 +58,7 @@ class TestContactSensorWrapper(omni.kit.test.AsyncTestCase):
 
     # After running each test
     async def tearDown(self) -> None:
-        """Tear down test fixtures."""
+        """Tear down test fixtures and wait for stage loading to finish."""
         if self._timeline.is_playing():
             self._timeline.stop()
         SimulationManager.invalidate_physics()
@@ -70,7 +70,11 @@ class TestContactSensorWrapper(omni.kit.test.AsyncTestCase):
         return
 
     async def test_data_acquisition(self) -> None:
-        """Verify current frame contains expected fields and optional contacts."""
+        """Verify current frame contains expected fields and optional contacts.
+
+        Raises:
+            AssertionError: If required frame fields are missing or raw contact data visibility is incorrect.
+        """
         await omni.kit.app.get_app().next_update_async()
         await omni.kit.app.get_app().next_update_async()
         data = self._contact_sensor.get_current_frame()
@@ -92,7 +96,11 @@ class TestContactSensorWrapper(omni.kit.test.AsyncTestCase):
         return
 
     async def test_pause_resume(self) -> None:
-        """Verify pause/resume freezes and resumes frame updates."""
+        """Verify pause/resume freezes and resumes frame updates.
+
+        Raises:
+            AssertionError: If paused frames change, resumed frames do not update, or reset timeline values are unexpected.
+        """
         await omni.kit.app.get_app().next_update_async()
         await omni.kit.app.get_app().next_update_async()
         data = self._contact_sensor.get_current_frame()
@@ -121,7 +129,11 @@ class TestContactSensorWrapper(omni.kit.test.AsyncTestCase):
         return
 
     async def test_properties(self) -> None:
-        """Verify contact sensor property setters update the underlying values."""
+        """Verify contact sensor property setters update the underlying values.
+
+        Raises:
+            AssertionError: If a contact sensor setter does not update the value returned by the getter.
+        """
         self._contact_sensor.set_frequency(20)
         self.assertAlmostEqual(20, self._contact_sensor.get_frequency(), delta=2)
         self._contact_sensor.set_dt(0.2)

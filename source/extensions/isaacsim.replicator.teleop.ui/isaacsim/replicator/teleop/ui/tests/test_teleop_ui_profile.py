@@ -20,6 +20,9 @@ import tempfile
 
 import omni.ui as ui
 from isaacsim.replicator.teleop import (
+    AnchorRotationMode,
+    BimanualControllerProfile,
+    ControllerSideProfile,
     TeleopProfile,
     TeleopSettingsProfile,
     save_teleop_profile,
@@ -56,6 +59,9 @@ class TestTeleopUIProfile(MenuUITestCase):
                         anchor_x=1.5,
                         anchor_y=-2.5,
                         anchor_z=0.75,
+                        anchor_rotation_mode=AnchorRotationMode.FOLLOW_PRIM_SMOOTHED.value,
+                        anchor_smoothing=0.75,
+                        anchor_fixed_height=False,
                     ),
                 )
                 profile_path = os.path.join(tmp_dir, f"{profile_name}.yaml")
@@ -86,6 +92,12 @@ class TestTeleopUIProfile(MenuUITestCase):
                 self.assertAlmostEqual(session_panel._anchor_x_field.model.get_value_as_float(), 1.5, places=4)
                 self.assertAlmostEqual(session_panel._anchor_y_field.model.get_value_as_float(), -2.5, places=4)
                 self.assertAlmostEqual(session_panel._anchor_z_field.model.get_value_as_float(), 0.75, places=4)
+
+                manager = window._teleop_manager
+                self.assertEqual(manager._xr_anchor_pos, (1.5, -2.5, 0.75))
+                self.assertEqual(manager._xr_anchor_rotation_mode, AnchorRotationMode.FOLLOW_PRIM_SMOOTHED)
+                self.assertAlmostEqual(manager._xr_anchor_smoothing_time, 0.75, places=4)
+                self.assertFalse(manager._xr_anchor_fixed_height)
 
                 applied = window.collect_teleop_profile()
                 self.assertEqual(applied.session.coordinate_system, "raw")
@@ -330,6 +342,84 @@ class TestTeleopUIProfile(MenuUITestCase):
                     os.path.isfile(os.path.join(tmp_dir, "explicit_profile.yml")),
                     "Save must keep .yml extension when explicitly provided",
                 )
+            finally:
+                if window is not None:
+                    window._last_profile_path = os.path.join(tmp_dir, "last_profile.yaml")
+                    window.destroy()
+
+    async def test_load_sparse_profile_clears_previous_controller_paths(self) -> None:
+        """Loading a profile that omits IK/floating paths must not keep the previous prims."""
+        window = None
+
+        with tempfile.TemporaryDirectory(prefix="teleop_ui_profile_") as tmp_dir:
+            try:
+                await self.menu_click_with_retry(MENU_PATH, window_name=WINDOW_TITLE)
+                window = ui.Workspace.get_window(WINDOW_TITLE)
+                self.assertIsNotNone(window, "Teleop window should exist after opening via the menu")
+                window._last_profile_path = os.path.join(tmp_dir, "last_profile.yaml")
+                window.visible = True
+                window.focus()
+                await self.wait_n_frames(5)
+
+                populated = TeleopProfile(
+                    floating=BimanualControllerProfile(
+                        right=ControllerSideProfile(
+                            enabled=True,
+                            settings={"prim_path": "/World/stale_floating"},
+                        ),
+                    ),
+                    ik=BimanualControllerProfile(
+                        left=ControllerSideProfile(
+                            enabled=True,
+                            settings={"robot_path": "/World/stale_ik_left"},
+                        ),
+                        right=ControllerSideProfile(
+                            enabled=True,
+                            settings={"robot_path": "/World/stale_ik_right"},
+                        ),
+                    ),
+                )
+                sparse = TeleopProfile(
+                    floating=BimanualControllerProfile(
+                        right=ControllerSideProfile(
+                            enabled=True,
+                            settings={"prim_path": "/World/teleop_xarm"},
+                        ),
+                    ),
+                )
+                populated_path = os.path.join(tmp_dir, "populated.yaml")
+                sparse_path = os.path.join(tmp_dir, "sparse.yaml")
+                ok, message = save_teleop_profile(populated_path, populated)
+                self.assertTrue(ok, message)
+                ok, message = save_teleop_profile(sparse_path, sparse)
+                self.assertTrue(ok, message)
+
+                profile_panel = window._teleop_profile_panel
+                profile_panel._dir_field.model.set_value(tmp_dir)
+                profile_panel._on_directory_changed()
+                await self.wait_n_frames(2)
+
+                profile_names = [name for name, _ in profile_panel._profiles]
+                profile_panel._profile_combo.model.get_item_value_model().set_value(profile_names.index("populated"))
+                profile_panel._on_load_clicked()
+                await self.wait_n_frames(5)
+
+                applied = window.collect_teleop_profile()
+                self.assertEqual(applied.ik.left.settings.get("robot_path"), "/World/stale_ik_left")
+                self.assertEqual(applied.ik.right.settings.get("robot_path"), "/World/stale_ik_right")
+                self.assertEqual(applied.floating.right.settings.get("prim_path"), "/World/stale_floating")
+
+                profile_panel._profile_combo.model.get_item_value_model().set_value(profile_names.index("sparse"))
+                profile_panel._on_load_clicked()
+                await self.wait_n_frames(5)
+
+                applied = window.collect_teleop_profile()
+                self.assertEqual(applied.ik.left.settings.get("robot_path", "").strip(), "")
+                self.assertEqual(applied.ik.right.settings.get("robot_path", "").strip(), "")
+                self.assertFalse(applied.ik.left.enabled)
+                self.assertFalse(applied.ik.right.enabled)
+                self.assertEqual(applied.floating.left.settings.get("prim_path", "").strip(), "")
+                self.assertEqual(applied.floating.right.settings.get("prim_path"), "/World/teleop_xarm")
             finally:
                 if window is not None:
                     window._last_profile_path = os.path.join(tmp_dir, "last_profile.yaml")

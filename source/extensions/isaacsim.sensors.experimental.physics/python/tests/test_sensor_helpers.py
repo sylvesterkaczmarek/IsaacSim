@@ -35,7 +35,7 @@ from isaacsim.sensors.experimental.physics import (
 from isaacsim.storage.native import get_assets_root_path_async
 from pxr import Gf, PhysxSchema, UsdPhysics
 
-from .common import setup_ant_scene
+from .common import is_physx_engine, setup_ant_scene
 
 
 class TestSensorCreate(omni.kit.test.AsyncTestCase):
@@ -118,7 +118,8 @@ class TestSensorCreate(omni.kit.test.AsyncTestCase):
         self.assertTrue(stage.HasDefaultPrim())
         self.assertEqual(stage.GetDefaultPrim().GetPath().pathString, "/Ant")
 
-        stage_utils.define_prim("/World", type_name="Xform")
+        if not stage.GetPrimAtPath("/World").IsValid():
+            stage_utils.define_prim("/World", type_name="Xform")
         cube = Cube("/World/TestCube", sizes=[1.0])
         UsdPhysics.RigidBodyAPI.Apply(cube.prims[0])
         await omni.kit.app.get_app().next_update_async()
@@ -332,7 +333,10 @@ class TestSensorCreate(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(sensor.contact.get_radius(), 0.5, places=5)
 
         parent_prim = stage.GetPrimAtPath("/World/Cube")
-        self.assertTrue(parent_prim.HasAPI(PhysxSchema.PhysxContactReportAPI))
+        if is_physx_engine():
+            self.assertTrue(parent_prim.HasAPI(PhysxSchema.PhysxContactReportAPI))
+        else:
+            self.assertFalse(parent_prim.HasAPI(PhysxSchema.PhysxContactReportAPI))
 
     async def test_contact_sensor_nested_under_rigid_body_keeps_requested_path(self) -> None:
         """Nested contact sensors are authored at the requested path and report on the rigid ancestor."""
@@ -349,7 +353,10 @@ class TestSensorCreate(omni.kit.test.AsyncTestCase):
         self.assertEqual(contact.paths[0], "/World/Cube/SensorMount/Contact")
         self.assertTrue(stage.GetPrimAtPath("/World/Cube/SensorMount/Contact").IsValid())
         self.assertFalse(stage.GetPrimAtPath("/World/Cube/Contact").IsValid())
-        self.assertTrue(stage.GetPrimAtPath("/World/Cube").HasAPI(PhysxSchema.PhysxContactReportAPI))
+        if is_physx_engine():
+            self.assertTrue(stage.GetPrimAtPath("/World/Cube").HasAPI(PhysxSchema.PhysxContactReportAPI))
+        else:
+            self.assertFalse(stage.GetPrimAtPath("/World/Cube").HasAPI(PhysxSchema.PhysxContactReportAPI))
         self.assertFalse(mount.HasAPI(PhysxSchema.PhysxContactReportAPI))
 
     async def test_contact_sensor_collision_only_parent_rejected(self) -> None:

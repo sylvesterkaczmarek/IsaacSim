@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <isaacsim/core/includes/BaseResetNode.h>
-#include <isaacsim/core/nodes/ICoreNodes.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
+#include <isaacsim/core/nodes/ICoreNodes.hpp>
 
 #include <OgnIsaacRunOneSimulationFrameDatabase.h>
 

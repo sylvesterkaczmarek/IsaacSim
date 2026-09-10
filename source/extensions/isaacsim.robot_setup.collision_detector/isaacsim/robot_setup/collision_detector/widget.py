@@ -18,7 +18,7 @@
 __all__ = ["CollisionDetectorWidget", "deregister_selection_groups"]
 
 import colorsys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -31,7 +31,7 @@ from omni.kit.widget.filter import FilterButton
 from omni.kit.widget.options_button import OptionsButton
 from omni.kit.widget.searchfield import SearchField
 from omni.physx.scripts.physicsUtils import get_initial_collider_pairs
-from pxr import Gf, Sdf, Tf, Usd, UsdGeom, UsdPhysics
+from pxr import Sdf, Tf, Usd, UsdGeom, UsdPhysics
 
 try:
     from usd.schema.isaac import robot_schema
@@ -129,6 +129,34 @@ def deregister_selection_groups() -> None:
     for gid in _registered_group_ids:
         _reset_group_colors(gid)
     _registered_group_ids.clear()
+
+
+# -- Subtree traversal -------------------------------------------------------
+
+
+def _iter_body_prims(root: Usd.Prim, predicate: Any = Usd.PrimDefaultPredicate) -> Iterator[Usd.Prim]:
+    """Yield the prims owned by a rigid body, halting at nested rigid bodies.
+
+    Traversal starts at ``root`` and descends through its subtree, but any
+    descendant that carries its own ``RigidBodyAPI`` is skipped together with
+    all of its children.  Such a descendant is an independent rigid body whose
+    geometry and colliders belong to it, not to ``root``, so its meshes must
+    not be attributed to the enclosing body when building the collision list
+    or the viewport selection groups.
+
+    Args:
+        root: The rigid-body prim to traverse.
+        predicate: Prim predicate forwarded to ``Usd.PrimRange``.
+
+    Yields:
+        Prims owned by ``root``, including ``root`` itself.
+    """
+    it = iter(Usd.PrimRange(root, predicate))
+    for prim in it:
+        if prim != root and prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            it.PruneChildren()
+            continue
+        yield prim
 
 
 # -- Data --------------------------------------------------------------------
@@ -588,7 +616,6 @@ class CollisionDetectorWidget:
         self._robot_paths: list[str] = []
         self._robot_names: list[str] = []
         self._pairs: list[RigidBodyPairData] = []
-        self._highlighted_prims: list[str] = []
         self._active_groups: dict[str, int] = {}
         self._group_prims: dict[str, set[str]] = {}
         self._color_assignments: dict[str, int] = {}
@@ -1002,12 +1029,9 @@ class CollisionDetectorWidget:
                     new_bodies.append(path)
         new_body_set = set(new_bodies)
 
-        old_active_groups = self._active_groups
         old_group_prims = self._group_prims
-        old_highlighted = self._highlighted_prims
         self._active_groups = {}
         self._group_prims = {}
-        self._highlighted_prims = []
 
         self._suppressing_notices = True
         try:
@@ -1030,37 +1054,17 @@ class CollisionDetectorWidget:
                     self._group_prims[body_path] = gprims
                     for p in gprims:
                         self._usd_context.set_selection_group(gid, p)
-                    with Usd.EditContext(stage, stage.GetSessionLayer()):
-                        self._apply_display_color(stage, body_path, Gf.Vec3f(*color))
-                    self._highlighted_prims.append(body_path)
 
             for body_path, gprims in old_group_prims.items():
                 if body_path not in new_body_set:
                     for p in gprims:
                         self._usd_context.set_selection_group(0, p)
-            for gid in old_active_groups.values():
-                if gid not in self._active_groups.values():
-                    _reset_group_colors(gid)
-
-            if stage and old_highlighted:
-                with Usd.EditContext(stage, stage.GetSessionLayer()):
-                    for body_path in old_highlighted:
-                        if body_path not in new_body_set:
-                            prim = stage.GetPrimAtPath(body_path)
-                            if not prim or not prim.IsValid():
-                                continue
-                            for desc in Usd.PrimRange(prim):
-                                if desc.IsA(UsdGeom.Gprim):
-                                    gprim = UsdGeom.Gprim(desc)
-                                    for attr in (gprim.GetDisplayColorAttr(), gprim.GetDisplayOpacityAttr()):
-                                        if attr and attr.IsAuthored():
-                                            attr.Clear()
         finally:
             self._suppressing_notices = False
 
         if new_bodies and not focal_active:
-            self._widget_stage_selection = set(new_bodies)
-            self._usd_context.get_selection().set_selected_prim_paths(new_bodies, True)
+            self._widget_stage_selection = set()
+            self._usd_context.get_selection().set_selected_prim_paths([], True)
             self._reapply_selection_groups()
 
     def _on_tree_key_pressed(self, key_index: int, key_flags: int, key_down: bool) -> None:
@@ -1131,23 +1135,18 @@ class CollisionDetectorWidget:
         if not stage:
             return
 
-        # Clear all existing group assignments
+        # Release all existing group assignments (colors are left in place).
         for gprims in self._group_prims.values():
             for p in gprims:
                 self._usd_context.set_selection_group(0, p)
-        for gid in self._active_groups.values():
-            _reset_group_colors(gid)
         self._active_groups.clear()
         self._group_prims.clear()
 
         # Set up a single group for the focal body only
         idx = self._color_assignments.get(body_path)
         if idx is not None:
-            color = PASTEL_PALETTE[idx]
-            gid = _get_group_id(0)
+            gid = _get_group_id(idx)
             self._active_groups[body_path] = gid
-            self._usd_context.set_selection_group_outline_color(gid, (*color, 1.0))
-            self._usd_context.set_selection_group_shade_color(gid, (*color, 0.3))
             gprims = self._collect_gprims(stage, body_path)
             self._group_prims[body_path] = gprims
             for p in gprims:
@@ -1159,7 +1158,7 @@ class CollisionDetectorWidget:
             return
 
         collision_paths: list[str] = []
-        for desc in Usd.PrimRange(prim):
+        for desc in _iter_body_prims(prim):
             if desc.HasAPI(UsdPhysics.CollisionAPI):
                 collision_paths.append(str(desc.GetPath()))
 
@@ -1398,7 +1397,10 @@ class CollisionDetectorWidget:
 
     @staticmethod
     def _collect_gprims(stage: Usd.Stage, body_path: str) -> set[str]:
-        """Collect all ``UsdGeom.Gprim`` paths under a rigid body.
+        """Collect the ``UsdGeom.Gprim`` paths owned by a rigid body.
+
+        Traversal halts at any nested prim with ``RigidBodyAPI`` so that the
+        geometry of child rigid bodies is not attributed to this body.
 
         Args:
             stage: The active USD stage.
@@ -1411,28 +1413,10 @@ class CollisionDetectorWidget:
         if not prim or not prim.IsValid():
             return set()
         result: set[str] = set()
-        for p in Usd.PrimRange(prim, Usd.TraverseInstanceProxies(Usd.PrimAllPrimsPredicate)):
+        for p in _iter_body_prims(prim, Usd.TraverseInstanceProxies(Usd.PrimAllPrimsPredicate)):
             if p.IsA(UsdGeom.Gprim):
                 result.add(str(p.GetPath()))
         return result
-
-    @staticmethod
-    def _apply_display_color(stage: Usd.Stage, body_path: str, color: Gf.Vec3f) -> None:
-        """Set ``displayColor`` and ``displayOpacity`` on all gprims under a body.
-
-        Args:
-            stage: The active USD stage.
-            body_path: Root prim path whose children receive the colour.
-            color: RGB colour to apply.
-        """
-        prim = stage.GetPrimAtPath(body_path)
-        if not prim or not prim.IsValid():
-            return
-        for desc in Usd.PrimRange(prim):
-            if desc.IsA(UsdGeom.Gprim):
-                gprim = UsdGeom.Gprim(desc)
-                gprim.CreateDisplayColorAttr().Set([color])
-                gprim.CreateDisplayOpacityAttr().Set([0.6])
 
     def _reapply_selection_groups(self) -> None:
         """Re-assign all active selection groups.
@@ -1446,33 +1430,18 @@ class CollisionDetectorWidget:
                 self._usd_context.set_selection_group(gid, p)
 
     def _clear_viewport_overlay(self) -> None:
-        """Remove all selection-group assignments and session-layer display overrides."""
+        """Remove all selection-group assignments from the highlighted prims.
+
+        Group colors are intentionally left in place; each color owns a stable
+        group and its shade only draws on selected prims, so releasing the prims
+        is enough to clear the overlay. Colors are fully reset only on extension
+        shutdown via :func:`deregister_selection_groups`.
+        """
         for gprims in self._group_prims.values():
             for p in gprims:
                 self._usd_context.set_selection_group(0, p)
-        for gid in self._active_groups.values():
-            _reset_group_colors(gid)
         self._group_prims.clear()
         self._active_groups.clear()
-
-        if not self._highlighted_prims:
-            return
-        stage = self._usd_context.get_stage()
-        if not stage:
-            self._highlighted_prims.clear()
-            return
-        with Usd.EditContext(stage, stage.GetSessionLayer()):
-            for body_path in self._highlighted_prims:
-                prim = stage.GetPrimAtPath(body_path)
-                if not prim or not prim.IsValid():
-                    continue
-                for desc in Usd.PrimRange(prim):
-                    if desc.IsA(UsdGeom.Gprim):
-                        gprim = UsdGeom.Gprim(desc)
-                        for attr in (gprim.GetDisplayColorAttr(), gprim.GetDisplayOpacityAttr()):
-                            if attr and attr.IsAuthored():
-                                attr.Clear()
-        self._highlighted_prims.clear()
 
     # ------------------------------------------------------------------
     # Viewport outline setting override

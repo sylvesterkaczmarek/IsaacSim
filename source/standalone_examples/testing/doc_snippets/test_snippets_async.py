@@ -27,7 +27,9 @@ import os
 import platform
 import re
 import signal
+import subprocess
 import sys
+import tempfile
 import time
 import traceback
 import unittest
@@ -38,12 +40,17 @@ from functools import partial
 from pathlib import Path
 from typing import Any, NoReturn
 
-# Note: SimulationApp is imported inside the experience loop to allow fresh imports
-# after closing each SimulationApp instance.
+# ``SimulationApp`` is imported only in an isolated experience child process.
+
+_DEFAULT_EXPERIENCE_GROUP = "__default__"
 
 
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
-    """Parse command line arguments."""
+    """Parse command line arguments.
+
+    Returns:
+        Parsed harness options and command-line tokens not recognized by this harness.
+    """
     parser = argparse.ArgumentParser(description="Test script that loads doc snippets and checks for errors.")
     parser.add_argument(
         "-f",
@@ -117,7 +124,160 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         "after SimulationApp starts. Useful when the default Nucleus server is "
         "unreachable and you want to use S3 or a local path instead.",
     )
+    parser.add_argument(
+        "--experience-group",
+        type=str,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
     return parser.parse_known_args()
+
+
+def _remove_cli_option(arguments: list[str], option: str) -> list[str]:
+    """Remove one value-taking option from a command-line argument list.
+
+    Args:
+        arguments: Command-line arguments to filter.
+        option: Long option name to remove, such as ``--junit-xml``.
+
+    Returns:
+        Copy of ``arguments`` without the option and its value.
+    """
+    filtered_arguments = []
+    skip_next = False
+    for argument in arguments:
+        if skip_next:
+            skip_next = False
+            continue
+        if argument == option:
+            skip_next = True
+            continue
+        if argument.startswith(f"{option}="):
+            continue
+        filtered_arguments.append(argument)
+    return filtered_arguments
+
+
+def _merge_junit_reports(reports: list[tuple[str, Path, int]], output_path: str | Path) -> None:
+    """Merge per-experience JUnit reports into one CI report.
+
+    Args:
+        reports: Experience name, report path, and child return code for each group.
+        output_path: Destination for the merged JUnit XML report.
+    """
+    testsuites = ET.Element("testsuites")
+    total_tests = 0
+    total_failures = 0
+    total_errors = 0
+    total_time = 0.0
+
+    for experience, report_path, return_code in reports:
+        experience_display = experience or "default"
+        suites_before = len(testsuites)
+        if report_path.is_file():
+            try:
+                report_root = ET.parse(report_path).getroot()
+            except (ET.ParseError, OSError) as exception:
+                print(f"Warning: Could not read JUnit report for {experience_display}: {exception}")
+            else:
+                child_suites = (
+                    [report_root] if report_root.tag == "testsuite" else list(report_root.findall("testsuite"))
+                )
+                for suite in child_suites:
+                    suite.set("name", f"doc_snippets_async[{experience_display}]")
+                    testsuites.append(suite)
+                    total_tests += int(suite.get("tests", "0"))
+                    total_failures += int(suite.get("failures", "0"))
+                    total_errors += int(suite.get("errors", "0"))
+                    total_time += float(suite.get("time", "0"))
+
+        if return_code != 0:
+            process_suite = ET.SubElement(
+                testsuites,
+                "testsuite",
+                name=f"doc_snippets_async[{experience_display}]-process",
+                tests="1",
+                failures="0",
+                errors="1",
+                time="0.000",
+            )
+            process_case = ET.SubElement(
+                process_suite,
+                "testcase",
+                name=f"experience process: {experience_display}",
+                classname="DocSnippetExperienceProcess",
+                time="0.000",
+            )
+            process_error = ET.SubElement(
+                process_case,
+                "error",
+                message=f"Experience process exited with code {return_code}",
+            )
+            process_error.text = f"The doc-snippet process for {experience_display} exited with code {return_code}."
+            total_tests += 1
+            total_errors += 1
+        elif len(testsuites) == suites_before:
+            print(f"Warning: No JUnit report produced for experience group: {experience_display}")
+
+    testsuites.set("tests", str(total_tests))
+    testsuites.set("failures", str(total_failures))
+    testsuites.set("errors", str(total_errors))
+    testsuites.set("time", f"{total_time:.3f}")
+    ET.indent(testsuites, space="  ", level=0)
+    output_file = Path(output_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.ElementTree(testsuites).write(output_file, encoding="utf-8", xml_declaration=True)
+    print(f"Merged JUnit XML report written to {output_file}")
+
+
+def _run_experience_groups(experience_names: list[str], junit_xml_path: str | None) -> int:
+    """Run each experience group in an isolated child process.
+
+    Args:
+        experience_names: Experience groups to execute sequentially.
+        junit_xml_path: Optional destination for a merged JUnit XML report.
+
+    Returns:
+        Zero when every child succeeds, otherwise the first nonzero return code.
+    """
+    child_arguments = _remove_cli_option(sys.argv[1:], "--junit-xml")
+    child_arguments = _remove_cli_option(child_arguments, "--experience-group")
+    reports = []
+    first_failure = 0
+
+    if junit_xml_path:
+        Path(junit_xml_path).unlink(missing_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="doc_snippets_junit_") as temporary_directory:
+        report_directory = Path(temporary_directory)
+        for index, experience in enumerate(experience_names):
+            experience_argument = experience or _DEFAULT_EXPERIENCE_GROUP
+            experience_display = experience or "default"
+            child_report_path = report_directory / f"experience_{index}.xml"
+            command = [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                *child_arguments,
+                "--experience-group",
+                experience_argument,
+            ]
+            if junit_xml_path:
+                command.extend(["--junit-xml", str(child_report_path)])
+
+            print(f"\nLaunching isolated experience group: {experience_display}", flush=True)
+            result = subprocess.run(command, check=False)
+            reports.append((experience, child_report_path, result.returncode))
+            if result.returncode != 0 and first_failure == 0:
+                first_failure = result.returncode
+
+        if junit_xml_path:
+            _merge_junit_reports(reports, junit_xml_path)
+
+    if first_failure:
+        print(f"[ FAIL ] One or more experience groups failed (first return code: {first_failure}).")
+    else:
+        print("[ ok ] All isolated experience groups passed.")
+    return first_failure
 
 
 def parse_experience_csv(
@@ -181,7 +341,15 @@ def group_files_by_experience(files: list[Path], experience_map: dict[str, str])
 
 
 def resolve_experience_path(experience: str) -> str:
-    """Resolve an experience name from the CSV to a Kit app path."""
+    """Resolve an experience name from the CSV to a Kit app path.
+
+    Args:
+        experience: Experience name or path read from the snippet mapping.
+
+    Returns:
+        Existing experience path, preferring ``EXP_PATH`` for relative names. If no candidate exists, return
+        the original value unchanged; an empty value remains empty.
+    """
     if not experience:
         return ""
 
@@ -204,7 +372,11 @@ def resolve_experience_path(experience: str) -> str:
 
 
 def get_current_platform_name() -> str:
-    """Return the current platform using Isaac Sim platform target naming."""
+    """Return the current platform using Isaac Sim platform target naming.
+
+    Returns:
+        Isaac Sim target name combining the operating system and normalized machine architecture.
+    """
     machine = platform.machine().lower()
     if machine in {"amd64", "x64"}:
         machine = "x86_64"
@@ -221,7 +393,17 @@ def get_current_platform_name() -> str:
 def parse_platform_constraints_csv(
     csv_path: str | Path, base_dir: str | Path, snippets_root: str | Path | None = None
 ) -> dict[str, tuple[str, ...]]:
-    """Parse snippet platform constraints from CSV."""
+    """Parse snippet platform constraints from CSV.
+
+    Args:
+        csv_path: Constraints file path, resolved relative to ``base_dir`` when needed.
+        base_dir: Directory used to resolve the constraints file itself.
+        snippets_root: Directory used to resolve snippet paths, or ``None`` to use ``base_dir``.
+
+    Returns:
+        Mapping from absolute snippet paths to allowed platform names or ``fnmatch`` patterns. Return an empty
+        mapping when the CSV file does not exist.
+    """
     if snippets_root is None:
         snippets_root = base_dir
 
@@ -258,7 +440,16 @@ def parse_platform_constraints_csv(
 def get_platform_skip_reason(
     file_path: str | Path, current_platform: str, platform_constraints: dict[str, tuple[str, ...]]
 ) -> str | None:
-    """Return a unittest skip reason when the snippet is not allowed on the current platform."""
+    """Return a unittest skip reason when the snippet is not allowed on the current platform.
+
+    Args:
+        file_path: Snippet path to check.
+        current_platform: Isaac Sim target name for the current host.
+        platform_constraints: Allowed platform patterns keyed by absolute snippet path.
+
+    Returns:
+        Skip reason when the current platform matches no allowed pattern, otherwise ``None``.
+    """
     allowed_platforms = platform_constraints.get(str(Path(file_path).resolve()))
     if not allowed_platforms:
         return None
@@ -356,7 +547,16 @@ def is_expected_failure(
     exception: BaseException,
     expected_failures: list[tuple[str, re.Pattern[str] | None]],
 ) -> bool:
-    """Return True if this snippet + exception combo matches an expected-failure entry."""
+    """Return True if this snippet + exception combo matches an expected-failure entry.
+
+    Args:
+        file_path: Snippet path to match against configured entries.
+        exception: Captured snippet exception whose class name and message are matched.
+        expected_failures: Absolute snippet paths paired with optional exception-message patterns.
+
+    Returns:
+        Whether the path matches an entry whose optional message pattern also matches the exception.
+    """
     if not expected_failures:
         return False
     file_path_str = str(Path(file_path).resolve())
@@ -369,13 +569,31 @@ def is_expected_failure(
 
 
 def find_python_files(root_dir: str | Path) -> list[Path]:
-    """Find all Python files recursively in the given directory."""
+    """Find all Python files recursively in the given directory.
+
+    Args:
+        root_dir: Directory tree to search.
+
+    Returns:
+        Paths of all files beneath ``root_dir`` whose names end in ``.py``.
+    """
     root_path = Path(root_dir)
-    return list(root_path.rglob("*.py"))
+    return sorted(root_path.rglob("*.py"))
 
 
 def file_contains_simulation_app(file_path: str | Path) -> bool | None:
-    """Check if a file contains 'SimulationApp' in uncommented lines."""
+    """Check if a file contains 'SimulationApp' in uncommented lines.
+
+    Args:
+        file_path: Python source file to inspect.
+
+    Returns:
+        Whether ``SimulationApp`` appears in source code before any inline comment.
+
+    Raises:
+        OSError: If the source file cannot be opened or read.
+        UnicodeDecodeError: If the source file is not valid UTF-8.
+    """
     try:
         with open(file_path, encoding="utf-8") as f:
             for line in f:
@@ -393,7 +611,12 @@ def file_contains_simulation_app(file_path: str | Path) -> bool | None:
         raise
 
 
-def _wait_for_context_idle(simulation_app: Any, deadline: float | None = None, settle_frames: int = 600) -> bool:
+def _wait_for_context_idle(
+    simulation_app: Any,
+    deadline: float | None = None,
+    settle_frames: int = 600,
+    stable_frames: int = 5,
+) -> bool:
     """Pump app updates until the USD context is no longer opening/closing a stage.
 
     A previous snippet may have launched a fire-and-forget ``open_stage_async`` whose
@@ -403,24 +626,43 @@ def _wait_for_context_idle(simulation_app: Any, deadline: float | None = None, s
     ``UsdContext busy`` / ``Stage opening or closing already in progress``. Letting the
     in-flight operation settle here keeps that race from leaking into the next snippet.
 
+    Args:
+        simulation_app: Running application used to pump update frames.
+        deadline: Monotonic-time deadline, or ``None`` to rely only on the frame budget.
+        settle_frames: Maximum number of update frames to pump when ``deadline`` is ``None``.
+        stable_frames: Consecutive idle update frames required before returning.
+
     Returns:
         ``True`` if the context became idle (closeable or openable), ``False`` if the
-        deadline / frame budget was hit first.
+        deadline or frame budget was hit first.
     """
     import omni.usd
 
     context = omni.usd.get_context()
-    for _ in range(settle_frames):
-        if context.can_close_stage() or context.can_open_stage():
-            return True
+    idle_frames = 0
+    update_frames = 0
+    while deadline is not None or update_frames < settle_frames:
         if deadline is not None and time.monotonic() > deadline:
             return False
+        if context.can_close_stage() or context.can_open_stage():
+            idle_frames += 1
+            if idle_frames >= stable_frames:
+                return True
+        else:
+            idle_frames = 0
         simulation_app.update()
-    return context.can_close_stage() or context.can_open_stage()
+        update_frames += 1
+    return idle_frames >= stable_frames
 
 
 def cleanup_before_new_stage(simulation_app: Any, file_path: str | Path, deadline: float | None = None) -> None:
-    """Clean up the current stage before creating a new one."""
+    """Clean up the current stage before creating a new one.
+
+    Args:
+        simulation_app: Running application used to advance asynchronous teardown.
+        file_path: Upcoming snippet path included in cleanup warnings.
+        deadline: Optional monotonic-time deadline that caps the helper's built-in cleanup waits.
+    """
     import omni.timeline
     import omni.usd
 
@@ -470,7 +712,15 @@ def cleanup_before_new_stage(simulation_app: Any, file_path: str | Path, deadlin
 
 
 def _is_path_within(path: str | Path, root: str | Path) -> bool:
-    """Return True if path is inside root."""
+    """Return True if path is inside root.
+
+    Args:
+        path: Candidate path to resolve.
+        root: Directory against which containment is checked.
+
+    Returns:
+        Whether the resolved candidate is beneath the resolved root; return ``False`` if resolution fails.
+    """
     try:
         return Path(path).resolve().is_relative_to(Path(root).resolve())
     except Exception:
@@ -478,7 +728,16 @@ def _is_path_within(path: str | Path, root: str | Path) -> bool:
 
 
 def _task_belongs_to_snippets(task: asyncio.Task[Any], snippets_root: str | Path) -> bool:
-    """Return True if task coroutine source file is from snippets tree."""
+    """Return True if task coroutine source file is from snippets tree.
+
+    Args:
+        task: Asynchronous task whose coroutine source is inspected.
+        snippets_root: Root directory of snippet source files.
+
+    Returns:
+        Whether the coroutine's source file is within the snippets tree; return ``False`` if it cannot be
+        determined.
+    """
     try:
         coro = task.get_coro()
         code = getattr(coro, "cr_code", None) or getattr(coro, "gi_code", None)
@@ -491,7 +750,15 @@ def _task_belongs_to_snippets(task: asyncio.Task[Any], snippets_root: str | Path
 
 
 def _exception_belongs_to_snippets(exception: BaseException, snippets_root: str | Path) -> bool:
-    """Return True if any traceback frame for *exception* is from snippets tree."""
+    """Return True if any traceback frame for *exception* is from snippets tree.
+
+    Args:
+        exception: Exception whose traceback frames are inspected.
+        snippets_root: Root directory of snippet source files.
+
+    Returns:
+        Whether any traceback frame originates within the snippets tree.
+    """
     try:
         tb = exception.__traceback__
         while tb is not None:
@@ -505,7 +772,15 @@ def _exception_belongs_to_snippets(exception: BaseException, snippets_root: str 
 
 
 def _loop_context_belongs_to_snippets(context: dict[str, Any], snippets_root: str | Path) -> bool:
-    """Return True if an asyncio loop exception context belongs to the snippet under test."""
+    """Return True if an asyncio loop exception context belongs to the snippet under test.
+
+    Args:
+        context: Event-loop error context containing an exception, task, or future.
+        snippets_root: Root directory of snippet source files.
+
+    Returns:
+        Whether the context's exception traceback or asynchronous work originates in the snippets tree.
+    """
     exception = context.get("exception")
     if exception is not None and _exception_belongs_to_snippets(exception, snippets_root):
         return True
@@ -551,10 +826,16 @@ def _patch_simulation_context_render_for_fabric_bootstrap() -> None:
 
 
 class JUnitTestResult(unittest.TextTestResult):
-    """TextTestResult subclass that records per-test timing for JUnit XML output.
+    """Record per-test timing and emit JUnit XML from unittest results.
 
     When *junit_xml_path* is set, the report is flushed to disk after every test
     so that a partial report survives even if the process is killed mid-run.
+
+    Args:
+        stream: Text stream used by the unittest result reporter.
+        descriptions: Whether the reporter displays test descriptions.
+        verbosity: Unittest reporting verbosity.
+        junit_xml_path: Destination for automatic partial reports, or ``None`` to disable per-test flushing.
     """
 
     def __init__(
@@ -604,7 +885,11 @@ class JUnitTestResult(unittest.TextTestResult):
     addError = _add_error
 
     def write_junit_xml(self, output_path: str | Path) -> None:
-        """Write a JUnit XML report with one <testcase> per snippet."""
+        """Write a JUnit XML report with one <testcase> per snippet.
+
+        Args:
+            output_path: Destination for the report; missing parent directories are created.
+        """
         failures = sum(1 for _, s, _, _ in self.test_timings if s == "fail")
         errors_count = sum(1 for _, s, _, _ in self.test_timings if s == "error")
         total_time = sum(e for _, _, e, _ in self.test_timings)
@@ -645,7 +930,14 @@ class JUnitTestResult(unittest.TextTestResult):
 
 
 def _sanitize_xml(text: str | None) -> str | None:
-    """Remove control characters that are invalid in XML 1.0."""
+    """Remove control characters that are invalid in XML 1.0.
+
+    Args:
+        text: Diagnostic text to sanitize, or ``None``.
+
+    Returns:
+        Text with XML-invalid control characters removed. Preserve ``None`` and empty text unchanged.
+    """
     if not text:
         return text
     return "".join(ch if (ord(ch) >= 0x20 or ch in "\t\n\r") else "" for ch in text)
@@ -673,7 +965,12 @@ _ALARM_ESCALATION_SECONDS = 30
 
 
 def _force_exit_alarm_handler(signum: int, frame: Any) -> None:
-    """Last-resort SIGALRM handler: force-exit when a snippet is stuck in native code."""
+    """Last-resort SIGALRM handler: force-exit when a snippet is stuck in native code.
+
+    Args:
+        signum: Delivered alarm signal number.
+        frame: Interrupted execution frame supplied by the signal handler.
+    """
     print(
         f"\n[FATAL] Snippet still stuck {_ALARM_ESCALATION_SECONDS}s after timeout. "
         "Partial JUnit report (if any) has been written to disk. Forcing exit.",
@@ -688,7 +985,14 @@ def _wait_for_snippet_tasks(
     settle_frames: int = 10,
     deadline: float | None = None,
 ) -> None:
-    """Give snippet-created async tasks a chance to complete."""
+    """Give snippet-created async tasks a chance to complete.
+
+    Args:
+        simulation_app: Running application used to pump update frames.
+        tasks: Snippet-created tasks to monitor.
+        settle_frames: Maximum number of update frames to pump.
+        deadline: Monotonic-time deadline, or ``None`` to rely only on the frame budget.
+    """
     if not tasks:
         return
     for _ in range(settle_frames):
@@ -716,9 +1020,18 @@ def load_snippet_module(
     keeps a slow teardown from being misattributed to the snippet about to run --
     which never executed in that case.
 
+    Args:
+        file_path: Snippet source file to execute.
+        snippets_root: Root used for module loading, task attribution, and cleanup.
+        index: Sequence number used to generate a unique module name.
+        simulation_app: Running application used for stage creation and asynchronous updates.
+        snippet_timeout: Execution budget in seconds after pre-snippet cleanup completes.
+        cleanup_timeout: Budget in seconds for tearing down state from the previous snippet.
+        previous_file_path: Previous snippet path used to diagnose cleanup timeouts, or ``None`` when unknown.
+
     Returns:
-        Tuple of (file_path_str, exception_or_None, timings_dict) where timings_dict
-        has ``cleanup``, ``exec`` and ``total`` elapsed seconds.
+        Snippet path, captured exception or ``None``, and elapsed seconds keyed by ``cleanup``, ``exec``, and
+        ``total``.
     """
     import gc
 
@@ -741,11 +1054,20 @@ def load_snippet_module(
     deadline = None
 
     def loop_exception_handler(loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
-        """Capture unhandled loop exceptions as test failures."""
+        """Capture unhandled loop exceptions as test failures.
+
+        Args:
+            loop: Event loop reporting the unhandled error.
+            context: Error context retained for later snippet attribution.
+        """
         captured_loop_exceptions.append(context)
 
     def _check_deadline(phase: str) -> None:
-        """Raise SnippetTimeoutError if the per-snippet execution deadline has been exceeded."""
+        """Raise SnippetTimeoutError if the per-snippet execution deadline has been exceeded.
+
+        Args:
+            phase: Execution phase included in the timeout error.
+        """
         if deadline is not None and time.monotonic() > deadline:
             raise SnippetTimeoutError(f"Snippet timed out after {snippet_timeout}s during {phase}: {file_path}")
 
@@ -852,6 +1174,14 @@ def load_snippet_module(
             for task in pending_snippet_tasks:
                 task.cancel()
             _wait_for_snippet_tasks(simulation_app, pending_snippet_tasks, settle_frames=5, deadline=deadline)
+
+            # Cancellation can return while native `open_stage_async` work continues on a
+            # loader thread. Wait again after cancellation so that work cannot poison the
+            # next snippet with `UsdContext busy` or a missing stage.
+            if pending_snippet_tasks and not _wait_for_context_idle(simulation_app, deadline=deadline):
+                exceptions.append(
+                    SnippetTimeoutError(f"USD context did not become idle after cancelling tasks: {file_path}")
+                )
 
             # Retrieve task exceptions explicitly so they become deterministic test failures.
             for task in snippet_tasks:
@@ -988,6 +1318,20 @@ files_by_experience = group_files_by_experience(files_to_test, experience_map)
 experience_names = sorted(files_by_experience.keys(), key=lambda x: (x != "", x))  # Default experience first
 print(f"Files grouped into {len(experience_names)} experience group(s): {experience_names}")
 
+# A ``SimulationApp`` cannot safely close and restart in the same Python process. Run
+# every mapped experience in a fresh child so its app settings and extension graph are
+# actually applied instead of silently reusing the first group's experience.
+if args.experience_group is None and len(experience_names) > 1:
+    sys.exit(_run_experience_groups(experience_names, args.junit_xml))
+
+if args.experience_group is not None:
+    selected_experience = "" if args.experience_group == _DEFAULT_EXPERIENCE_GROUP else args.experience_group
+    if selected_experience not in files_by_experience:
+        print(f"Error: Experience group not found after filtering: {selected_experience or 'default'}")
+        sys.exit(2)
+    files_by_experience = {selected_experience: files_by_experience[selected_experience]}
+    experience_names = [selected_experience]
+
 # Parse expected failures
 expected_failures = []
 if args.expected_failures_csv:
@@ -1017,7 +1361,15 @@ _previous_snippet_path = None
 
 
 def is_in_expected_failures(file_path: str | Path, expected_failures: list[tuple[str, re.Pattern[str] | None]]) -> bool:
-    """Return True if this snippet path appears in the expected-failure list (regardless of pattern)."""
+    """Return True if this snippet path appears in the expected-failure list (regardless of pattern).
+
+    Args:
+        file_path: Snippet path to match.
+        expected_failures: Absolute snippet paths paired with optional exception-message patterns.
+
+    Returns:
+        Whether the resolved snippet path matches any configured entry, regardless of its message pattern.
+    """
     if not expected_failures:
         return False
     file_path_str = str(Path(file_path).resolve())
@@ -1038,7 +1390,23 @@ def _make_snippet_test(
     platform_constraints_map: dict[str, tuple[str, ...]],
     current_platform_name: str,
 ) -> Any:
-    """Create a test method for a single doc snippet."""
+    """Create a test method for a single doc snippet.
+
+    Args:
+        file_path: Snippet source file exercised by the generated test.
+        snippets_root: Root passed to the snippet loader and task-attribution checks.
+        snippet_index: Zero-based sequence number used to generate the snippet's module name.
+        total_count: Total snippet count retained for call-site symmetry with progress bookkeeping; the
+            generated method does not use it.
+        expected_failures_list: Snippet paths paired with optional expected exception patterns.
+        snippet_timeout: Execution budget in seconds for the snippet.
+        cleanup_timeout: Budget in seconds for tearing down the preceding snippet.
+        platform_constraints_map: Allowed platform patterns keyed by absolute snippet path.
+        current_platform_name: Isaac Sim target name used to evaluate platform constraints.
+
+    Returns:
+        Unittest method that loads, times, and validates the snippet when invoked.
+    """
 
     def test_snippet(self: unittest.TestCase) -> None:
         global _previous_snippet_path

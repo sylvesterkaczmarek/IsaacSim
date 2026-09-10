@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "robot_prim_path": "/World/envs/env_0/Franka",
+  "articulation_root_path": "/World/envs/env_0/Franka",
+  "optimized_at": "2026-05-25T12:00:00+00:00",
+  "optimizer_backend": "levenberg_marquardt",
+  "final_cost": 0.0123,
+  "iterations": 12,
+  "dataset": {
+    "source_type": "csv",
+    "source_path": "/data/trajectory.csv",
+    "num_samples": 300,
+    "num_joints": 7,
+    "duration_seconds": 3.0
+  },
+  "parameters": [
+    {
+      "name": "Joint 1 — Friction",
+      "param_type": "joint_friction",
+      "category": "sysid",
+      "dof_index": 0,
+      "link_index": -1,
+      "component_index": 0,
+      "value": 1.05
+    }
+  ],
+  "sysid_parameters": [
+    {
+      "name": "Joint 1 — Friction",
+      "param_type": "joint_friction",
+      "category": "sysid",
+      "dof_index": 0,
+      "link_index": -1,
+      "component_index": 0,
+      "value": 1.05
+    }
+  ],
+  "calibration_parameters": [],
+  "theta_initial": [1.0],
+  "theta_final": [1.05],
+  "residual_weights": {
+    "position_weight": 1.0,
+    "velocity_weight": 1.0
+  }
+}

@@ -28,7 +28,7 @@ def tf_matrices_from_poses(translations: np.ndarray, orientations: np.ndarray, d
     Args:
         translations: Translations with shape (N, 3).
         orientations: Quaternion orientations (scalar first) with shape (N, 4).
-        device: Device for tensor operations.
+        device: Unused device parameter.
 
     Returns:
         Transformation matrices with shape (N, 4, 4).
@@ -50,10 +50,10 @@ def get_local_from_world(
         parent_transforms: Parent transformation matrices.
         positions: World space positions with shape (N, 3).
         orientations: World space quaternion orientations with shape (N, 4).
-        device: Device for tensor operations.
+        device: Device for creating the output tensors.
 
     Returns:
-        Tuple of (local_translations, local_orientations) in parent coordinate frame.
+        The local translations and local orientations in the parent coordinate frame.
     """
     calculated_translations = create_zeros_tensor(shape=[positions.shape[0], 3], dtype="float32", device=device)
     calculated_orientations = create_zeros_tensor(shape=[positions.shape[0], 4], dtype="float32", device=device)
@@ -77,10 +77,10 @@ def get_world_from_local(
         parent_transforms: Parent transformation matrices.
         translations: Local space translations with shape (N, 3).
         orientations: Local space quaternion orientations with shape (N, 4).
-        device: Device for tensor operations.
+        device: Device for creating the output tensors.
 
     Returns:
-        Tuple of (world_positions, world_orientations) in world coordinate frame.
+        The world positions and world orientations in the world coordinate frame.
     """
     calculated_positions = create_zeros_tensor(shape=[translations.shape[0], 3], dtype="float32", device=device)
     calculated_orientations = create_zeros_tensor(shape=[translations.shape[0], 4], dtype="float32", device=device)
@@ -101,7 +101,7 @@ def get_pose(positions: np.ndarray, orientations: np.ndarray, device: object = N
     Args:
         positions: Position array with shape (N, 3).
         orientations: Orientation array with shape (N, 4).
-        device: Device for tensor operations.
+        device: Unused device parameter.
 
     Returns:
         Combined pose array with shape (N, 7) containing positions and orientations.
@@ -127,8 +127,8 @@ def assign_pose(
         positions: New positions to assign. If None, uses current positions at indices.
         orientations: New orientations to assign. If None, uses current orientations at indices.
         indices: Indices where new poses should be assigned.
-        device: Device for tensor operations.
-        pose: Optional pose parameter.
+        device: Unused device parameter.
+        pose: Unused pose parameter.
 
     Returns:
         Updated pose array with new positions and orientations assigned at specified indices.

@@ -1,5 +1,5 @@
 [package]
-version = "2.4.5"
+version = "2.4.7"
 category = "SyntheticData"
 title = "Isaac Sim Replicator Synthetic Data Recorder"
 description = "The extension provides a UI to record synthetic data using Replicator writers. By default the UI uses the Replicator BasicWriter, it however also supports custom writers with custom parameters loaded through config files as key-value pairs."
@@ -11,6 +11,7 @@ icon = "data/icon.png"
 writeTarget.kit = true
 
 [dependencies]
+"isaacsim.core.experimental.utils" = {}
 "isaacsim.gui.components" = {}
 "omni.kit.menu.utils" = {}
 "omni.kit.viewport.utility" = {}
@@ -27,12 +28,18 @@ args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 timeout = 900
 dependencies = [
     "isaacsim.test.utils",
+    "omni.hydra.rtx",
     "omni.kit.viewport.window",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]
@@ -96,8 +103,10 @@ name = "test_recorder_outputs"
 timeout = 900
 dependencies = [
     "isaacsim.test.utils",
+    "omni.hydra.rtx",
     "omni.kit.viewport.window",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]
@@ -164,8 +173,10 @@ name = "test_recorder_ui"
 timeout = 900
 dependencies = [
     "isaacsim.test.utils",
+    "omni.hydra.rtx",
     "omni.kit.viewport.window",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]
@@ -232,8 +243,10 @@ name = "test_recorder_timeline"
 timeout = 900
 dependencies = [
     "isaacsim.test.utils",
+    "omni.hydra.rtx",
     "omni.kit.viewport.window",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

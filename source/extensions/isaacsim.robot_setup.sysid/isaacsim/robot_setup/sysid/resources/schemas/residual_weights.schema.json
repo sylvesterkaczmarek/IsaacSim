@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nvidia.com/isaac/schemas/residual_weights.schema.json",
+  "title": "SysID Residual Weights",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "position_weight": { "type": "number", "minimum": 0 },
+    "velocity_weight": { "type": "number", "minimum": 0 },
+    "torque_weight": { "type": "number", "minimum": 0 },
+    "end_effector_pose_weight": { "type": "number", "minimum": 0 },
+    "contact_force_weight": { "type": "number", "minimum": 0 },
+    "sample_weights": {
+      "type": ["array", "null"],
+      "items": { "type": "number", "minimum": 0 }
+    },
+    "end_effector_link_index": { "type": "integer" }
+  }
+}

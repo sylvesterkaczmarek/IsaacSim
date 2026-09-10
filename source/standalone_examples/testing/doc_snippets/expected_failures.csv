@@ -8,19 +8,13 @@
 introduction/quickstart_isaacsim_robot/standalone_stepping_loop.py
 #
 # ---- WG2: isaac_lab_tutorials/ ----
-# Class method fragments — reference self, torch, wp; not standalone-testable
-isaac_lab_tutorials/tutorial_policy_deployment/compute_observation.py
-isaac_lab_tutorials/tutorial_policy_deployment/forward.py
-isaac_lab_tutorials/tutorial_policy_deployment/run_the_actuator_network.py
 # Code fragment referencing undefined 'create_parent_xforms' from prior context
 isaac_lab_tutorials/tutorial_instanceable_assets/save_as_path_str_usd_file_path_for_modified_usd_st.py
 # Sequential cloner snippets — FIXED with test setups + migrated to experimental API
 #
 # ---- WG3: replicator / SDG ----
 # Missing modules or API changes in current build
-replicator_tutorials/tutorial_replicator_isaac_snippets/motion_blur_script_editor.py
 replicator_tutorials/tutorial_replicator_custom_og_randomizer/replicator_wrapper.py
-replicator_tutorials/tutorial_replicator_ur10_palletizing/sdg_ur10_palletizing_script_editor.py
 replicator_tutorials/tutorial_replicator_augmentation/writer_augmentation_script_editor.py
 replicator_tutorials/tutorial_replicator_augmentation/annotator_augmentation_script_editor.py
 synthetic_data_generation/tutorial_replicator_grasping_sdg/grasping_workflow_sdg_script_editor.py,ModuleNotFoundError.*isaacsim\.replicator\.grasping
@@ -69,10 +63,29 @@ cortex_tutorials/tutorial_cortex_2_decider_networks/class_dfstatedfbindable.py
 cortex_tutorials/tutorial_cortex_2_decider_networks/setup_automatic_action_on_the_monitored_logical_st.py
 #
 # ---- WG6: omniverse_usd/ ----
-# isaacsim.robot.poser not available in base.python.kit experience
-omniverse_usd/robot_schema/import_named_pose_crud.py,ModuleNotFoundError.*isaacsim\.robot\.poser
 # Needs actual robot with links/joints for GenerateRobotLinkTree
 omniverse_usd/robot_schema/open_the_script_editor_in_window_script_editor_and.py
+#
+# isaacsim.robot.poser not available in base.python.kit experience
+robot_setup/import_kinematics.py,ModuleNotFoundError.*isaacsim\.robot\.poser
+robot_setup/import_named_pose_crud.py,ModuleNotFoundError.*isaacsim\.robot\.poser
+# AGILE is a separate repository and is not installed in the Isaac Sim doc-snippet
+# test environment. These are configuration excerpts whose surrounding imports and
+# definitions live in AGILE; assert their expected missing-context failure modes.
+robot_setup_tutorials/tutorial_humanoid_workflow_create_task/define_robot.py,ModuleNotFoundError.*(?:isaaclab|agile)
+robot_setup_tutorials/tutorial_humanoid_workflow_create_task/register_task.py,(?:ModuleNotFoundError.*gymnasium|ImportError.*relative import)
+robot_setup_tutorials/tutorial_humanoid_workflow_create_task/configure_runner.py,ModuleNotFoundError.*(?:isaaclab|agile)
+robot_setup_tutorials/tutorial_humanoid_workflow_configure_mdp/scene_cfg.py,NameError.*configclass
+robot_setup_tutorials/tutorial_humanoid_workflow_configure_mdp/commands_cfg.py,NameError.*configclass
+robot_setup_tutorials/tutorial_humanoid_workflow_configure_mdp/actions_cfg.py,NameError.*unitree_h2
+robot_setup_tutorials/tutorial_humanoid_workflow_configure_mdp/observations_cfg.py,NameError.*configclass
+robot_setup_tutorials/tutorial_humanoid_workflow_configure_mdp/rewards_cfg.py,NameError.*configclass
+robot_setup_tutorials/tutorial_humanoid_workflow_configure_mdp/terminations_cfg.py,NameError.*configclass
+robot_setup_tutorials/tutorial_humanoid_workflow_configure_mdp/viewer_cfg.py,NameError.*configclass
+robot_setup_tutorials/tutorial_humanoid_workflow_configure_mdp/events_cfg.py,NameError.*configclass
+robot_setup_tutorials/tutorial_humanoid_workflow_configure_mdp/curriculum_cfg.py,NameError.*configclass
+robot_setup_tutorials/tutorial_humanoid_workflow_configure_mdp/environment_cfg.py,NameError.*configclass
+robot_setup_tutorials/tutorial_humanoid_workflow_deploy/create_policy_runner.py,NameError.*PolicyArtifact
 #
 # ---- WG7: python_scripting/ ----
 # Low-level Kit bootstrap fragments — cannot run inside existing SimulationApp
@@ -85,11 +98,6 @@ python_scripting/manual_standalone_python/details_how_simulationapp_works.py
 # ---- WG8: ros2_tutorials/ ----
 # ROS2 bridge node types not available in default experience
 ros2_tutorials/tutorial_ros2_camera_noise/camera_noise.py
-# RTX lidar sequential snippets — need ROS2 bridge or undefined context vars
-ros2_tutorials/tutorial_ros2_rtx_lidar/rtx_lidar_script_sample_1.py
-ros2_tutorials/tutorial_ros2_rtx_lidar/rtx_lidar_script_sample_2.py
-ros2_tutorials/tutorial_ros2_rtx_lidar/rtx_lidar_script_sample_3.py
-ros2_tutorials/tutorial_ros2_rtx_lidar/rtx_lidar_script_sample_4.py
 # ROS2 launch file fragments — undefined vars (map_yaml_file, Node, LaunchDescription)
 ros2_tutorials/tutorial_ros2_multi_navigation/set_up_the_namespace_carter1_by_defining_the_node_.py
 ros2_tutorials/tutorial_ros2_multi_navigation/finally_at_the_end_of_the_launch_file_add_the_two_.py
@@ -119,21 +127,35 @@ omnigraph/omnigraph_scripting/editing_a_graph.py
 omnigraph/omnigraph_scripting/set_new_value.py
 # Class fragment referencing self._num_scenarios, RobotScenario (from prior snippet context)
 core_api_tutorials/tutorial_core_multiple_tasks/adding_randomization.py
-# Missing module: isaacsim.robot.experimental.manipulators
-core_api_tutorials/tutorial_core_multiple_tasks/scaling_to_many_tasks.py,ModuleNotFoundError.*isaacsim\.robot\.experimental
-core_api_tutorials/tutorial_core_multiple_tasks/parameterizing_tasks.py,ModuleNotFoundError.*isaacsim\.robot\.experimental
-core_api_tutorials/tutorial_core_adding_multiple_robots/adding_state_machine_logic.py,ModuleNotFoundError.*isaacsim\.robot\.experimental
 # Pseudocode with fake API names (UsdPhysics.SomePhysicsAPI)
 physics/simulation_fundamentals/physics_in_usd_schemas.py
 # Newton physics engine not available in default build
 # Extension module not importable in default build
 robot_setup/assemble_robots/robot_assembler_api.py
-# Class with relative import (.rmpflow) — not standalone-testable
-robot_setup_tutorials/tutorial_pickplace_example/basic_pick_and_place_task_using_rmp_flow.py
 # Non-existent template module (my.custom.extension)
 utilities/vscode_extension_template_generator/running_the_extension.py,ModuleNotFoundError
 # Old deprecated import path (omni.isaac.sensor)
 overview/extensions_renaming/renaming_extension_apis.py,ModuleNotFoundError.*omni\.isaac\.sensor
+#
+# ---- WG13: migration_guides/isaac_sim_6_0/ ----
+# Isaac Sim 6.0 migration guide snippets. These are illustrative "before/after"
+# and API-shape examples for the migration docs. The "old" snippets reference
+# deprecated or pre-3.0.0 APIs on purpose, and several "new" snippets need an
+# extension that is not enabled in the base snippet test experience, or a
+# populated stage/asset that the focused example intentionally omits. The
+# matching exception type is asserted so an unexpected failure mode still surfaces.
+# The remaining sibling snippets -- world_step_old/new, contact_create_old,
+# imu_create_read_new, and raw_read_new -- run cleanly and are deliberately not listed here.
+migration_guides/isaac_sim_6_0/benchmark_services/benchmark_recorders.py,ModuleNotFoundError.*isaacsim\.benchmark
+migration_guides/isaac_sim_6_0/mobility_gen_recordings_migration/import_new.py,ModuleNotFoundError.*isaacsim\.replicator\.experimental\.mobility_gen
+migration_guides/isaac_sim_6_0/mobility_gen_recordings_migration/import_old.py,ModuleNotFoundError.*isaacsim\.replicator\.mobility_gen
+migration_guides/isaac_sim_6_0/replicator_domain_randomization_to_experimental/import_new.py,ValueError.*Specified paths are invalid
+migration_guides/isaac_sim_6_0/replicator_domain_randomization_to_experimental/import_old.py,Exception.*wrapping it as view
+migration_guides/isaac_sim_6_0/sensors_physics_to_experimental_physics/contact_create_new.py,ValueError.*Contact Sensor needs to be created under an enabled rigid-body prim
+migration_guides/isaac_sim_6_0/sensors_physics_to_experimental_physics/imu_create_read_old.py,ImportError.*IMUSensor
+migration_guides/isaac_sim_6_0/sensors_physics_to_experimental_physics/raw_read_old.py,ImportError.*_sensor
+migration_guides/isaac_sim_6_0/urdf_importer/import_from_ros2_robot_description.py,ModuleNotFoundError.*isaacsim\.ros2
+migration_guides/isaac_sim_6_0/urdf_importer/import_urdf_with_base_type.py,ValueError.*is not a readable file
 #
 # ---- WG11: digital_twin/ ----
 # Extension not available in default experience
@@ -145,3 +167,8 @@ digital_twin/warehouse_logistics/ext_omni_warehouse_creator/headless_generation.
 action_and_event_data_generation/ira_config_read_update.py,ModuleNotFoundError.*isaacsim\.replicator\.agent
 action_and_event_data_generation/ira_setup_and_data_generation.py,ModuleNotFoundError.*isaacsim\.replicator\.agent
 action_and_event_data_generation/ira_config_load_save.py,ModuleNotFoundError.*isaacsim\.replicator\.agent
+#
+# ---- Sequential physics walkthrough snippets ----
+# These require the Factory assets loaded by the preceding walkthrough step.
+physics/hydroelastic_contact_walkthrough/apply_newton_sdf_collision_api.py,RuntimeError.*Collider prim does not exist
+physics/hydroelastic_contact_walkthrough/bind_newton_material.py,RuntimeError.*Collider prim does not exist

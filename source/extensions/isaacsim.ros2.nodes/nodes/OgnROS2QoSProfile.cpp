@@ -14,7 +14,7 @@
 // limitations under the License.
 
 
-#include <isaacsim/core/includes/BaseResetNode.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
 #include <nlohmann/json.hpp>
 
 #include <OgnROS2QoSProfileDatabase.h>

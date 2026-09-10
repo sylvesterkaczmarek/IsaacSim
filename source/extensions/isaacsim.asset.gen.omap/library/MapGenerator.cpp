@@ -14,13 +14,13 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "isaacsim/core/includes/ScopedTimer.h"
+#include "isaacsim/core/includes/ScopedTimer.hpp"
 
 #include <extensions/PxSceneQueryExt.h>
-#include <isaacsim/asset/gen/omap/MapGenerator.h>
+#include <isaacsim/asset/gen/omap/MapGenerator.hpp>
 #include <octomap/octomap.h>
 #include <omni/physx/IPhysx.h>
 #include <pxr/usd/usdPhysics/scene.h>
@@ -62,6 +62,11 @@ namespace
  */
 ::physx::PxScene* findPhysxScene(omni::physx::IPhysx* physXPtr, pxr::UsdStageWeakPtr stagePtr)
 {
+    if (!physXPtr || !stagePtr)
+    {
+        return nullptr;
+    }
+
     pxr::UsdPrimRange range = stagePtr->Traverse();
     ::physx::PxScene* physxScene = nullptr;
     for (pxr::UsdPrimRange::iterator iter = range.begin(); iter != range.end(); ++iter)
@@ -113,7 +118,6 @@ MapGenerator::MapGenerator(omni::physx::IPhysx* physXPtr, pxr::UsdStageWeakPtr s
     if (!m_physxScenePtr)
     {
         CARB_LOG_ERROR("Physics scene not found in stage");
-        return;
     }
 
     m_tree->setOccupancyThres(0.5);
@@ -169,8 +173,8 @@ void MapGenerator::updateSettings(const float cellSize,
  * @brief Sets the transform parameters for the map generation
  * @details
  * Defines the origin and boundaries of the area to be mapped in world coordinates.
- * The boundaries are adjusted to align with the cell grid by rounding the min/max
- * points to the nearest cell boundaries.
+ * The XY boundaries are adjusted to align with the cell grid by rounding the min/max
+ * points to the nearest cell boundaries. The lower Z bound is preserved.
  *
  * @param[in] inputOrigin Origin point of the map in world coordinates
  * @param[in] inputMinPoint Minimum point of the map relative to origin
@@ -178,15 +182,15 @@ void MapGenerator::updateSettings(const float cellSize,
  *
  * @post m_inputOrigin, m_inputMinPoint, and m_inputMaxPoint will be updated
  *
- * @note The min/max points are adjusted to align with cell boundaries
- *       by rounding down/up to the nearest cell size multiple
+ * @note XY min/max points are adjusted to align with cell boundaries. The lower Z
+ *       bound is preserved so callers can exclude floor contacts with a positive minZ.
  */
 void MapGenerator::setTransform(carb::Float3 inputOrigin, carb::Float3 inputMinPoint, carb::Float3 inputMaxPoint)
 {
     carb::Float3 roundedMin = {
         std::floor(inputMinPoint.x / m_cellSize) * m_cellSize,
         std::floor(inputMinPoint.y / m_cellSize) * m_cellSize,
-        std::floor(inputMinPoint.z / m_cellSize) * m_cellSize,
+        inputMinPoint.z,
     };
 
     carb::Float3 roundedMax = {
@@ -208,35 +212,37 @@ void MapGenerator::setTransform(carb::Float3 inputOrigin, carb::Float3 inputMinP
  * in the Z direction to detect obstacles at any height. The octree is updated
  * with both occupied and free cells based on the collision test results.
  *
- * @pre m_physxScenePtr must be valid
  * @pre m_tree must be valid
  *
- * @post m_tree will be populated with occupancy information
+ * @post m_tree is cleared, then populated with occupancy information
  * @post The octree's inner nodes will be updated for consistency
+ * @post m_physxScenePtr is re-resolved from the currently bound stage
  *
  * @note This method is more efficient than generate3d() but provides less spatial information
- * @warning If the PhysX scene or octree is not initialized, the function will return early
+ * @warning Returns early, leaving an empty map, if the octree, stage, or physics scene is unavailable
  */
 void MapGenerator::generate2d()
 {
-    if (!m_physxScenePtr)
-    {
-        CARB_LOG_ERROR("Physics scene not initialized");
-        return;
-    }
-
     if (!m_tree)
     {
         CARB_LOG_ERROR("Octree not initialized");
         return;
     }
 
-    // Clear existing octree data
+    // Clear first so a failed generation cannot return the previous run's data.
     m_tree->clear();
 
-    // Create overlap test geometry
-    // Use a tall box that extends in Z direction to detect obstacles at any height
-    float geomHeight = ::physx::PxAbs(m_inputMaxPoint.z - m_inputMinPoint.z) / 2.0f + m_cellSize / 2.0f;
+    m_physxScenePtr = findPhysxScene(m_physx, m_stage);
+    if (!m_physxScenePtr)
+    {
+        CARB_LOG_ERROR("No physics scene found; the stage may have been closed or replaced");
+        return;
+    }
+
+    // Create overlap test geometry. Use the requested Z band exactly so minZ == 0
+    // includes floor contacts, while any positive minZ can exclude a floor at z=0.
+    const float zSpan = ::physx::PxAbs(m_inputMaxPoint.z - m_inputMinPoint.z);
+    float geomHeight = std::max(zSpan / 2.0f, m_cellSize / 2.0f);
     ::physx::PxBoxGeometry cellGeom(::physx::PxVec3(m_cellSize / 2.0f, m_cellSize / 2.0f, geomHeight));
 
     // Sets to store occupied and unoccupied cell keys
@@ -295,32 +301,33 @@ void MapGenerator::generate2d()
  * The octree is updated with both occupied and free cells based on the
  * collision test results.
  *
- * @pre m_physxScenePtr must be valid
  * @pre m_tree must be valid
  *
- * @post m_tree will be populated with 3D occupancy information
+ * @post m_tree is cleared, then populated with 3D occupancy information
  * @post The octree's inner nodes will be updated for consistency
+ * @post m_physxScenePtr is re-resolved from the currently bound stage
  *
  * @note This method provides more complete spatial information than generate2d()
  * @warning This method requires more memory and computation than generate2d()
- * @warning If the PhysX scene or octree is not initialized, the function will return early
+ * @warning Returns early, leaving an empty map, if the octree, stage, or physics scene is unavailable
  */
 void MapGenerator::generate3d()
 {
-    if (!m_physxScenePtr)
-    {
-        CARB_LOG_ERROR("Physics scene not initialized");
-        return;
-    }
-
     if (!m_tree)
     {
         CARB_LOG_ERROR("Octree not initialized");
         return;
     }
 
-    // Clear existing octree data
+    // Clear first so a failed generation cannot return the previous run's data.
     m_tree->clear();
+
+    m_physxScenePtr = findPhysxScene(m_physx, m_stage);
+    if (!m_physxScenePtr)
+    {
+        CARB_LOG_ERROR("No physics scene found; the stage may have been closed or replaced");
+        return;
+    }
 
     // Create overlap test geometry
     // Use a cube with half extents equal to half the cell size
@@ -556,12 +563,19 @@ bool isSafe(const float* buffer, carb::Int2 numCells, int x, int y, float target
  * @param[in] replacement Value to fill connected regions with
  *
  * @pre buffer must be a valid pointer to a grid buffer
- * @pre (sx,sy) must be a valid position within the grid
- *
  * @post All cells connected to (sx,sy) with the same initial value will be changed to replacement
+ *
+ * @note Returns without modifying the buffer when the start position is outside the grid.
  */
 void floodfill(float* buffer, carb::Int2 numCells, int sx, int sy, float replacement)
 {
+    if (sx < 0 || sx >= numCells.x || sy < 0 || sy >= numCells.y)
+    {
+        CARB_LOG_WARN("Flood fill start position (%d, %d) is outside the occupancy map bounds (%d, %d).", sx, sy,
+                      numCells.x, numCells.y);
+        return;
+    }
+
     // Get the target value we're replacing at the start position
     size_t startIndex = sy * numCells.x + sx;
     float target = buffer[startIndex];

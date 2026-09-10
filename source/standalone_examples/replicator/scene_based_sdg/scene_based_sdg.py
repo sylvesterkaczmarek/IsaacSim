@@ -32,7 +32,7 @@ config = {
     },
     "resolution": [512, 512],
     "rt_subframes": 32,
-    "num_frames": 10,
+    "num_frames": 4,
     "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
     "writer": "BasicWriter",
     "backend_type": "DiskBackend",
@@ -64,10 +64,7 @@ config = {
         "url": "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_04.usd",
         "class": "cardbox",
     },
-    "close_app_after_run": True,
 }
-
-import carb
 
 # Parse command line arguments for optional config file
 parser = argparse.ArgumentParser()
@@ -84,9 +81,9 @@ if args.config and os.path.isfile(args.config):
         elif args.config.endswith(".yaml"):
             args_config = yaml.safe_load(f)
         else:
-            carb.log_warn(f"File {args.config} is not json or yaml, will use default config")
+            print(f"[SDG][WARN] File {args.config} is not json or yaml, will use default config")
 else:
-    carb.log_warn(f"File {args.config} does not exist, will use default config")
+    print(f"[SDG][WARN] File {args.config} does not exist, will use default config")
 
 # Clear default writer_config if overridden in args
 if "writer_config" in args_config:
@@ -98,7 +95,9 @@ config.update(args_config)
 # Initialize simulation app
 simulation_app = SimulationApp(launch_config=config["launch_config"])
 
+import carb
 import carb.settings
+import omni.kit.app
 
 # Runtime modules (must import after SimulationApp creation)
 import omni.replicator.core as rep
@@ -106,7 +105,7 @@ import omni.usd
 import scene_based_sdg_utils
 from isaacsim.core.experimental.prims import XformPrim
 from isaacsim.core.experimental.utils.semantics import add_labels, remove_all_labels
-from isaacsim.core.experimental.utils.stage import add_reference_to_stage, define_prim, get_current_stage, open_stage
+from isaacsim.core.experimental.utils.stage import add_reference_to_stage, define_prim, get_current_stage
 from isaacsim.core.experimental.utils.transform import euler_angles_to_quaternion
 from isaacsim.storage.native import get_assets_root_path
 from pxr import Gf
@@ -117,11 +116,9 @@ if assets_root_path is None:
     carb.log_error("Could not get nucleus server path, closing application..")
     simulation_app.close()
 
-# Load environment stage
-print(f"[SDG] Loading Stage {config['env_url']}")
-stage_opened, _ = open_stage(assets_root_path + config["env_url"])
-if not stage_opened:
-    carb.log_error(f"Could not open stage{config['env_url']}, closing application..")
+# Load environment stage, or create a minimal plane + dome light when env_url is None
+if not scene_based_sdg_utils.setup_environment(config.get("env_url"), assets_root_path):
+    carb.log_error(f"Could not open stage {config.get('env_url')}, closing application..")
     simulation_app.close()
 
 # Initialize randomization
@@ -309,13 +306,89 @@ writer.detach()
 for render_product in render_products:
     render_product.destroy()
 
-# Check if the application should keep running after data generation
-close_app_after_run = config.get("close_app_after_run", True)
-if config["launch_config"]["headless"]:
-    if not close_app_after_run:
-        print("[SDG] 'close_app_after_run' is ignored when running headless. The application will be closed.")
-elif not close_app_after_run:
-    print("[SDG] The application will not be closed after the run. Make sure to close it manually.")
-    while simulation_app.is_running():
-        simulation_app.update()
+# <start-scene-based-sdg-test>
+test_parser = argparse.ArgumentParser()
+test_parser.add_argument(
+    "--test",
+    action="store_true",
+    help="Validate captured output files against expected counts and exit.",
+)
+test_args, _ = test_parser.parse_known_args()
+
+if test_args.test:
+    import sys
+
+    from isaacsim.core.utils.extensions import enable_extension
+
+    enable_extension("isaacsim.test.utils")
+    enable_extension("isaacsim.replicator.examples")
+    from isaacsim.test.utils.file_validation import get_folder_file_summary, validate_folder_contents
+    from isaacsim.test.utils.image_comparison import compare_images_in_directories
+
+    rgb_mean_diff_tolerance = 7.5
+    num_captures = config.get("num_frames", 4) * 3
+    if config.get("backend_type"):
+        out_dir = config.get("backend_params", {}).get("output_dir")
+    else:
+        out_dir = config.get("writer_config", {}).get("output_dir")
+    if not out_dir:
+        print("[SDG][Test][FAIL] Output directory not configured")
+        sys.exit(1)
+
+    ok = validate_folder_contents(
+        path=out_dir,
+        expected_counts={"png": num_captures},
+        recursive=True,
+        exact_match=False,
+        fail_on_empty_files=True,
+    )
+    if not ok:
+        summary = get_folder_file_summary(out_dir, recursive=True)
+        print(
+            f"[SDG][Test][FAIL] Output validation failed for {out_dir}\n"
+            f"\t Expected at least: {{'png': {num_captures}}}\n"
+            f"\t Found: {summary['extension_counts']}"
+        )
+        sys.exit(1)
+
+    replicator_examples_ext_path = (
+        omni.kit.app.get_app().get_extension_manager().get_extension_path_by_module("isaacsim.replicator.examples")
+    )
+    golden_dir = os.path.join(
+        replicator_examples_ext_path,
+        "isaacsim",
+        "replicator",
+        "examples",
+        "tests",
+        "data",
+        "golden",
+        "_out_scene_based_sdg",
+    )
+    compare_rgb = os.path.basename(os.path.normpath(out_dir)) == "_out_scene_based_sdg"
+    rgb_results = []
+    if compare_rgb:
+        for golden_root, _, golden_files in os.walk(golden_dir):
+            if any(file_name.endswith(".png") for file_name in golden_files):
+                relative_root = os.path.relpath(golden_root, golden_dir)
+                test_root = out_dir if relative_root == "." else os.path.join(out_dir, relative_root)
+                rgb_results.append(
+                    compare_images_in_directories(
+                        golden_dir=golden_root,
+                        test_dir=test_root,
+                        path_pattern=r"^rgb_.*\.png$",
+                        allclose_rtol=None,
+                        allclose_atol=None,
+                        mean_tolerance=rgb_mean_diff_tolerance,
+                        print_all_stats=False,
+                    )
+                )
+    if compare_rgb and (not rgb_results or not all(result["all_passed"] for result in rgb_results)):
+        print(
+            f"[SDG][Test][FAIL] RGB image comparison failed (tol={rgb_mean_diff_tolerance}). "
+            f"Golden dir: {golden_dir}, output dir: {out_dir}"
+        )
+        sys.exit(1)
+    print(f"[SDG][Test][PASS] Output validation succeeded for {out_dir} ({num_captures} captures)")
+# <end-scene-based-sdg-test>
+
 simulation_app.close()

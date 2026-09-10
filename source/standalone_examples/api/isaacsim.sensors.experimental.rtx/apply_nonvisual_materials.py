@@ -52,19 +52,38 @@ parser = argparse.ArgumentParser(description="Apply non-visual materials for RTX
 parser.add_argument("--test", default=False, action="store_true", help="Run in test mode.")
 args, _ = parser.parse_known_args()
 
-# headless=False to visualize the scene and debug view
-simulation_app = SimulationApp({"headless": False})
+# headless=False to visualize the scene and debug view.
+# stableIds must be enabled so the lidar GMO carries per-point object IDs (StableIdMap),
+# which the writer uses to bin return intensity per cube.
+simulation_app = SimulationApp(
+    {
+        "headless": False,
+        "extra_args": ["--/rtx-transient/stableIds/enabled=true"],
+    }
+)
 
 output_dir = os.path.join(os.getcwd(), "_example_output_isaacsim.sensors.experimental.rtx", "apply_nonvisual_materials")
 os.makedirs(output_dir, exist_ok=True)
 
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
 import omni.replicator.core as rep
-import omni.timeline
 from isaacsim.core.experimental.materials import NonVisualMaterial
 from isaacsim.core.experimental.objects import Cube, DistantLight
-from isaacsim.sensors.experimental.rtx import Lidar, LidarSensor, parse_generic_model_output_data
+from isaacsim.sensors.experimental.rtx import (
+    Lidar,
+    LidarSensor,
+    parse_generic_model_output_data,
+    parse_object_ids,
+    parse_stable_id_map_data,
+)
 from omni.replicator.core import Writer
+
+# isaacsim.sensors.rtx.nodes provides register_scalar_colored_point_cloud_writer
+app_utils.enable_extension("isaacsim.sensors.rtx.nodes")
+
+from isaacsim.sensors.rtx.nodes import register_scalar_colored_point_cloud_writer
 
 # =============================================================================
 # DEFINE SCENE OBJECTS WITH DIFFERENT MATERIALS
@@ -73,49 +92,78 @@ from omni.replicator.core import Writer
 # - Visual color (how it appears in the viewport)
 # - Non-visual material (how RTX sensors perceive it)
 
+# Each cube is tuned to demonstrate a distinct RTX-sensor material effect so the
+# per-object intensity binning below shows clearly separated populations:
+#   cube_0: retroreflective sign -> very high, angle-independent intensity
+#   cube_1: calibration Lambertian -> strong, known, consistent diffuse intensity
+#   cube_2: transparent glass -> weak, sparse returns + pass-through (multi-return)
+#   cube_3: frosted glass -> noisy/scattered intensity from volumetric imperfections
 cube_configs = [
     {
         "path": "/World/cube_0",
         "position": np.array([3, 3, 0.5]),
-        "scale": np.array([1, 5, 1]),
+        "scale": np.array([1, 10, 1]),
         "color": [1, 0, 0],  # Red (visual)
         "base": "aluminum",
         "coating": "paint",
-        "attribute": "emissive",
+        "attribute": "retroreflective",  # HIGH intensity: bright even at grazing angles
     },
     {
         "path": "/World/cube_1",
-        "position": np.array([3, -3, 0.5]),
+        "position": np.array([-7, 7, 0.5]),
         "scale": np.array([1, 1, 1]),
         "color": [0, 1, 0],  # Green (visual)
-        "base": "steel",
-        "coating": "clearcoat",
-        "attribute": "emissive",
+        "base": "calibration_lambertian",  # MID-HIGH: controlled, consistent diffuse return
+        "coating": "none",
+        "attribute": "none",
     },
     {
         "path": "/World/cube_2",
         "position": np.array([-3, 3, 0.5]),
         "scale": np.array([1, 1, 1]),
         "color": [0, 0, 1],  # Blue (visual)
-        "base": "concrete",
-        "coating": "paint",
-        "attribute": "emissive",
+        "base": "clear_glass",  # TRANSPARENCY: weak returns, beams pass through
+        "coating": "none",
+        "attribute": "visually_transparent",
     },
     {
         "path": "/World/cube_3",
         "position": np.array([-3, -3, 0.5]),
-        "scale": np.array([5, 1, 1]),
+        "scale": np.array([10, 1, 1]),
         "color": [1, 1, 0],  # Yellow (visual)
-        "base": "concrete",
-        "coating": "clearcoat",
-        "attribute": "retroreflective",
+        "base": "frosted_glass",  # NOISE: volumetric particulates scatter the beam
+        "coating": "none",
+        "attribute": "none",
     },
 ]
+
 
 # =============================================================================
 # CREATE LIGHTING
 # =============================================================================
-light = DistantLight("/World/light")
+def _emission_orientation(direction):
+    """wxyz quaternion rotating a DistantLight's default -Z emission axis to `direction`."""
+    d = np.asarray(direction, dtype=float)
+    d /= np.linalg.norm(d)
+    default = np.array([0.0, 0.0, -1.0])
+    axis = np.cross(default, d)
+    axis_norm = np.linalg.norm(axis)
+    dot = float(np.clip(np.dot(default, d), -1.0, 1.0))
+    if axis_norm < 1e-8:
+        # Parallel (identity) or anti-parallel (180 deg about X).
+        return np.array([1.0, 0.0, 0.0, 0.0]) if dot > 0 else np.array([0.0, 1.0, 0.0, 0.0])
+    axis /= axis_norm
+    half = np.arccos(dot) / 2.0
+    xyz = axis * np.sin(half)
+    return np.array([np.cos(half), xyz[0], xyz[1], xyz[2]])
+
+
+# Angle the sun so it comes from above and rakes "inward" toward cube_2 (at [-3, 3]):
+# photons travel down (-Z) and toward -X / +Y.
+light = DistantLight(
+    "/World/light",
+    orientations=_emission_orientation([-1.0, 1.0, -1.0]),
+)
 light.set_intensities(3000.0)
 
 # =============================================================================
@@ -133,6 +181,8 @@ print(f"\n{'='*60}")
 print("Creating cubes with non-visual materials")
 print(f"{'='*60}")
 
+stage = stage_utils.get_current_stage(backend="usd")
+
 material_ids = {}
 
 for config in cube_configs:
@@ -144,7 +194,8 @@ for config in cube_configs:
         colors=config["color"],
     )
 
-    # Create a non-visual material and apply it to the cube
+    # Create a non-visual material and apply it to the cube. NonVisualMaterial authors a minimal
+    # surface shader when the material has none, so the non-visual IDs survive a cold stage load.
     material = NonVisualMaterial(
         f"{config['path']}/material",
         bases=config["base"],
@@ -172,9 +223,20 @@ for config in cube_configs:
 lidar = Lidar.create(
     "/World/lidar",
     config="Example_Rotary",
-    translations=np.array([0, 0, 0.5]),
+    translations=np.array([-5, 5, 0.5]),
     aux_output_level="FULL",
+    attributes={
+        "omni:sensor:Core:maxReturns": 3,
+        "omni:sensor:Core:peakPowerW": 5.0,
+    },
 )
+
+# Export the fully-authored scene (geometry + shader-connected materials + lidar prim) now, before
+# wrapping the lidar in a LidarSensor or attaching any writers.
+if args.test:
+    stage_path = os.path.join(output_dir, "stage.usda")
+    stage.Export(stage_path)
+    print(f"Exported stage to {stage_path}")
 
 sensor = LidarSensor(lidar, annotators=[])
 
@@ -192,14 +254,24 @@ print(f"{'='*60}")
 
 
 class GmoMaterialInspectWriter(Writer):
-    """Writer that parses GenericModelOutput and prints intensity stats."""
+    """Writer that parses GenericModelOutput and prints one-time overall + per-cube intensity histograms."""
 
     def __init__(self) -> None:
         self.data_structure = "renderProduct"
-        self.annotators = [rep.annotators.get("GenericModelOutput")]
+        # StableIdMap resolves each point's objId to the USD prim (cube) that was hit.
+        self.annotators = [
+            rep.annotators.get("GenericModelOutput"),
+            rep.annotators.get("StableIdMap"),
+        ]
+        # Guard so the histograms are only emitted once, on the first frame with returns.
+        self._histogram_done = False
 
     def write(self, data: dict[str, object]) -> None:
-        """Inspect GenericModelOutput material intensity data."""
+        """Inspect GenericModelOutput material intensity data.
+
+        Args:
+            data: Writer payload containing GenericModelOutput data grouped by render product.
+        """
         if "renderProducts" not in data:
             return
         for _rp_name, rp_data in data["renderProducts"].items():
@@ -207,19 +279,80 @@ class GmoMaterialInspectWriter(Writer):
             if isinstance(gmo_raw, dict):
                 gmo_raw = gmo_raw.get("data")
             gmo = parse_generic_model_output_data(gmo_raw)
-            if gmo.numElements > 0:
+            if gmo.numElements == 0:
+                continue
+
+            if self._histogram_done:
+                continue
+
+            intensities = np.asarray(gmo.scalar, dtype=np.float32)
+            print(
+                f"{gmo.numElements} points, "
+                f"intensity min={intensities.min():.4f}, "
+                f"max={intensities.max():.4f}, "
+                f"mean={intensities.mean():.4f}"
+            )
+
+            # Overall distribution across all returns.
+            self._print_intensity_histogram(intensities, title="Return intensity histogram (all returns)")
+
+            # Per-cube distribution, keyed by the stable object ID of each return.
+            sid_raw = rp_data.get("StableIdMap")
+            if isinstance(sid_raw, dict):
+                sid_raw = sid_raw.get("data")
+            has_obj_ids = getattr(gmo, "objId", None) is not None and gmo.objId.size > 0
+            if sid_raw is not None and has_obj_ids:
+                stable_id_map = parse_stable_id_map_data(sid_raw)
+                obj_ids = np.asarray(parse_object_ids(gmo.objId), dtype=object)
+                # Order cubes by descending mean intensity to make the material spread obvious.
+                unique_ids = list(np.unique(obj_ids))
+                unique_ids.sort(key=lambda oid: float(intensities[obj_ids == oid].mean()), reverse=True)
+                for oid in unique_ids:
+                    mask = obj_ids == oid
+                    prim_path = stable_id_map.get(int(oid), "<unknown>")
+                    self._print_intensity_histogram(
+                        intensities[mask],
+                        title=f"{prim_path}  (object ID {int(oid)})",
+                    )
+            else:
                 print(
-                    f"{gmo.numElements} points, "
-                    f"intensity min={gmo.scalar.min():.4f}, "
-                    f"max={gmo.scalar.max():.4f}, "
-                    f"mean={gmo.scalar.mean():.4f}"
+                    "  (per-cube binning unavailable: needs aux_output_level='FULL' and "
+                    "--/rtx-transient/stableIds/enabled=true)"
                 )
+
+            self._histogram_done = True
+
+    @staticmethod
+    def _print_intensity_histogram(
+        intensities: np.ndarray, title: str = "Return intensity histogram", num_bins: int = 20, width: int = 50
+    ) -> None:
+        """Print an ASCII histogram of return intensity to the console."""
+        counts, edges = np.histogram(intensities, bins=num_bins)
+        peak = int(counts.max()) if counts.size else 0
+        print(f"\n{'='*72}")
+        print(f"{title}  [{intensities.size} points, mean={float(intensities.mean()):.4f}]")
+        print(f"{'='*72}")
+        if peak == 0:
+            print("  (no returns to bin)")
+            return
+        for i, count in enumerate(counts):
+            bar = "#" * int(round(width * count / peak))
+            print(f"  [{edges[i]:7.4f}, {edges[i + 1]:7.4f})  {bar:<{width}} {int(count)}")
+        print(f"{'='*72}\n")
 
 
 rep.WriterRegistry.register(GmoMaterialInspectWriter)
 sensor.attach_writer("GmoMaterialInspectWriter")
 
 print("Attached GmoMaterialInspectWriter to sensor")
+
+# Attach a debug draw point cloud writer that colors returns by per-point intensity.
+# register_scalar_colored_point_cloud_writer builds the
+# IsaacExtractRTXSensorPointCloud -> IsaacMapScalarsToColors -> DebugDrawPointCloud graph.
+intensity_writer = register_scalar_colored_point_cloud_writer(scalar="intensity")
+sensor.attach_writer(intensity_writer, size=0.05)  # Point size in meters
+
+print(f"Attached {intensity_writer} (point cloud colored by intensity) to sensor")
 
 # =============================================================================
 # INSTRUCTIONS FOR VIEWING NON-VISUAL MATERIALS
@@ -236,14 +369,7 @@ print(f"{'='*60}\n")
 # =============================================================================
 # RUN SIMULATION AND PRINT INTENSITY DATA
 # =============================================================================
-if args.test:
-    import omni.usd
-
-    stage = omni.usd.get_context().get_stage()
-    stage.Export(os.path.join(output_dir, "stage.usda"))
-
-timeline = omni.timeline.get_timeline_interface()
-timeline.play()
+app_utils.play()
 
 frame_count = 0
 while simulation_app.is_running() and (not args.test or frame_count < 10):
@@ -253,5 +379,5 @@ while simulation_app.is_running() and (not args.test or frame_count < 10):
 # =============================================================================
 # CLEANUP
 # =============================================================================
-timeline.stop()
+app_utils.stop()
 simulation_app.close()

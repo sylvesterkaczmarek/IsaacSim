@@ -20,46 +20,55 @@ No injected globals required.
 
 import os
 
-import carb.settings
-import omni.kit.app
-import omni.usd
 
-app = omni.kit.app.get_app()
-s = carb.settings.get_settings()
+def _run_health_check() -> None:
+    """Probe the running Isaac Sim and print environment info.
 
-# Basic info
-version = s.get("/app/version") or "unknown"
-print(f"Isaac Sim version: {version}")
+    Raises:
+        RuntimeError: If the core Kit/USD subsystems cannot be queried, which
+            indicates the python server is attached to an unhealthy app.
+    """
+    import carb.settings
+    import isaacsim.core.experimental.utils.app as app_utils
+    import omni.kit.app
+    import omni.usd
 
-# Asset root
-asset_root = s.get("/persistent/isaac/asset_root/default")
-print(f"Asset root: {asset_root}")
+    app = omni.kit.app.get_app()
+    if app is None:
+        raise RuntimeError("omni.kit.app.get_app() returned None — app not initialized")
+    s = carb.settings.get_settings()
 
-# Stage info
-ctx = omni.usd.get_context()
-stage = ctx.get_stage()
-if stage:
-    prims = list(stage.Traverse())
-    up_axis = stage.GetMetadata("upAxis") or "?"
-    meters = stage.GetMetadata("metersPerUnit") or "?"
-    print(f"Stage: {len(prims)} prims, up={up_axis}, meters/unit={meters}")
-else:
-    print("Stage: None (no stage open)")
+    version = s.get("/app/version") or "unknown"
+    print(f"Isaac Sim version: {version}")
 
-# Timeline
-import isaacsim.core.experimental.utils.app as app_utils
+    asset_root = s.get("/persistent/isaac/asset_root/default")
+    print(f"Asset root: {asset_root}")
 
-playing = app_utils.is_playing()
-print(f"Timeline: {'playing' if playing else 'stopped'}")
+    ctx = omni.usd.get_context()
+    stage = ctx.get_stage() if ctx else None
+    if stage:
+        prims = list(stage.Traverse())
+        up_axis = stage.GetMetadata("upAxis") or "?"
+        meters = stage.GetMetadata("metersPerUnit") or "?"
+        print(f"Stage: {len(prims)} prims, up={up_axis}, meters/unit={meters}")
+    else:
+        print("Stage: None (no stage open)")
 
-# Display
-display = os.environ.get("DISPLAY", "none")
-print(f"Display: {display}")
+    playing = app_utils.is_playing()
+    print(f"Timeline: {'playing' if playing else 'stopped'}")
 
-# Loaded extensions count
-ext_manager = omni.kit.app.get_app().get_extension_manager()
-enabled = [e for e in ext_manager.get_extensions() if e["enabled"]]
-print(f"Extensions: {len(enabled)} enabled")
+    display = os.environ.get("DISPLAY", "none")
+    print(f"Display: {display}")
 
-print()
-print("Health: OK")
+    ext_manager = app.get_extension_manager()
+    enabled = [e for e in ext_manager.get_extensions() if e["enabled"]]
+    print(f"Extensions: {len(enabled)} enabled")
+
+
+try:
+    _run_health_check()
+    print()
+    print("Health: OK")
+except Exception as exc:  # noqa: BLE001 — surface any failure to the remote caller
+    print(f"Health: FAILED ({type(exc).__name__}: {exc})")
+    raise

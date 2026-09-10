@@ -32,9 +32,12 @@ from pxr import PhysxSchema
 class IMUSensor(BaseSensor):
     """A physics-based IMU (Inertial Measurement Unit) sensor that measures linear acceleration, angular velocity, and orientation.
 
-    This sensor provides inertial measurements from a simulated IMU attached to a physics body. It measures three-axis linear acceleration, three-axis angular velocity, and orientation as a quaternion. The sensor supports configurable sampling rates and filtering for each measurement type.
+    This sensor provides inertial measurements from a simulated IMU attached to a physics body. It measures three-axis
+    linear acceleration, three-axis angular velocity, and orientation as a quaternion. The sensor supports configurable
+    sampling rates and filtering for each measurement type.
 
-    The sensor can be created at an existing prim path or will automatically create a new IMU prim if the path doesn't exist. When creating a new prim, it uses physics simulation settings to determine default timing parameters.
+    The sensor can be created at an existing prim path or will automatically create a new IMU prim if the path does not
+    exist. When creating a new prim, it uses physics simulation settings to determine default timing parameters.
 
     Args:
         prim_path: USD path where the IMU sensor prim is located or will be created.
@@ -51,6 +54,7 @@ class IMUSensor(BaseSensor):
         orientation_filter_size: Number of samples for moving average filter applied to orientation measurements.
 
     Raises:
+        ValueError: If no PhysicsScene is found on the stage when creating a new IMU prim without dt.
         Exception: If both frequency and dt are specified simultaneously.
         Exception: If IMU sensor prim creation fails at the specified path.
     """
@@ -159,13 +163,11 @@ class IMUSensor(BaseSensor):
             read_gravity: Whether to include gravity in the linear acceleration reading.
 
         Returns:
-            Dictionary containing sensor data with keys:
-            - 'lin_acc': Linear acceleration as a 3D tensor
-            - 'ang_vel': Angular velocity as a 3D tensor
-            - 'orientation': Orientation quaternion in scalar-first (w, x, y, z) order as a 4D tensor
-            - 'time': Sensor reading timestamp
-            - 'physics_step': Current physics simulation step
-            - 'is_valid': Whether the current sensor reading is valid
+            Dictionary containing sensor data with keys for 'lin_acc', 'ang_vel', 'orientation', 'time',
+            'physics_step', and 'is_valid'. 'lin_acc' is linear acceleration as a 3D tensor. 'ang_vel' is angular
+            velocity as a 3D tensor. 'orientation' is the orientation quaternion in scalar-first (w, x, y, z) order
+            as a 4D tensor. 'time' is the sensor reading timestamp. 'physics_step' is the current physics simulation
+            step. 'is_valid' indicates whether the current sensor reading is valid.
         """
         imu_sensor_reading = self._imu_sensor_interface.get_sensor_reading(self.prim_path, read_gravity=read_gravity)
         self._current_frame["is_valid"] = bool(imu_sensor_reading.is_valid)

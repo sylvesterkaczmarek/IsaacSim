@@ -15,11 +15,15 @@
 
 """Provides high-level inverse kinematics solving and pose management for robots in Isaac Sim."""
 
-from usd.schema.isaac.robot_schema.ik_solver import IKSolver as IKSolver
-from usd.schema.isaac.robot_schema.ik_solver import IKSolverRegistry as IKSolverRegistry
-from usd.schema.isaac.robot_schema.math import Transform as Transform
-
 from .extension import Extension as Extension
+from .ik_solver import IKSolver as IKSolver
+from .ik_solver import IKSolverRegistry as IKSolverRegistry
+from .ik_solver import pose_error as pose_error
+from .kinematic_chain import KinematicChain as KinematicChain
+from .lm_ik import IKSolverLM as IKSolverLM
+from .lm_ik import ik_lm as ik_lm
+from .math import Joint as Joint
+from .math import Transform as Transform
 from .robot_poser import (
     PoseResult,
     RobotPoser,
@@ -36,16 +40,24 @@ from .robot_poser import (
 )
 
 __all__ = [
-    "RobotPoser",
+    "IKSolver",
+    "IKSolverLM",
+    "IKSolverRegistry",
+    "Joint",
+    "KinematicChain",
     "PoseResult",
-    "validate_robot_schema",
+    "RobotPoser",
+    "Transform",
     "apply_joint_state",
     "apply_joint_state_anchored",
-    "store_named_pose",
     "apply_pose_by_name",
-    "get_named_pose",
-    "list_named_poses",
     "delete_named_pose",
     "export_poses",
+    "get_named_pose",
+    "ik_lm",
     "import_poses",
+    "list_named_poses",
+    "pose_error",
+    "store_named_pose",
+    "validate_robot_schema",
 ]

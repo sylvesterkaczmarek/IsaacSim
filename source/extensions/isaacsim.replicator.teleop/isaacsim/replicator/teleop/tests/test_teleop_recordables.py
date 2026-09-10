@@ -14,8 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import isaacsim.core.experimental.utils.app as app_utils
 import numpy as np
-import omni.kit.app
 import omni.kit.test
 from isaacsim.replicator.teleop import TeleopControllerRecordable, TeleopHeadRecordable
 
@@ -105,7 +105,7 @@ class TestTeleopRecordables(omni.kit.test.AsyncTestCase):
 
     async def setUp(self) -> None:
         """Set up the test fixture."""
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
 
     async def test_controller_recordable_samples_selected_side(self) -> None:
         """Run the controller recordable samples selected side test."""

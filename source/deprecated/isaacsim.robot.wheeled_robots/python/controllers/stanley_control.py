@@ -61,9 +61,9 @@ class State(object):
     """Class representing the state of a vehicle.
 
     Args:
-        wheel_base: Wheel base length of the vehicle.
-        x: x-coordinate.
-        y: y-coordinate.
+        wheel_base: Wheelbase length of the vehicle.
+        x: X-coordinate.
+        y: Y-coordinate.
         yaw: Yaw angle.
         v: Speed.
         Ks: Maximum steering angle.
@@ -88,14 +88,15 @@ class State(object):
         self.Ks = Ks
 
     def update(self, acceleration: float, delta: float, dt: float) -> None:
-        """Update the state of the vehicle.
-
-            Stanley Control uses bicycle model.
+        """Update the vehicle state with Stanley Control bicycle model.
 
         Args:
             acceleration: Acceleration.
             delta: Steering angle.
             dt: Time step.
+
+        Raises:
+            ValueError: If the updated yaw angle is not finite.
         """
         delta = np.clip(delta, -self.Ks, self.Ks)
 
@@ -172,7 +173,7 @@ def normalize_angle(angle: float) -> float:
         angle: Input angle in radians.
 
     Returns:
-        Angle in radian in [-pi, pi].
+        Angle in radians in [-pi, pi].
 
     Raises:
         ValueError: If angle is not finite.

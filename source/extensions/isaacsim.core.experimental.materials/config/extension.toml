@@ -1,5 +1,5 @@
 [package]
-version = "0.7.1"
+version = "0.10.0"
 category = "Simulation"
 title = "Isaac Sim Core (Materials)"
 description = "The Core Materials extension provides a set of APIs to create and/or wrap one or more USD materials in the stage..."
@@ -25,6 +25,10 @@ name = "isaacsim.core.experimental.materials"
 # define the Python module for tests
 [[python.module]]
 name = "isaacsim.core.experimental.materials.tests"
+
+[settings]
+# USD attribute prefix for SimReady non-visual material semantics. Defaults to `omni:simready:nonvisual`.
+rtx.materialDb.nonVisualMaterialSemantics.prefix = "omni:simready:nonvisual"
 
 [[test]]
 timeout = 900

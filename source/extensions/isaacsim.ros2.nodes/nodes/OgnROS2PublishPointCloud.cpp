@@ -19,15 +19,16 @@
 #endif
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/profiler/Profile.h>
 #include <carb/tasking/ITasking.h>
 #include <carb/tasking/TaskingUtils.h>
 
-#include <isaacsim/ros2/core/Ros2Node.h>
-#include <isaacsim/ros2/nodes/PointCloudPublisher.h>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
+#include <isaacsim/ros2/nodes/FillPointCloudBufferHost.hpp>
+#include <isaacsim/ros2/nodes/PointCloudPublisher.hpp>
 
 #include <OgnROS2PublishPointCloudDatabase.h>
 
@@ -129,7 +130,7 @@ public:
                     // Host interleave: fill buffer with xyz + metadata per point
                     isaacsim::ros2::nodes::fillPointCloudBufferHost(
                         reinterpret_cast<uint8_t*>(state.m_pub.getPointCloudMessage()->getBufferPtr()),
-                        reinterpret_cast<const float3*>(db.inputs.dataPtr()),
+                        reinterpret_cast<const float*>(db.inputs.dataPtr()),
                         state.m_pub.getPointCloudMessage()->getOrderedFields(),
                         state.m_pub.getPointCloudMessage()->getPointStep(),
                         state.m_pub.getPointCloudMessage()->getNumPoints());
@@ -181,12 +182,9 @@ public:
             {
                 state.m_pub.publishFromDevice(devicePtr, bufferSize, timestamp, cudaDeviceIndex, metadata);
             }
-            else
+            else if (state.m_pub.prepareFromDevice(devicePtr, bufferSize, timestamp, cudaDeviceIndex, metadata))
             {
-                tasking->addTask(
-                    carb::tasking::Priority::eHigh, state.m_tasks,
-                    [&state, devicePtr, bufferSize, timestamp, cudaDeviceIndex, metadata]() mutable
-                    { state.m_pub.publishFromDevice(devicePtr, bufferSize, timestamp, cudaDeviceIndex, metadata); });
+                tasking->addTask(carb::tasking::Priority::eHigh, state.m_tasks, [&state] { state.m_pub.send(); });
             }
         }
 

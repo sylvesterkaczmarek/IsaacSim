@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.5] - 2026-08-26
+### Security
+- Update cryptography to 50.0.1.
+- Update MSAL to 1.38.0.
+
 ## [1.5.4] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

@@ -56,7 +56,7 @@ class TestO3dyn(omni.kit.test.AsyncTestCase):
         # )
 
         # add in carter (from nucleus)
-        self.usd_path = self._assets_root_path + "/Isaac/Robots/Fraunhofer/O3dyn/o3dyn.usd"
+        self.usd_path = self._assets_root_path + "/Isaac/Robots_Multiphysics/Fraunhofer/O3dyn/o3dyn.usda"
 
     # After running each test
     async def tearDown(self) -> None:

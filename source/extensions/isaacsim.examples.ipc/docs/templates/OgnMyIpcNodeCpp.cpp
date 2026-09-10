@@ -17,7 +17,7 @@
 // Replace OgnMyIpcNodeCpp / OgnMyIpcNodeCppDatabase with your node class name.
 
 // TEMPLATE-START
-#include <isaacsim/core/includes/BaseResetNode.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
 
 #include <OgnMyIpcNodeCppDatabase.h>
 #include <memory>

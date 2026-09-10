@@ -1,5 +1,5 @@
 [package]
-version = "1.6.5"
+version = "1.9.2"
 category = "Simulation"
 title = "ROS 2 UI Components"
 description = "This extension provides UI components for ROS 2 integration with Isaac Sim."
@@ -12,8 +12,10 @@ writeTarget.kit = true
 
 [dependencies]
 "isaacsim.core.experimental.utils" = {}
+"isaacsim.core.nodes" = {}
 "isaacsim.core.rendering_manager" = {}
 "isaacsim.gui.components" = {}
+"isaacsim.robot.schema" = {}
 "isaacsim.ros2.nodes" = {}
 "isaacsim.storage.native" = {}
 "omni.graph" = {}

@@ -13,8 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "CudaKernels.h"
-#include "CudaCommon.h"
+#include "CudaKernels.hpp"
+#include "CudaCommon.hpp"
+#include "utils/WrenchOps.hpp"
 
 namespace isaacsim {
 namespace physics {
@@ -260,6 +261,44 @@ __global__ void fusedLinkAddKernel(const float* src, float* dst,
     }
 }
 
+__global__ void fusedLinkWrenchAddKernel(const float* force,
+                                         const float* torque,
+                                         const float* position,
+                                         float* bodyForce,
+                                         const int* articulationIndices,
+                                         const int* linkMapping,
+                                         const wp::transform* bodyTransforms,
+                                         const wp::vec3* bodyCentersOfMass,
+                                         int numArticulations,
+                                         int maxLinks,
+                                         bool isGlobal,
+                                         bool hasForce,
+                                         bool hasTorque,
+                                         bool hasPosition) {
+    int slot = blockIdx.x * blockDim.x + threadIdx.x;
+    if (slot >= numArticulations * maxLinks) return;
+
+    int articulationSlot = slot / maxLinks;
+    int linkSlot = slot % maxLinks;
+    int articulationIndex = articulationIndices ? articulationIndices[articulationSlot] : articulationSlot;
+    if (articulationIndex < 0) return;
+    int bodyIndex = linkMapping[articulationIndex * maxLinks + linkSlot];
+    if (bodyIndex < 0) return;
+
+    int sourceOffset = (articulationIndex * maxLinks + linkSlot) * 3;
+    wp::vec3 forceWorld;
+    wp::vec3 torqueWorld;
+    details::computeWorldWrench(hasForce ? force + sourceOffset : nullptr,
+                                hasTorque ? torque + sourceOffset : nullptr,
+                                hasPosition ? position + sourceOffset : nullptr,
+                                bodyTransforms[bodyIndex], bodyCentersOfMass[bodyIndex],
+                                isGlobal, hasForce, hasTorque, hasPosition, forceWorld, torqueWorld);
+    for (int component = 0; component < 3; ++component) {
+        atomicAdd(&bodyForce[bodyIndex * 6 + component], forceWorld[component]);
+        atomicAdd(&bodyForce[bodyIndex * 6 + 3 + component], torqueWorld[component]);
+    }
+}
+
 __global__ void fusedRootScatterKernel(const float* src, float* dst,
                                        const int* artiIndices, const int* rootMapping,
                                        int numArti, int elemSize) {
@@ -409,6 +448,33 @@ bool launchFusedLinkAdd(const float* src, float* dst,
     fusedLinkAddKernel<<<numBlocks, BLOCK_SIZE, 0, stream>>>(
         src, dst, devArtiIndices, devLinkMapping, numArti, maxLinks,
         srcElemSize, dstElemSize, dstElemOffset, numComponents);
+    CHECK_CUDA_LAUNCH();
+    return true;
+}
+
+bool launchFusedLinkWrenchAdd(const float* force,
+                              const float* torque,
+                              const float* position,
+                              float* bodyForce,
+                              const int* articulationIndices,
+                              const int* linkMapping,
+                              const wp::transform* bodyTransforms,
+                              const wp::vec3* bodyCentersOfMass,
+                              int numArticulations,
+                              int maxLinks,
+                              bool isGlobal,
+                              bool hasForce,
+                              bool hasTorque,
+                              bool hasPosition,
+                              cudaStream_t stream) {
+    int totalWork = numArticulations * maxLinks;
+    if (totalWork == 0) return true;
+    int numBlocks = (totalWork + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    (void)cudaGetLastError();
+    fusedLinkWrenchAddKernel<<<numBlocks, BLOCK_SIZE, 0, stream>>>(
+        force, torque, position, bodyForce, articulationIndices, linkMapping,
+        bodyTransforms, bodyCentersOfMass, numArticulations, maxLinks,
+        isGlobal, hasForce, hasTorque, hasPosition);
     CHECK_CUDA_LAUNCH();
     return true;
 }
@@ -650,7 +716,9 @@ __global__ void contactDataKernel(const int* contactCount, const int* shape0, co
 
     float nx = normal[tid * 3 + 0], ny = normal[tid * 3 + 1], nz = normal[tid * 3 + 2];
     float fx = contactForce[tid * 3 + 0], fy = contactForce[tid * 3 + 1], fz = contactForce[tid * 3 + 2];
-    float forceMag = sqrtf(fx * fx + fy * fy + fz * fz) * dtScale;
+    float normalForce = (fx * nx + fy * ny + fz * nz) * dtScale;
+    float forceMag = fabsf(normalForce);
+    float normalSign = normalForce < 0.0f ? -1.0f : 1.0f;
 
     float thk0 = thickness0[tid], thk1 = thickness1[tid];
     float nArr[3] = {nx, ny, nz};
@@ -672,9 +740,9 @@ __global__ void contactDataKernel(const int* contactCount, const int* shape0, co
             uint32_t localIdx = atomicAdd(&outCounts[sensorA * filterCount + filterIdx], 1u);
             int writeIdx = (int)startIndices[sensorA * filterCount + filterIdx] + (int)localIdx;
             if (writeIdx < maxContactDataCount) {
-                outForces[writeIdx] = -forceMag;
+                outForces[writeIdx] = forceMag;
                 outPoints[writeIdx * 3 + 0] = cpx; outPoints[writeIdx * 3 + 1] = cpy; outPoints[writeIdx * 3 + 2] = cpz;
-                outNormals[writeIdx * 3 + 0] = -nx; outNormals[writeIdx * 3 + 1] = -ny; outNormals[writeIdx * 3 + 2] = -nz;
+                outNormals[writeIdx * 3 + 0] = normalSign * nx; outNormals[writeIdx * 3 + 1] = normalSign * ny; outNormals[writeIdx * 3 + 2] = normalSign * nz;
                 outSeparations[writeIdx] = -d;
             }
         }
@@ -687,8 +755,87 @@ __global__ void contactDataKernel(const int* contactCount, const int* shape0, co
             if (writeIdx < maxContactDataCount) {
                 outForces[writeIdx] = forceMag;
                 outPoints[writeIdx * 3 + 0] = cpx; outPoints[writeIdx * 3 + 1] = cpy; outPoints[writeIdx * 3 + 2] = cpz;
-                outNormals[writeIdx * 3 + 0] = nx; outNormals[writeIdx * 3 + 1] = ny; outNormals[writeIdx * 3 + 2] = nz;
+                outNormals[writeIdx * 3 + 0] = -normalSign * nx; outNormals[writeIdx * 3 + 1] = -normalSign * ny; outNormals[writeIdx * 3 + 2] = -normalSign * nz;
                 outSeparations[writeIdx] = d;
+            }
+        }
+    }
+}
+
+__global__ void frictionDataKernel(const int* contactCount, const int* shape0, const int* shape1,
+                                   const float* point0, const float* point1,
+                                   const float* normal, const float* contactForce,
+                                   const float* thickness0, const float* thickness1,
+                                   const int* shapeBody, const float* bodyQ,
+                                   const int* bodySensorMap, int bodySensorMapSize,
+                                   const int* bodyFilterMap, int numBodies, int filterCount,
+                                   int worldBodyIdx, float dtScale, int maxContactDataCount,
+                                   float* outForces, float* outPoints, uint32_t* outCounts,
+                                   const uint32_t* startIndices, int pairCount, int rigidContactMax,
+                                   bool pointsInWorldSpace) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= rigidContactMax || tid >= contactCount[0]) return;
+
+    int shapeA = shape0[tid];
+    int shapeB = shape1[tid];
+    if (shapeA == shapeB || shapeA < 0 || shapeB < 0) return;
+
+    int rawBodyA = shapeBody[shapeA];
+    int rawBodyB = shapeBody[shapeB];
+    int mappedA = (rawBodyA < 0) ? worldBodyIdx : rawBodyA;
+    int mappedB = (rawBodyB < 0) ? worldBodyIdx : rawBodyB;
+    int sensorA = (mappedA >= 0 && mappedA < bodySensorMapSize) ? bodySensorMap[mappedA] : -1;
+    int sensorB = (mappedB >= 0 && mappedB < bodySensorMapSize) ? bodySensorMap[mappedB] : -1;
+    if (sensorA < 0 && sensorB < 0) return;
+
+    float nx = normal[tid * 3], ny = normal[tid * 3 + 1], nz = normal[tid * 3 + 2];
+    float fx = contactForce[tid * 3], fy = contactForce[tid * 3 + 1], fz = contactForce[tid * 3 + 2];
+    float normalForce = fx * nx + fy * ny + fz * nz;
+    float tfx = (fx - normalForce * nx) * dtScale;
+    float tfy = (fy - normalForce * ny) * dtScale;
+    float tfz = (fz - normalForce * nz) * dtScale;
+
+    float nArr[3] = {nx, ny, nz};
+    float p0[3] = {point0[tid * 3], point0[tid * 3 + 1], point0[tid * 3 + 2]};
+    float p1[3] = {point1[tid * 3], point1[tid * 3 + 1], point1[tid * 3 + 2]};
+    int bodyA = pointsInWorldSpace ? -1 : rawBodyA;
+    int bodyB = pointsInWorldSpace ? -1 : rawBodyB;
+    float wax, way, waz, wbx, wby, wbz;
+    transformContactPoint(p0, bodyQ, bodyA, thickness0[tid], nArr, -1.0f, wax, way, waz);
+    transformContactPoint(p1, bodyQ, bodyB, thickness1[tid], nArr, 1.0f, wbx, wby, wbz);
+    float cpx = (wax + wbx) * 0.5f, cpy = (way + wby) * 0.5f, cpz = (waz + wbz) * 0.5f;
+
+    if (sensorA >= 0 && mappedB >= 0 && mappedB < numBodies) {
+        int filterIdx = bodyFilterMap[sensorA * numBodies + mappedB];
+        if (filterIdx >= 0 && filterIdx < filterCount) {
+            int pairIdx = sensorA * filterCount + filterIdx;
+            uint32_t localIdx = atomicAdd(&outCounts[pairIdx], 1u);
+            uint32_t pairEnd = pairIdx + 1 < pairCount ? startIndices[pairIdx + 1] : maxContactDataCount;
+            int writeIdx = static_cast<int>(startIndices[pairIdx]) + static_cast<int>(localIdx);
+            if (writeIdx < static_cast<int>(pairEnd)) {
+                outForces[writeIdx * 3] = tfx;
+                outForces[writeIdx * 3 + 1] = tfy;
+                outForces[writeIdx * 3 + 2] = tfz;
+                outPoints[writeIdx * 3] = cpx;
+                outPoints[writeIdx * 3 + 1] = cpy;
+                outPoints[writeIdx * 3 + 2] = cpz;
+            }
+        }
+    }
+    if (sensorB >= 0 && mappedA >= 0 && mappedA < numBodies) {
+        int filterIdx = bodyFilterMap[sensorB * numBodies + mappedA];
+        if (filterIdx >= 0 && filterIdx < filterCount) {
+            int pairIdx = sensorB * filterCount + filterIdx;
+            uint32_t localIdx = atomicAdd(&outCounts[pairIdx], 1u);
+            uint32_t pairEnd = pairIdx + 1 < pairCount ? startIndices[pairIdx + 1] : maxContactDataCount;
+            int writeIdx = static_cast<int>(startIndices[pairIdx]) + static_cast<int>(localIdx);
+            if (writeIdx < static_cast<int>(pairEnd)) {
+                outForces[writeIdx * 3] = -tfx;
+                outForces[writeIdx * 3 + 1] = -tfy;
+                outForces[writeIdx * 3 + 2] = -tfz;
+                outPoints[writeIdx * 3] = cpx;
+                outPoints[writeIdx * 3 + 1] = cpy;
+                outPoints[writeIdx * 3 + 2] = cpz;
             }
         }
     }
@@ -747,7 +894,9 @@ __global__ void rawContactDataKernel(const int* contactCount, const int* shape0,
 
     float nx = normal[tid * 3 + 0], ny = normal[tid * 3 + 1], nz = normal[tid * 3 + 2];
     float fx = contactForce[tid * 3 + 0], fy = contactForce[tid * 3 + 1], fz = contactForce[tid * 3 + 2];
-    float forceMag = sqrtf(fx * fx + fy * fy + fz * fz) * dtScale;
+    float normalForce = (fx * nx + fy * ny + fz * nz) * dtScale;
+    float forceMag = fabsf(normalForce);
+    float normalSign = normalForce < 0.0f ? -1.0f : 1.0f;
 
     float thk0 = thickness0[tid], thk1 = thickness1[tid];
     float nArr[3] = {nx, ny, nz};
@@ -767,11 +916,12 @@ __global__ void rawContactDataKernel(const int* contactCount, const int* shape0,
         uint32_t localIdx = atomicAdd(&outCounts[sensorA], 1u);
         int writeIdx = (int)startIndices[sensorA] + (int)localIdx;
         if (writeIdx < maxContactDataCount) {
-            outForces[writeIdx] = -forceMag;
+            outForces[writeIdx] = forceMag;
             outPoints[writeIdx * 3 + 0] = cpx; outPoints[writeIdx * 3 + 1] = cpy; outPoints[writeIdx * 3 + 2] = cpz;
-            outNormals[writeIdx * 3 + 0] = -nx; outNormals[writeIdx * 3 + 1] = -ny; outNormals[writeIdx * 3 + 2] = -nz;
+            outNormals[writeIdx * 3 + 0] = normalSign * nx; outNormals[writeIdx * 3 + 1] = normalSign * ny; outNormals[writeIdx * 3 + 2] = normalSign * nz;
             outSeparations[writeIdx] = -d;
-            otherActorIds[writeIdx] = (uint64_t)mappedB;
+            otherActorIds[writeIdx] =
+                rawBodyB < 0 ? (uint64_t)(worldBodyIdx + 1 + shapeB) : (uint64_t)mappedB;
         }
     }
     if (sensorB >= 0) {
@@ -780,9 +930,10 @@ __global__ void rawContactDataKernel(const int* contactCount, const int* shape0,
         if (writeIdx < maxContactDataCount) {
             outForces[writeIdx] = forceMag;
             outPoints[writeIdx * 3 + 0] = cpx; outPoints[writeIdx * 3 + 1] = cpy; outPoints[writeIdx * 3 + 2] = cpz;
-            outNormals[writeIdx * 3 + 0] = nx; outNormals[writeIdx * 3 + 1] = ny; outNormals[writeIdx * 3 + 2] = nz;
+            outNormals[writeIdx * 3 + 0] = -normalSign * nx; outNormals[writeIdx * 3 + 1] = -normalSign * ny; outNormals[writeIdx * 3 + 2] = -normalSign * nz;
             outSeparations[writeIdx] = d;
-            otherActorIds[writeIdx] = (uint64_t)mappedA;
+            otherActorIds[writeIdx] =
+                rawBodyA < 0 ? (uint64_t)(worldBodyIdx + 1 + shapeA) : (uint64_t)mappedA;
         }
     }
 }
@@ -869,6 +1020,30 @@ bool launchContactData(const int* contactCount, const int* shape0, const int* sh
         worldBodyIdx, dtScale, maxContactDataCount,
         outForces, outPoints, outNormals, outSeparations, outCounts, startIndices,
         rigidContactMax, pointsInWorldSpace);
+    CHECK_CUDA_LAUNCH();
+    return true;
+}
+
+bool launchFrictionData(const int* contactCount, const int* shape0, const int* shape1,
+                        const float* point0, const float* point1,
+                        const float* normal, const float* contactForce,
+                        const float* thickness0, const float* thickness1,
+                        const int* shapeBody, const float* bodyQ,
+                        const int* bodySensorMap, int bodySensorMapSize,
+                        const int* bodyFilterMap, int numBodies, int filterCount,
+                        int worldBodyIdx, float dtScale, int maxContactDataCount,
+                        float* outForces, float* outPoints, uint32_t* outCounts,
+                        const uint32_t* startIndices, int pairCount, int rigidContactMax,
+                        bool pointsInWorldSpace, cudaStream_t stream) {
+    if (rigidContactMax <= 0) return true;
+    int numBlocks = (rigidContactMax + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    (void)cudaGetLastError();
+    frictionDataKernel<<<numBlocks, BLOCK_SIZE, 0, stream>>>(
+        contactCount, shape0, shape1, point0, point1, normal, contactForce,
+        thickness0, thickness1, shapeBody, bodyQ,
+        bodySensorMap, bodySensorMapSize, bodyFilterMap, numBodies, filterCount,
+        worldBodyIdx, dtScale, maxContactDataCount, outForces, outPoints,
+        outCounts, startIndices, pairCount, rigidContactMax, pointsInWorldSpace);
     CHECK_CUDA_LAUNCH();
     return true;
 }

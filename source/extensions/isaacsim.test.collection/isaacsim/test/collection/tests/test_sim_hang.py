@@ -125,7 +125,7 @@ class TestHangBugs(omni.kit.test.AsyncTestCase):
 
         # It has to be the Franka USD that gets loaded here to cause the issue
         usd_path = await get_assets_root_path_async()
-        usd_path += "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        usd_path += "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
         robot_prim_path = "/panda"
         stage_utils.add_reference_to_stage(usd_path, robot_prim_path)
 
@@ -158,7 +158,7 @@ class TestHangBugs(omni.kit.test.AsyncTestCase):
     async def test_freeze_sim(self) -> None:
         """Test that repeatedly opening stages does not cause simulation freeze."""
         usd_path = await get_assets_root_path_async()
-        usd_path += "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        usd_path += "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 
         for i in range(100):
             result, error = await open_stage_async(usd_path)

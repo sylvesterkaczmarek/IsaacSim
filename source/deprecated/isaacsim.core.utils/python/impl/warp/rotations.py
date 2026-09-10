@@ -29,7 +29,7 @@ torch = import_module("torch")
 
 
 def gf_quat_to_tensor(orientation: Gf.Quatd | Gf.Quatf | Gf.Quaternion, device: object = None) -> wp.array:
-    """Converts a pxr Quaternion type to a torch array (scalar first).
+    """Converts a pxr Quaternion type to a Warp array (scalar first).
 
     Args:
         orientation: Input quaternion from USD.
@@ -60,7 +60,7 @@ def euler_angles_to_quats(
         device: Target device for the output array.
 
     Returns:
-        Quaternions representation of the angles (N, 4) - scalar first.
+        Quaternion representation of the angles (N, 4) - scalar first.
     """
     if extrinsic:
         order = "xyz"
@@ -251,6 +251,15 @@ wp.overload(_wxyz2xyzw3, {"q": wp.indexedarray(dtype=float, ndim=3)})
 
 
 def _roll_quaternion_components(q: wp.array | wp.indexedarray, shift: int) -> wp.array:
+    """Rolls quaternion components along the last dimension.
+
+    Args:
+        q: Warp array or indexedarray containing quaternion components.
+        shift: Number of component positions to roll.
+
+    Returns:
+        Warp array with quaternion components rolled along the last dimension.
+    """
     if isinstance(q, wp.indexedarray):
         q = q.contiguous()
     return wp.from_torch(torch.roll(wp.to_torch(q), shift, dims=-1).contiguous())

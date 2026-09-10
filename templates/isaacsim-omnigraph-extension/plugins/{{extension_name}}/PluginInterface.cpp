@@ -18,7 +18,7 @@
 #include <carb/Framework.h>
 #include <carb/PluginUtils.h>
 
-#include <{{python_module_path}}/IExampleNodes.h>
+#include <{{python_module_path}}/IExampleNodes.hpp>
 #include <omni/graph/core/ogn/Registration.h>
 
 const struct carb::PluginImplDesc g_kPluginDesc = { "{{extension_name}}.plugin",

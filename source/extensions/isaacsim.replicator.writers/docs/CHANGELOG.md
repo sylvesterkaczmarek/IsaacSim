@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.6] - 2026-08-19
+### Fixed
+- `PoseWriter`: write frames for non-`class` semantic types in `idToLabels` instead of aborting the capture.
+
+## [1.5.5] - 2026-08-10
+### Fixed
+- Make PoseWriter bounding-box golden comparisons independent of annotator ordering.
+
 ## [1.5.4] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

@@ -4,54 +4,38 @@
 This extension is deprecated in favor of `isaacsim.robot.experimental.wheeled_robots` and `isaacsim.robot.wheeled_robots.nodes`.
 ```
 
-The `isaacsim.robot.wheeled_robots` extension provides Python and C++ classes for controlling wheeled mobile robots in Isaac Sim. It includes robot wrappers, multiple controller types covering differential, holonomic, and Ackermann drive systems, path planning utilities, and OmniGraph nodes for graph-based robot control.
+The `isaacsim.robot.wheeled_robots` extension provides Python utilities for simulating and controlling wheeled robots in Isaac Sim. It supplies robot wrappers, motion controllers, and path-planning helpers for differential-drive, Ackermann-steered, and holonomic platforms, together with a small Carbonite plugin that exposes the wheeled-robots C++ interface.
+
+Use this extension when you need to drive a wheeled robot articulation from Python, convert a desired body motion into per-wheel commands, or follow a planned path.
 
 ## Key Components
 
-### Robots
+### Robot wrappers
 
-**{class}`WheeledRobot <isaacsim.robot.wheeled_robots.WheeledRobot>`** wraps an articulation prim to provide a high-level interface for wheeled robot control. It manages joint states and accepts drive commands through `apply_wheel_actions()` using `ArticulationAction` objects, supporting mixed command modes (effort, velocity, and position).
+The `isaacsim.robot.wheeled_robots.robots` package provides robot-level helpers:
 
-**{class}`HolonomicRobotUsdSetup <isaacsim.robot.wheeled_robots.HolonomicRobotUsdSetup>`** reads wheel geometry parameters from USD for holonomic (mecanum) robots. It extracts wheel radii, positions, orientations, and mecanum angles needed to construct a {class}`HolonomicController <isaacsim.robot.wheeled_robots.HolonomicController>`.
+- {class}`WheeledRobot <isaacsim.robot.wheeled_robots.robots.WheeledRobot>`: Wraps and manages the articulation for a wheeled robot base, exposing its wheel joints and an API for applying wheel actions and querying degree-of-freedom parameters.
+- {class}`HolonomicRobotUsdSetup <isaacsim.robot.wheeled_robots.robots.HolonomicRobotUsdSetup>`: Reads the USD setup of a holonomic (for example, mecanum) robot to derive the parameters needed by the holonomic controller.
 
 ### Controllers
 
-**{class}`DifferentialController <isaacsim.robot.wheeled_robots.DifferentialController>`** converts throttle and steering (or linear/angular velocity) commands into left and right wheel velocities for two-wheeled differential drive robots.
+The `isaacsim.robot.wheeled_robots.controllers` package provides controllers that convert a desired body motion into per-wheel commands:
 
-**{class}`HolonomicController <isaacsim.robot.wheeled_robots.HolonomicController>`** computes per-wheel velocities for omnidirectional (mecanum) robots from forward, lateral, and yaw commands, accounting for wheel geometry and mecanum roller angles.
+- {class}`DifferentialController <isaacsim.robot.wheeled_robots.controllers.DifferentialController>`: Differential-drive control from linear and angular velocity commands.
+- {class}`AckermannController <isaacsim.robot.wheeled_robots.controllers.AckermannController>`: Ackermann steering control for car-like platforms.
+- {class}`HolonomicController <isaacsim.robot.wheeled_robots.controllers.HolonomicController>`: Holonomic control for omnidirectional (for example, mecanum) drives.
+- {class}`WheelBasePoseController <isaacsim.robot.wheeled_robots.controllers.WheelBasePoseController>`: Drives the robot base toward a target pose using an underlying wheel controller.
 
-**{class}`AckermannController <isaacsim.robot.wheeled_robots.AckermannController>`** implements bicycle-model Ackermann steering, returning both steering angles and per-wheel rotation velocities from steering angle, speed, and acceleration inputs.
+### Path planning
 
-**{class}`WheelBasePoseController <isaacsim.robot.wheeled_robots.WheelBasePoseController>`** provides a higher-level controller that drives a wheeled robot to a target 2D pose (position + heading) by combining proportional control with an underlying differential or holonomic controller.
+The extension also includes path-planning and path-following helpers, including a quintic polynomial trajectory planner ({func}`quintic_polynomials_planner <isaacsim.robot.wheeled_robots.controllers.quintic_polynomials_planner>`) and a Stanley path-tracking controller ({func}`stanley_control <isaacsim.robot.wheeled_robots.controllers.stanley_control>`).
 
-**{class}`StanleyControl <isaacsim.robot.wheeled_robots.StanleyControl>`** implements the Stanley lateral path-tracking algorithm for path following with configurable gains.
+## C++ Interface
 
-**{class}`QuinticPathPlanner <isaacsim.robot.wheeled_robots.QuinticPathPlanner>`** generates smooth quintic polynomial trajectories between waypoints for wheeled robot navigation.
+The extension ships a Carbonite plugin that registers the `IWheeledRobots` interface. The interface is exposed to Python through the `isaacsim.robot.wheeled_robots.bindings` module and is acquired automatically when the extension loads; most users interact only with the Python controllers and robot wrappers above.
 
-## Basic Usage
+Node-based (OmniGraph) wheeled-robot control is provided by the separate `isaacsim.robot.wheeled_robots.nodes` extension.
 
-```python
-from isaacsim.robot.wheeled_robots.robots import WheeledRobot
-from isaacsim.robot.wheeled_robots.controllers import DifferentialController
-from isaacsim.core.utils.types import ArticulationAction
+## Relationships
 
-# Wrap an articulation as a wheeled robot
-jetbot = WheeledRobot(
-    prim_path="/World/Jetbot",
-    name="jetbot",
-    wheel_dof_names=["left_wheel_joint", "right_wheel_joint"],
-)
-
-# Create a differential controller
-controller = DifferentialController(
-    name="diff_ctrl", wheel_radius=0.035, wheel_base=0.1
-)
-
-# In your simulation loop:
-action = controller.forward(command=[0.5, 0.0])  # [linear, angular]
-jetbot.apply_wheel_actions(action)
-```
-
-## Integration
-
-The extension integrates with `isaacsim.core.api` for articulation and controller base classes. The extension also provides OmniGraph nodes for graph-based robot control, which can be combined with Isaac Sim's action graph system for complete autonomous navigation pipelines.
+The robot wrappers build on `isaacsim.core.api` robot primitives, and the controllers rely on `omni.physx` for the underlying articulation simulation.

@@ -19,9 +19,9 @@ from .impl import *
 
 __all__ = [
     "BaseController",
-    "ControllerContainer",
-    "ParallelController",
-    "SequentialController",
+    "SelectableController",
+    "CombinedController",
+    "ChainedController",
     "ObstacleConfiguration",
     "ObstacleRepresentation",
     "ObstacleStrategy",

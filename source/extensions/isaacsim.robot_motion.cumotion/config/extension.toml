@@ -4,7 +4,7 @@
 #
 
 [package]
-version = "1.3.1"
+version = "1.4.0"
 category = "simulation"
 title = "cumotion"
 description = "Access to cuMotion planners under the isaacsim motion generation API."
@@ -18,7 +18,9 @@ writeTarget.platform = true # pip prebundle makes this extension os specific
 writeTarget.python = true
 
 [dependencies]
+"isaacsim.common" = {}
 "isaacsim.core.experimental.materials" = {}
+"isaacsim.core.experimental.objects" = {}
 "isaacsim.core.experimental.prims" = {}
 "isaacsim.robot_motion.experimental.motion_generation" = {}
 "omni.kit.pip_archive" = {} # import the base kit python archive
@@ -38,6 +40,10 @@ name = "isaacsim.robot_motion.cumotion.tests"
 name = "startup"
 enabled = true
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 enabled = true
 dependencies = [
@@ -45,7 +51,6 @@ dependencies = [
 
 stdoutFailPatterns.exclude = [    
     '*The NumPy module was reloaded*',
-    "*UserWarning: Trajectory optimizer failed with status: *",
 ]
 
 [documentation]

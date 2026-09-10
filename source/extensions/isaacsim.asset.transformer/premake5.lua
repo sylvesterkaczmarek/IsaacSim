@@ -14,10 +14,15 @@
 -- limitations under the License.
 
 local ext = get_current_extension_info()
+dofile(root .. "/tools/isaac_build/module_carrier.lua")
+
 project_ext(ext)
+stage_isaacsim_module_carrier_with_python_overlays(ext, "isaacsim.asset.transformer", {
+    "isaacsim/asset/transformer/extension.py",
+})
 
 repo_build.prebuild_link {
     { "data", ext.target_dir .. "/data" },
     { "docs", ext.target_dir .. "/docs" },
-    { "isaacsim", ext.target_dir .. "/isaacsim" },
+    { "isaacsim/asset/transformer/tests", ext.target_dir .. "/isaacsim/asset/transformer/tests" },
 }

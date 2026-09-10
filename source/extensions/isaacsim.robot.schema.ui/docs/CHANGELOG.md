@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.7] - 2026-08-06
+### Fixed
+- Robot Inspector hierarchy generation no longer emits global USD object-change notices for live-stage paths.
+
+## [0.3.6] - 2026-06-26
+### Changed
+- Hide the Kit lifecycle extension class from the generated public Python API.
+
 ## [0.3.5] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

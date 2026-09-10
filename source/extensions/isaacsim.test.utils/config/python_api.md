@@ -28,7 +28,7 @@
 - def deferred_click(x: float, y: float)
 - def deferred_click_widget(widget: object) -> tuple[float, float]
 - def discover_template_buttons(template: object) -> dict[str, object]
-- def validate_folder_contents(path: str | Path, expected_counts: dict[str, int]) -> bool
+- def validate_folder_contents(path: str | Path, expected_counts: dict[str, int], *, recursive: bool = False, fail_on_empty_files: bool = False, fail_on_empty_extensions: set[str] | None = None, allowed_extra_extensions: set[str] | None = None, min_file_size_bytes: int = 0, exact_match: bool = True) -> bool
 - def get_folder_file_summary(path: str | Path) -> dict[str, int | dict[str, list]]
 - def validate_file_list(file_paths: list[str | Path]) -> dict[str, bool | list[str]]
 - async def capture_annotator_data_async(annotator_name: str, camera_position: tuple[float, float, float] = (5, 5, 5), camera_look_at: tuple[float, float, float] = (0, 0, 0), resolution: tuple[int, int] = (1280, 720), camera_prim_path: str | None = None, render_product: Any = None, do_array_copy: bool = True) -> Any

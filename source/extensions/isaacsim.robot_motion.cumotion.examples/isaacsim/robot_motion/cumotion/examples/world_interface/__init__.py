@@ -15,6 +15,7 @@
 
 """A cuMotion world interface example module that provides an interactive UI for robot motion planning demonstrations."""
 
-from .extension import *
+from .extension import Extension as Extension
+from .extension import UIBuilder as UIBuilder
 
-__all__ = ["UIBuilder"]
+__all__ = []

@@ -45,7 +45,7 @@ class Extension(omni.ext.IExt):
         self._cpp = settings.get("/exts/isaacsim.ros2.tf_viewer/cpp")
         self._include_root_frame = settings.get("/exts/isaacsim.ros2.tf_viewer/include_root_frame")
 
-        # load plugin
+        # load the transform listener module (C++ plugin or Python implementation)
         if self._cpp:
             # set environment PATH
             if sys.platform == "win32":
@@ -58,14 +58,11 @@ class Extension(omni.ext.IExt):
                 loaded_file_wildcards=["isaacsim.ros2.tf_viewer.plugin"],
                 search_paths=[os.path.abspath(os.path.join(ext_path, "bin"))],
             )
-            from .. import _transform_listener as _transform_listener_ros2_cpp
-
-            self._module = {"ros": None, "ros2": _transform_listener_ros2_cpp}
+            from .. import _transform_listener as transform_listener
         else:
-            from . import transform_listener_ros as _transform_listener_ros_py
-            from . import transform_listener_ros2 as _transform_listener_ros2_py
+            from . import transform_listener_ros2 as transform_listener
 
-            self._module = {"ros": _transform_listener_ros_py, "ros2": _transform_listener_ros2_py}
+        self._module = transform_listener
 
         # get viewport scene
         self._viewport_window = omni.kit.viewport.utility.get_active_viewport_window()
@@ -82,9 +79,6 @@ class Extension(omni.ext.IExt):
 
         self._running = False
         self._interface = None
-        self._ros_version = ""
-
-        self._interface = None
 
         # data
         self._frames = {"World", "world", "map"}
@@ -100,28 +94,22 @@ class Extension(omni.ext.IExt):
             self._viewport_scene = None
 
     def _on_visibility_changed(self, visible: bool) -> None:
-        if self._extension_manager.is_extension_enabled("isaacsim.ros2.bridge"):
-            self._ros_version = "ros2"
-        else:
+        bridge_enabled = self._extension_manager.is_extension_enabled("isaacsim.ros2.bridge")
+        if not bridge_enabled:
             carb.log_warn("The 'isaacsim.ros2.bridge' extension is not enabled")
 
         distro = os.environ.get("ROS_DISTRO", "").lower()
-        module = self._module.get(self._ros_version, None)
+        module = self._module if bridge_enabled else None
         if visible:
-            carb.log_info(
-                f"Acquire interface ({self._ros_version.upper()} | {distro} | {'cpp' if self._cpp else 'python'})"
-            )
+            carb.log_info(f"Acquire interface (ROS2 | {distro} | {'cpp' if self._cpp else 'python'})")
             # acquire interface
             if module:
                 self._interface = module.acquire_transform_listener_interface()
                 self._interface.initialize(distro)
             # start thread
             threading.Thread(target=self._update_transforms).start()
-            # carb.log_info(f"Transform listener status: {self._interface.is_ready()}")
         else:
-            carb.log_info(
-                f"Release interface ({self._ros_version.upper()} | {distro} | {'cpp' if self._cpp else 'python'})"
-            )
+            carb.log_info(f"Release interface (ROS2 | {distro} | {'cpp' if self._cpp else 'python'})")
             self._running = False
             # release interface
             if module:

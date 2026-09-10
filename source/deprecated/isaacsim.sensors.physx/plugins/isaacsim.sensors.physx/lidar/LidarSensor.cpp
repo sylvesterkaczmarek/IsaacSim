@@ -16,13 +16,13 @@
 #define CARB_EXPORTS
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "LidarSensor.h"
+#include "LidarSensor.hpp"
 
-#include <isaacsim/core/includes/Conversions.h>
-#include <isaacsim/core/includes/Pose.h>
+#include <isaacsim/core/includes/Conversions.hpp>
+#include <isaacsim/core/includes/Pose.hpp>
 #include <omni/physx/IPhysx.h>
 
 #include <algorithm>

@@ -26,11 +26,23 @@ import omni.usd
 from isaacsim.core.utils.prims import delete_prim, get_prim_at_path
 from isaacsim.core.utils.stage import traverse_stage
 from isaacsim.sensors.rtx import SUPPORTED_LIDAR_CONFIGS, SUPPORTED_LIDAR_VARIANT_SET_NAME
+from isaacsim.sensors.rtx.impl.aux_output_metadata import GMO_CHANNELS_ATTR, LIDAR_AUX_OUTPUT_ATTR
 from isaacsim.storage.native import get_assets_root_path
 from pxr import Gf, Sdf, UsdGeom
 
 
 def _variant_label(v: Any) -> Any:
+    """Build a label for an RTX Lidar variant value.
+
+    Args:
+        v: Variant value to label. Supports None, strings, and mapping values.
+
+    Returns:
+        A label using "default" for None, the string value for strings, or joined key-value pairs for mappings.
+
+    Raises:
+        AttributeError: If v is not None, not a string, and does not provide items.
+    """
     if v is None:
         return "default"
     if isinstance(v, str):
@@ -51,7 +63,11 @@ class TestRtxSensorCommands(omni.kit.test.AsyncTestCase):
         await omni.usd.get_context().close_stage_async()
 
     async def test_create_rtx_lidar_configs(self) -> None:
-        """Test creating RTX Lidar sensors with different configurations."""
+        """Test creating RTX Lidar sensors with different configurations.
+
+        Raises:
+            AssertionError: If a sensor prim is not created, is not an OmniLidar, or has an unexpected variant selection.
+        """
         translation = Gf.Vec3d(0.0, 0.0, 0.0)
         orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
 
@@ -112,7 +128,11 @@ class TestRtxSensorCommands(omni.kit.test.AsyncTestCase):
                             )
 
     async def test_create_rtx_lidar_invalid_config(self) -> None:
-        """Test creating an RTX Lidar sensor with an invalid configuration."""
+        """Test creating an RTX Lidar sensor with an invalid configuration.
+
+        Raises:
+            AssertionError: If the sensor prim is not created, is invalid, or is not an OmniLidar.
+        """
         translation = Gf.Vec3d(0.0, 0.0, 0.0)
         orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
         path = "/RtxLidar_InvalidConfig"
@@ -131,7 +151,11 @@ class TestRtxSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertTrue(prim.IsA("OmniLidar"))
 
     async def test_create_rtx_radar_no_config(self) -> None:
-        """Test creating an RTX Radar sensor without a configuration."""
+        """Test creating an RTX Radar sensor without a configuration.
+
+        Raises:
+            AssertionError: If the sensor prim is not created, is invalid, or is not an OmniRadar.
+        """
         translation = Gf.Vec3d(0.0, 1.0, 2.0)
         orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
 
@@ -147,7 +171,11 @@ class TestRtxSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertTrue(prim.IsA("OmniRadar"))
 
     async def test_create_rtx_radar_with_config(self) -> None:
-        """Test creating an RTX Radar sensor with a configuration."""
+        """Test creating an RTX Radar sensor with a configuration.
+
+        Raises:
+            AssertionError: If the sensor prim is not created, is invalid, or is not an OmniRadar.
+        """
         translation = Gf.Vec3d(0.0, 1.0, 2.0)
         orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
         config = "test_radar_config"
@@ -165,7 +193,11 @@ class TestRtxSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertTrue(prim.IsA("OmniRadar"))
 
     async def test_create_rtx_ids_default_config(self) -> None:
-        """Test creating an RTX IDS sensor with default configuration."""
+        """Test creating an RTX IDS sensor with default configuration.
+
+        Raises:
+            AssertionError: If the Camera prim path, sensor type, default config, or plugin name is unexpected.
+        """
         translation = Gf.Vec3d(0.0, 0.0, 1.0)
         orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
 
@@ -195,7 +227,11 @@ class TestRtxSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertEqual(plugin_attr.Get(), "omni.sensors.nv.ids.ids.plugin")
 
     async def test_create_rtx_ids_with_config(self) -> None:
-        """Test creating an RTX IDS sensor with a specific configuration."""
+        """Test creating an RTX IDS sensor with a specific configuration.
+
+        Raises:
+            AssertionError: If the Camera prim sensor type, config, or plugin name is unexpected.
+        """
         translation = Gf.Vec3d(0.0, 0.0, 1.0)
         orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
         config = "test_ids_config"
@@ -225,7 +261,11 @@ class TestRtxSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertEqual(plugin_attr.Get(), "omni.sensors.nv.ids.ids.plugin")
 
     async def test_create_rtx_ultrasonic_default(self) -> None:
-        """Test creating an RTX Ultrasonic sensor with default configuration."""
+        """Test creating an RTX Ultrasonic sensor with default configuration.
+
+        Raises:
+            AssertionError: If the Camera prim path, sensor type, or plugin name is unexpected.
+        """
         translation = Gf.Vec3d(-1.0, 0.0, 0.0)
         orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
 
@@ -251,7 +291,11 @@ class TestRtxSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertEqual(plugin_attr.Get(), "omni.sensors.nv.acoustic.wpm_ultrasonic.plugin")
 
     async def test_create_rtx_ultrasonic_with_config(self) -> None:
-        """Test creating an RTX Ultrasonic sensor with a specific configuration."""
+        """Test creating an RTX Ultrasonic sensor with a specific configuration.
+
+        Raises:
+            AssertionError: If the Camera prim config or plugin name is unexpected.
+        """
         translation = Gf.Vec3d(-1.0, 0.0, 0.0)
         orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
         config = "test_ultrasonic_config"
@@ -365,7 +409,7 @@ class TestRtxSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertEqual(plugin_attr.Get(), "omni.sensors.nv.lidar.lidar_core.plugin")
 
     async def test_rtx_lidar_default_creation(self) -> None:
-        """Test RTX Lidar default creation (no config, no force_camera_prim)."""
+        """Test RTX Lidar default creation with no config and no force_camera_prim."""
         translation = Gf.Vec3d(0.0, 0.0, 0.0)
         orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
 
@@ -403,8 +447,27 @@ class TestRtxSensorCommands(omni.kit.test.AsyncTestCase):
             "Expected accumulateOutputs to be True after command execution.",
         )
 
+    async def test_rtx_lidar_aux_output_creation_sets_gmo_channels(self) -> None:
+        """Test that creation-time auxOutputType maps to GenericModelOutput channels metadata."""
+        _, prim = omni.kit.commands.execute(
+            "IsaacSensorCreateRtxLidar",
+            path="/RtxLidar_AuxOutputTest",
+            config="Example_Rotary",
+            translation=Gf.Vec3d(0.0, 0.0, 0.0),
+            orientation=Gf.Quatd(1.0, 0.0, 0.0, 0.0),
+            **{LIDAR_AUX_OUTPUT_ATTR: "EXTRA"},
+        )
+
+        self.assertIsNotNone(prim)
+        self.assertTrue(prim.IsValid())
+        self.assertTrue(prim.IsA("OmniLidar"))
+
+        channels_attr = prim.GetAttribute(GMO_CHANNELS_ATTR)
+        self.assertTrue(channels_attr.IsValid(), f"Expected {GMO_CHANNELS_ATTR} on OmniLidar prim.")
+        self.assertEqual(channels_attr.Get(), ["EXTRA"])
+
     async def test_rtx_lidar_default_creation_with_path(self) -> None:
-        """Test RTX Lidar default creation (no config, no force_camera_prim)."""
+        """Test RTX Lidar default creation with explicit root, parent, and parented path locations."""
         print(get_prim_at_path("/").GetAllChildren())
         translation = Gf.Vec3d(0.0, 0.0, 0.0)
         orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
@@ -482,7 +545,7 @@ class TestRtxSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertEqual(plugin_attr.Get(), "omni.sensors.nv.lidar.lidar_core.plugin")
 
     async def test_rtx_lidar_usd_path_no_variant(self) -> None:
-        """Test RTX Lidar creation with usd_path (no variant)."""
+        """Test RTX Lidar creation with usd_path and no variant."""
         translation = Gf.Vec3d(0.0, 0.0, 0.0)
         orientation = Gf.Quatd(1.0, 0.0, 0.0, 0.0)
         # Use a lidar config without variants

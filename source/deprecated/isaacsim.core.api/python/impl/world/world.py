@@ -43,34 +43,34 @@ class World(SimulationContext):
 
     Includes a PhysicsContext instance for physics-related settings such as physics dt and solver type.
 
-    Enable easy control of default reset states by adding objects to the Scene. Objects are bound
+    Enables easy control of default reset states by adding objects to the Scene. Objects are bound
     to keywords that facilitate retrieval like a dictionary.
 
-    Checkout the required tutorials at https://docs.isaacsim.omniverse.nvidia.com/latest/index.html
+    Check out the required tutorials at https://docs.isaacsim.omniverse.nvidia.com/latest/index.html
 
     Args:
         physics_dt: dt between physics steps.
         rendering_dt: dt between rendering steps. Note: rendering means
             rendering a frame of the current application and not
-            only rendering a frame to the viewports/ cameras. So UI
+            only rendering a frame to the viewports/cameras. So UI
             elements of Isaac Sim will be refreshed with this dt
             as well if running non-headless.
-        stage_units_in_meters: The metric units of assets. This will affect gravity value..etc.
-        physics_prim_path: specifies the prim path to create a PhysicsScene at,
-            only in the case where no PhysicsScene already defined.
-        sim_params: simulation parameters.
-        set_defaults: set to True to use the defaults settings
+        stage_units_in_meters: The metric units of assets. This affects the gravity value, etc.
+        physics_prim_path: Specifies the prim path to create a PhysicsScene at,
+            only when no PhysicsScene is already defined.
+        sim_params: Simulation parameters.
+        set_defaults: Set to True to use the default settings
             [physics_dt = 1.0/ 60.0,
-            stage units in meters = 1.0 (i.e in meters),
+            stage units in meters = 1.0 (i.e. in meters),
             rendering_dt = 1.0 / 60.0,
             gravity = -9.81 m / s
             ccd_enabled,
             stabilization_enabled,
-            gpu dynamics turned off,
+            GPU dynamics turned off,
             broadphase type is MBP,
             solver type is TGS].
-        backend: specifies the backend to be used (numpy or torch or warp).
-        device: specifies the device to be used if running on the gpu with torch or warp backends.
+        backend: Specifies the backend to be used (numpy or torch or warp).
+        device: Specifies the device to be used if running on the GPU with torch or warp backends.
 
     Example:
 
@@ -81,7 +81,6 @@ class World(SimulationContext):
         >>> world = World()
         >>> world
         <isaacsim.core.api.world.world.World object at 0x...>
-
     """
 
     _world_initialized = False
@@ -135,7 +134,6 @@ class World(SimulationContext):
         .. code-block:: python
 
             >>> World.clear_instance()
-
         """
         if World._world_initialized:
             if hasattr(SimulationContext._instance, "_scene"):
@@ -151,7 +149,10 @@ class World(SimulationContext):
 
     @property
     def scene(self) -> Scene:
-        """Return the scene instance.
+        """Scene instance.
+
+        Returns:
+            Scene instance.
 
         Example:
 
@@ -159,7 +160,6 @@ class World(SimulationContext):
 
             >>> world.scene
             <isaacsim.core.api.scenes.scene.Scene object at 0x>
-
         """
         return self._scene
 
@@ -175,7 +175,10 @@ class World(SimulationContext):
             Tasks should have a unique name
 
         Args:
-            task: task object
+            task: Task object to add.
+
+        Raises:
+            Exception: If a task with the same name already exists in the world.
 
         Example:
 
@@ -195,7 +198,6 @@ class World(SimulationContext):
             ...
             >>> task = Task(name="custom_task")
             >>> world.add_task(task)
-
         """
         if task.name in self._current_tasks:
             raise Exception("Task name should be unique in the world")
@@ -215,7 +217,6 @@ class World(SimulationContext):
             >>> # given a world instance that was rested at some point
             >>> world.is_tasks_scene_built()
             True
-
         """
         return self._task_scene_built
 
@@ -223,7 +224,7 @@ class World(SimulationContext):
         """Get a dictionary of the registered tasks where keys are task names.
 
         Returns:
-            Registered tasks.
+            Registered tasks keyed by task name.
 
         Example:
 
@@ -231,7 +232,6 @@ class World(SimulationContext):
 
             >>> world.get_current_tasks()
             {'custom_task': <custom.task.scripts.extension.Task object at 0x...>}
-
         """
         return self._current_tasks
 
@@ -244,13 +244,15 @@ class World(SimulationContext):
         Returns:
             The task with the specified name.
 
+        Raises:
+            Exception: If the task name does not exist in the current world tasks.
+
         Example:
 
         .. code-block:: python
 
             >>> world.get_task("custom_task")
             <custom.task.scripts.extension.Task object at 0x...>
-
         """
         if name not in self._current_tasks:
             raise Exception(f"task name {name} doesn't exist in the current world tasks.")
@@ -261,13 +263,16 @@ class World(SimulationContext):
     """
 
     def get_observations(self, task_name: str | None = None) -> dict:
-        """Get observations from all the tasks that were added.
+        """Get observations from tasks that were added.
 
         Args:
-            task_name: task name to ask for. If None, returns observations from all tasks.
+            task_name: Task name to ask for. If None, returns observations from all tasks.
 
         Returns:
-            The task (or all tasks) observations.
+            Task observations for the specified task or all tasks.
+
+        Raises:
+            Exception: If the task name does not exist in the current world tasks.
 
         Example:
 
@@ -275,7 +280,6 @@ class World(SimulationContext):
 
             >>> world.get_observations("custom_task")
             {'obs': [0]}
-
         """
         if task_name is not None:
             return self.get_task(task_name).get_observations()
@@ -286,13 +290,16 @@ class World(SimulationContext):
             return observations
 
     def calculate_metrics(self, task_name: str | None = None) -> dict:
-        """Get metrics from all the tasks that were added.
+        """Get metrics from tasks that were added.
 
         Args:
-            task_name: task name to ask for. If None, returns metrics from all tasks.
+            task_name: Task name to ask for. If None, returns metrics from all tasks.
 
         Returns:
-            The computed task (or all tasks) metric.
+            Computed metrics for the specified task or all tasks.
+
+        Raises:
+            Exception: If the task name does not exist in the current world tasks.
 
         Example:
 
@@ -300,7 +307,6 @@ class World(SimulationContext):
 
             >>> world.calculate_metrics("custom_task")
             {'reward': 1}
-
         """
         if task_name is not None:
             return self.get_task(task_name).calculate_metrics()
@@ -311,13 +317,16 @@ class World(SimulationContext):
             return metrics
 
     def is_done(self, task_name: str | None = None) -> bool:
-        """Get done from all the tasks that were added.
+        """Get the done state from tasks that were added.
 
         Args:
-            task_name: task name to ask for. If None, checks if all tasks are done.
+            task_name: Task name to ask for. If None, checks if all tasks are done.
 
         Returns:
-            Whether the task (or all tasks) is done.
+            Whether the specified task or all tasks are done.
+
+        Raises:
+            Exception: If the task name does not exist in the current world tasks.
 
         Example:
 
@@ -325,7 +334,6 @@ class World(SimulationContext):
 
             >>> world.is_done("custom_task")
             False
-
         """
         if task_name is not None:
             return self.get_task(task_name).is_done()
@@ -349,7 +357,6 @@ class World(SimulationContext):
 
             >>> world.get_data_logger()
             <isaacsim.core.api.loggers.data_logger.DataLogger object at 0x...>
-
         """
         return self._data_logger
 
@@ -358,14 +365,13 @@ class World(SimulationContext):
     """
 
     def initialize_physics(self) -> None:
-        """Initialize the physics simulation view and each added object to the Scene.
+        """Initialize the physics simulation view and finalize each object added to the Scene.
 
         Example:
 
         .. code-block:: python
 
             >>> world.initialize_physics()
-
         """
         SimulationContext.initialize_physics(self)
         self._scene._finalize(self.physics_sim_view)
@@ -374,34 +380,35 @@ class World(SimulationContext):
     def reset(self, soft: bool = False) -> None:
         """Reset the stage to its initial state and each object included in the Scene to its default state.
 
-            as specified by the ``set_default_state`` and ``__init__`` methods.
+        The default state is specified by the ``set_default_state`` and ``__init__`` methods.
 
         .. note::
 
             - All tasks should be added before the first reset is called unless the ``clear`` method was called.
             - All articulations should be added before the first reset is called unless the ``clear`` method was called.
             - This method takes care of initializing articulation handles with the first reset called.
-            - This will do one step internally regardless
-            - Call ``post_reset`` on each object in the Scene
-            - Call ``post_reset`` on each Task
+            - This will do one step internally regardless.
+            - Call ``post_reset`` on each object in the Scene.
+            - Call ``post_reset`` on each Task.
 
-            Things like setting PD gains for instance should happen at a Task reset or a Robot reset since
-            the defaults are restored after ``stop`` method is called.
+            Things like setting PD gains should happen at a Task reset or a Robot reset since the defaults are
+            restored after the ``stop`` method is called.
 
         .. warning::
 
-            This method is not intended to be used in the Isaac Sim's Extensions workflow since the Kit application
-            has the control over the rendering steps. For the Extensions workflow use the ``reset_async`` method instead
+            This method is not intended to be used in the Isaac Sim's Extensions workflow since the Omniverse Kit SDK
+            application has control over the rendering steps. For the Extensions workflow, use the ``reset_async`` method
+            instead.
 
         Args:
-            soft: If set to True simulation won't be stopped and start again. It only calls the reset on the scene objects.
+            soft: If set to True, simulation will not be stopped and started again. It only calls reset on the Scene
+                objects.
 
         Example:
 
         .. code-block:: python
 
             >>> world.reset()
-
         """
         if not self._task_scene_built:
             for task in self._current_tasks.values():
@@ -418,24 +425,12 @@ class World(SimulationContext):
             task.post_reset()
 
     async def reset_async_set_up_scene(self, soft: bool = False) -> None:
-        """Reset the stage to its initial state and each object included in the Scene to its default state.
+        """Set up the Scene for each registered task before an async reset.
 
-            as specified by the ``set_default_state`` and ``__init__`` methods.
-
-        .. note::
-
-            - All tasks should be added before the first reset is called unless the ``clear`` method was called.
-            - All articulations should be added before the first reset is called unless the ``clear`` method was called.
-            - This method takes care of initializing articulation handles with the first reset called.
-            - This will do one step internally regardless
-            - Call ``post_reset`` on each object in the Scene
-            - Call ``post_reset`` on each Task
-
-            Things like setting PD gains for instance should happen at a Task reset or a Robot reset since
-            the defaults are restored after ``stop`` method is called.
+        Calls ``set_up_scene`` on each Task with the World Scene.
 
         Args:
-            soft: If set to True simulation won't be stopped and start again. It only calls the reset on the scene objects.
+            soft: Unused parameter kept for compatibility with async reset methods.
 
         Example:
 
@@ -447,30 +442,30 @@ class World(SimulationContext):
             >>>     await world.reset_async_set_up_scene()
             >>>
             >>> run_coroutine(task())
-
         """
         for task in self._current_tasks.values():
             task.set_up_scene(self.scene)
 
     async def reset_async_no_set_up_scene(self, soft: bool = False) -> None:
-        """Reset the stage to its initial state and each object included in the Scene to its default state.
+        """Reset the stage and each object included in the Scene without calling Task ``set_up_scene``.
 
-            as specified by the ``set_default_state`` and ``__init__`` methods.
+        The default state is specified by the ``set_default_state`` and ``__init__`` methods.
 
         .. note::
 
             - All tasks should be added before the first reset is called unless the ``clear`` method was called.
             - All articulations should be added before the first reset is called unless the ``clear`` method was called.
             - This method takes care of initializing articulation handles with the first reset called.
-            - This will do one step internally regardless
-            - Call ``post_reset`` on each object in the Scene
-            - Call ``post_reset`` on each Task
+            - This will do one step internally regardless.
+            - Call ``post_reset`` on each object in the Scene.
+            - Call ``post_reset`` on each Task.
 
-            Things like setting PD gains for instance should happen at a Task reset or a Robot reset since
-            the defaults are restored after ``stop`` method is called.
+            Things like setting PD gains should happen at a Task reset or a Robot reset since the defaults are
+            restored after the ``stop`` method is called.
 
         Args:
-            soft: If set to True simulation won't be stopped and start again. It only calls the reset on the scene objects.
+            soft: If set to True, simulation will not be stopped and started again. It only calls reset on the Scene
+                objects.
 
         Example:
 
@@ -482,7 +477,6 @@ class World(SimulationContext):
             >>>     await world.reset_async_no_set_up_scene()
             >>>
             >>> run_coroutine(task())
-
         """
         if not soft:
             await self.stop_async()
@@ -499,22 +493,23 @@ class World(SimulationContext):
     async def reset_async(self, soft: bool = False) -> None:
         """Reset the stage to its initial state and each object included in the Scene to its default state.
 
-            as specified by the ``set_default_state`` and ``__init__`` methods.
+        The default state is specified by the ``set_default_state`` and ``__init__`` methods.
 
         .. note::
 
             - All tasks should be added before the first reset is called unless the ``clear`` method was called.
             - All articulations should be added before the first reset is called unless the ``clear`` method was called.
             - This method takes care of initializing articulation handles with the first reset called.
-            - This will do one step internally regardless
-            - Call ``post_reset`` on each object in the Scene
-            - Call ``post_reset`` on each Task
+            - This will do one step internally regardless.
+            - Call ``post_reset`` on each object in the Scene.
+            - Call ``post_reset`` on each Task.
 
-            Things like setting PD gains for instance should happen at a Task reset or a Robot reset since
-            the defaults are restored after ``stop`` method is called.
+            Things like setting PD gains should happen at a Task reset or a Robot reset since the defaults are
+            restored after the ``stop`` method is called.
 
         Args:
-            soft: If set to True simulation won't be stopped and start again. It only calls the reset on the scene objects.
+            soft: If set to True, simulation will not be stopped and started again. It only calls reset on the Scene
+                objects.
 
         Example:
 
@@ -526,7 +521,6 @@ class World(SimulationContext):
             ...     await world.reset_async()
             ...
             >>> run_coroutine(task())
-
         """
         if not self._task_scene_built:
             await self.reset_async_set_up_scene()
@@ -535,33 +529,34 @@ class World(SimulationContext):
         return
 
     def step(self, render: bool = True, step_sim: bool = True, update_fabric: bool = False) -> None:
-        """Step the physics simulation while rendering or without.
+        """Step the physics simulation with or without rendering.
 
         .. note::
 
-            The ``pre_step`` for each task is called before stepping. This method also update the Bounding Box Cache
-            time for computing bounding box if enabled
+            The ``pre_step`` for each Task is called before stepping. This method also updates the Bounding Box Cache
+            time for computing bounding boxes if enabled.
 
         .. warning::
 
-            Calling this method with the ``render`` parameter set to True (default value) is not intended to be used
-            in the Isaac Sim's Extensions workflow since the Kit application has the control over the rendering steps
+            Calling this method with ``render`` set to True is not intended to be used in the Isaac Sim's Extensions
+            workflow since the Omniverse Kit SDK application has control over the rendering steps.
 
         Args:
-            render: Set to False to only do a physics simulation without rendering. Note:
-                                 app UI will be frozen (since its not rendering) in this case.
-            step_sim: True to step simulation (physics and/or rendering)
+            render: Set to False to only do a physics simulation without rendering. The application UI will be frozen
+                because it is not rendering in this case.
+            step_sim: True to step simulation.
             update_fabric: Whether to force the update of the physics data to fabric when performing a physics-only
-                                  step (without rendering). This flag should be enabled when it is desired to read updated
-                                  data using the fabric interface after performing a physics-only step
-                                  (e.g., XFormPrim's world transform).
+                step without rendering. Enable this flag to read updated data using the fabric interface after performing
+                a physics-only step, such as XFormPrim's world transform.
+
+        Raises:
+            Exception: If data logging is started before adding a data frame logging function.
 
         Example:
 
         .. code-block:: python
 
             >>> world.step()
-
         """
         if self._task_scene_built:
             for task in self._current_tasks.values():
@@ -581,27 +576,24 @@ class World(SimulationContext):
         return
 
     def step_async(self, step_size: float | None = None) -> None:
-        """Call all functions that should be called pre stepping the physics.
+        """Run World pre-step updates before an external physics step.
 
         .. note::
 
-            The ``pre_step`` for each task is called before stepping. This method also update the Bounding Box Cache
-            time for computing bounding box if enabled
+            The ``pre_step`` for each Task is called before stepping. This method also updates the Bounding Box Cache
+            time for computing bounding boxes if enabled.
 
         Args:
-            step_size: Step size
+            step_size: Unused step size parameter.
+
+        Raises:
+            Exception: If data logging is started before adding a data frame logging function.
 
         Example:
 
         .. code-block:: python
 
-            >>> from omni.kit.async_engine import run_coroutine
-            >>>
-            >>> async def task():
-            ...     await world.step_async()
-            ...
-            >>> run_coroutine(task())
-
+            >>> world.step_async()
         """
         if self._task_scene_built:
             for task in self._current_tasks.values():
@@ -618,14 +610,13 @@ class World(SimulationContext):
         return
 
     def clear(self) -> None:
-        """Clear the current stage leaving the PhysicsScene and /World.
+        """Clear the current stage, task registry, task scene state, and data logger, leaving the PhysicsScene and /World.
 
         Example:
 
         .. code-block:: python
 
             >>> world.clear()
-
         """
         self.scene.clear(registry_only=False)
         self._current_tasks = {}

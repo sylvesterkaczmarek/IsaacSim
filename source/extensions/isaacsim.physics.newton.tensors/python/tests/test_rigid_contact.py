@@ -144,6 +144,27 @@ class TestRigidContactForceMatrix(NewtonTensorTestBase):
             nf_np, fm_sum, rtol=0.05, atol=0.5, err_msg="Net forces should match sum of force matrix"
         )
 
+        friction_forces, friction_points, friction_counts, friction_starts = box_contacts.get_friction_data(dt)
+        friction_counts_np = friction_counts.numpy().reshape(box_contacts.sensor_count, box_contacts.filter_count)
+        self.assertTrue(np.all(friction_counts_np > 0), "Each filtered contact pair should have friction data")
+        self.assertTrue(np.all(friction_starts.numpy() >= 0), "Friction start indices must be non-negative")
+        self.assertTrue(np.isfinite(friction_forces.numpy()).all(), "Friction forces must be finite")
+        self.assertTrue(np.isfinite(friction_points.numpy()).all(), "Friction points must be finite")
+
+        capacity_limited_contacts = sim.create_rigid_contact_view(
+            "/envs/*/box",
+            filter_patterns=box_filter_patterns,
+            max_contact_data_count=3,
+        )
+        limited_forces, _limited_points, limited_counts, limited_starts = capacity_limited_contacts.get_friction_data(
+            dt
+        )
+        limited_counts_np = limited_counts.numpy().reshape(-1)
+        limited_starts_np = limited_starts.numpy().reshape(-1)
+        self.assertEqual(int(np.sum(limited_counts_np)), 3, "Reported counts must fit the friction output buffer")
+        self.assertTrue(np.all(limited_starts_np + limited_counts_np <= 3))
+        self.assertEqual(limited_forces.shape[0], 3)
+
 
 @run_on_device_configs()
 class TestRawContactData(NewtonTensorTestBase):
@@ -190,6 +211,12 @@ class TestRawContactData(NewtonTensorTestBase):
         self.assertIsNotNone(top_contacts)
         self.assertEqual(top_contacts.sensor_count, self.NUM_ENVS)
         self.assertEqual(top_contacts.filter_count, 0)
+        bottom_contacts = sim.create_rigid_contact_view(
+            "/envs/*/bottom_box",
+            max_contact_data_count=self.NUM_ENVS * 10,
+        )
+        self.assertIsNotNone(bottom_contacts)
+        self.assertEqual(bottom_contacts.sensor_count, self.NUM_ENVS)
 
         dt = self.get_sim_dt()
         self.step(n=120, dt=dt)
@@ -200,30 +227,64 @@ class TestRawContactData(NewtonTensorTestBase):
 
         counts_np = counts.numpy().flatten()
         start_indices_np = start_indices.numpy().flatten()
+        actor_ids_np = other_actor_ids.numpy().flatten()
+        forces_np = forces.numpy().flatten()
+        normals_np = normals.numpy().reshape(-1, 3)
+        top_raw_vectors: list[np.ndarray] = []
 
         for i in range(self.NUM_ENVS):
-            self.assertGreater(counts_np[i], 0, msg=f"Sensor {i} should have contacts")
-
-        start0 = int(start_indices_np[0])
-        count0 = int(counts_np[0])
-        if count0 > 0:
-            ids_slice = other_actor_ids.numpy().flatten()[start0 : start0 + count0]
-            ids_cpu = wp.array(ids_slice.astype(np.uint64), dtype=wp.uint64, device="cpu")
+            start = int(start_indices_np[i])
+            count = int(counts_np[i])
+            self.assertGreater(count, 0, msg=f"Sensor {i} should have contacts")
+            ids_cpu = wp.array(actor_ids_np[start : start + count].astype(np.uint64), dtype=wp.uint64, device="cpu")
             paths = top_contacts.get_other_actor_paths_from_ids(ids_cpu)
             has_bottom = any("bottom_box" in p for p in paths if p)
-            self.assertTrue(has_bottom, f"Top box should contact bottom_box. Paths: {paths}")
+            self.assertTrue(has_bottom, f"Top box {i} should contact bottom_box. Paths: {paths}")
 
-            forces_np = forces.numpy().flatten()
-            normals_np = normals.numpy().reshape(-1, 3)
-            slc = slice(start0, start0 + count0)
+            slc = slice(start, start + count)
             force_vectors = forces_np[slc, np.newaxis] * normals_np[slc]
             net_force = np.sum(force_vectors, axis=0)
+            top_raw_vectors.append(net_force)
             expected_z = self.BOX_MASS * self.GRAVITY
             self.assertAlmostEqual(
                 net_force[2],
                 expected_z,
                 delta=expected_z * 0.5,
                 msg=f"Net Z force should be ~{expected_z}, got {net_force[2]}",
+            )
+
+        bottom_forces, _, bottom_normals, _, bottom_counts, bottom_starts, bottom_actor_ids = (
+            bottom_contacts.get_raw_contact_data(dt)
+        )
+        bottom_counts_np = bottom_counts.numpy().flatten()
+        bottom_starts_np = bottom_starts.numpy().flatten()
+        bottom_ids_np = bottom_actor_ids.numpy().flatten()
+        bottom_forces_np = bottom_forces.numpy().flatten()
+        bottom_normals_np = bottom_normals.numpy().reshape(-1, 3)
+        for i in range(self.NUM_ENVS):
+            start = int(bottom_starts_np[i])
+            count = int(bottom_counts_np[i])
+            self.assertGreater(count, 0, msg=f"Bottom sensor {i} should contact the static ground")
+            ids = wp.array(bottom_ids_np[start : start + count].astype(np.uint64), dtype=wp.uint64, device="cpu")
+            paths = bottom_contacts.get_other_actor_paths_from_ids(ids)
+            self.assertTrue(paths, f"Bottom sensor {i} should resolve other-actor paths")
+            for path in paths:
+                self.assertTrue(Sdf.Path(path).IsAbsolutePath(), f"Other-actor path must be absolute: {path!r}")
+            ground_paths = [path for path in paths if Sdf.Path(path).HasPrefix(Sdf.Path("/groundPlane"))]
+            self.assertTrue(ground_paths, f"Bottom sensor {i} should expose the contacted ground prim: {paths}")
+            for path in ground_paths:
+                self.assertTrue(self.stage.GetPrimAtPath(path).IsValid(), f"Static actor path must name a prim: {path}")
+
+            raw_vectors = bottom_forces_np[start : start + count, np.newaxis] * bottom_normals_np[start : start + count]
+            top_contact_indices = [index for index, path in enumerate(paths) if "top_box" in path]
+            self.assertTrue(top_contact_indices, f"Bottom sensor {i} should expose its top-box contact: {paths}")
+            bottom_to_top_force = np.sum(raw_vectors[top_contact_indices], axis=0)
+            np.testing.assert_allclose(
+                top_raw_vectors[i],
+                -bottom_to_top_force,
+                rtol=0.1,
+                atol=0.5,
+                err_msg=f"The two sides of contact {i} must report opposite normal-force vectors",
             )
 
 

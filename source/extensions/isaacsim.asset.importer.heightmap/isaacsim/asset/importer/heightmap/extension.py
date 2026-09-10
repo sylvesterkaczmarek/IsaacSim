@@ -27,8 +27,8 @@ import omni.kit.commands
 import omni.ui as ui
 import omni.usd
 from isaacsim.asset.importer.heightmap.importer import HeightmapImporter
+from isaacsim.gui.components import btn_builder, float_builder
 from isaacsim.gui.components.menu import make_menu_item_description
-from isaacsim.gui.components.ui_utils import btn_builder, float_builder
 from omni.kit.menu.utils import MenuItemDescription, add_menu_items, remove_menu_items
 from PIL import Image
 

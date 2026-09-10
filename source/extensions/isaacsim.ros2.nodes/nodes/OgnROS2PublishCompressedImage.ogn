@@ -1,9 +1,9 @@
 {
     "isaacsim.ros2.bridge.ROS2PublishCompressedImage": {
-        "version": 1,
+        "version": 2,
         "icon": "icons/isaac-sim.svg",
         "description": [
-            "This node publishes ROS2 CompressedImage messages (H264 encoded)."
+            "This node publishes ROS2 CompressedImage messages."
         ],
         "metadata": {
             "uiName": "ROS2 Publish Compressed Image"
@@ -52,7 +52,7 @@
             },
             "data": {
                 "type": "uchar[]",
-                "description": "Buffer array containing the compressed image data (e.g., H264 bitstream)",
+                "description": "Buffer array containing the compressed image data (for example, H.264 or HEVC bitstreams)",
                 "memoryType": "any",
                 "default": []
             },
@@ -71,7 +71,8 @@
                 "description": "Compression format identifier for the ROS2 CompressedImage message",
                 "metadata": {
                     "allowedTokens": {
-                        "h264": "h264"
+                        "h264": "h264",
+                        "hevc": "hevc"
                     }
                 },
                 "default": "h264"

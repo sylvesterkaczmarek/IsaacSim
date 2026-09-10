@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import math
 import traceback
 from typing import Any
 
@@ -81,6 +82,64 @@ class OgnROS2RtxLidarHelper:
     """OmniGraph node that sets up ROS 2 RTX lidar publishers."""
 
     @staticmethod
+    def _calculate_rotary_output_count(horizontal_fov: float, full_rotation_ticks: int) -> int:
+        """Match the float-tolerant clipped-tick calculation used by the publisher."""
+        if horizontal_fov <= 0.0 or full_rotation_ticks <= 0:
+            return 0
+        if horizontal_fov >= 360.0 - 1e-3:
+            return full_rotation_ticks
+        clipped_ticks = horizontal_fov / (360.0 / full_rotation_ticks)
+        nearest_clipped_ticks = round(clipped_ticks)
+        if math.isclose(clipped_ticks, nearest_clipped_ticks, abs_tol=1e-3):
+            return max(1, nearest_clipped_ticks)
+        return max(1, math.ceil(clipped_ticks))
+
+    @staticmethod
+    def _calculate_rotary_scan_arc(
+        valid_start_azimuth: float,
+        valid_end_azimuth: float,
+        start_azimuth_offset: float,
+        horizontal_resolution: float,
+        full_rotation_ticks: int,
+        rotation_direction: str,
+    ) -> tuple[float, float, float]:
+        """Convert a rotary lidar's discrete market-frame samples to ROS angles.
+
+        Args:
+            valid_start_azimuth: Valid arc start in the clockwise market-model frame.
+            valid_end_azimuth: Valid arc end in the clockwise market-model frame.
+            start_azimuth_offset: Market-model-to-sensor azimuth offset in degrees.
+            horizontal_resolution: Angular distance between rotary ticks in degrees.
+            full_rotation_ticks: Truncated number of ticks in a full rotation.
+            rotation_direction: Authored ``CW`` or ``CCW`` rotation direction.
+
+        Returns:
+            ROS ``(angle_min, angle_max, horizontal_fov)`` in degrees, with
+            inclusive sampled endpoints.
+        """
+        horizontal_fov = (valid_end_azimuth - valid_start_azimuth) % 360.0
+        if math.isclose(horizontal_fov, 0.0, abs_tol=1e-6):
+            horizontal_fov = 360.0
+
+        num_output_elements = OgnROS2RtxLidarHelper._calculate_rotary_output_count(horizontal_fov, full_rotation_ticks)
+        sampled_span = (num_output_elements - 1) * horizontal_resolution
+
+        # Keep established full-circle metadata while making angle_max agree
+        # with the last of N discrete samples.
+        if math.isclose(horizontal_fov, 360.0, abs_tol=1e-6):
+            return -180.0, -180.0 + sampled_span, horizontal_fov
+
+        # Kit adds the offset in the clockwise market-model frame and writes GMO
+        # azimuths as signed counter-clockwise angles. Reverse CW samples into
+        # ascending ROS order; CCW samples already ascend after conversion.
+        if rotation_direction.upper() == "CCW":
+            angle_min = (-(valid_end_azimuth + start_azimuth_offset) + 180.0) % 360.0 - 180.0
+        else:
+            first_angle = (-(valid_start_azimuth + start_azimuth_offset) + 180.0) % 360.0 - 180.0
+            angle_min = (first_angle - sampled_span + 180.0) % 360.0 - 180.0
+        return angle_min, angle_min + sampled_span, horizontal_fov
+
+    @staticmethod
     def internal_state() -> OgnROS2RtxLidarHelperInternalState:
         """Return the internal state object for this node.
 
@@ -133,9 +192,21 @@ class OgnROS2RtxLidarHelper:
                 carb.log_error("LaserScan SRTX: scanRateBaseHz or patternFiringRateHz is 0")
                 return None
             h_res = 360.0 * rotation_rate / firing_rate
-            az_start = -180.0
-            az_end = 180.0
-            h_fov = 360.0
+            valid_start_value = prim.GetAttribute("omni:sensor:Core:validStartAzimuthDeg").Get()
+            valid_end_value = prim.GetAttribute("omni:sensor:Core:validEndAzimuthDeg").Get()
+            offset_value = prim.GetAttribute("omni:sensor:Core:startAzimuthOffsetDeg").Get()
+            rotation_direction_value = prim.GetAttribute("omni:sensor:Core:rotationDirection").Get()
+            valid_start = float(valid_start_value if valid_start_value is not None else 0.0)
+            valid_end = float(valid_end_value if valid_end_value is not None else 360.0)
+            offset = float(offset_value if offset_value is not None else 0.0)
+            rotation_direction = str(rotation_direction_value if rotation_direction_value is not None else "CW")
+            full_rotation_ticks = int(firing_rate / rotation_rate)
+            if full_rotation_ticks <= 0:
+                carb.log_error("LaserScan SRTX: patternFiringRateHz must provide at least one tick per scan rotation")
+                return None
+            az_start, az_end, h_fov = OgnROS2RtxLidarHelper._calculate_rotary_scan_arc(
+                valid_start, valid_end, offset, h_res, full_rotation_ticks, rotation_direction
+            )
 
         return {
             "azimuth_range_start": az_start,
@@ -311,7 +382,10 @@ class OgnROS2RtxLidarHelper:
                     init_params["horizontalResolution"] = scan_meta["horizontal_resolution"]
                     init_params["depthRange"] = [scan_meta["depth_range_min"], scan_meta["depth_range_max"]]
                     init_params["rotationRate"] = scan_meta["rotation_rate"]
-                    init_params["azimuthRange"] = [scan_meta["azimuth_range_start"], scan_meta["azimuth_range_end"]]
+                    init_params["azimuthRange"] = [
+                        scan_meta["azimuth_range_start"],
+                        scan_meta["azimuth_range_end"],
+                    ]
                     writer = rep.writers.get("RtxLidar" + f"ROS2{time_type}PublishLaserScan")
                 elif sensor_type == "point_cloud":
                     for metadata_item in db.inputs.selectedMetadata:

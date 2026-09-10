@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.4] - 2026-08-19
+### Fixed
+- `BaseSampleUITemplate`: cancel in-flight load/reset work on shutdown and skip callbacks after teardown.
+
+## [1.3.3] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [1.3.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

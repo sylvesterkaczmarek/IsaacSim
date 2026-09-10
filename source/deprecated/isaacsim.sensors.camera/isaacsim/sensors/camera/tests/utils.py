@@ -37,10 +37,6 @@ def debug_draw_pointcloud(pointcloud_data: object, color: object, size: float, c
         color: RGBA tuple for the point color (e.g., (1, 0, 0, 1) for red).
         size: Size of the points to draw.
         clear_existing: If True, clear existing points before drawing.
-
-    Returns:
-        None.
-
     """
     if not (isinstance(pointcloud_data, np.ndarray) and pointcloud_data.ndim == 2 and pointcloud_data.shape[1] == 3):
         print("Warning: pointcloud_data must be a NumPy array with shape (N, 3).")
@@ -107,6 +103,10 @@ def compare_images(src1: object, src2: object, ksize: int = 5, thresh: int = 30,
 
     Returns:
         A tuple of (combined_score, histogram_score, background_subtraction_score).
+
+    Raises:
+        AssertionError: If the image dimensions, channel counts, or shapes do not match.
+        ValueError: If an image format is not supported.
     """
 
     def compare_histograms(src1: object, src2: object) -> float:

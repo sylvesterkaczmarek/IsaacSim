@@ -26,12 +26,18 @@ args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 timeout = 900
 dependencies = [
     "isaacsim.test.utils",
-    "omni.kit.window.stage",
+    "omni.hydra.rtx",
+    "omni.kit.window.stage"
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

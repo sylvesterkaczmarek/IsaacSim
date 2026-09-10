@@ -1,0 +1,90 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <isaacsim/foundation/objects/lights/Light.hpp>
+
+namespace isaacsim
+{
+namespace foundation
+{
+namespace objects
+{
+namespace lights
+{
+
+/**
+ * @class SphereLight
+ * @brief Wrapper over one or more USD sphere light prims.
+ */
+class ISAACSIM_FOUNDATION_OBJECTS_API SphereLight : public Light
+{
+public:
+    /**
+     * @brief Construct a SphereLight wrapper and optionally configure initial geometry and transform.
+     * @param[in] paths                  Single path or list of paths to USD sphere light prims.
+     * @param[in] radii                  Initial sphere radii in scene units (shape @c (N,)). Optional.
+     * @param[in] positions              Initial world-frame positions (shape @c (N,3)). Optional.
+     * @param[in] translations           Initial local-frame translations (shape @c (N,3)). Optional.
+     * @param[in] orientations           Initial orientations as quaternions @c wxyz (shape @c (N,4)). Optional.
+     * @param[in] scales                 Initial local scales (shape @c (N,3)). Optional.
+     * @param[in] resetXformOpProperties Whether to normalize the xformOp stack before applying the
+     *                                   initial transform.
+     */
+    SphereLight(const std::variant<std::string, std::vector<std::string>>& paths,
+                // SphereLight
+                const std::optional<array::Array>& radii = std::nullopt,
+                // Xform
+                const std::optional<array::Array>& positions = std::nullopt,
+                const std::optional<array::Array>& translations = std::nullopt,
+                const std::optional<array::Array>& orientations = std::nullopt,
+                const std::optional<array::Array>& scales = std::nullopt,
+                bool resetXformOpProperties = true);
+    ~SphereLight() = default;
+
+    /**
+     * @brief Set the radii (in scene units) of the selected sphere light prims.
+     * @param[in] radii   Radius values (shape @c (N,)). Broadcast rules apply.
+     * @param[in] indices Indices of prims to process. If omitted, all wrapped prims are processed.
+     */
+    void setRadii(const array::Array& radii, const std::optional<array::Array>& indices = std::nullopt);
+
+    /**
+     * @brief Get the radii (in scene units) of the selected sphere light prims.
+     * @param[in] indices Indices of prims to process. If omitted, all wrapped prims are processed.
+     * @return Radius values (shape @c (N,)).
+     */
+    array::Array getRadii(const std::optional<array::Array>& indices = std::nullopt);
+
+    /**
+     * @brief Enable or disable treating the sphere lights as point lights (zero-area approximation).
+     * @param[in] enabled Boolean flags (shape @c (N,)). Broadcast rules apply.
+     * @param[in] indices Indices of prims to process. If omitted, all wrapped prims are processed.
+     */
+    void setEnabledTreatAsPoints(const array::Array& enabled, const std::optional<array::Array>& indices = std::nullopt);
+
+    /**
+     * @brief Get the enabled state of the treat-as-point-light flag for the selected sphere light prims.
+     * @param[in] indices Indices of prims to process. If omitted, all wrapped prims are processed.
+     * @return Boolean flags (shape @c (N,)).
+     */
+    array::Array getEnabledTreatAsPoints(const std::optional<array::Array>& indices = std::nullopt);
+};
+
+} // namespace lights
+} // namespace objects
+} // namespace foundation
+} // namespace isaacsim

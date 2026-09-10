@@ -412,3 +412,6 @@ class NewtonMjcScene(PhysicsScene):
         attr = self._prim.GetAttribute("mjc:option:viscosity")
         if attr:
             attr.Set(float(viscosity))
+
+    def get_newton_solver_type(self) -> str:
+        return "mujoco"

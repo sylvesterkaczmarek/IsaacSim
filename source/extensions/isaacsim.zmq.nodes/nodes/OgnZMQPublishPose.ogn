@@ -1,0 +1,53 @@
+{
+    "ZMQPublishPose": {
+        "version": 1,
+        "icon": "icons/isaac-sim.svg",
+        "description": "Publishes a prim's world-space pose via ZMQ as a Pose protobuf message. Wire from IsaacReadWorldPose to stream a stage object's pose (e.g. a manipulation target) without camera-based localization.",
+        "metadata": {
+            "uiName": "ZMQ Publish Pose"
+        },
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": "isaacZmq",
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "The input execution port"
+            },
+            "ip": {
+                "type": "string",
+                "description": "Remote IP address of the ZMQ server",
+                "default": "localhost"
+            },
+            "port": {
+                "type": "uint",
+                "description": "Remote port number of the ZMQ server",
+                "default": 5561
+            },
+            "topicName": {
+                "type": "string",
+                "description": "ZMQ topic published on (first multipart frame); defaults to the message type. Set a unique value (e.g. \"robot_0/pose\") to distinguish multiple data sources.",
+                "default": "pose"
+            },
+            "timeStamp": {
+                "type": "double",
+                "description": "Frame timestamp in seconds",
+                "uiName": "Timestamp",
+                "default": 0.0
+            },
+            "position": {
+                "type": "vectord[3]",
+                "description": "World position (x, y, z) in meters"
+            },
+            "orientation": {
+                "type": "quatd[4]",
+                "description": "World orientation quaternion (IJKR / x, y, z, w)"
+            }
+        },
+        "outputs": {
+            "execOut": {
+                "type": "execution",
+                "description": "Fires every tick after the message is published"
+            }
+        }
+    }
+}

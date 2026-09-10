@@ -48,7 +48,7 @@ class MobilityGenRobot(Module):
 
     This class defines an abstract base class for robots.
 
-    Robot implementations must subclass this class, define the
+    Robot implementations must subclass this class and define the
     required class parameters and abstract methods.
 
     The two main abstract methods subclasses must define are the build() and write_action()

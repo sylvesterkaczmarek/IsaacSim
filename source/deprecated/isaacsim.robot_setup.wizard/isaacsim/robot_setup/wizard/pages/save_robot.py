@@ -54,7 +54,7 @@ class SaveRobot:
         self._select_robot_asset_window = None
 
     def destroy(self) -> None:
-        """Cleanup method that destroys the UI frame and associated widgets."""
+        """Destroys the UI frame and associated widgets."""
         self.frame.destroy()
         if self._articulation_root_widget:
             self._articulation_root_widget.destroy()
@@ -64,7 +64,7 @@ class SaveRobot:
         self._select_robot_asset_window = None
 
     def _build_frame(self) -> None:
-        """Builds the UI frame for the robot saving interface."""
+        """Builds the UI frame for selecting the articulation root, minimal environment options, and robot export."""
         with ui.CollapsableFrame("Save Robot", build_header_fn=custom_header):
             with ui.ScrollingFrame():
                 with ui.VStack(name="setting_content_vstack"):
@@ -199,7 +199,7 @@ class SaveRobot:
         """Handles selection of robot asset paths from the asset picker.
 
         Args:
-            selected_paths: List of selected USD prim paths for the robot asset.
+            selected_paths: Selected USD prim paths for the robot asset.
         """
         self._select_robot_asset_window.visible = False
         self._selected_paths = selected_paths

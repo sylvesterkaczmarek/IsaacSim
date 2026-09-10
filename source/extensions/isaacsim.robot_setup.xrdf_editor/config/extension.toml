@@ -1,5 +1,5 @@
 [package]
-version = "3.6.2"
+version = "3.7.0"
 category = "Simulation"
 title = "Robot Description Editor"
 description = "Generates and edit Lula robot_description YAML files"
@@ -16,6 +16,7 @@ writeTarget.kit = true
 "isaacsim.core.experimental.prims" = {}
 "isaacsim.gui.components" = {}
 "isaacsim.robot_motion.lula" = {}
+"omni.kit.notification_manager" = {}
 "omni.kit.uiapp" = {}
 "omni.physics" = {}
 "omni.physics.physx" = {}
@@ -25,6 +26,10 @@ name = "isaacsim.robot_setup.xrdf_editor"
 
 [[test]]
 name = "startup"
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
 
 [[test]]
 timeout = 900
@@ -80,6 +85,7 @@ args = [
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

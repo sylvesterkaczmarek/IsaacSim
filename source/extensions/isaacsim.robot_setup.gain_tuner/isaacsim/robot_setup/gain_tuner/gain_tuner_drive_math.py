@@ -13,11 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Pure math for joint drive natural frequency / damping (matches JointItem UI conventions).
+"""Pure math for position-drive natural frequency and damping ratio.
 
-Revolute joint stiffness in USD is stored in the same numeric convention used by
-:class:`JointItem` in ``joint_table_widget.py``: an effective "degree-scaled"
-stiffness where ``K_rad = K_stored / DEG_TO_RAD`` for frequency calculations.
+``UsdPhysics`` stores a drive's stiffness and damping in the drive's own angular
+or linear convention, while the spring-mass relations ``omega_n = sqrt(K/m)`` and
+``zeta = D / (2 sqrt(m K))`` only hold in SI (radians or metres). Every function
+here therefore converts through :func:`stored_gain_scale`, which reports the one
+scale that separates the two.
+
+Both angular gains are stored *per degree* --- ``UsdPhysics`` declares stiffness
+as ``mass*DIST*DIST/degrees/second/second`` and damping as
+``mass*DIST*DIST/second/degrees`` --- so the same scale applies to each. Applying
+it to only one of them leaves the pair inconsistent by that scale, which is the
+kind of error the ratio ``D/K == 2 zeta / omega_n`` exposes regardless of inertia.
+Linear drives carry no angle unit and take no scale at all.
 """
 
 from __future__ import annotations
@@ -26,12 +35,31 @@ import math
 
 DEG_TO_RAD = math.pi / 180.0
 
+# Linear drive gains are already SI (per stage linear unit), so they need no scaling.
+_LINEAR_GAIN_SCALE = 1.0
+
+
+def stored_gain_scale(*, is_angular: bool) -> float:
+    """Scale relating a stored position-drive gain to its SI value.
+
+    A stored gain divided by this scale is the SI gain; an SI gain multiplied by
+    it is the stored gain. Applies identically to stiffness and damping.
+
+    Args:
+        is_angular: True for revolute / D6-rotational DOFs whose gains are stored
+            per degree, False for prismatic / linear DOFs.
+
+    Returns:
+        ``pi/180`` for angular DOFs, ``1.0`` for linear DOFs.
+    """
+    return DEG_TO_RAD if is_angular else _LINEAR_GAIN_SCALE
+
 
 def meq_for_drive_frequency(*, use_force_drive: bool, m_eq: float) -> float:
     """Equivalent inertia (or mass) scalar used in natural-frequency formulas.
 
-    Matches :class:`JointItem` behavior: acceleration drive uses ``1.0``;
-    force drive uses ``m_eq`` with a fallback when zero.
+    Acceleration drive uses ``1.0``; force drive uses ``m_eq`` with a fallback
+    when zero.
 
     Args:
         use_force_drive: True when the joint drive uses force mode.
@@ -45,85 +73,91 @@ def meq_for_drive_frequency(*, use_force_drive: bool, m_eq: float) -> float:
     return 1.0 if m_eq == 0 else m_eq
 
 
-def natural_frequency_hz_from_stiffness_revolute_position(
-    stiffness_stored: float, *, use_force_drive: bool, m_eq: float
+def natural_frequency_hz_from_stiffness_position_drive(
+    stiffness_stored: float, *, is_angular: bool, use_force_drive: bool, m_eq: float
 ) -> float:
-    """Natural frequency (Hz) from stiffness for revolute position drive (non-mimic).
+    """Natural frequency (Hz) from a stored position-drive stiffness (non-mimic).
 
     Args:
         stiffness_stored: Stiffness as stored on the joint / in the UI model.
+        is_angular: True for revolute DOFs (gains stored per degree), False for prismatic.
         use_force_drive: True if drive type is force (uses ``m_eq``).
-        m_eq: Equivalent inertia from the gain tuner pipeline (kg*m^2).
+        m_eq: Equivalent inertia or mass from the gain tuner pipeline.
 
     Returns:
         Natural frequency in Hz.
     """
     m = meq_for_drive_frequency(use_force_drive=use_force_drive, m_eq=m_eq)
-    stiffness_rad = stiffness_stored / DEG_TO_RAD
-    return math.sqrt(stiffness_rad / m) / (2.0 * math.pi)
+    stiffness_si = stiffness_stored / stored_gain_scale(is_angular=is_angular)
+    return math.sqrt(stiffness_si / m) / (2.0 * math.pi)
 
 
-def damping_ratio_from_stiffness_damping_revolute_position(
-    damping: float, stiffness_stored: float, *, use_force_drive: bool, m_eq: float
+def damping_ratio_from_stiffness_damping_position_drive(
+    damping_stored: float, stiffness_stored: float, *, is_angular: bool, use_force_drive: bool, m_eq: float
 ) -> float:
-    """Damping ratio from stiffness and damping (JointItem formula, non-mimic).
+    """Damping ratio from a stored stiffness / damping pair (non-mimic).
 
-    Uses the same radian-equivalent stiffness as :func:`natural_frequency_hz_from_stiffness_revolute_position`
-    and :func:`stiffness_stored_and_damping_from_natural_frequency_revolute_position`
-    (``K_rad = stiffness_stored / DEG_TO_RAD``), not ``sqrt(m * stiffness_stored)``.
+    Both gains are converted out of the stored convention before applying
+    ``zeta = D / (2 sqrt(m K))``, so the ratio is dimensionless as intended.
 
     Args:
-        damping: Drive damping value.
+        damping_stored: Damping as stored on the joint / in the UI model.
         stiffness_stored: Stiffness as stored on the joint / in the UI model.
+        is_angular: True for revolute DOFs (gains stored per degree), False for prismatic.
         use_force_drive: True when the joint drive uses force mode.
-        m_eq: Equivalent inertia from the gain tuner pipeline (kg*m^2).
+        m_eq: Equivalent inertia or mass from the gain tuner pipeline.
 
     Returns:
-        Damping ratio for the drive.
+        Damping ratio for the drive, or ``0.0`` when there is no stiffness.
     """
     if stiffness_stored <= 0:
         return 0.0
     m = meq_for_drive_frequency(use_force_drive=use_force_drive, m_eq=m_eq)
-    stiffness_rad = stiffness_stored / DEG_TO_RAD
-    return damping / (2.0 * math.sqrt(m * stiffness_rad))
+    scale = stored_gain_scale(is_angular=is_angular)
+    stiffness_si = stiffness_stored / scale
+    damping_si = damping_stored / scale
+    return damping_si / (2.0 * math.sqrt(m * stiffness_si))
 
 
-def stiffness_stored_and_damping_from_natural_frequency_revolute_position(
-    natural_freq_hz: float, damping_ratio: float, *, use_force_drive: bool, m_eq: float
+def stiffness_and_damping_from_natural_frequency_position_drive(
+    natural_freq_hz: float, damping_ratio: float, *, is_angular: bool, use_force_drive: bool, m_eq: float
 ) -> tuple[float, float]:
-    """Compute stored stiffness and damping from ``f_n`` and ``zeta`` (natural-frequency mode).
+    """Stored stiffness and damping for a target ``f_n`` and ``zeta``.
 
     Args:
         natural_freq_hz: Target natural frequency in Hz.
         damping_ratio: Target damping ratio.
+        is_angular: True for revolute DOFs (gains stored per degree), False for prismatic.
         use_force_drive: True when the joint drive uses force mode.
-        m_eq: Equivalent inertia from the gain tuner pipeline (kg*m^2).
+        m_eq: Equivalent inertia or mass from the gain tuner pipeline.
 
     Returns:
-        ``(stiffness_stored, damping)`` matching :meth:`JointItem.compute_drive_stiffness`
-        and the damping update in :meth:`JointItem.on_update_damping_ratio`.
+        ``(stiffness_stored, damping_stored)`` in the drive's stored convention.
     """
     m = meq_for_drive_frequency(use_force_drive=use_force_drive, m_eq=m_eq)
-    stiffness_rad = m * ((2.0 * math.pi * natural_freq_hz) ** 2)
-    stiffness_stored = stiffness_rad * DEG_TO_RAD
-    damping = damping_ratio * (2.0 * math.sqrt(m * stiffness_rad))
-    return stiffness_stored, damping
+    scale = stored_gain_scale(is_angular=is_angular)
+    stiffness_si = m * ((2.0 * math.pi * natural_freq_hz) ** 2)
+    damping_si = damping_ratio * (2.0 * math.sqrt(m * stiffness_si))
+    return stiffness_si * scale, damping_si * scale
 
 
-def damping_from_damping_ratio_revolute_position(
-    damping_ratio: float, stiffness_stored: float, *, use_force_drive: bool, m_eq: float
+def damping_from_damping_ratio_position_drive(
+    damping_ratio: float, stiffness_stored: float, *, is_angular: bool, use_force_drive: bool, m_eq: float
 ) -> float:
-    """Damping from damping ratio given current stored stiffness (uses ``sqrt(m * K_rad)``).
+    """Stored damping for a target damping ratio at the current stored stiffness.
 
     Args:
         damping_ratio: Target damping ratio.
         stiffness_stored: Stiffness as stored on the joint / in the UI model.
+        is_angular: True for revolute DOFs (gains stored per degree), False for prismatic.
         use_force_drive: True when the joint drive uses force mode.
-        m_eq: Equivalent inertia from the gain tuner pipeline (kg*m^2).
+        m_eq: Equivalent inertia or mass from the gain tuner pipeline.
 
     Returns:
-        Drive damping value.
+        Damping in the drive's stored convention.
     """
     m = meq_for_drive_frequency(use_force_drive=use_force_drive, m_eq=m_eq)
-    stiffness_rad = stiffness_stored / DEG_TO_RAD
-    return damping_ratio * (2.0 * math.sqrt(m * stiffness_rad))
+    scale = stored_gain_scale(is_angular=is_angular)
+    stiffness_si = stiffness_stored / scale
+    damping_si = damping_ratio * (2.0 * math.sqrt(m * stiffness_si))
+    return damping_si * scale

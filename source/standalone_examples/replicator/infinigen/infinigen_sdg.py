@@ -173,7 +173,11 @@ from isaacsim.core.utils.viewports import set_camera_view
 
 # Run the SDG pipeline on the scenarios
 def run_sdg(config: dict[str, Any]) -> None:
-    """Run the synthetic data generation pipeline on the configured scenarios."""
+    """Run the synthetic data generation pipeline on the configured scenarios.
+
+    Args:
+        config: Environment, camera, writer, and randomization settings for each SDG scenario.
+    """
     # Load the config parameters
     env_config = config.get("environments", {})
     env_urls = infinigen_utils.get_usd_paths(

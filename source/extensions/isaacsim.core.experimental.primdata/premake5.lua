@@ -64,12 +64,19 @@ includedirs {
     "plugins/isaacsim.core.experimental.primdata",
     "plugins/",
     "%{target_deps}/doctest/include",
+    "%{root}/source/extensions/isaacsim.core.experimental.prims/include",
     "%{root}/source/extensions/isaacsim.core.includes/include",
     "%{root}/source/extensions/isaacsim.core.simulation_manager/include",
+    "%{kit_sdk_bin_dir}/dev/fabric/include/",
+    "%{target_deps}/usd/%{cfg.buildcfg}/include",
+    "%{target_deps}/usd/%{cfg.buildcfg}/include/boost",
 }
 libdirs {
     extsbuild_dir .. "/omni.kit.test/bin",
+    extsbuild_dir .. "/omni.usd.core/bin",
 }
+links { "carb", "omni.usd" }
+add_usd({ "usd", "usdUtils" })
 
 filter { "configurations:debug" }
 defines { "_DEBUG" }

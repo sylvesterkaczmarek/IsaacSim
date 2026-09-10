@@ -28,7 +28,10 @@ timeout = 300
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*omni.replicator.nv*",
     "*SyntheticData extension needs*",
     "*[HSB Bridge] Failed to connect: Failed to create socket*",

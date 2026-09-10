@@ -168,6 +168,8 @@ class BinStackingDiagnosticsMonitor(DfDiagnosticsMonitor):
     def print_diagnostics(self, context: Any) -> None:
         """Collect and report diagnostic information about the active bin.
 
+        Sends a BinStackingDiagnostic to the configured diagnostic callback. If there is no active bin, sends an empty diagnostic.
+
         Args:
             context: The bin stacking context providing current state information.
         """
@@ -307,17 +309,29 @@ class BinStackingContext(ObstacleMonitorContext):
 
     @property
     def stack_complete(self) -> bool:
-        """Check whether all bins have been stacked."""
+        """Whether all bins have been stacked.
+
+        Returns:
+            True if the number of stacked bins matches the number of stack coordinates.
+        """
         return len(self.stacked_bins) == len(self.stack_coordinates)
 
     @property
     def elapse_time(self) -> float:
-        """Return the elapsed time since the behavior started."""
+        """Elapsed time since the behavior started.
+
+        Returns:
+            The elapsed time since the behavior started.
+        """
         return time.time() - self.start_time
 
     @property
     def has_active_bin(self) -> bool:
-        """Check whether there is an active bin being processed."""
+        """Whether there is an active bin being processed.
+
+        Returns:
+            True if an active bin is set.
+        """
         return self.active_bin is not None
 
     def monitor_bins(self) -> None:

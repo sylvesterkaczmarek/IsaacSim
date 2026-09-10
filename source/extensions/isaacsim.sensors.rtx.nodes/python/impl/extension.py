@@ -18,10 +18,7 @@
 import carb
 import numpy as np
 import omni.ext
-from isaacsim.core.nodes.scripts.utils import (
-    register_annotator_from_node_with_telemetry,
-    register_node_writer_with_telemetry,
-)
+from isaacsim.core.nodes import register_annotator_from_node_with_telemetry, register_node_writer_with_telemetry
 from isaacsim.sensors.experimental.rtx import (
     register_writer_spec,
     unregister_writer_spec,

@@ -17,12 +17,18 @@
 
 from __future__ import annotations
 
+import functools
 import importlib
 import sys
+import warnings
+from collections.abc import Callable
 from types import ModuleType
+from typing import Any, TypeVar, cast
 
 import carb
 import omni.kit.app
+
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 
 class _StubModule:
@@ -112,3 +118,65 @@ For a specific PyTorch version, see: https://pytorch.org/get-started/locally
                 return _StubModule()
             carb.log_error(f"Import error: {str(e)}")
             exit_app()
+
+
+def deprecated(
+    obj: _F | None = None,
+    reason: str | None = None,
+    replacement: str | None = None,
+    removal_version: str | None = None,
+) -> _F | Callable[[_F], _F]:
+    """Mark a public function or class as deprecated.
+
+    Args:
+        obj: Function or class to decorate when used as ``@deprecated``.
+        reason: Optional explanation for the deprecation.
+        replacement: Optional replacement API name or import path.
+        removal_version: Optional version when the symbol is expected to be removed.
+
+    Returns:
+        A decorated function/class, or a decorator when called with keyword arguments.
+
+    Example:
+
+    .. code-block:: python
+
+        >>> import isaacsim.core.deprecation_manager as deprecation_manager
+        >>>
+        >>> @deprecation_manager.deprecated(replacement="new_function", removal_version="6.0")
+        ... def old_function():
+        ...     return new_function()
+    """
+
+    def build_message(name: str) -> str:
+        parts = [f"{name} is deprecated."]
+        if replacement:
+            parts.append(f"Use {replacement} instead.")
+        if removal_version:
+            parts.append(f"It will be removed in {removal_version}.")
+        if reason:
+            parts.append(reason)
+        return " ".join(parts)
+
+    def decorate(deprecated_obj: _F) -> _F:
+        if isinstance(deprecated_obj, type):
+            original_init = deprecated_obj.__init__
+
+            @functools.wraps(original_init)
+            def wrapped_init(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN001
+                warnings.warn(build_message(deprecated_obj.__qualname__), DeprecationWarning, stacklevel=2)
+                original_init(self, *args, **kwargs)
+
+            deprecated_obj.__init__ = wrapped_init
+            return deprecated_obj
+
+        @functools.wraps(deprecated_obj)
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            warnings.warn(build_message(deprecated_obj.__qualname__), DeprecationWarning, stacklevel=2)
+            return deprecated_obj(*args, **kwargs)
+
+        return cast(_F, wrapped)
+
+    if obj is not None:
+        return decorate(obj)
+    return decorate

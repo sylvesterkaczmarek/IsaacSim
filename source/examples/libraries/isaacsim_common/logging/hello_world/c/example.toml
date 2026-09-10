@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id = "hello_world.c"
+title = "C Hello World"
+summary = "Report a message through the public C logging API."
+owners = ["isaacsim.common.logging"]
+topics = ["logging", "c"]
+
+[build]
+adapter = "cmake"
+targets = ["hello_world_c"]
+
+[run]
+adapter = "executable"
+target = "hello_world_c"
+
+[requirements]
+system = ["cmake", "c"]
+
+[[requirements.modules]]
+name = "isaacsim_common"
+surfaces = ["native_sdk"]
+
+[[test]]
+name = "default"
+stdout_contains = ["[isaacsim.examples.hello_world.c] Hello World from C."]

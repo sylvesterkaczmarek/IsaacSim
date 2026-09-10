@@ -44,9 +44,9 @@ if assets_root_path is None:
     sys.exit()
 
 
-asset_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 stage_utils.add_reference_to_stage(
-    asset_path, "/World/panda", variants=[("Gripper", "AlternateFinger"), ("Mesh", "Quality")]
+    asset_path, "/World/panda", variants=[("Gripper", "alternatefinger"), ("Mesh", "quality")]
 )
 
 # Wait two frames so that stage starts loading

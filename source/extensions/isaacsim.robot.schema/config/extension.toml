@@ -4,7 +4,7 @@ reloadable = false
 order = -100
 
 [package]
-version = "6.3.7"
+version = "7.0.2"
 category = "Simulation"
 title = "Isaac USD schema"
 description = "Extension used to host all USD schemas made for robots. Provides the generated schema USDA. and a few utility functions used for informal schemas."
@@ -19,12 +19,7 @@ writeTarget.kit = true
 "omni.usd.libs" = {}
 
 [[python.module]]
-name = "omni.isaac.RangeSensorSchema"
-path = "./compat"
-
-[[python.module]]
-name = "omni.isaac.IsaacSensorSchema"
-path = "./compat"
+path = "pip_prebundle"
 
 [[python.module]]
 name = "usd.schema.isaac"
@@ -35,10 +30,18 @@ name = "isaacsim.robot.schema.tests"
 [[test]]
 name = "startup"
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 timeout = 120
 dependencies = [
     "omni.usd",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [documentation]

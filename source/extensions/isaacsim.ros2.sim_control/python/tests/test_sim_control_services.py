@@ -1975,7 +1975,7 @@ class TestSimControlServices(omni.kit.test.AsyncTestCase):
         assets_root_path = await get_assets_root_path_async()
         if assets_root_path:
             request_additional = GetAvailableWorlds.Request()
-            request_additional.additional_sources = [assets_root_path + "/Isaac/Sensors/SICK/picoScan150"]
+            request_additional.additional_sources = [assets_root_path + "/Isaac/Sensors/SICK/picoScan100"]
 
             result_additional = await self._call_service_async(
                 GetAvailableWorlds, "/get_available_worlds", request_additional

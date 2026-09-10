@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides material APIs for isaacsim.core.api."""
+
 from isaacsim.core.api.materials.deformable_material import DeformableMaterial as DeformableMaterial
 from isaacsim.core.api.materials.deformable_material import DeformableMaterialView as DeformableMaterialView
 from isaacsim.core.api.materials.omni_glass import OmniGlass as OmniGlass

@@ -14,14 +14,15 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include <isaacsim/ros2/core/Ros2Node.h>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
 #include <nlohmann/json.hpp>
 #include <omni/fabric/FabricUSD.h>
 
 #include <OgnROS2ServicePrimDatabase.h>
+#include <exception>
 
 using namespace isaacsim::ros2::core;
 
@@ -888,16 +889,23 @@ private:
                     auto attr = targetPrim.GetAttribute(pxr::TfToken(attrName.c_str()));
                     if (nlohmann::json::accept(attrValueAsString))
                     {
-                        nlohmann::json jsonObj = nlohmann::json::parse(attrValueAsString);
-                        CARB_LOG_INFO("OgnROS2ServicePrim: |-- %s (type name: %s)", attrValueAsString.c_str(),
-                                      attr.GetTypeName().GetAsToken().GetString().c_str());
-                        auto vtValue = valueTypeFromJson(attr, jsonObj);
-                        success = !vtValue.IsEmpty();
-                        if (success)
+                        try
                         {
-                            attr.Set(vtValue); // pxr::TfUnstringify(attrValueAsString);
+                            nlohmann::json jsonObj = nlohmann::json::parse(attrValueAsString);
+                            CARB_LOG_INFO("OgnROS2ServicePrim: |-- %s (type name: %s)", attrValueAsString.c_str(),
+                                          attr.GetTypeName().GetAsToken().GetString().c_str());
+                            auto vtValue = valueTypeFromJson(attr, jsonObj);
+                            success = !vtValue.IsEmpty();
+                            if (success)
+                            {
+                                attr.Set(vtValue); // pxr::TfUnstringify(attrValueAsString);
+                            }
+                            else
+                            {
+                                message = "Unable to deserialize the attribute";
+                            }
                         }
-                        else
+                        catch (const std::exception&)
                         {
                             message = "Unable to deserialize the attribute";
                         }
@@ -1168,20 +1176,17 @@ private:
         case SdfDataType::eFrame4d:
         case SdfDataType::eMatrix4d:
         {
-            auto value = pxr::GfMatrix4d();
-            for (int i = 0; i < 4; ++i)
+            if (validateJsonMatrix(jsonObj, 4))
             {
-                if (validateJsonContainer(jsonObj[i], SdfDataType::eDouble, 4))
+                auto value = pxr::GfMatrix4d();
+                for (size_t i = 0; i < 4; ++i)
                 {
-                    value.SetRow(i, pxr::GfVec4d(jsonObj[i][0].get<double>(), jsonObj[i][1].get<double>(),
-                                                 jsonObj[i][2].get<double>(), jsonObj[i][3].get<double>()));
+                    const auto& row = jsonObj.at(i);
+                    value.SetRow(static_cast<int>(i), pxr::GfVec4d(row.at(0).get<double>(), row.at(1).get<double>(),
+                                                                   row.at(2).get<double>(), row.at(3).get<double>()));
                 }
-                else
-                {
-                    return pxr::VtValue();
-                }
+                vtValue = pxr::VtValue(value);
             }
-            vtValue = pxr::VtValue(value);
             break;
         }
         case SdfDataType::eFrame4dArray:
@@ -1287,19 +1292,16 @@ private:
         }
         case SdfDataType::eMatrix2d:
         {
-            auto value = pxr::GfMatrix2d();
-            for (int i = 0; i < 2; ++i)
+            if (validateJsonMatrix(jsonObj, 2))
             {
-                if (validateJsonContainer(jsonObj[i], SdfDataType::eDouble, 2))
+                auto value = pxr::GfMatrix2d();
+                for (size_t i = 0; i < 2; ++i)
                 {
-                    value.SetRow(i, pxr::GfVec2d(jsonObj[i][0].get<double>(), jsonObj[i][1].get<double>()));
+                    const auto& row = jsonObj.at(i);
+                    value.SetRow(static_cast<int>(i), pxr::GfVec2d(row.at(0).get<double>(), row.at(1).get<double>()));
                 }
-                else
-                {
-                    return pxr::VtValue();
-                }
+                vtValue = pxr::VtValue(value);
             }
-            vtValue = pxr::VtValue(value);
             break;
         }
         case SdfDataType::eMatrix2dArray:
@@ -1309,20 +1311,17 @@ private:
         }
         case SdfDataType::eMatrix3d:
         {
-            auto value = pxr::GfMatrix3d();
-            for (int i = 0; i < 3; ++i)
+            if (validateJsonMatrix(jsonObj, 3))
             {
-                if (validateJsonContainer(jsonObj[i], SdfDataType::eDouble, 3))
+                auto value = pxr::GfMatrix3d();
+                for (size_t i = 0; i < 3; ++i)
                 {
-                    value.SetRow(i, pxr::GfVec3d(jsonObj[i][0].get<double>(), jsonObj[i][1].get<double>(),
-                                                 jsonObj[i][2].get<double>()));
+                    const auto& row = jsonObj.at(i);
+                    value.SetRow(static_cast<int>(i), pxr::GfVec3d(row.at(0).get<double>(), row.at(1).get<double>(),
+                                                                   row.at(2).get<double>()));
                 }
-                else
-                {
-                    return pxr::VtValue();
-                }
+                vtValue = pxr::VtValue(value);
             }
-            vtValue = pxr::VtValue(value);
             break;
         }
         case SdfDataType::eMatrix3dArray:
@@ -1482,6 +1481,22 @@ private:
             }
         }
         return array;
+    }
+
+    bool validateJsonMatrix(const nlohmann::json& jsonObj, size_t size)
+    {
+        if (!jsonObj.is_array() || jsonObj.size() != size)
+        {
+            return false;
+        }
+        for (size_t i = 0; i < size; ++i)
+        {
+            if (!validateJsonContainer(jsonObj.at(i), SdfDataType::eDouble, size))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     bool validateJsonContainer(const nlohmann::json& jsonObj, SdfDataType type, size_t size)

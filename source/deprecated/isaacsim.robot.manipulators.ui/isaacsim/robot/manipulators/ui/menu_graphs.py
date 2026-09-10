@@ -46,7 +46,7 @@ class ArticulationPositionWindow(MenuHelperWindow):
     controller to an existing graph or create a new one. Upon creation, the graph enables real-time joint position
     control through the Property Manager interface during simulation.
 
-    Key features include automatic joint discovery from USD physics prims, support for both revolute and prismatic
+    Key features include automatic joint discovery from USD Physics prims, support for both revolute and prismatic
     joints, and proper unit conversion between USD degrees and PhysX radians for revolute joints.
     """
 
@@ -68,8 +68,8 @@ class ArticulationPositionWindow(MenuHelperWindow):
     def _build_ui(self) -> None:
         """Builds the user interface for the articulation position controller window.
 
-        Creates the UI components including graph path input, robot prim selector, instruction text,
-        and action buttons for creating the articulation controller graph.
+        Creates the UI components including graph path input, robot prim selector, instruction text, and action buttons for
+        creating the articulation controller graph.
         """
         self._og_path = get_next_free_path(self._og_path, "")
         og_path_def = ParamWidget.FieldDef(
@@ -154,11 +154,10 @@ class ArticulationPositionWindow(MenuHelperWindow):
         return
 
     def make_graph(self) -> None:
-        """Creates the Omniverse graph for articulation position control.
+        """Creates the OmniGraph for articulation position control.
 
-        Stops the timeline, creates or uses an existing graph, and adds nodes for joint command arrays,
-        articulation controller, and joint names. Connects the nodes and sets default position values
-        for all joints.
+        Stops the timeline, creates or uses an existing graph, and adds nodes for joint command arrays, articulation
+        controller, and joint names. Connects the nodes and sets default position values for all joints.
         """
         # stop simulation before adding the graph
         self._timeline = omni.timeline.get_timeline_interface()
@@ -245,8 +244,8 @@ class ArticulationPositionWindow(MenuHelperWindow):
     def _on_ok(self) -> None:
         """Handles the OK button click event.
 
-        Retrieves input values, validates parameters, creates the articulation graph if validation
-        passes, and closes the window. Shows a warning notification if parameter validation fails.
+        Retrieves input values, validates parameters, creates the articulation graph if validation passes, and closes the
+        window. Shows a warning notification if parameter validation fails.
         """
         self._og_path = self.og_path_input.get_value()
         self._robot_prim_path = self.robot_prim_input.get_value()
@@ -261,9 +260,8 @@ class ArticulationPositionWindow(MenuHelperWindow):
     def _check_params(self) -> bool:
         """Validates the input parameters for creating the articulation controller.
 
-        Checks if the specified graph path exists (when adding to existing graph), locates the
-        articulation root prim under the robot parent, and collects joint information including
-        names and default positions.
+        Checks if the specified graph path exists when adding to an existing graph, locates the articulation root prim under
+        the robot parent, and collects joint information including names and default positions.
 
         Returns:
             True if all parameters are valid and joints are found.
@@ -571,7 +569,7 @@ class ArticulationVelocityWindow(MenuHelperWindow):
     def _check_params(self) -> bool:
         """Validates the input parameters for creating the velocity controller graph.
 
-        Checks if the specified graph path exists (when adding to existing graph), locates the
+        Checks if the specified graph path exists when adding to an existing graph, locates the
         articulation root prim, discovers joints under the robot prim, and extracts joint names
         and default velocities.
 
@@ -653,7 +651,7 @@ class GripperWindow(MenuHelperWindow):
 
     The interface includes input fields for specifying the parent robot prim, gripper root prim,
     graph path, and gripper-specific parameters like open/close positions and movement speed.
-    Users can optionally enable keyboard control (O-open, C-close, N-stop) and specify which joints
+    Users can optionally enable keyboard control (O-open, C-close, and N-stop) and specify which joints
     should be controlled as gripper joints when not all articulated joints are part of the gripper mechanism.
     """
 
@@ -678,8 +676,8 @@ class GripperWindow(MenuHelperWindow):
     def _build_ui(self) -> None:
         """Builds the gripper controller configuration UI.
 
-        Creates the user interface elements for configuring gripper parameters including graph path,
-        robot and gripper prim selection, speed settings, joint limits, and keyboard control options.
+        Creates the user interface elements for configuring gripper parameters including graph path, robot and gripper prim
+        selection, speed settings, joint limits, and keyboard control options.
         """
         self._og_path = get_next_free_path(self._og_path, "")
         og_path_def = ParamWidget.FieldDef(
@@ -807,8 +805,8 @@ class GripperWindow(MenuHelperWindow):
     def make_graph(self) -> None:
         """Creates the gripper controller OmniGraph.
 
-        Generates an OmniGraph with gripper controller nodes, array nodes for joint positions and speeds,
-        and optional keyboard input nodes. Connects all nodes to form a complete gripper control system.
+        Generates an OmniGraph with gripper controller nodes, array nodes for joint positions and speeds, and optional keyboard
+        input nodes. Connects all nodes to form a complete gripper control system.
         """
         # stop physics before adding graphs
         self._timeline = omni.timeline.get_timeline_interface()
@@ -973,8 +971,8 @@ class GripperWindow(MenuHelperWindow):
     def _check_params(self) -> bool:
         """Validates gripper controller parameters.
 
-        Checks if the existing graph is valid, ensures no duplicate gripper controllers exist,
-        and verifies the articulation root prim is found under the parent robot prim.
+        Checks if the existing graph is valid, ensures no duplicate gripper controllers exist, and verifies the articulation root
+        prim is found under the parent robot prim.
 
         Returns:
             True if all parameters are valid, False otherwise.

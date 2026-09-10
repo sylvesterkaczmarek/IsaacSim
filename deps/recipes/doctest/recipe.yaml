@@ -1,0 +1,32 @@
+context:
+  version: "2.5.3"
+
+package:
+  name: doctest
+  version: ${{ version }}
+
+source:
+  url: https://github.com/doctest/doctest/archive/refs/tags/v${{ version }}.zip
+  sha256: 5ddeafa34bece65b9f2e5207186fa70cd8ca44c00f41ae2c25e6e50b427c2b79
+
+build:
+  number: 0
+  script: |
+    rm -rf "$PREFIX/include/doctest" "$PREFIX/licenses/doctest"
+    mkdir -p "$PREFIX/include/doctest" "$PREFIX/licenses/doctest"
+    cp "$SRC_DIR/doctest/doctest.h" "$PREFIX/include/doctest/doctest.h"
+    cp "$SRC_DIR/LICENSE.txt" "$PREFIX/licenses/doctest/LICENSE.txt"
+
+tests:
+  - package_contents:
+      include:
+        - doctest/doctest.h
+      files:
+        - licenses/doctest/LICENSE.txt
+
+about:
+  homepage: https://github.com/doctest/doctest
+  license: MIT
+  license_file: LICENSE.txt
+  repository: https://github.com/doctest/doctest
+  summary: Fast feature-rich C++ testing framework.

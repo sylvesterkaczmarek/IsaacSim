@@ -68,6 +68,22 @@ class TestSensorIcon(OmniUiTest):
         # Set icon visibility to true, default is false
         self._settings.set(VISIBLE_SETTING, True)
 
+    async def test_show_title_setting_uses_documented_path(self) -> None:
+        """The label visibility setting uses the documented sensor setting path."""
+        documented_path = "exts/omni.kit.prim.sensor/showTitle"
+        legacy_path = "exts/omni.kit.prim.icon/showTitle"
+        try:
+            self._settings.set(legacy_path, True)
+            self._settings.set(documented_path, False)
+            self.assertEqual(SHOW_TITLE_PATH, documented_path)
+            self.assertFalse(self._settings.get(SHOW_TITLE_PATH))
+
+            self._settings.set(documented_path, True)
+            self.assertTrue(self._settings.get(SHOW_TITLE_PATH))
+        finally:
+            self._settings.set(legacy_path, False)
+            self._settings.set(documented_path, False)
+
     # After running each test
     async def tearDown(self) -> None:
         """Tear down test fixtures after each test."""
@@ -148,6 +164,24 @@ class TestSensorIcon(OmniUiTest):
         self.assertTrue(TEST_OBJECT_PRIM_PATH in new_model.get_prim_paths())
         retrieved_path = new_model.get_icon_url(TEST_OBJECT_PRIM_PATH)
         self.assertEqual(retrieved_path, str(path))
+
+    async def test_sensoricon_custom_icon_replaces_discovered_icon_and_survives_refresh(self) -> None:
+        """A custom icon overrides an auto-discovered sensor and survives a visual refresh."""
+        create_test_object()
+        await ui_test.wait_n_updates(30)
+
+        model = self._icon_scene.get_model()
+        default_icon_path = model.get_icon_url(TEST_OBJECT_PRIM_PATH)
+        custom_icon_path = str(TEST_DATA_PATH_ICON.parent.joinpath("data/icon.png"))
+        self.assertNotEqual(default_icon_path, custom_icon_path)
+
+        self._icon_scene.add_sensor_icon(TEST_OBJECT_PRIM_PATH, custom_icon_path)
+        self.assertEqual(model.get_icon_url(TEST_OBJECT_PRIM_PATH), custom_icon_path)
+
+        # Timeline stop calls this path, which rebuilds the icons from the USD stage.
+        model.refresh_all_icon_visuals()
+        await ui_test.wait_n_updates(3)
+        self.assertEqual(model.get_icon_url(TEST_OBJECT_PRIM_PATH), custom_icon_path)
 
     async def test_sensoricon_path_types(self) -> None:
         """Tests handling of str and Sdf.Path for prim_path arguments."""
@@ -259,6 +293,17 @@ class TestSensorIcon(OmniUiTest):
         settings.set(VISIBLE_SETTING, True)
         await ui_test.wait_n_updates(30)
         self.assertTrue(model.get_item(TEST_OBJECT_PRIM_PATH).visible)
+
+    async def test_sensoricon_tracks_structural_stage_changes(self) -> None:
+        """Sensor icons track sensor prim additions and removals."""
+        model = self._icon_scene.get_model()
+        create_test_object()
+        await ui_test.wait_n_updates(3)
+        self.assertIsNotNone(model.get_item(TEST_OBJECT_PRIM_PATH))
+
+        omni.usd.get_context().get_stage().RemovePrim(TEST_OBJECT_PRIM_PATH)
+        await ui_test.wait_n_updates(3)
+        self.assertIsNone(model.get_item(TEST_OBJECT_PRIM_PATH))
 
 
 def create_test_object(

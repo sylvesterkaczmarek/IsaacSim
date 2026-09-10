@@ -13,4 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .impl import Extension  # noqa: F401
+from .impl import Extension as Extension
+from .impl.utils import register_scalar_colored_point_cloud_writer as register_scalar_colored_point_cloud_writer
+
+__all__ = ["register_scalar_colored_point_cloud_writer"]

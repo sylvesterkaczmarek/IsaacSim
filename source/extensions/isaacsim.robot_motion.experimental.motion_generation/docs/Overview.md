@@ -7,9 +7,9 @@ The isaacsim.robot_motion.experimental.motion_generation extension provides APIs
 ```{mermaid}
 graph TD
     %% Inheritance relationships
-    BaseController --> ControllerContainer
-    BaseController --> ParallelController
-    BaseController --> SequentialController
+    BaseController --> SelectableController
+    BaseController --> CombinedController
+    BaseController --> ChainedController
     BaseController --> TrajectoryFollower
 ```
 
@@ -19,7 +19,7 @@ graph TD
 
 ### Controllers
 
-The extension provides a flexible controller framework built around the {class}`BaseController <isaacsim.robot_motion.experimental.motion_generation.BaseController>` interface. The {class}`ControllerContainer <isaacsim.robot_motion.experimental.motion_generation.ControllerContainer>` enables runtime switching between different controllers using selection keys, while {class}`ParallelController <isaacsim.robot_motion.experimental.motion_generation.ParallelController>` runs multiple controllers simultaneously and combines their outputs. The {class}`SequentialController <isaacsim.robot_motion.experimental.motion_generation.SequentialController>` chains controllers together, feeding the output of one controller as the setpoint to the next.
+The extension provides a flexible controller framework built around the {class}`BaseController <isaacsim.robot_motion.experimental.motion_generation.BaseController>` interface. The {class}`SelectableController <isaacsim.robot_motion.experimental.motion_generation.SelectableController>` enables runtime switching between different controllers using selection keys, while {class}`CombinedController <isaacsim.robot_motion.experimental.motion_generation.CombinedController>` runs multiple controllers simultaneously and combines their outputs. The {class}`ChainedController <isaacsim.robot_motion.experimental.motion_generation.ChainedController>` chains controllers together, feeding the output of one controller as the setpoint to the next.
 
 The {class}`TrajectoryFollower <isaacsim.robot_motion.experimental.motion_generation.TrajectoryFollower>` controller implements trajectory execution, requiring a trajectory to be set before use and handling timing bounds automatically.
 
@@ -37,7 +37,7 @@ The {class}`ObstacleStrategy <isaacsim.robot_motion.experimental.motion_generati
 
 ### World Interface
 
-The {class}`WorldBinding <isaacsim.robot_motion.experimental.motion_generation.WorldBinding>` class synchronizes USD stage objects with planning world implementations through the {class}`WorldInterface <isaacsim.robot_motion.experimental.motion_generation.WorldInterface>`. It uses USDRT change tracking to efficiently mirror tracked prims into planning representations, handling transforms, collision states, and shape properties.
+The {class}`WorldBinding <isaacsim.robot_motion.experimental.motion_generation.WorldBinding>` class initializes planning-world obstacles from USD stage objects through the {class}`WorldInterface <isaacsim.robot_motion.experimental.motion_generation.WorldInterface>`. It can then synchronize the positions and orientations of tracked obstacles; shape properties and collision-enabled state are read only after initialization.
 
 The {class}`SceneQuery <isaacsim.robot_motion.experimental.motion_generation.SceneQuery>` class provides spatial queries against the USD stage, enabling searches for objects with specific APIs within axis-aligned bounding boxes.
 

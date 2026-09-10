@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.5] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [2.3.4] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [2.3.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

@@ -26,11 +26,13 @@ from isaacsim.core.utils.types import ArticulationAction
 
 
 class WheeledRobot(Robot):
-    """This class wraps and manages the articulation for a two wheeled differential robot base. It is designed to be managed by the `World` simulation context and provides an API for applying actions, retrieving dof parameters, etc...
+    """This class wraps and manages the articulation for a two-wheeled differential robot base. It is designed to be managed by the `World` simulation context and provides an API for applying actions, retrieving dof parameters, etc.
 
     Creating a wheeled robot can be done in a number of different ways, depending on the use case.
 
-    * Most commonly, the robot and stage are preloaded, in which case only the prim path to the articulation root and the joint labels are required. Joint labels can take the form of either the joint names or the joint indices in the articulation.
+    * Most commonly, the robot and stage are preloaded, in which case only the prim path to the articulation root and
+      the joint labels are required. Joint labels can take the form of either the joint names or the joint indices in
+      the articulation.
 
     .. code-block:: python
 
@@ -39,12 +41,13 @@ class WheeledRobot(Robot):
                             wheel_dof_names=["left_wheel_joint", "right_wheel_joint"]
                             )
 
-        armbot = WheeledRobot(prim_path="path/to/armbot"
+        armbot = WheeledRobot(prim_path="path/to/armbot",
                                 name="Weird_Arm_On_Wheels_Bot",
                                 wheel_dof_indices=[7, 8]
                             )
 
-    * Alternatively, this class can create and populate a new reference on the stage.  This is done with the `create_robot` parameter set to True.
+    * Alternatively, this class can create and populate a new reference on the stage. This is done with the
+      `create_robot` parameter set to True.
 
     .. code-block:: python
 
@@ -72,6 +75,9 @@ class WheeledRobot(Robot):
         create_robot: Create robot at prim_path using asset from usd_path.
         position: The location to create the robot when create_robot is True.
         orientation: The orientation of the robot when create_robot is True.
+
+    Raises:
+        ValueError: If both wheel_dof_names and wheel_dof_indices are None.
     """
 
     def __init__(
@@ -200,6 +206,9 @@ class WheeledRobot(Robot):
 
         Args:
             physics_sim_view: Physics simulation view.
+
+        Raises:
+            ValueError: If neither wheel DOF names nor wheel DOF indices are available.
         """
         super().initialize(physics_sim_view=physics_sim_view)
         if self._wheel_dof_names is not None:

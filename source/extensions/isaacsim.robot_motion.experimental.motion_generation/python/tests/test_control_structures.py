@@ -16,7 +16,7 @@
 """Verify motion-generation controller orchestration.
 
 The tests exercise controller selection, reset timing, passthrough keyword
-arguments, parallel state merging, sequential state transforms, and failure
+arguments, combined state merging, chained state transforms, and failure
 propagation from child controllers.
 """
 
@@ -42,8 +42,8 @@ class DefaultController(mg.BaseController):
 
     The controller generates simple robot states with default joint configurations, returning zero values
     for positions, velocities, and efforts. It includes flags to control whether reset and forward
-    operations should succeed or fail, making it useful for unit testing and validation of controller
-    container behavior.
+    operations should succeed or fail, making it useful for unit testing and validation of selectable controller
+    behavior.
 
     Key features:
     - Tracks whether the controller has been reset via the ``was_reset`` attribute
@@ -422,15 +422,15 @@ class SiteController(mg.BaseController):
 class TestControlStructures(omni.kit.test.AsyncTestCase):
     """Test class for validating control structure implementations in the motion generation framework.
 
-    This class contains comprehensive test cases for the core control structures including ControllerContainer,
-    ParallelController, and SequentialController. It verifies controller switching mechanisms, error handling,
+    This class contains comprehensive test cases for the core control structures including SelectableController,
+    CombinedController, and ChainedController. It verifies controller switching mechanisms, error handling,
     state management, and proper composition of multiple controllers.
 
     The tests use dummy controller implementations to validate:
 
-    - Controller container functionality with enum-based controller selection
+    - Selectable controller functionality with enum-based controller selection
     - Parallel execution of multiple controllers with state merging
-    - Sequential controller chaining with output propagation
+    - Chained controller with output propagation
     - Error propagation and failure handling across control structures
     - Reset behavior and state management
     - Proper handling of robot state components (joints, root, links, sites)
@@ -444,8 +444,8 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
     async def tearDown(self) -> None:
         """Clean up after each test method has run."""
 
-    async def test_controller_container(self) -> None:
-        """Test ControllerContainer functionality including creation, controller switching, and error handling."""
+    async def test_selectable_controller(self) -> None:
+        """Test SelectableController functionality including creation, controller switching, and error handling."""
 
         # creating a controller selection enum:
         class ControllerSelection(Enum):
@@ -453,16 +453,16 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
             OTHER = 1
             DOES_NOT_EXIST = 2
 
-        # controller container must have at least one controller.
+        # selectable controller must have at least one controller.
         self.assertRaises(
             ValueError,
-            mg.ControllerContainer,
+            mg.SelectableController,
             controller_options={},
             initial_controller_selection=ControllerSelection.DEFAULT,
         )
 
-        # create a controller container:
-        controller_container = mg.ControllerContainer(
+        # create a selectable controller:
+        selectable_controller = mg.SelectableController(
             controller_options={
                 ControllerSelection.DEFAULT: DefaultController(),
                 ControllerSelection.OTHER: OtherController(),
@@ -472,8 +472,8 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
 
         # before running either controller, we should get that they have
         # not been reset:
-        self.assertFalse(controller_container.get_controller(ControllerSelection.DEFAULT).was_reset)
-        self.assertFalse(controller_container.get_controller(ControllerSelection.OTHER).was_reset)
+        self.assertFalse(selectable_controller.get_controller(ControllerSelection.DEFAULT).was_reset)
+        self.assertFalse(selectable_controller.get_controller(ControllerSelection.OTHER).was_reset)
 
         # create a robot state:
         robot_state = mg.RobotState()
@@ -481,18 +481,18 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
         # create a time:
         t = 0.0
 
-        # reset the controller container:
-        success = controller_container.reset(robot_state, None, t)
+        # reset the selectable controller:
+        success = selectable_controller.reset(robot_state, None, t)
         self.assertTrue(success)
 
         # now, the default controller (DEFAULT) should have been reset,
         # but the OTHER controller should not have been reset:
-        self.assertTrue(controller_container.get_controller(ControllerSelection.DEFAULT).was_reset)
-        self.assertFalse(controller_container.get_controller(ControllerSelection.OTHER).was_reset)
-        self.assertEqual(controller_container.get_active_controller_enum(), ControllerSelection.DEFAULT)
+        self.assertTrue(selectable_controller.get_controller(ControllerSelection.DEFAULT).was_reset)
+        self.assertFalse(selectable_controller.get_controller(ControllerSelection.OTHER).was_reset)
+        self.assertEqual(selectable_controller.get_active_controller_enum(), ControllerSelection.DEFAULT)
 
-        # forward the controller container, confirming that the default is running.
-        action = controller_container.forward(robot_state, None, t)
+        # forward the selectable controller, confirming that the default is running.
+        action = selectable_controller.forward(robot_state, None, t)
         self.assertIsNotNone(action)
         self.assertEqual(action.joints.position_names, ["default"])
         self.assertEqual(action.joints.velocity_names, ["default"])
@@ -505,35 +505,35 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.allclose(action.joints.efforts.numpy(), np.array([0.0])))
 
         # if the active controller fails without switching, forward returns None.
-        controller_container.get_controller(ControllerSelection.DEFAULT).should_error = True
-        action = controller_container.forward(robot_state, None, t)
+        selectable_controller.get_controller(ControllerSelection.DEFAULT).should_error = True
+        action = selectable_controller.forward(robot_state, None, t)
         self.assertIsNone(action)
-        controller_container.get_controller(ControllerSelection.DEFAULT).should_error = False
+        selectable_controller.get_controller(ControllerSelection.DEFAULT).should_error = False
 
         # The controller resets should still not have changed:
-        self.assertTrue(controller_container.get_controller(ControllerSelection.DEFAULT).was_reset)
-        self.assertFalse(controller_container.get_controller(ControllerSelection.OTHER).was_reset)
+        self.assertTrue(selectable_controller.get_controller(ControllerSelection.DEFAULT).was_reset)
+        self.assertFalse(selectable_controller.get_controller(ControllerSelection.OTHER).was_reset)
 
         # change the controller to be the OTHER controller:
-        controller_container.set_next_controller(ControllerSelection.OTHER)
+        selectable_controller.set_next_controller(ControllerSelection.OTHER)
 
         # The controller resets should still not have changed,
         # since the next controller will be reset on the next forward call:
-        self.assertTrue(controller_container.get_controller(ControllerSelection.DEFAULT).was_reset)
-        self.assertFalse(controller_container.get_controller(ControllerSelection.OTHER).was_reset)
+        self.assertTrue(selectable_controller.get_controller(ControllerSelection.DEFAULT).was_reset)
+        self.assertFalse(selectable_controller.get_controller(ControllerSelection.OTHER).was_reset)
 
         # the active controller enum should still not have changed, since we haven't called forward yet:
-        self.assertEqual(controller_container.get_active_controller_enum(), ControllerSelection.DEFAULT)
+        self.assertEqual(selectable_controller.get_active_controller_enum(), ControllerSelection.DEFAULT)
 
-        # forward the controller container:
-        action = controller_container.forward(robot_state, None, t)
+        # forward the selectable controller:
+        action = selectable_controller.forward(robot_state, None, t)
 
         # the active controller enum should have changed to the OTHER controller:
-        self.assertEqual(controller_container.get_active_controller_enum(), ControllerSelection.OTHER)
+        self.assertEqual(selectable_controller.get_active_controller_enum(), ControllerSelection.OTHER)
 
         # Now both controllers would have had reset called on them:
-        self.assertTrue(controller_container.get_controller(ControllerSelection.DEFAULT).was_reset)
-        self.assertTrue(controller_container.get_controller(ControllerSelection.OTHER).was_reset)
+        self.assertTrue(selectable_controller.get_controller(ControllerSelection.DEFAULT).was_reset)
+        self.assertTrue(selectable_controller.get_controller(ControllerSelection.OTHER).was_reset)
 
         # confirming that the OTHER controller is running, and that it did not throw an error.
         self.assertIsNotNone(action)
@@ -548,10 +548,10 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.allclose(action.joints.efforts.numpy(), np.array([1.0])))
 
         # arbitrary kwargs can be passed to the forward and reset calls:
-        success = controller_container.reset(robot_state, None, t, first_kwarg="string", second_kwarg=None)
+        success = selectable_controller.reset(robot_state, None, t, first_kwarg="string", second_kwarg=None)
         self.assertTrue(success)
-        controller_container.set_next_controller(ControllerSelection.OTHER)
-        action = controller_container.forward(robot_state, None, t, first_kwarg="string", second_kwarg=None)
+        selectable_controller.set_next_controller(ControllerSelection.OTHER)
+        action = selectable_controller.forward(robot_state, None, t, first_kwarg="string", second_kwarg=None)
         self.assertIsNotNone(action)
         self.assertEqual(action.joints.position_names, ["other"])
         self.assertEqual(action.joints.velocity_names, ["other"])
@@ -566,42 +566,42 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
         # now, say that we should throw an error on the default controller,
         # set the desired controller to be the default controller again,
         # and then call forward again:
-        controller_container.get_controller(ControllerSelection.DEFAULT).should_error = True
-        controller_container.set_next_controller(ControllerSelection.DEFAULT)
+        selectable_controller.get_controller(ControllerSelection.DEFAULT).should_error = True
+        selectable_controller.set_next_controller(ControllerSelection.DEFAULT)
 
         # attempting to call forward, but having an error while resetting the controller
         # causes an exception to be raised.
-        self.assertRaises(RuntimeError, controller_container.forward, robot_state, None, t)
+        self.assertRaises(RuntimeError, selectable_controller.forward, robot_state, None, t)
 
         # attempts to set the next enum, where the enum has not associated controller:
-        self.assertRaises(LookupError, controller_container.set_next_controller, ControllerSelection.DOES_NOT_EXIST)
+        self.assertRaises(LookupError, selectable_controller.set_next_controller, ControllerSelection.DOES_NOT_EXIST)
 
         # attempts to get the controller associated with the non-existant controller:
-        self.assertRaises(LookupError, controller_container.get_controller, ControllerSelection.DOES_NOT_EXIST)
+        self.assertRaises(LookupError, selectable_controller.get_controller, ControllerSelection.DOES_NOT_EXIST)
 
         # assert that we can get the controller for controllers that do exist:
-        self.assertIsNotNone(controller_container.get_controller(ControllerSelection.DEFAULT))
-        self.assertIsNotNone(controller_container.get_controller(ControllerSelection.OTHER))
+        self.assertIsNotNone(selectable_controller.get_controller(ControllerSelection.DEFAULT))
+        self.assertIsNotNone(selectable_controller.get_controller(ControllerSelection.OTHER))
 
-    async def test_parallel_controller(self) -> None:
-        """Test ParallelController functionality including output combination and error propagation."""
-        # parallel controller must have at least two controllers.
-        self.assertRaises(ValueError, mg.ParallelController, controllers=[])
-        self.assertRaises(ValueError, mg.ParallelController, controllers=[DefaultController()])
+    async def test_combined_controller(self) -> None:
+        """Test CombinedController functionality including output combination and error propagation."""
+        # combined controller must have at least two controllers.
+        self.assertRaises(ValueError, mg.CombinedController, controllers=[])
+        self.assertRaises(ValueError, mg.CombinedController, controllers=[DefaultController()])
 
-        # create our parallel controller with two different controllers:
-        parallel_controller = mg.ParallelController(
+        # create our combined controller with two different controllers:
+        combined_controller = mg.CombinedController(
             controllers=[DefaultController(), OtherController()],
         )
 
         empty_robot_state = mg.RobotState()
 
-        # reset the parallel controller:
-        success = parallel_controller.reset(empty_robot_state, None, 0.0)
+        # reset the combined controller:
+        success = combined_controller.reset(empty_robot_state, None, 0.0)
         self.assertTrue(success)
 
-        # forward the parallel controller:
-        desired_state = parallel_controller.forward(empty_robot_state, None, 0.0)
+        # forward the combined controller:
+        desired_state = combined_controller.forward(empty_robot_state, None, 0.0)
         self.assertIsNotNone(desired_state)
         self.assertEqual(desired_state.joints.position_names, ["default", "other"])
         self.assertEqual(desired_state.joints.velocity_names, ["default", "other"])
@@ -614,27 +614,27 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.allclose(desired_state.joints.efforts.numpy(), np.array([0.0, 1.0])))
 
         # trying to run with two identical controllers will be invalid:
-        parallel_controller = mg.ParallelController(
+        combined_controller = mg.CombinedController(
             controllers=[DefaultController(), DefaultController()],
         )
-        desired_state = parallel_controller.forward(empty_robot_state, None, 0.0)
+        desired_state = combined_controller.forward(empty_robot_state, None, 0.0)
         self.assertIsNone(desired_state)
 
-        # if any controller fails, the whole parallel controller will fail:
-        parallel_controller = mg.ParallelController(
+        # if any controller fails, the whole combined controller will fail:
+        combined_controller = mg.CombinedController(
             controllers=[DefaultController(), AlwaysFailsController()],
         )
-        desired_state = parallel_controller.forward(empty_robot_state, None, 0.0)
+        desired_state = combined_controller.forward(empty_robot_state, None, 0.0)
         self.assertIsNone(desired_state)
 
-        success = parallel_controller.reset(empty_robot_state, None, 0.0)
+        success = combined_controller.reset(empty_robot_state, None, 0.0)
         self.assertFalse(success)
 
-        # combining root, link, and site outputs in parallel is valid:
-        parallel_controller = mg.ParallelController(
+        # combining root, link, and site outputs in combined is valid:
+        combined_controller = mg.CombinedController(
             controllers=[RootController(), LinkController(), SiteController()],
         )
-        desired_state = parallel_controller.forward(empty_robot_state, None, 0.0)
+        desired_state = combined_controller.forward(empty_robot_state, None, 0.0)
         self.assertIsNotNone(desired_state)
         self.assertTrue(np.allclose(desired_state.root.position.numpy(), np.array([1.0, 2.0, 3.0])))
         self.assertEqual(desired_state.links.spatial_space, ["link_a"])
@@ -648,25 +648,25 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.allclose(desired_state.sites.linear_velocities.numpy(), np.array([[0.0, 0.0, 0.0]])))
         self.assertTrue(np.allclose(desired_state.sites.angular_velocities.numpy(), np.array([[0.0, 0.0, 0.0]])))
 
-    async def test_sequential_controller(self) -> None:
-        """Test SequentialController functionality including chaining controllers and error propagation."""
-        # sequential controller must have at least two controllers.
-        self.assertRaises(ValueError, mg.SequentialController, controllers=[])
-        self.assertRaises(ValueError, mg.SequentialController, controllers=[DefaultController()])
+    async def test_chained_controller(self) -> None:
+        """Test ChainedController functionality including chaining controllers and error propagation."""
+        # chained controller must have at least two controllers.
+        self.assertRaises(ValueError, mg.ChainedController, controllers=[])
+        self.assertRaises(ValueError, mg.ChainedController, controllers=[DefaultController()])
 
-        # create our sequential controller with the add one controller being the final controller.
-        sequential_controller = mg.SequentialController(
+        # create our chained controller with the add one controller being the final controller.
+        chained_controller = mg.ChainedController(
             controllers=[DefaultController(), AddOneController()],
         )
 
         empty_robot_state = mg.RobotState()
 
-        # reset the sequential controller:
-        success = sequential_controller.reset(empty_robot_state, None, 0.0)
+        # reset the chained controller:
+        success = chained_controller.reset(empty_robot_state, None, 0.0)
         self.assertTrue(success)
 
-        # forward the sequential controller, all outputs have one added to them.
-        desired_state = sequential_controller.forward(empty_robot_state, None, 0.0)
+        # forward the chained controller, all outputs have one added to them.
+        desired_state = chained_controller.forward(empty_robot_state, None, 0.0)
         self.assertIsNotNone(desired_state)
         self.assertEqual(desired_state.joints.position_names, ["default"])
         self.assertEqual(desired_state.joints.velocity_names, ["default"])
@@ -678,8 +678,8 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.allclose(desired_state.joints.velocities.numpy(), np.array([1.0])))
         self.assertTrue(np.allclose(desired_state.joints.efforts.numpy(), np.array([1.0])))
 
-        # create our sequential controller with several add one controllers.
-        sequential_controller = mg.SequentialController(
+        # create our chained controller with several add one controllers.
+        chained_controller = mg.ChainedController(
             controllers=[
                 DefaultController(),
                 AddOneController(),
@@ -690,12 +690,12 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
 
         empty_robot_state = mg.RobotState()
 
-        # reset the sequential controller:
-        success = sequential_controller.reset(empty_robot_state, None, 0.0)
+        # reset the chained controller:
+        success = chained_controller.reset(empty_robot_state, None, 0.0)
         self.assertTrue(success)
 
-        # forward the sequential controller, all outputs have 3 added to them (from 3 AddOneControllers).
-        desired_state = sequential_controller.forward(empty_robot_state, None, 0.0)
+        # forward the chained controller, all outputs have 3 added to them (from 3 AddOneControllers).
+        desired_state = chained_controller.forward(empty_robot_state, None, 0.0)
         self.assertIsNotNone(desired_state)
         self.assertEqual(desired_state.joints.position_names, ["default"])
         self.assertEqual(desired_state.joints.velocity_names, ["default"])
@@ -707,12 +707,12 @@ class TestControlStructures(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.allclose(desired_state.joints.velocities.numpy(), np.array([3.0])))
         self.assertTrue(np.allclose(desired_state.joints.efforts.numpy(), np.array([3.0])))
 
-        # if any controller fails, the whole sequential controller will fail:
-        sequential_controller = mg.SequentialController(
+        # if any controller fails, the whole chained controller will fail:
+        chained_controller = mg.ChainedController(
             controllers=[DefaultController(), AlwaysFailsController(), AddOneController()],
         )
-        desired_state = sequential_controller.forward(empty_robot_state, None, 0.0)
+        desired_state = chained_controller.forward(empty_robot_state, None, 0.0)
         self.assertIsNone(desired_state)
 
-        success = sequential_controller.reset(empty_robot_state, None, 0.0)
+        success = chained_controller.reset(empty_robot_state, None, 0.0)
         self.assertFalse(success)

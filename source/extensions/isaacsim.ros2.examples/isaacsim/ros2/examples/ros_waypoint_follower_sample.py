@@ -29,10 +29,12 @@ import omni.ui as ui
 import omni.usd
 from isaacsim.core.experimental.utils import stage as stage_utils
 from isaacsim.examples.browser import get_instance as get_browser_instance
-from isaacsim.gui.components.ui_utils import setup_ui_headers
+from isaacsim.gui.components import setup_ui_headers
 from isaacsim.gui.components.widgets import ParamWidget
 from omni.kit.notification_manager import NotificationStatus, post_notification
 from pxr import Gf, UsdGeom
+
+__all__ = []
 
 MENU_NAME = "Add Waypoint Follower"
 MENU_CATEGORY = "ROS2/Navigation"
@@ -72,10 +74,10 @@ class WaypointFollower(BaseResetNode):
         pose.pose.position.x = waypoint[0]
         pose.pose.position.y = waypoint[1]
         pose.pose.position.z = waypoint[2]
-        pose.pose.orientation.w = waypoint[3]
-        pose.pose.orientation.x = waypoint[4]
-        pose.pose.orientation.y = waypoint[5]
-        pose.pose.orientation.z = waypoint[6]
+        pose.pose.orientation.x = waypoint[3]
+        pose.pose.orientation.y = waypoint[4]
+        pose.pose.orientation.z = waypoint[5]
+        pose.pose.orientation.w = waypoint[6]
         return pose
 
     def start_waypoint_follower(self):

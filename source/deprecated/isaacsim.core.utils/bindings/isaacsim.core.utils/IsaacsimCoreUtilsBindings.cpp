@@ -14,15 +14,15 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/core/includes/Conversions.h>
-#include <isaacsim/core/includes/Math.h>
-#include <isaacsim/core/includes/Transforms.h>
-#include <isaacsim/core/utils/PrimUtils.h>
+#include <isaacsim/core/includes/Conversions.hpp>
+#include <isaacsim/core/includes/Math.hpp>
+#include <isaacsim/core/includes/Transforms.hpp>
+#include <isaacsim/core/utils/PrimUtils.hpp>
 
 CARB_BINDINGS("isaacsim.core.utils.python")
 

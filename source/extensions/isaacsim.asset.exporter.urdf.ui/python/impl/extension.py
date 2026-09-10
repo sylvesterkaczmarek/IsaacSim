@@ -164,9 +164,6 @@ class UrdfExporterDelegate(ExportOptionsDelegate):
         export_path = os.path.join(export_dir, f"{export_filename}.urdf")
         stage = omni.usd.get_context().get_stage()
 
-        if opts.use_physx_inertia:
-            _write_physx_inertia(stage)
-
         mesh_prefix = opts.mesh_path_prefix
 
         if mesh_prefix == "package://":
@@ -179,13 +176,22 @@ class UrdfExporterDelegate(ExportOptionsDelegate):
                 sanitized += "_pkg"
             mesh_prefix = f"package://{sanitized}/"
 
+        inertia_layer = None
+        session_layer = stage.GetSessionLayer()
         try:
+            if opts.use_physx_inertia:
+                inertia_layer = Sdf.Layer.CreateAnonymous("inertia_temp.usda")
+                session_layer.subLayerPaths.append(inertia_layer.identifier)
+                with Usd.EditContext(stage, inertia_layer):
+                    _write_physx_inertia(stage)
+
             converter = UsdToUrdfConverter(
                 stage=stage,
                 root_prim_path=root,
                 mesh_dir_name=opts.mesh_dir_name,
                 mesh_path_prefix=mesh_prefix,
                 visualize_collision_meshes=opts.visualize_collision_meshes,
+                export_duplicate_ghost_links=opts.export_duplicate_ghost_links,
             )
             converter.convert(export_path)
             print(f"Converted USD to URDF: {export_path}")
@@ -196,6 +202,9 @@ class UrdfExporterDelegate(ExportOptionsDelegate):
 
             traceback.print_exc()
             return False
+        finally:
+            if inertia_layer is not None and inertia_layer.identifier in session_layer.subLayerPaths:
+                session_layer.subLayerPaths.remove(inertia_layer.identifier)
 
     def _destroy_impl(self) -> None:
         if self._widget:
@@ -223,65 +232,72 @@ def _write_physx_inertia(stage: Usd.Stage) -> None:
         _logger.warning("PhysX query interface not available, skipping inertia pre-computation")
         return
 
-    inertia_layer = Sdf.Layer.CreateAnonymous("inertia_temp.usda")
-    root_layer = stage.GetRootLayer()
-    root_layer.subLayerPaths.append(inertia_layer.identifier)
-    stage.SetEditTarget(Usd.EditTarget(inertia_layer))
-
-    try:
-        stage_cache = UsdUtils.StageCache().Get()
+    stage_cache = UsdUtils.StageCache.Get()
+    stage_id = stage_cache.GetId(stage).ToLongInt()
+    if not stage_id:
+        stage_cache.Insert(stage)
         stage_id = stage_cache.GetId(stage).ToLongInt()
+    if not stage_id:
+        _logger.warning("Stage is not registered in UsdUtils.StageCache; skipping PhysX inertia pre-computation")
+        return
 
-        for prim in stage.Traverse():
-            if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
-                continue
-            if not prim.HasAPI(UsdPhysics.MassAPI):
-                continue
+    for prim in stage.Traverse():
+        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            continue
+        if not prim.HasAPI(UsdPhysics.MassAPI):
+            continue
 
-            mass_api = UsdPhysics.MassAPI(prim)
-            mass_attr = mass_api.GetMassAttr()
-            if mass_attr and mass_attr.HasAuthoredValue():
-                diag_attr = mass_api.GetDiagonalInertiaAttr()
-                if diag_attr and diag_attr.HasAuthoredValue():
-                    continue
+        mass_api = UsdPhysics.MassAPI(prim)
+        targets = {
+            "mass": mass_api.GetMassAttr(),
+            "com": mass_api.GetCenterOfMassAttr(),
+            "inertia": mass_api.GetDiagonalInertiaAttr(),
+            "axes": mass_api.GetPrincipalAxesAttr(),
+        }
+        pending = {key: attr for key, attr in targets.items() if not (attr and attr.HasAuthoredValue())}
+        if not pending:
+            continue
 
-            prim_path = str(prim.GetPath())
-            prim_id = PhysicsSchemaTools.sdfPathToInt(prim_path)
-            inertia_result = {}
+        prim_path = str(prim.GetPath())
+        prim_id = PhysicsSchemaTools.sdfPathToInt(prim_path)
+        inertia_result = {}
 
-            def rigid_body_fn(rigid_info: Any, path: str = prim_path) -> None:
-                if rigid_info.result == PhysxPropertyQueryResult.VALID:
-                    inertia_result["mass"] = rigid_info.mass
-                    inertia_result["com"] = np.array(rigid_info.center_of_mass)
-                    inertia_result["inertia"] = np.array(rigid_info.inertia)
-                    inertia_result["axes"] = np.array(
-                        [
-                            rigid_info.principal_axes[3],
-                            rigid_info.principal_axes[0],
-                            rigid_info.principal_axes[1],
-                            rigid_info.principal_axes[2],
-                        ]
-                    )
+        def rigid_body_fn(rigid_info: Any, path: str = prim_path) -> None:
+            if rigid_info.result == PhysxPropertyQueryResult.VALID:
+                inertia_result["mass"] = rigid_info.mass
+                inertia_result["com"] = np.array(rigid_info.center_of_mass)
+                inertia_result["inertia"] = np.array(rigid_info.inertia)
+                inertia_result["axes"] = np.array(
+                    [
+                        rigid_info.principal_axes[3],
+                        rigid_info.principal_axes[0],
+                        rigid_info.principal_axes[1],
+                        rigid_info.principal_axes[2],
+                    ]
+                )
 
-            get_physx_property_query_interface().query_prim(
-                stage_id=stage_id,
-                prim_id=prim_id,
-                query_mode=PhysxPropertyQueryMode.QUERY_RIGID_BODY_WITH_COLLIDERS,
-                rigid_body_fn=rigid_body_fn,
-            )
+        get_physx_property_query_interface().query_prim(
+            stage_id=stage_id,
+            prim_id=prim_id,
+            query_mode=PhysxPropertyQueryMode.QUERY_RIGID_BODY_WITH_COLLIDERS,
+            rigid_body_fn=rigid_body_fn,
+        )
 
-            if "mass" in inertia_result:
-                mass_api.GetMassAttr().Set(float(inertia_result["mass"]))
-                com = inertia_result["com"]
-                mass_api.GetCenterOfMassAttr().Set(Gf.Vec3f(float(com[0]), float(com[1]), float(com[2])))
-                diag = inertia_result["inertia"]
-                mass_api.GetDiagonalInertiaAttr().Set(Gf.Vec3f(float(diag[0]), float(diag[1]), float(diag[2])))
-                axes = inertia_result["axes"]
-                w, x, y, z = float(axes[0]), float(axes[1]), float(axes[2]), float(axes[3])
-                mass_api.GetPrincipalAxesAttr().Set(Gf.Quatf(w, (x, y, z)))
-    finally:
-        root_layer.subLayerPaths.remove(inertia_layer.identifier)
-        stage.SetEditTarget(stage.GetRootLayer())
+        if "mass" not in inertia_result:
+            continue
+
+        if "mass" in pending:
+            pending["mass"].Set(float(inertia_result["mass"]))
+        if "com" in pending:
+            com = inertia_result["com"]
+            pending["com"].Set(Gf.Vec3f(float(com[0]), float(com[1]), float(com[2])))
+        if "inertia" in pending:
+            diag = inertia_result["inertia"]
+            pending["inertia"].Set(Gf.Vec3f(float(diag[0]), float(diag[1]), float(diag[2])))
+        if "axes" in pending:
+            axes = inertia_result["axes"]
+            w, x, y, z = float(axes[0]), float(axes[1]), float(axes[2]), float(axes[3])
+            pending["axes"].Set(Gf.Quatf(w, (x, y, z)))
 
 
 def _get_stage_source_dir_and_stem() -> tuple[str, str]:

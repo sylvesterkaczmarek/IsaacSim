@@ -51,6 +51,9 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
 
         Verifies that named_buffers() includes both direct buffers and nested module buffers
         with proper dot notation for nested paths.
+
+        Raises:
+            AssertionError: If named_buffers() omits a direct or nested buffer name.
         """
 
         class ModuleA(Module):
@@ -74,6 +77,9 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
 
         Verifies that state_dict() includes all buffer values with proper naming
         for both direct and nested module buffers.
+
+        Raises:
+            AssertionError: If state_dict() omits a buffer name or returns an unexpected buffer value.
         """
 
         class ModuleA(Module):
@@ -101,6 +107,9 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
 
         Verifies that include_tags and exclude_tags parameters properly filter
         buffers based on their assigned tags.
+
+        Raises:
+            AssertionError: If include_tags or exclude_tags returns unexpected buffer names.
         """
 
         class ModuleA(Module):

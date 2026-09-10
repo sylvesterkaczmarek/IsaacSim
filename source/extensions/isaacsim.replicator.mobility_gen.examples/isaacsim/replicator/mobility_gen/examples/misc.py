@@ -17,19 +17,10 @@
 
 from __future__ import annotations
 
+from isaacsim.core.experimental.utils.prim import join_prim_paths
 from isaacsim.core.experimental.utils.stage import add_reference_to_stage
 from isaacsim.replicator.experimental.mobility_gen import MobilityGenCamera, Module
 from isaacsim.storage.native import get_assets_root_path
-from pxr import Sdf
-
-
-def _join_sdf_paths(*subpaths: str) -> str:
-    p = Sdf.Path(subpaths[0])
-    for subpath in subpaths[1:]:
-        subpath = subpath.strip("/")
-        if subpath:
-            p = p.AppendPath(subpath)
-    return str(p)
 
 
 class HawkCamera(Module):
@@ -84,7 +75,7 @@ class HawkCamera(Module):
         Returns:
             A new HawkCamera instance connected to the existing prim's left and right cameras.
         """
-        left_camera = MobilityGenCamera(_join_sdf_paths(prim_path, cls.left_camera_path), cls.resolution)
-        right_camera = MobilityGenCamera(_join_sdf_paths(prim_path, cls.right_camera_path), cls.resolution)
+        left_camera = MobilityGenCamera(join_prim_paths(prim_path, cls.left_camera_path), cls.resolution)
+        right_camera = MobilityGenCamera(join_prim_paths(prim_path, cls.right_camera_path), cls.resolution)
 
         return HawkCamera(left_camera, right_camera)

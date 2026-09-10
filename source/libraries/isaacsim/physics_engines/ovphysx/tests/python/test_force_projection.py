@@ -1,0 +1,278 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Validate analytical joint wrenches and projected motor forces with OvPhysX."""
+
+from __future__ import annotations
+
+import os
+import sys
+
+import _physics_setup  # noqa: F401
+
+_TENSORS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _TENSORS_DIR not in sys.path:
+    sys.path.append(_TENSORS_DIR)
+
+from _legacy_runner import (  # noqa: E402
+    cpu_device,
+    gpu_device,
+    gpu_only,
+    run_scenario,
+)
+from common.force_projection import (  # noqa: E402
+    JFP_Spherical_Y_Common,
+    JFP_Torsional_Y_Common,
+    JFP_TwoLinks_Y_DofContactCommon,
+    JFP_TwoLinks_Y_ZeroContactCommon,
+    JFP_TwoLinks_Y_ZeroDofCommon,
+    JFP_X_ZeroContactCommon,
+    JFP_X_ZeroDofCommon,
+    JFP_Y_DofContactCommon,
+    JFP_Y_ZeroContactCommon,
+    JFP_Y_ZeroDofCommon,
+    JFP_Z_ZeroContactCommon,
+    JFP_Z_ZeroDofCommon,
+)
+from physx_usd_schemas import PhysxSchema  # noqa: E402
+
+
+class _PhysxArticulationApiMixin:
+    """Configure pendulum articulations for force-projection scenarios.
+
+    Each replicated pendulum receives ``PhysxArticulationAPI`` with sleeping
+    and self-collision disabled.
+    """
+
+    def _apply_engine_specifics(self) -> None:
+        super()._apply_engine_specifics()
+        for i in range(self.num_envs):
+            prim = self.stage.GetPrimAtPath(f"/envs/env{i}/pendulum")
+            if prim:
+                api = PhysxSchema.PhysxArticulationAPI.Apply(prim)
+                api.CreateSleepThresholdAttr(0.0)
+                api.CreateEnabledSelfCollisionsAttr().Set(False)
+
+
+class _JFP_Y_ZeroContact(_PhysxArticulationApiMixin, JFP_Y_ZeroContactCommon):  # noqa: N801
+    pass
+
+
+class _JFP_X_ZeroContact(_PhysxArticulationApiMixin, JFP_X_ZeroContactCommon):  # noqa: N801
+    pass
+
+
+class _JFP_Z_ZeroContact(_PhysxArticulationApiMixin, JFP_Z_ZeroContactCommon):  # noqa: N801
+    pass
+
+
+class _JFP_Y_ZeroDof(_PhysxArticulationApiMixin, JFP_Y_ZeroDofCommon):  # noqa: N801
+    pass
+
+
+class _JFP_X_ZeroDof(_PhysxArticulationApiMixin, JFP_X_ZeroDofCommon):  # noqa: N801
+    pass
+
+
+class _JFP_Z_ZeroDof(_PhysxArticulationApiMixin, JFP_Z_ZeroDofCommon):  # noqa: N801
+    pass
+
+
+class _JFP_Y_DofContact(_PhysxArticulationApiMixin, JFP_Y_DofContactCommon):  # noqa: N801
+    pass
+
+
+class _JFP_TwoLinks_Y_ZeroContact(_PhysxArticulationApiMixin, JFP_TwoLinks_Y_ZeroContactCommon):  # noqa: N801
+    pass
+
+
+class _JFP_TwoLinks_Y_ZeroDof(_PhysxArticulationApiMixin, JFP_TwoLinks_Y_ZeroDofCommon):  # noqa: N801
+    pass
+
+
+class _JFP_TwoLinks_Y_DofContact(_PhysxArticulationApiMixin, JFP_TwoLinks_Y_DofContactCommon):  # noqa: N801
+    pass
+
+
+class _JFP_Torsional_Y(_PhysxArticulationApiMixin, JFP_Torsional_Y_Common):  # noqa: N801
+    pass
+
+
+class _JFP_Spherical_Y(_PhysxArticulationApiMixin, JFP_Spherical_Y_Common):  # noqa: N801
+    pass
+
+
+class TestForceProjectionSingleLinkYZeroContact:
+    """Validate zero-contact force projection for a single Y-axis link with OvPhysX."""
+
+    def test_force_projection_single_link_y_zero_contact_ovphysx_cc(self) -> None:
+        """Verify zero-contact force projection for a single Y-axis link with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_Y_ZeroContact, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_single_link_y_zero_contact_ovphysx_gg(self) -> None:
+        """Verify zero-contact force projection for a single Y-axis link with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_Y_ZeroContact, "ovphysx", gpu_device())
+
+
+class TestForceProjectionSingleLinkXZeroContact:
+    """Validate zero-contact force projection for a single X-axis link with OvPhysX."""
+
+    def test_force_projection_single_link_x_zero_contact_ovphysx_cc(self) -> None:
+        """Verify zero-contact force projection for a single X-axis link with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_X_ZeroContact, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_single_link_x_zero_contact_ovphysx_gg(self) -> None:
+        """Verify zero-contact force projection for a single X-axis link with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_X_ZeroContact, "ovphysx", gpu_device())
+
+
+class TestForceProjectionSingleLinkZZeroContact:
+    """Validate zero-contact force projection for a single Z-axis link with OvPhysX."""
+
+    def test_force_projection_single_link_z_zero_contact_ovphysx_cc(self) -> None:
+        """Verify zero-contact force projection for a single Z-axis link with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_Z_ZeroContact, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_single_link_z_zero_contact_ovphysx_gg(self) -> None:
+        """Verify zero-contact force projection for a single Z-axis link with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_Z_ZeroContact, "ovphysx", gpu_device())
+
+
+class TestForceProjectionSingleLinkYZeroDof:
+    """Validate a free Y-axis joint with zero motor torque.
+
+    A ground ball anchors the link tip, so the contact force balances half of
+    the gravitational load by symmetry.
+    """
+
+    def test_force_projection_single_link_y_zero_dof_ovphysx_cc(self) -> None:
+        """Check zero-motor projection for a Y-axis link with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_Y_ZeroDof, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_single_link_y_zero_dof_ovphysx_gg(self) -> None:
+        """Check zero-motor projection for a Y-axis link with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_Y_ZeroDof, "ovphysx", gpu_device())
+
+
+class TestForceProjectionSingleLinkXZeroDof:
+    """Validate a frame-aligned free X-axis joint with zero motor torque."""
+
+    def test_force_projection_single_link_x_zero_dof_ovphysx_cc(self) -> None:
+        """Check zero-motor projection for an X-axis link with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_X_ZeroDof, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_single_link_x_zero_dof_ovphysx_gg(self) -> None:
+        """Check zero-motor projection for an X-axis link with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_X_ZeroDof, "ovphysx", gpu_device())
+
+
+class TestForceProjectionSingleLinkZZeroDof:
+    """Validate a frame-aligned free Z-axis joint with zero motor torque."""
+
+    def test_force_projection_single_link_z_zero_dof_ovphysx_cc(self) -> None:
+        """Check zero-motor projection for a Z-axis link with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_Z_ZeroDof, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_single_link_z_zero_dof_ovphysx_gg(self) -> None:
+        """Check zero-motor projection for a Z-axis link with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_Z_ZeroDof, "ovphysx", gpu_device())
+
+
+class TestForceProjectionSingleLinkYDofContact:
+    """Validate a free Y-axis joint with positive motor-assisted contact.
+
+    The ground-ball contact carries the gravitational load and the additional
+    reaction produced by the applied motor torque.
+    """
+
+    def test_force_projection_single_link_y_dof_contact_ovphysx_cc(self) -> None:
+        """Verify contact-force projection for a single Y-axis DOF with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_Y_DofContact, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_single_link_y_dof_contact_ovphysx_gg(self) -> None:
+        """Verify contact-force projection for a single Y-axis DOF with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_Y_DofContact, "ovphysx", gpu_device())
+
+
+class TestForceProjectionTwoLinksYZeroContact:
+    """Validate negative unit motor projection and a nonzero ground reaction."""
+
+    def test_force_projection_two_links_y_zero_contact_ovphysx_cc(self) -> None:
+        """Check negative-motor projection with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_TwoLinks_Y_ZeroContact, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_two_links_y_zero_contact_ovphysx_gg(self) -> None:
+        """Check negative-motor projection with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_TwoLinks_Y_ZeroContact, "ovphysx", gpu_device())
+
+
+class TestForceProjectionTwoLinksYZeroDof:
+    """Validate a two-link Y-axis pendulum with zero motor torque."""
+
+    def test_force_projection_two_links_y_zero_dof_ovphysx_cc(self) -> None:
+        """Check zero-motor projection with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_TwoLinks_Y_ZeroDof, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_two_links_y_zero_dof_ovphysx_gg(self) -> None:
+        """Check zero-motor projection with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_TwoLinks_Y_ZeroDof, "ovphysx", gpu_device())
+
+
+class TestForceProjectionTwoLinksYDofContact:
+    """Validate contact-force projection for two Y-axis links with OvPhysX."""
+
+    def test_force_projection_two_links_y_dof_contact_ovphysx_cc(self) -> None:
+        """Verify contact-force projection for two Y-axis links with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_TwoLinks_Y_DofContact, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_two_links_y_dof_contact_ovphysx_gg(self) -> None:
+        """Verify contact-force projection for two Y-axis links with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_TwoLinks_Y_DofContact, "ovphysx", gpu_device())
+
+
+class TestForceProjectionTorsionalY:
+    """Validate a Y-axis joint with an additional free torsional X axis."""
+
+    def test_force_projection_torsional_y_ovphysx_cc(self) -> None:
+        """Verify torsional Y-axis force projection with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_Torsional_Y, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_torsional_y_ovphysx_gg(self) -> None:
+        """Verify torsional Y-axis force projection with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_Torsional_Y, "ovphysx", gpu_device())
+
+
+class TestForceProjectionSphericalY:
+    """Validate force projection with the Y and Z rotation axes free."""
+
+    def test_force_projection_spherical_y_ovphysx_cc(self) -> None:
+        """Check the spherical-labelled configuration with CPU simulation and CPU tensors."""
+        run_scenario(self, _JFP_Spherical_Y, "ovphysx", cpu_device())
+
+    @gpu_only
+    def test_force_projection_spherical_y_ovphysx_gg(self) -> None:
+        """Check the spherical-labelled configuration with GPU simulation and GPU tensors."""
+        run_scenario(self, _JFP_Spherical_Y, "ovphysx", gpu_device())

@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import os
 
-import omni.kit.app
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
+import omni.kit.test
 import omni.usd
-from isaacsim.core.experimental.utils.app import get_extension_path
 from isaacsim.replicator.grasping.grasping_manager import GraspingManager
 from isaacsim.storage.native import get_assets_root_path_async
 
@@ -32,18 +33,18 @@ class TestGraspingWorkflow(omni.kit.test.AsyncTestCase):
     """Test the grasping workflow with configuration and evaluation."""
 
     async def setUp(self) -> None:
-        """Set up test fixtures."""
-        await omni.kit.app.get_app().next_update_async()
-        await omni.usd.get_context().new_stage_async()
-        await omni.kit.app.get_app().next_update_async()
+        """Create a clean stage."""
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
 
     async def tearDown(self) -> None:
-        """Tear down test fixtures."""
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
+        """Close the stage and wait for pending asset loads."""
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
         # In some cases the test will end before the asset is loaded, in this case wait for assets to load
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
 
     async def test_grasping_workflow_example(self) -> None:
         """Test the full grasping workflow with config loading and pose evaluation."""
@@ -61,8 +62,8 @@ class TestGraspingWorkflow(omni.kit.test.AsyncTestCase):
             print(f"Assets root path: {assets_root_path}")
             stage_url = assets_root_path + stage_path
             print(f"Opening stage: {stage_url}")
-            await omni.usd.get_context().open_stage_async(stage_url)
-            stage = omni.usd.get_context().get_stage()
+            await stage_utils.open_stage_async(stage_url)
+            stage = stage_utils.get_current_stage()
 
             grasping_manager = GraspingManager()
 
@@ -146,7 +147,7 @@ class TestGraspingWorkflow(omni.kit.test.AsyncTestCase):
 
         stage_path = "/Isaac/Samples/Replicator/Stage/sdg_grasping_xarm.usd"
 
-        ext_path = get_extension_path("isaacsim.replicator.grasping")
+        ext_path = app_utils.get_extension_path("isaacsim.replicator.grasping")
         config_path = os.path.join(ext_path, "data/gripper_configs/xarm_antipodal_soup_can.yaml")
         output_dir = os.path.join(os.getcwd(), "xarm_antipodal")
 

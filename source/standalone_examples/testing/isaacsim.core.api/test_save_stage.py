@@ -28,7 +28,7 @@ from isaacsim.core.utils.stage import add_reference_to_stage, save_stage
 from isaacsim.storage.native import get_assets_root_path
 
 assets_root_path = get_assets_root_path()
-asset_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 simulation_context = SimulationContext()
 add_reference_to_stage(asset_path, "/Franka")
 # need to initialize physics getting any articulation..etc

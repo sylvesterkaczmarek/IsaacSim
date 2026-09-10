@@ -23,7 +23,7 @@ import omni.ext
 import omni.replicator.core as rep
 import omni.syntheticdata
 import omni.syntheticdata._syntheticdata as sd
-from isaacsim.core.nodes.scripts.utils import register_node_writer_with_telemetry
+from isaacsim.core.nodes import register_node_writer_with_telemetry
 
 # Bridge constants
 BRIDGE_NAME = "isaacsim.ucx.nodes"

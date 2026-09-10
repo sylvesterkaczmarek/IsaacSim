@@ -1,5 +1,5 @@
 [package]
-version = "1.3.1"
+version = "1.4.0"
 category = "Utility"
 title = "Python Server"
 description = "TCP socket server for remote Python code execution in Isaac Sim"
@@ -93,7 +93,10 @@ args = [
     "--/exts/isaacsim.code_editor.python_server/require_auth=true",
     "--/exts/isaacsim.code_editor.python_server/auth_token=isaacsim-python-server-test-token",
 ]
+
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     # Pre-existing asyncio context re-entry errors when update_app() pumps the
     # event loop while a TCP transport's _read_ready callback is pending.
     "*_SelectorSocketTransport._read_ready*",

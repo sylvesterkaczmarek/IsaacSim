@@ -15,6 +15,6 @@
 
 """Example OmniGraph nodes for Isaac Sim tutorials."""
 
-from .extension import ExamplesIpcExtension
+from .extension import ExamplesIpcExtension as ExamplesIpcExtension
 
-__all__ = ["ExamplesIpcExtension"]
+__all__ = []

@@ -92,7 +92,6 @@ class PreviewSurface(VisualMaterial):
 
         Args:
             color: RGB color array.
-
         """
         if self.shaders_list[0].GetInput("diffuseColor").Get() is None:
             self.shaders_list[0].CreateInput("diffuseColor", Sdf.ValueTypeNames.Float3).Set(Gf.Vec3f(*color.tolist()))
@@ -105,7 +104,6 @@ class PreviewSurface(VisualMaterial):
 
         Returns:
             RGB color array or None if not set.
-
         """
         if self.shaders_list[0].GetInput("diffuseColor").Get() is None:
             carb.log_warn("A color attribute is not set yet")
@@ -118,7 +116,6 @@ class PreviewSurface(VisualMaterial):
 
         Args:
             roughness: Roughness value (0-1).
-
         """
         if self.shaders_list[0].GetInput("roughness").Get() is None:
             self.shaders_list[0].CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(roughness)
@@ -131,7 +128,6 @@ class PreviewSurface(VisualMaterial):
 
         Returns:
             Roughness value or None if not set.
-
         """
         if self.shaders_list[0].GetInput("roughness").Get() is None:
             carb.log_warn("A roughness attribute is not set yet")
@@ -144,7 +140,6 @@ class PreviewSurface(VisualMaterial):
 
         Args:
             metallic: Metallic value (0-1).
-
         """
         if self.shaders_list[0].GetInput("metallic").Get() is None:
             self.shaders_list[0].CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(metallic)
@@ -157,7 +152,6 @@ class PreviewSurface(VisualMaterial):
 
         Returns:
             Metallic value or None if not set.
-
         """
         if self.shaders_list[0].GetInput("metallic").Get() is None:
             carb.log_warn("A metallic attribute is not set yet")

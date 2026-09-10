@@ -49,7 +49,10 @@ class TestPrimValidation(ROS2TestCase):
         """Test joint state valid prim."""
         # test OgnROS2PublishJointState with valid target prim
 
-        usd_path = self._assets_root_path + "/Isaac/Robots/IsaacSim/SimpleArticulation/articulation_3_joints.usd"
+        usd_path = (
+            self._assets_root_path
+            + "/Isaac/Robots_Multiphysics/IsaacSim/SimpleArticulation/articulation_3_joints/articulation_3_joints.usda"
+        )
         result, error = await stage_utils.open_stage_async(usd_path)
         await omni.kit.app.get_app().next_update_async()
         self.assertTrue(result)
@@ -95,7 +98,10 @@ class TestPrimValidation(ROS2TestCase):
         """Test joint state invalid prim."""
         # test OgnROS2PublishJointState with invalid target prim
 
-        usd_path = self._assets_root_path + "/Isaac/Robots/IsaacSim/SimpleArticulation/articulation_3_joints.usd"
+        usd_path = (
+            self._assets_root_path
+            + "/Isaac/Robots_Multiphysics/IsaacSim/SimpleArticulation/articulation_3_joints/articulation_3_joints.usda"
+        )
         result, error = await stage_utils.open_stage_async(usd_path)
         await omni.kit.app.get_app().next_update_async()
         self.assertTrue(result)
@@ -141,7 +147,10 @@ class TestPrimValidation(ROS2TestCase):
         """Test joint state empty prim."""
         # test OgnROS2PublishJointState with empty target prim
 
-        usd_path = self._assets_root_path + "/Isaac/Robots/IsaacSim/SimpleArticulation/articulation_3_joints.usd"
+        usd_path = (
+            self._assets_root_path
+            + "/Isaac/Robots_Multiphysics/IsaacSim/SimpleArticulation/articulation_3_joints/articulation_3_joints.usda"
+        )
         result, error = await stage_utils.open_stage_async(usd_path)
         await omni.kit.app.get_app().next_update_async()
         self.assertTrue(result)

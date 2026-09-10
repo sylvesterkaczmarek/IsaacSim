@@ -42,7 +42,11 @@ def setup_clean_stage() -> None:
 
 
 def test_articulation_root() -> bool:
-    """Test articulation root orientation bug fix."""
+    """Verify that an articulation preserves its expected root orientation.
+
+    Returns:
+        Whether the articulation retained the expected root orientation.
+    """
     print("Running test_articulation_root...")
     setup_clean_stage()
 
@@ -69,7 +73,11 @@ def test_articulation_root() -> bool:
 
 
 def test_articulation_determinism() -> bool:
-    """Test Franka articulation convergence determinism."""
+    """Verify that repeated Franka trials converge after the same number of frames.
+
+    Returns:
+        Whether all trials converged in the expected number of simulation frames.
+    """
     print("Running test_articulation_determinism...")
 
     assets_root_path = get_assets_root_path()
@@ -78,7 +86,8 @@ def test_articulation_determinism() -> bool:
         setup_clean_stage()
         robot_prim_path = "/panda"
         add_reference_to_stage(
-            usd_path=assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd", prim_path=robot_prim_path
+            usd_path=assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
+            prim_path=robot_prim_path,
         )
 
         # Start Simulation and wait
@@ -149,14 +158,18 @@ def test_articulation_determinism() -> bool:
 
 
 def test_tensor_api_handles() -> bool:
-    """Test tensor API handles with physics callbacks."""
+    """Verify that tensor API handles remain valid in physics callbacks.
+
+    Returns:
+        Whether the callback captured valid articulation velocities without raising an exception.
+    """
     print("Running test_tensor_api_handles...")
     setup_clean_stage()
 
     my_world = World(stage_units_in_meters=1.0)
     my_world.scene.add_default_ground_plane()
     assets_root_path = get_assets_root_path()
-    asset_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+    asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
     add_reference_to_stage(usd_path=asset_path, prim_path="/World/Franka")
     articulated_system_1 = my_world.scene.add(Robot(prim_path="/World/Franka", name="my_franka_1"))
 

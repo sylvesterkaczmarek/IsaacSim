@@ -45,22 +45,23 @@ class TestPrim(omni.kit.test.AsyncTestCase):
         """Test prim variants."""
         assets_root_path = await get_assets_root_path_async(skip_check=True)
         prim = stage_utils.add_reference_to_stage(
-            usd_path=assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+            usd_path=assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
             path="/franka",
         )
         # test cases
         # - collection
         ground_truth = {
-            "Mesh": ["Performance", "Quality"],
-            "Gripper": ["AlternateFinger", "Default", "None", "Robotiq_2F_85"],
+            "Gripper": ["alternatefinger", "default", "none", "robotiq_2f_85"],
+            "Mesh": ["performance", "quality"],
+            "Physics": ["none", "physics", "physx"],
         }
         self.assertEqual(prim_utils.get_prim_variant_collection(prim), ground_truth, "Wrong variant collection")
         # - get variants (default)
-        ground_truth = [("Gripper", "Default"), ("Mesh", "Performance")]
+        ground_truth = [("Gripper", "default"), ("Mesh", "performance"), ("Physics", "physx")]
         self.assertEqual(prim_utils.get_prim_variants(prim), ground_truth, "Wrong default variants")
         # - set variants
-        prim_utils.set_prim_variants(prim, variants=[("Gripper", "AlternateFinger"), ("Mesh", "Quality")])
-        ground_truth = [("Gripper", "AlternateFinger"), ("Mesh", "Quality")]
+        prim_utils.set_prim_variants(prim, variants=[("Gripper", "alternatefinger"), ("Mesh", "quality")])
+        ground_truth = [("Gripper", "alternatefinger"), ("Mesh", "quality"), ("Physics", "physx")]
         self.assertEqual(prim_utils.get_prim_variants(prim), ground_truth, "Wrong authored variants")
 
     async def test_prim_and_path(self) -> None:
@@ -86,6 +87,27 @@ class TestPrim(omni.kit.test.AsyncTestCase):
             self.assertEqual(path, "/World/B")
         # - Invalid path
         self.assertFalse(prim_utils.get_prim_at_path("/World/C").IsValid())
+
+    async def test_join_prim_paths(self) -> None:
+        """Test join prim paths."""
+        # test cases
+        # - valid joins
+        self.assertEqual(prim_utils.join_prim_paths("/World", "robot", "camera_left"), "/World/robot/camera_left")
+        self.assertEqual(
+            prim_utils.join_prim_paths("/World/", "/robot/", "camera_left/optical"), "/World/robot/camera_left/optical"
+        )
+        self.assertEqual(prim_utils.join_prim_paths("/World", "", "A"), "/World/A")
+        self.assertEqual(prim_utils.join_prim_paths("/World"), "/World")
+        self.assertEqual(prim_utils.join_prim_paths("/"), "/")
+        # - invalid characters or non-prim paths
+        for paths in [
+            ("/World", "robot arm"),  # space
+            ("/World", "camera-left"),  # dash
+            ("/World", "prim.attr"),  # property path
+            ("/World", "1_prim"),  # leading digit
+        ]:
+            with self.assertRaises(ValueError):
+                prim_utils.join_prim_paths(*paths)
 
     async def test_find_matching_prim_paths(self) -> None:
         """Test find matching prim paths."""
@@ -264,6 +286,8 @@ class TestPrim(omni.kit.test.AsyncTestCase):
         prim = stage_utils.define_prim("/World/A", "Cube")
         UsdPhysics.RigidBodyAPI.Apply(prim)
         UsdLux.LightAPI.Apply(prim)
+        joint = UsdPhysics.RevoluteJoint.Define(stage_utils.get_current_stage(), "/World/Joint")
+        UsdPhysics.DriveAPI.Apply(joint.GetPrim(), "angular")
         # test cases
         # - all
         self.assertTrue(prim_utils.has_api("/World/A", UsdPhysics.RigidBodyAPI, test="all"))
@@ -283,6 +307,10 @@ class TestPrim(omni.kit.test.AsyncTestCase):
         self.assertFalse(
             prim_utils.has_api("/World/A", ["PhysicsMassAPI", "PhysicsRigidBodyAPI", UsdLux.LightAPI], test="none")
         )
+        # - multi-apply instance
+        self.assertTrue(prim_utils.has_api(joint.GetPrim(), UsdPhysics.DriveAPI, instance_name="angular"))
+        self.assertTrue(prim_utils.has_api("/World/Joint", "PhysicsDriveAPI", instance_name="angular"))
+        self.assertFalse(prim_utils.has_api(joint.GetPrim(), UsdPhysics.DriveAPI, instance_name="linear"))
         # exceptions
         self.assertRaises(ValueError, prim_utils.has_api, "/World/A", "UnexistingAPI", test="unknown")
 
@@ -305,7 +333,7 @@ class TestPrim(omni.kit.test.AsyncTestCase):
         """Test is prim non root articulation link."""
         assets_root_path = await get_assets_root_path_async(skip_check=True)
         stage_utils.add_reference_to_stage(
-            usd_path=assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+            usd_path=assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
             path="/franka",
         )
         # test cases
@@ -342,6 +370,48 @@ class TestPrim(omni.kit.test.AsyncTestCase):
         # - exception: non-existent attribute
         with self.assertRaises(ValueError):
             prim_utils.get_prim_attribute_value("/World/Cube", "nonexistent_attr")
+
+    async def test_set_and_delete_prim_attribute(self) -> None:
+        """Test setting and deleting prim attributes."""
+        stage_utils.define_prim("/World/AttributePrim", "Xform")
+        for backend in ["usd", "usdrt", "fabric"]:
+            with backend_utils.use_backend(backend):
+                attribute_name = f"test:{backend}"
+                prim_utils.create_prim_attribute(
+                    "/World/AttributePrim", name=attribute_name, type_name=Sdf.ValueTypeNames.Float
+                )
+                prim_utils.set_prim_attribute_value("/World/AttributePrim", attribute_name, 1.25)
+                self.assertEqual(
+                    prim_utils.get_prim_attribute_value("/World/AttributePrim", attribute_name),
+                    1.25,
+                )
+                self.assertTrue(prim_utils.delete_prim_attribute("/World/AttributePrim", attribute_name))
+                self.assertNotIn(
+                    attribute_name,
+                    prim_utils.get_prim_attribute_names("/World/AttributePrim"),
+                )
+
+                with self.assertRaises(ValueError):
+                    prim_utils.set_prim_attribute_value("/World/AttributePrim", attribute_name, 2.5)
+                with self.assertRaises(ValueError):
+                    prim_utils.delete_prim_attribute("/World/AttributePrim", attribute_name)
+
+    async def test_is_prim_valid(self) -> None:
+        """Test prim validity for paths and prim instances."""
+        prim = stage_utils.define_prim("/World/ValidPrim", "Xform")
+        self.assertTrue(prim_utils.is_prim_valid(prim))
+
+        for backend in ["usd", "usdrt", "fabric"]:
+            with backend_utils.use_backend(backend):
+                self.assertTrue(prim_utils.is_prim_valid("/World/ValidPrim"))
+                self.assertFalse(prim_utils.is_prim_valid("/World/MissingPrim"))
+
+        stage_utils.delete_prim("/World/ValidPrim")
+        self.assertFalse(prim_utils.is_prim_valid(prim))
+
+        prim = stage_utils.define_prim("/World/OldStagePrim", "Xform")
+        await stage_utils.create_new_stage_async()
+        self.assertFalse(prim_utils.is_prim_valid(prim))
 
     async def test_get_prim_attribute_names(self) -> None:
         """Test get prim attribute names."""

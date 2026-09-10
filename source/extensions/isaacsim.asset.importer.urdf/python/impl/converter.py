@@ -25,13 +25,8 @@ import shutil
 import tempfile
 from typing import Any
 
-from isaacsim.asset.importer.utils.impl import (
-    asset_utils,
-    importer_utils,
-    merge_mesh_utils,
-    stage_utils,
-    urdf_to_mjc_physx_conversion_utils,
-)
+from isaacsim.asset.importer.utils import asset_utils, importer_utils, merge_mesh_utils, stage_utils
+from isaacsim.asset.importer.utils.impl import urdf_to_mjc_physx_conversion_utils
 from isaacsim.asset.transformer.rules import DEFAULT_PROFILE_PATH
 from pxr import Sdf
 
@@ -42,6 +37,9 @@ from .joint_reconstruction import parse_source_joint_breadcrumbs, reconstruct_so
 from .urdf_utils import _rewrite_relative_mesh_paths_to_absolute, merge_fixed_joints
 
 _logger = logging.getLogger(__name__)
+
+_DEFAULT_START_TIME_CODE = 0.0
+_DEFAULT_END_TIME_CODE = 1_000_000.0
 
 
 class URDFImporter:
@@ -138,7 +136,11 @@ class URDFImporter:
             merged_urdf_path = os.path.normpath(os.path.join(scratch_dir, f"{robot_name}_merged.urdf"))
             urdf_path = merge_fixed_joints(urdf_path, merged_urdf_path)
             if os.path.dirname(urdf_path) != source_urdf_dir:
-                _rewrite_relative_mesh_paths_to_absolute(urdf_path, source_urdf_dir)
+                _rewrite_relative_mesh_paths_to_absolute(
+                    urdf_path,
+                    source_urdf_dir,
+                    self.config.ros_package_paths,
+                )
 
         try:
             usdex_path = importer_utils.resolve_unique_path(
@@ -159,6 +161,14 @@ class URDFImporter:
 
             if not self.stage:
                 raise ValueError(f"Failed to open flattened stage at path: {asset.path}")
+
+            start_time_code, end_time_code, _ = stage_utils.get_stage_time_code(self.stage)
+            if start_time_code == end_time_code:
+                stage_utils.set_stage_time_code(
+                    self.stage,
+                    start_time_code=_DEFAULT_START_TIME_CODE,
+                    end_time_code=_DEFAULT_END_TIME_CODE,
+                )
 
             breadcrumbs = parse_source_geometry_breadcrumbs(urdf_path)
             if breadcrumbs:

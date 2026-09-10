@@ -15,7 +15,7 @@
 
 """Verify ROS 2 camera publishing.
 
-Covers RGB, compressed H.264, moving-camera sequences, transform frames,
+Covers RGB, compressed H.264/HEVC, moving-camera sequences, transform frames,
 semantic labels, enable gating, tick-rate throttling, and depth point clouds.
 """
 
@@ -55,6 +55,12 @@ from sensor_msgs.msg import Image
 
 from .common import add_carter_ros, add_cube, get_qos_profile
 
+_NOVA_CARTER_ROS_ROOT = "/World/Nova_Carter_ROS"
+_FRONT_HAWK_LEFT_PATH = f"{_NOVA_CARTER_ROS_ROOT}/chassis_link/sensors/front_hawk/left"
+_FRONT_HAWK_LEFT_RGB_PUBLISHER_PATH = f"{_FRONT_HAWK_LEFT_PATH}/ROS_Camera_Left/left_camera_publish_image"
+_FRONT_STEREO_LEFT_IMAGE_TOPIC = "/front_stereo_camera/left/image_raw"
+_FRONT_STEREO_LEFT_COMPRESSED_IMAGE_TOPIC = f"{_FRONT_STEREO_LEFT_IMAGE_TOPIC}/compressed"
+
 
 def _camera_orientation_at_angle_deg(angle_deg: float) -> Any:
     """Return quaternion (w,x,y,z) for camera at center looking at angle_deg in XY (0° = +X), up = world +Z.
@@ -88,7 +94,15 @@ def _view_angle_deg_from_quat_wxyz(quat_wxyz: Any) -> Any:
     return (yaw + 90.0 + 360.0) % 360.0
 
 
-def _create_rgb_camera_graph(graph_path: Any, camera_path: Any, topic_name: Any, width: Any, height: Any) -> None:
+def _create_rgb_camera_graph(
+    graph_path: Any,
+    camera_path: Any,
+    topic_name: Any,
+    width: Any,
+    height: Any,
+    queue_size: int = 100,
+    image_type: str = "rgb",
+) -> None:
     """Create an OmniGraph that publishes RGB images from a camera via ROS2.
 
     Args:
@@ -97,6 +111,8 @@ def _create_rgb_camera_graph(graph_path: Any, camera_path: Any, topic_name: Any,
         topic_name: ROS 2 topic name.
         width: Render product width.
         height: Render product height.
+        queue_size: ROS 2 publisher queue depth.
+        image_type: ROS 2 camera helper image type.
     """
     og.Controller.edit(
         {"graph_path": graph_path, "evaluator_name": "execution"},
@@ -111,7 +127,8 @@ def _create_rgb_camera_graph(graph_path: Any, camera_path: Any, topic_name: Any,
                 ("CreateRenderProduct.inputs:height", height),
                 ("CreateRenderProduct.inputs:width", width),
                 ("RGBPublish.inputs:topicName", topic_name),
-                ("RGBPublish.inputs:type", "rgb"),
+                ("RGBPublish.inputs:type", image_type),
+                ("RGBPublish.inputs:queueSize", queue_size),
                 ("RGBPublish.inputs:resetSimulationTimeOnStop", True),
             ],
             og.Controller.Keys.CONNECT: [
@@ -166,6 +183,31 @@ def _match_buffered_images(image_buffer: Any, sim_times: Any, timestamp_toleranc
                 f"(sim_time={target_sim_time:.6f}s, best_diff={best_diff:.6f}s)"
             )
     return matched, matched_ts
+
+
+def _has_image_near_timestamp(image_buffer: Any, target_sim_time: float, timestamp_tolerance: float) -> bool:
+    return any(abs(ts - target_sim_time) <= timestamp_tolerance for ts, _ in image_buffer)
+
+
+def _select_candidate_sim_times_with_images(
+    image_buffers: Any, sim_time_candidates: Any, angle_candidates: Any, timestamp_tolerance: float, target_angles: Any
+) -> Any:
+    selected_sim_times = {}
+    selected_angles = {}
+    unresolved = []
+
+    for target in target_angles:
+        for index, sim_time in enumerate(sim_time_candidates.get(target, [])):
+            if all(
+                _has_image_near_timestamp(image_buffer, sim_time, timestamp_tolerance) for image_buffer in image_buffers
+            ):
+                selected_sim_times[target] = sim_time
+                selected_angles[target] = angle_candidates[target][index]
+                break
+        if target not in selected_sim_times:
+            unresolved.append(target)
+
+    return selected_sim_times, selected_angles, unresolved
 
 
 class TestRos2Camera(ROS2TestCase):
@@ -350,18 +392,16 @@ class TestRos2Camera(ROS2TestCase):
             self._received_rgb_image = data
 
         node = self.create_node("rgb_image_test_node")
-        rgb_sub = self.create_subscription(
-            node, Image, "/front_stereo_camera/left/image_raw", rgb_callback, get_qos_profile()
-        )
+        rgb_sub = self.create_subscription(node, Image, _FRONT_STEREO_LEFT_IMAGE_TOPIC, rgb_callback, get_qos_profile())
 
         def spin() -> None:
             rclpy.spin_once(node, timeout_sec=0.1)
 
         await omni.kit.app.get_app().next_update_async()
 
-        # Move /World/Nova_Carter_ROS to -6, -1, 0 and 180 degree rotation around z axis
+        # Move the Nova Carter root to -6, -1, 0 and 180 degree rotation around z axis.
         # Quaternion for 180 deg rotation around z: (w=0, x=0, y=0, z=1)
-        nova_carter = XformPrim("/World/Nova_Carter_ROS", reset_xform_op_properties=True)
+        nova_carter = XformPrim(_NOVA_CARTER_ROS_ROOT, reset_xform_op_properties=True)
         nova_carter.set_world_poses(positions=[-6, -1, 0], orientations=[0, 0, 0, 1])
 
         await omni.kit.app.get_app().next_update_async()
@@ -406,21 +446,23 @@ class TestRos2Camera(ROS2TestCase):
         )
         self.assertTrue(results["passed"], f"Image comparison failed: {results}")
 
-    async def test_rgb_h264_compressed_golden_image_comparison(self) -> Any:
-        """Subscribe to compressed RGB H.264, decode it, and compare against the golden image.
+    async def _run_rgb_compressed_golden_image_comparison(self, compression_type: str) -> Any:
+        """Subscribe to compressed RGB, decode it, and compare against the golden image.
 
-        Returns:
-            None.
+        Args:
+            compression_type: Compressed image codec identifier, for example ``h264`` or ``hevc``.
         """
+        codec_label = compression_type.upper()
+        camera_helper_type = f"rgb_{compression_type}"
         try:
             import PyNvVideoCodec as nvc
         except ImportError:
-            self.skipTest("PyNvVideoCodec not available - skipping H264 decode test")
+            self.skipTest(f"PyNvVideoCodec not available - skipping {codec_label} decode test")
 
         import numpy as np
         from sensor_msgs.msg import CompressedImage
 
-        # Ensure omni.replicator.nv extension is enabled (provides H264 hardware encoder)
+        # Ensure omni.replicator.nv extension is enabled (provides compressed image hardware encoders)
         ext_manager = omni.kit.app.get_app().get_extension_manager()
         ext_manager.set_extension_enabled_immediate("omni.replicator.nv", True)
         await omni.kit.app.get_app().next_update_async()
@@ -441,14 +483,12 @@ class TestRos2Camera(ROS2TestCase):
         await omni.kit.app.get_app().next_update_async()
         await omni.kit.app.get_app().next_update_async()
 
-        # Modify the existing front stereo camera left RGB publisher to use H264 compression
-        og.Controller.attribute("/World/Nova_Carter_ROS/front_hawk/left_camera_publish_image.inputs:type").set(
-            "rgb_h264"
+        og.Controller.attribute(f"{_FRONT_HAWK_LEFT_RGB_PUBLISHER_PATH}.inputs:type").set(camera_helper_type)
+        og.Controller.attribute(f"{_FRONT_HAWK_LEFT_RGB_PUBLISHER_PATH}.inputs:nodeNamespace").set("/")
+        og.Controller.attribute(f"{_FRONT_HAWK_LEFT_RGB_PUBLISHER_PATH}.inputs:topicName").set(
+            _FRONT_STEREO_LEFT_COMPRESSED_IMAGE_TOPIC
         )
-
-        og.Controller.attribute("/World/Nova_Carter_ROS/front_hawk/left_camera_publish_image.inputs:topicName").set(
-            "left/image_raw/compressed"
-        )
+        og.Controller.attribute(f"{_FRONT_HAWK_LEFT_RGB_PUBLISHER_PATH}.inputs:enabled").set(True)
 
         await omni.kit.app.get_app().next_update_async()
 
@@ -458,11 +498,11 @@ class TestRos2Camera(ROS2TestCase):
         def compressed_callback(data: Any) -> None:
             self._received_compressed_image = data
 
-        node = self.create_node("rgb_h264_test_node")
+        node = self.create_node(f"rgb_{compression_type}_test_node")
         compressed_sub = self.create_subscription(
             node,
             CompressedImage,
-            "/front_stereo_camera/left/image_raw/compressed",
+            _FRONT_STEREO_LEFT_COMPRESSED_IMAGE_TOPIC,
             compressed_callback,
             get_qos_profile(),
         )
@@ -472,8 +512,8 @@ class TestRos2Camera(ROS2TestCase):
 
         await omni.kit.app.get_app().next_update_async()
 
-        # Move /World/Nova_Carter_ROS to -6, -1, 0
-        nova_carter = XformPrim("/World/Nova_Carter_ROS", reset_xform_op_properties=True)
+        # Move the Nova Carter root to -6, -1, 0.
+        nova_carter = XformPrim(_NOVA_CARTER_ROS_ROOT, reset_xform_op_properties=True)
         nova_carter.set_world_poses(positions=[-6, -1, 0], orientations=[0, 0, 0, 1])
 
         await omni.kit.app.get_app().next_update_async()
@@ -491,12 +531,14 @@ class TestRos2Camera(ROS2TestCase):
         self._timeline.stop()
         await omni.kit.app.get_app().next_update_async()
 
-        # Get the H264 bitstream from ROS CompressedImage message
-        h264_bitstream = self._received_compressed_image.data.tobytes()
+        self.assertEqual(self._received_compressed_image.format, compression_type)
 
-        # Decode H264 using PyNvVideoCodec (core Decoder + buffer demuxer)
-        # Buffer feeder serves raw H264 elementary stream bytes to the demuxer
-        class H264BufferFeeder:
+        # Get the compressed bitstream from ROS CompressedImage message
+        compressed_bitstream = self._received_compressed_image.data.tobytes()
+
+        # Decode using PyNvVideoCodec (core Decoder + buffer demuxer)
+        # Buffer feeder serves raw elementary stream bytes to the demuxer
+        class CompressedImageBufferFeeder:
             def __init__(self, data: Any) -> None:
                 self._buffer = bytearray(data)
                 self._pos = 0
@@ -511,7 +553,7 @@ class TestRos2Camera(ROS2TestCase):
                 self._remaining -= chunk
                 return chunk
 
-        feeder = H264BufferFeeder(h264_bitstream)
+        feeder = CompressedImageBufferFeeder(compressed_bitstream)
         dmx = nvc.CreateDemuxer(feeder.feed_chunk)
         dec = nvc.CreateDecoder(
             gpuid=0,
@@ -524,7 +566,7 @@ class TestRos2Camera(ROS2TestCase):
             for frame in dec.Decode(pkt):
                 frames.append(frame)
 
-        self.assertTrue(len(frames) > 0, f"Failed to decode H264 frame ({len(h264_bitstream)} bytes)")
+        self.assertTrue(len(frames) > 0, f"Failed to decode {codec_label} frame ({len(compressed_bitstream)} bytes)")
 
         # Convert last decoded frame to numpy array via DLPack
         # Core decoder outputs NV12 (native format); convert to RGB
@@ -532,7 +574,7 @@ class TestRos2Camera(ROS2TestCase):
         if decoded_np.dtype != np.uint8:
             decoded_np = np.clip(decoded_np, 0, 255).astype(np.uint8)
 
-        # NV12 frame has shape (H * 3/2, W) — convert to RGB (H, W, 3)
+        # NV12 frame has shape (H * 3/2, W) - convert to RGB (H, W, 3)
         import cv2
 
         received_array = cv2.cvtColor(decoded_np, cv2.COLOR_YUV2RGB_NV12)
@@ -544,7 +586,7 @@ class TestRos2Camera(ROS2TestCase):
         if golden_img_data.ndim == 3 and golden_img_data.shape[2] == 4:
             golden_img_data = golden_img_data[:, :, :3]
 
-        # H264 compression is lossy, so we need a higher tolerance
+        # H.264 and HEVC compression are lossy, so we need a higher tolerance
         results = compare_arrays_within_tolerances(
             golden_img_data,
             received_array,
@@ -553,7 +595,23 @@ class TestRos2Camera(ROS2TestCase):
             mean_tolerance=15,
             print_all_stats=True,
         )
-        self.assertTrue(results["passed"], f"H264 compressed image comparison failed: {results}")
+        self.assertTrue(results["passed"], f"{codec_label} compressed image comparison failed: {results}")
+
+    async def test_rgb_h264_compressed_golden_image_comparison(self) -> Any:
+        """Subscribe to compressed RGB H.264, decode it, and compare against the golden image.
+
+        Returns:
+            None.
+        """
+        await self._run_rgb_compressed_golden_image_comparison("h264")
+
+    async def test_rgb_hevc_compressed_golden_image_comparison(self) -> Any:
+        """Subscribe to compressed RGB HEVC, decode it, and compare against the golden image.
+
+        Returns:
+            None.
+        """
+        await self._run_rgb_compressed_golden_image_comparison("hevc")
 
     async def test_spinning_camera_golden_images(self) -> None:
         """Two cameras on one spinning rigid body: compare physics images to golden images.
@@ -578,6 +636,7 @@ class TestRos2Camera(ROS2TestCase):
         rotation_speed_deg_per_sec = 90
         cam2_vertical_offset = 1.0  # metres above camera 1 (local +Y = world +Z)
         cam2_tilt_deg = 10.0  # degrees downward tilt
+        spinning_camera_mean_tolerance = 20
 
         golden_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data", "golden", "spinning_camera")
 
@@ -620,6 +679,16 @@ class TestRos2Camera(ROS2TestCase):
         _create_rgb_camera_graph("/ActionGraph", camera_path, "spinning_camera_rgb", width, height)
         await omni.kit.app.get_app().next_update_async()
 
+        stage_fps = self._timeline.get_time_codes_per_second()
+        stage_utils.set_stage_time_code(
+            start_time_code=0.0,
+            end_time_code=60.0 * stage_fps,
+            time_codes_per_second=stage_fps,
+        )
+        self._timeline.set_start_time(0.0)
+        self._timeline.set_end_time(60.0)
+        ros_drain_delay_sec = 1.0 / stage_fps
+
         # Buffer all received ROS2 images with their timestamps
         image_buffer = []  # list of (timestamp, ROS2 Image message)
 
@@ -647,9 +716,6 @@ class TestRos2Camera(ROS2TestCase):
         await self.simulate_until_condition(
             lambda: len(image_buffer) > 0,
         )
-
-        stage_fps = self._timeline.get_time_codes_per_second()
-        ros_drain_delay_sec = 1.0 / stage_fps
 
         async def _simulate_frames_with_ros_drain(max_frames: Any, per_frame_callback: Any = None) -> None:
             for _ in range(max_frames):
@@ -706,6 +772,8 @@ class TestRos2Camera(ROS2TestCase):
         # Snapshot the first-rotation buffer; matching is deferred until after both
         # rotations finish so the rig isn't wasting simulation frames on processing.
         timestamp_tolerance = 1.5 / stage_fps
+        exact_timestamp_tolerance = 0.25 / stage_fps
+        image_timestamp_tolerance = timestamp_tolerance
         image_buffer_r1 = list(image_buffer)
 
         # ===========================================================
@@ -754,34 +822,54 @@ class TestRos2Camera(ROS2TestCase):
         image_buffer.clear()
         image_buffer_2.clear()
 
-        recorded_sim_times_1b = {}
-        recorded_angles_1b = {}
+        recorded_sim_time_candidates_1b = {target: [] for target in keyframe_angles_deg}
+        recorded_angle_candidates_1b = {target: [] for target in keyframe_angles_deg}
         angle_tolerance_1b_deg = 0.2
 
         print("[STEP 1b] Both cameras rotating (same rig)...")
 
         def _record_angles_1b_step() -> None:
-            if len(recorded_sim_times_1b) < len(keyframe_angles_deg):
-                sim_time = SimulationManager.get_simulation_time()
-                _, orientations = camera_rigid.get_world_poses()
-                ori = orientations.numpy()[0]
-                actual_angle = _view_angle_deg_from_quat_wxyz([ori[0], ori[1], ori[2], ori[3]])
-                for target in keyframe_angles_deg:
-                    if target in recorded_sim_times_1b:
+            sim_time = SimulationManager.get_simulation_time()
+            _, orientations = camera_rigid.get_world_poses()
+            ori = orientations.numpy()[0]
+            actual_angle = _view_angle_deg_from_quat_wxyz([ori[0], ori[1], ori[2], ori[3]])
+            for target in keyframe_angles_deg:
+                angle_diff = abs(actual_angle - target)
+                if angle_diff > 180:
+                    angle_diff = 360 - angle_diff
+                if angle_diff <= angle_tolerance_1b_deg:
+                    target_candidates = recorded_sim_time_candidates_1b[target]
+                    if target_candidates and abs(sim_time - target_candidates[-1]) <= exact_timestamp_tolerance:
                         continue
-                    angle_diff = abs(actual_angle - target)
-                    if angle_diff > 180:
-                        angle_diff = 360 - angle_diff
-                    if angle_diff <= angle_tolerance_1b_deg:
-                        recorded_sim_times_1b[target] = sim_time
-                        recorded_angles_1b[target] = actual_angle
-                        print(f"  rig {target}° at sim_time={sim_time:.6f}s (actual={actual_angle:.2f}°)")
+                    target_candidates.append(sim_time)
+                    recorded_angle_candidates_1b[target].append(actual_angle)
+                    print(f"  rig {target}° at sim_time={sim_time:.6f}s (actual={actual_angle:.2f}°)")
 
         await _simulate_frames_with_ros_drain(total_frames, per_frame_callback=_record_angles_1b_step)
 
-        missing_angles_1b = [a for a in keyframe_angles_deg if a not in recorded_sim_times_1b]
-        if missing_angles_1b:
-            self.fail(f"[STEP 1b] Did not observe rig angles: {missing_angles_1b}")
+        recorded_sim_times_1b, recorded_angles_1b, unresolved_angles_1b = _select_candidate_sim_times_with_images(
+            [image_buffer, image_buffer_2],
+            recorded_sim_time_candidates_1b,
+            recorded_angle_candidates_1b,
+            image_timestamp_tolerance,
+            keyframe_angles_deg,
+        )
+
+        extra_rotation_count = 0
+        while unresolved_angles_1b and extra_rotation_count < 2:
+            extra_rotation_count += 1
+            print(f"[STEP 1b] Missing exact camera images for {unresolved_angles_1b}; capturing one more rotation.")
+            await _simulate_frames_with_ros_drain(rotation_frames, per_frame_callback=_record_angles_1b_step)
+            recorded_sim_times_1b, recorded_angles_1b, unresolved_angles_1b = _select_candidate_sim_times_with_images(
+                [image_buffer, image_buffer_2],
+                recorded_sim_time_candidates_1b,
+                recorded_angle_candidates_1b,
+                image_timestamp_tolerance,
+                keyframe_angles_deg,
+            )
+
+        if unresolved_angles_1b:
+            self.fail(f"[STEP 1b] Did not capture camera images near rig angles: {unresolved_angles_1b}")
 
         print(f"[STEP 1b] Buffered {len(image_buffer)} cam1 and {len(image_buffer_2)} cam2 images.")
 
@@ -820,16 +908,16 @@ class TestRos2Camera(ROS2TestCase):
             print(f"cam1 only ({len(cam1_only)}): {[f'{t:.6f}' for t in cam1_only]}")
         if cam2_only:
             print(f"cam2 only ({len(cam2_only)}): {[f'{t:.6f}' for t in cam2_only]}")
-        print(f"Recorded rig sim_times: { {a: f'{t:.6f}' for a, t in sorted(recorded_sim_times_1b.items())} }")
+        print(f"Selected rig sim_times: { {a: f'{t:.6f}' for a, t in sorted(recorded_sim_times_1b.items())} }")
         print("=== End timestamp dump ===\n")
 
         # Match each camera independently. A dropped cam2 frame should not force cam1
         # to compare against a later common timestamp.
         physics_images_1b, _ = _match_buffered_images(
-            image_buffer, recorded_sim_times_1b, timestamp_tolerance, label="cam1 second rotation "
+            image_buffer, recorded_sim_times_1b, image_timestamp_tolerance, label="cam1 second rotation "
         )
         physics_images_2, _ = _match_buffered_images(
-            image_buffer_2, recorded_sim_times_1b, timestamp_tolerance, label="cam2 "
+            image_buffer_2, recorded_sim_times_1b, image_timestamp_tolerance, label="cam2 "
         )
 
         if save_debug_images:
@@ -849,7 +937,7 @@ class TestRos2Camera(ROS2TestCase):
                 f"[STEP 1b] Could not match images for cam1 angles: {missing_1b_cam1}, "
                 f"cam2 angles: {missing_1b_cam2}. "
                 f"cam1={len(cam1_timestamps)} timestamps, cam2={len(cam2_timestamps)} timestamps, "
-                f"common={len(common_timestamps)} timestamps, tolerance={timestamp_tolerance:.6f}s"
+                f"common={len(common_timestamps)} timestamps, tolerance={image_timestamp_tolerance:.6f}s"
             )
 
         # ============================================================
@@ -951,7 +1039,7 @@ class TestRos2Camera(ROS2TestCase):
                 physics_images[target_angle],
                 allclose_rtol=None,
                 allclose_atol=None,
-                mean_tolerance=10,
+                mean_tolerance=spinning_camera_mean_tolerance,
                 print_all_stats=True,
             )
             self.assertTrue(
@@ -966,7 +1054,7 @@ class TestRos2Camera(ROS2TestCase):
                 physics_images_1b[target_angle],
                 allclose_rtol=None,
                 allclose_atol=None,
-                mean_tolerance=10,
+                mean_tolerance=spinning_camera_mean_tolerance,
                 print_all_stats=True,
             )
             self.assertTrue(
@@ -981,7 +1069,7 @@ class TestRos2Camera(ROS2TestCase):
                 physics_images_2[target_angle],
                 allclose_rtol=None,
                 allclose_atol=None,
-                mean_tolerance=10,
+                mean_tolerance=spinning_camera_mean_tolerance,
                 print_all_stats=True,
             )
             self.assertTrue(
@@ -1249,9 +1337,15 @@ class TestRos2Camera(ROS2TestCase):
 
         self._timeline.play()
         await omni.kit.app.get_app().next_update_async()
+        await self.wait_for_publishers_on_topic(
+            node,
+            "/tf_camera_test",
+            timeout_sec=10.0,
+            per_frame_callback=spin,
+        )
         await self.simulate_until_condition(
             lambda: self._camera_tf_data is not None,
-            max_frames=60,
+            max_frames=120,
             per_frame_callback=spin,
         )
 

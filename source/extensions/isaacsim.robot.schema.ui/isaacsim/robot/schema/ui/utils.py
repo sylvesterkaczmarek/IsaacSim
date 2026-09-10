@@ -618,7 +618,87 @@ def get_joint_position(robot_root_path: Sdf.Path | str, joint_path: Sdf.Path | s
 # --------------------------------------------------------------------------
 
 
-def _copy_applied_schemas(source_prim: Usd.Prim, target_prim: Usd.Prim) -> None:
+class _SpecPrim:
+    """Minimal prim-like wrapper around an :class:`Sdf.PrimSpec`.
+
+    The hierarchy builders only ever call :meth:`GetPath` on the prims they
+    create, plus ``AddAppliedSchema`` via :func:`_copy_applied_schemas`. Wrapping
+    a ``PrimSpec`` in that tiny surface lets the hierarchy be authored straight
+    into an :class:`Sdf.Layer` with **no UsdStage attached**, which is what keeps
+    it from emitting global ``UsdNotice::ObjectsChanged`` notices.
+    """
+
+    __slots__ = ("spec",)
+
+    def __init__(self, spec: Sdf.PrimSpec) -> None:
+        self.spec = spec
+
+    def GetPath(self) -> Sdf.Path:  # noqa: N802 - mirrors the Usd.Prim API
+        """Return the prim spec's path.
+
+        Returns:
+            Path of the underlying prim spec.
+        """
+        return self.spec.path
+
+    def AddAppliedSchema(self, schema_name: str) -> None:  # noqa: N802 - mirrors the Usd.Prim API
+        """Append *schema_name* to the spec's explicit ``apiSchemas`` list op.
+
+        Args:
+            schema_name: Name of the applied API schema to add.
+        """
+        list_op = self.spec.GetInfo("apiSchemas")
+        items = list(list_op.explicitItems) if list_op else []
+        if schema_name in items:
+            return
+        items.append(schema_name)
+        new_op = Sdf.TokenListOp.CreateExplicit(items)
+        self.spec.SetInfo("apiSchemas", new_op)
+
+
+class _HierarchyLayerBuilder:
+    """Stage-like façade that authors prims directly into an :class:`Sdf.Layer`.
+
+    Exposes only :meth:`DefinePrim`, the sole stage member the hierarchy
+    generators exercise during construction, so those generators are unchanged.
+    Because no :class:`Usd.Stage` is open on the layer while it is being
+    populated, authoring produces no USD object-change notices at all (see
+    :func:`_generate_robot_hierarchy_stage_inner`, which opens the stage once
+    from the finished layer).
+    """
+
+    __slots__ = ("_layer",)
+
+    def __init__(self, layer: Sdf.Layer) -> None:
+        self._layer = layer
+
+    def DefinePrim(self, path: Sdf.Path, type_name: str = "") -> _SpecPrim:  # noqa: N802 - mirrors Usd.Stage
+        """Create a defined prim spec at *path*.
+
+        Args:
+            path: Namespace path of the prim to define.
+            type_name: Optional prim type name.
+
+        Returns:
+            A :class:`_SpecPrim` wrapping the created spec.
+        """
+        spec = Sdf.CreatePrimInLayer(self._layer, path)
+        # Sdf.CreatePrimInLayer leaves intermediate ancestors as `over`, whereas
+        # Usd.Stage.DefinePrim defines them. Stage traversal skips undefined prims,
+        # so leaving them as overs would prune the whole hierarchy from the tree.
+        ancestor_path = path.GetParentPath()
+        while ancestor_path and ancestor_path != Sdf.Path.absoluteRootPath:
+            ancestor = self._layer.GetPrimAtPath(ancestor_path)
+            if ancestor is not None and ancestor.specifier != Sdf.SpecifierDef:
+                ancestor.specifier = Sdf.SpecifierDef
+            ancestor_path = ancestor_path.GetParentPath()
+        spec.specifier = Sdf.SpecifierDef
+        if type_name:
+            spec.typeName = type_name
+        return _SpecPrim(spec)
+
+
+def _copy_applied_schemas(source_prim: Usd.Prim, target_prim: Usd.Prim | _SpecPrim) -> None:
     """Copy the ``apiSchemas`` metadata from *source_prim* to *target_prim*.
 
     This transfers all applied API schemas (e.g. ``IsaacJointAPI``,
@@ -627,7 +707,8 @@ def _copy_applied_schemas(source_prim: Usd.Prim, target_prim: Usd.Prim) -> None:
 
     Args:
         source_prim: Prim whose applied schemas are read.
-        target_prim: Prim that receives the copied schemas.
+        target_prim: Prim that receives the copied schemas. May be a
+            :class:`Usd.Prim` or a :class:`_SpecPrim`.
     """
     schemas = source_prim.GetAppliedSchemas()
     if not schemas:
@@ -637,9 +718,9 @@ def _copy_applied_schemas(source_prim: Usd.Prim, target_prim: Usd.Prim) -> None:
 
 
 def _create_hierarchy_node(
-    hierarchy_stage: Usd.Stage,
+    hierarchy_stage: Usd.Stage | _HierarchyLayerBuilder,
     link_node: Any,
-    parent_link_prim: Usd.Prim,
+    parent_link_prim: Usd.Prim | _SpecPrim,
     parent_joint_in_chain: Usd.Prim | None,
     parent_link_source_prim: Usd.Prim | None,
     robot_root_path: Sdf.Path,
@@ -651,9 +732,12 @@ def _create_hierarchy_node(
     Internal helper function for generate_robot_hierarchy_stage().
 
     Args:
-        hierarchy_stage: The in-memory hierarchy stage being built.
+        hierarchy_stage: Target the hierarchy is authored into. In practice a
+            :class:`_HierarchyLayerBuilder`; only ``DefinePrim`` is used, so any
+            stage-like object works.
         link_node: The current link tree node to process.
-        parent_link_prim: The parent prim in the hierarchy stage.
+        parent_link_prim: The parent prim in the hierarchy, as returned by
+            ``DefinePrim`` (a :class:`_SpecPrim`); only ``GetPath`` is used.
         parent_joint_in_chain: The parent joint prim for connection tracking.
         parent_link_source_prim: The parent link prim in the source stage.
         robot_root_path: The path to the robot root prim.
@@ -710,9 +794,9 @@ def _create_hierarchy_node(
 
 
 def _generate_flat_hierarchy(
-    hierarchy_stage: Usd.Stage,
+    hierarchy_stage: Usd.Stage | _HierarchyLayerBuilder,
     source_robot_prim: Usd.Prim,
-    hierarchy_robot_prim: Usd.Prim,
+    hierarchy_robot_prim: Usd.Prim | _SpecPrim,
     robot_root_path: Sdf.Path,
     path_map: PathMap,
     joint_connections: list[Any],
@@ -724,9 +808,12 @@ def _generate_flat_hierarchy(
     relationships, placed under dedicated ``Links`` and ``Joints`` scope prims.
 
     Args:
-        hierarchy_stage: The in-memory hierarchy stage being built.
+        hierarchy_stage: Target the hierarchy is authored into. In practice a
+            :class:`_HierarchyLayerBuilder`; only ``DefinePrim`` is used, so any
+            stage-like object works.
         source_robot_prim: The robot root prim in the original stage.
-        hierarchy_robot_prim: The robot root prim already created in the hierarchy stage.
+        hierarchy_robot_prim: The robot root prim already created in the hierarchy,
+            as returned by ``DefinePrim`` (a :class:`_SpecPrim`); only ``GetPath`` is used.
         robot_root_path: The path to the robot root prim.
         path_map: The path mapping object for tracking paths.
         joint_connections: List to append connection items to.
@@ -786,9 +873,9 @@ def _generate_flat_hierarchy(
 
 
 def _create_hierarchy_node_mujoco(
-    hierarchy_stage: Usd.Stage,
+    hierarchy_stage: Usd.Stage | _HierarchyLayerBuilder,
     link_node: Any,
-    parent_prim: Usd.Prim,
+    parent_prim: Usd.Prim | _SpecPrim,
     parent_joint_in_chain: Usd.Prim | None,
     parent_link_source_prim: Usd.Prim | None,
     robot_root_path: Sdf.Path,
@@ -802,9 +889,12 @@ def _create_hierarchy_node_mujoco(
     appended as the last child of this link prim.
 
     Args:
-        hierarchy_stage: The in-memory hierarchy stage being built.
+        hierarchy_stage: Target the hierarchy is authored into. In practice a
+            :class:`_HierarchyLayerBuilder`; only ``DefinePrim`` is used, so any
+            stage-like object works.
         link_node: The current link tree node to process.
-        parent_prim: The parent prim in the hierarchy stage.
+        parent_prim: The parent prim in the hierarchy, as returned by
+            ``DefinePrim`` (a :class:`_SpecPrim`); only ``GetPath`` is used.
         parent_joint_in_chain: The kinematic-chain parent joint for connection lines.
         parent_link_source_prim: The parent link prim in the source stage.
         robot_root_path: The path to the robot root prim.
@@ -1069,47 +1159,58 @@ def _generate_robot_hierarchy_stage_inner(
     if not robot_data:
         return None, path_map, joint_connections
 
-    hierarchy_stage = Usd.Stage.CreateInMemory()
+    # The hierarchy mirrors live-stage paths (/World/<robot>/...). Authoring those
+    # paths on a Usd.Stage would emit global UsdNotice::ObjectsChanged carrying
+    # live-stage paths; listeners that do not filter by sender stage (notably the
+    # PhysX Physics Inspector) read them as structural edits to the real stage and
+    # drop their authoring state, producing an endless re-authorize loop. Authoring
+    # into a bare Sdf.Layer -- with no stage attached -- emits no object-change notices;
+    # the stage is opened once at the end, from already-populated content, which is also notice-free.
+    layer = Sdf.Layer.CreateAnonymous()
+    builder = _HierarchyLayerBuilder(layer)
+
+    with Sdf.ChangeBlock():
+        for robot_root_prim, robot_tree, joints in robot_data:
+            hierarchy_root_prim = builder.DefinePrim(robot_root_prim.GetPath(), "Xform")
+            _copy_applied_schemas(robot_root_prim, hierarchy_root_prim)
+            path_map.insert(robot_root_prim.GetPath(), hierarchy_root_prim.GetPath())
+            current_root_path = robot_root_prim.GetPath()
+
+            if mode == HierarchyMode.FLAT:
+                _generate_flat_hierarchy(
+                    builder,
+                    robot_root_prim,
+                    hierarchy_root_prim,
+                    current_root_path,
+                    path_map,
+                    joint_connections,
+                    stage,
+                )
+            elif mode == HierarchyMode.MUJOCO:
+                _create_hierarchy_node_mujoco(
+                    builder,
+                    robot_tree,
+                    hierarchy_root_prim,
+                    None,
+                    None,
+                    current_root_path,
+                    path_map,
+                    joint_connections,
+                )
+            else:
+                _create_hierarchy_node(
+                    builder,
+                    robot_tree,
+                    hierarchy_root_prim,
+                    None,
+                    None,
+                    current_root_path,
+                    path_map,
+                    joint_connections,
+                )
+
+    hierarchy_stage = Usd.Stage.Open(layer)
     if not hierarchy_stage:
         return None, path_map, joint_connections
-
-    for robot_root_prim, robot_tree, joints in robot_data:
-        hierarchy_root_prim = hierarchy_stage.DefinePrim(robot_root_prim.GetPath(), "Xform")
-        _copy_applied_schemas(robot_root_prim, hierarchy_root_prim)
-        path_map.insert(robot_root_prim.GetPath(), hierarchy_root_prim.GetPath())
-        current_root_path = robot_root_prim.GetPath()
-
-        if mode == HierarchyMode.FLAT:
-            _generate_flat_hierarchy(
-                hierarchy_stage,
-                robot_root_prim,
-                hierarchy_root_prim,
-                current_root_path,
-                path_map,
-                joint_connections,
-                stage,
-            )
-        elif mode == HierarchyMode.MUJOCO:
-            _create_hierarchy_node_mujoco(
-                hierarchy_stage,
-                robot_tree,
-                hierarchy_root_prim,
-                None,
-                None,
-                current_root_path,
-                path_map,
-                joint_connections,
-            )
-        else:
-            _create_hierarchy_node(
-                hierarchy_stage,
-                robot_tree,
-                hierarchy_root_prim,
-                None,
-                None,
-                current_root_path,
-                path_map,
-                joint_connections,
-            )
 
     return hierarchy_stage, path_map, joint_connections

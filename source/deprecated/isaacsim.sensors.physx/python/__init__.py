@@ -13,5 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides PhysX-based proximity, rotating lidar, range sensor, and light beam sensor APIs for Isaac Sim."""
+
 from .bindings import _range_sensor  # noqa: F401
 from .impl import *

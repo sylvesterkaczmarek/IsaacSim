@@ -27,11 +27,11 @@ from .utils import get_pose3
 
 
 class LulaTrajectory(Trajectory):
-    """Instance of Trajectory interface class for handling lula.Trajectory objects.
+    """An instance of the Trajectory interface class for handling lula.Trajectory objects.
 
     Args:
-        trajectory: C-space trajectory defined continuously
-        active_joints: List of joint names that are controllable by the trajectory
+        trajectory: C-space trajectory defined continuously.
+        active_joints: List of joint names that are controllable by the trajectory.
     """
 
     def __init__(self, trajectory: object, active_joints: list) -> None:
@@ -71,7 +71,8 @@ class LulaTrajectory(Trajectory):
             time: Time value to evaluate the trajectory at.
 
         Returns:
-            A tuple containing (joint positions, joint velocities) evaluated at the specified time.
+            A tuple containing (joint positions, joint velocities) evaluated at the specified time, or None if time is
+            outside the trajectory bounds.
         """
         if time > self.end_time or time < self.start_time:
             carb.log_error("Could not compute joint targets because the provided time is out of bounds")
@@ -80,13 +81,11 @@ class LulaTrajectory(Trajectory):
 
 
 class LulaCSpaceTrajectoryGenerator:
-    """LulaCSpaceTrajectoryGenerator is a class for generating time-optimal trajectories that connect a series of.
-
-    provided c-space waypoints.
+    """LulaCSpaceTrajectoryGenerator is a class for generating time-optimal trajectories that connect a series of provided c-space waypoints.
 
     Args:
-        robot_description_path: Path to a robot description yaml file.
-        urdf_path: Path to robot urdf.
+        robot_description_path: Path to a robot description YAML file.
+        urdf_path: Path to a robot URDF.
     """
 
     def __init__(self, robot_description_path: str, urdf_path: str) -> None:
@@ -101,18 +100,19 @@ class LulaCSpaceTrajectoryGenerator:
         self._c_space_trajectory_generator = lula.create_c_space_trajectory_generator(self._lula_kinematics)
 
     def compute_c_space_trajectory(self, waypoint_positions: np.array) -> LulaTrajectory:
-        """Produce a trajectory from a set of provided c_space waypoint positions.  The resulting trajectory.
+        """Produce a trajectory from provided c_space waypoint positions.
 
-        will use spline-based interpolation to connect the waypoints with an initial and final velocity of 0.  The trajectory is time-optimal:
-        i.e. either the velocity, acceleration, or jerk limits are saturated at any given time to produce as trajectory with as short a duration as possible.
+        The resulting trajectory uses spline-based interpolation to connect the waypoints with an initial and final
+        velocity of 0. The trajectory is time-optimal, so either the velocity, acceleration, or jerk limits are saturated
+        at any given time to produce a trajectory with the shortest possible duration.
 
         Args:
-            waypoint_positions: Set of c-space coordinates cooresponding to the output of get_active_joints().
+            waypoint_positions: Set of c-space coordinates corresponding to the output of get_active_joints().
                 The expected shape is (N x k) where N is the number of waypoints and k is the number of active joints.
 
         Returns:
-            Instance of the Trajectory class which specifies continuous joint_targets for the active joints over a span of time.
-            If a trajectory could not be produced, None will be returned.
+            Instance of the Trajectory class which specifies continuous joint_targets for the active joints over a span
+            of time. If a trajectory could not be produced, None will be returned.
         """
         if waypoint_positions.shape[0] < 2:
             carb.log_error("LulaTrajectoryGenerator must be passed at least two waypoints")
@@ -139,18 +139,20 @@ class LulaCSpaceTrajectoryGenerator:
     ) -> LulaTrajectory:
         """Compute a trajectory where each c_space waypoint has a corresponding timestamp that will be exactly matched.
 
-        The resulting trajectory will use spline-based interpolation to connect the waypoints with an initial and final velocity of 0.
+        The resulting trajectory uses spline-based interpolation to connect the waypoints with an initial and final
+        velocity of 0.
 
         Args:
-            waypoint_positions: Set of c-space coordinates cooresponding to the output of get_active_joints().
+            waypoint_positions: Set of c-space coordinates corresponding to the output of get_active_joints().
                 The expected shape is (N x k) where N is the number of waypoints and k is the number of active joints.
-            timestamps: Set of timestamps corresponding to the waypoint positions argument with an expected shape of (Nx1).
+            timestamps: Set of timestamps corresponding to the waypoint positions argument with an expected shape of
+                (Nx1).
             interpolation_mode: The type of interpolation to be used between waypoints.
                 The available options are "cubic_spline" and "linear".
 
         Returns:
-            Instance of the Trajectory class which specifies continuous joint_targets for the active joints over a span of time.
-            If a trajectory could not be produced, None will be returned.
+            Instance of the Trajectory class which specifies continuous joint_targets for the active joints over a span
+            of time. If a trajectory could not be produced, None will be returned.
         """
         if waypoint_positions.shape[0] < 2:
             carb.log_error("LulaTrajectoryGenerator must be passed at least two waypoints")
@@ -361,9 +363,9 @@ class LulaCSpaceTrajectoryGenerator:
                 `min_time_span` must be positive.
 
                 This is most likely to affect the time span between the endpoints and "free-position" points
-                that are used to enable acceleration bound constraints. If no jerk limit is provided, these free-position points may
-                tend to become arbitrarily close in position and time to the endpoints. This `min_time_span`
-                prevents this time span from approaching zero.
+                that are used to enable acceleration bound constraints. If no jerk limit is provided, these
+                free-position points may tend to become arbitrarily close in position and time to the endpoints.
+                This `min_time_span` prevents this time span from approaching zero.
 
                 In general, a jerk limit is recommended for preventing abrupt changes in acceleration rather
                 than relying on the `min_time_span` for this purpose.
@@ -411,8 +413,8 @@ class LulaCSpaceTrajectoryGenerator:
                     where q represents the position of the waypoint.
 
         Args:
-            param_name: Parameter name from the above list of parameters
-            param_val: Value to which the given parameter will be set
+            param_name: Parameter name from the above list of parameters.
+            param_val: Value to which the given parameter will be set.
         """
         self._c_space_trajectory_generator.set_solver_param(param_name, param_val)
 
@@ -468,13 +470,17 @@ class LulaTaskSpaceTrajectoryGenerator:
     def compute_task_space_trajectory_from_points(
         self, positions: np.array, orientations: np.array, frame_name: str
     ) -> LulaTrajectory:
-        """Return a LulaTrajectory that connects the provided positions and orientations at the specified frame in the robot. Points will be connected linearly in space.
+        """Return a LulaTrajectory that connects the provided positions and orientations at the specified frame in the robot.
+
+        Points will be connected linearly in space.
 
         Args:
-            positions: Taskspace positions that the robot end effector should pass through with shape (N x 3) where N is the number of provided positions.
+            positions: Taskspace positions that the robot end effector should pass through with shape (N x 3), where N
+                is the number of provided positions.
                 Positions is assumed to be in meters.
-            orientations: Taskspace quaternion orientations that the robot end effector should pass through with shape (N x 4) where N is the number of provided
-                orientations. The length of this argument must match the length of the positions argument.
+            orientations: Taskspace quaternion orientations that the robot end effector should pass through with shape
+                (N x 4), where N is the number of provided orientations.
+                The length of this argument must match the length of the positions argument.
             frame_name: Name of the end effector frame in the robot URDF.
 
         Returns:
@@ -532,7 +538,8 @@ class LulaTaskSpaceTrajectoryGenerator:
     def get_path_conversion_config(self) -> lula.TaskSpacePathConversionConfig:
         """Configuration object that lula uses to convert task-space paths to c-space paths.
 
-        The values of the returned TaskSpacePathConversionConfig object can be modified directly to affect lula task-space path conversions.
+        The values of the returned TaskSpacePathConversionConfig object can be modified directly to affect lula task-space
+        path conversions.
         See help(lula.TaskSpacePathConversionConfig) for a detailed description of the editable parameters.
 
         Returns:

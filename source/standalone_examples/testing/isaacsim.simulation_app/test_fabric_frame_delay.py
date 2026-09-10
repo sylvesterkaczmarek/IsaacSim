@@ -45,7 +45,7 @@ if assets_root_path is None:
     simulation_app.close()
     sys.exit()
 
-asset_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 
 
 def _get_fabric_world_position(prim_path: str) -> np.ndarray:

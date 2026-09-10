@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.9.5] - 2026-09-04
+### Changed
+- Update opencv-python-headless-noffmpeg to 4.14.0.94rc1.
+
+## [1.9.4] - 2026-08-31
+### Changed
+- Use the FFmpeg-free OpenCV Python package.
+
+## [1.9.3] - 2026-08-18
+### Changed
+- Update opencv-python-headless to 4.14.0.94.
+
 ## [1.9.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

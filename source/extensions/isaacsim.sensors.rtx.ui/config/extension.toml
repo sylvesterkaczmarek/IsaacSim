@@ -1,5 +1,5 @@
 [package]
-version = "1.5.1"
+version = "1.5.3"
 category = "Simulation"
 title = "Isaac Sim RTX Sensor Simulation UI Components"
 description = "Provides UI components for Isaac Sim RTX-based sensor simulation, eg. menu options."
@@ -24,6 +24,10 @@ name = "isaacsim.sensors.rtx.ui"
 name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [[test]]
@@ -85,6 +89,7 @@ args = [
 stdoutFailPatterns.include = [
     "*Config * not found for OmniLidar*"
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

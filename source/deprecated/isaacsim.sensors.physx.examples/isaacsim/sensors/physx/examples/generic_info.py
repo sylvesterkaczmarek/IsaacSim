@@ -27,7 +27,8 @@ import omni.ui as ui
 from isaacsim.core.utils.prims import delete_prim, get_prim_at_path
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.examples.browser import get_instance as get_browser_instance
-from isaacsim.gui.components.ui_utils import btn_builder, get_style, setup_ui_headers, str_builder
+from isaacsim.gui.components import btn_builder, setup_ui_headers, str_builder
+from isaacsim.gui.components.ui_utils import get_style
 from isaacsim.sensors.physx import _range_sensor
 from pxr import Gf, Sdf, UsdGeom, UsdLux, UsdPhysics
 
@@ -56,7 +57,7 @@ class Extension(omni.ext.IExt):
     """
 
     def on_startup(self, ext_id: str) -> None:
-        """Initialize extension and UI elements.
+        """Initialize the extension and register the Generic Range Sensor example in the browser.
 
         Args:
             ext_id: Extension identifier string.
@@ -73,7 +74,7 @@ class Extension(omni.ext.IExt):
         )
 
     def on_shutdown(self) -> None:
-        """Clean up extension resources and deregister example from browser."""
+        """Clean up extension resources and deregister the example from the browser."""
         get_browser_instance().deregister_example(name=self.example_name, category=self.category)
         self._editor_event_subscription = None
 
@@ -270,7 +271,7 @@ class Extension(omni.ext.IExt):
     def _test_streaming_data(self) -> tuple:
         """Custom generated data for testing streaming data mode.
 
-            Data profile: zigzag left to right, slowly going up and down.
+        Data profile: zigzag left to right, slowly going up and down.
 
         Returns:
             A tuple containing the sensor pattern array and origin offsets array.
@@ -309,10 +310,10 @@ class Extension(omni.ext.IExt):
         return sensor_pattern, origin_offsets
 
     def _test_repeating_data(self) -> tuple:
-        """Custom data to test repeating (non-streaming) mode.
+        """Custom data to test repeating, non-streaming mode.
 
-            Data profile: zigzag left and right, half of it scanning high in zenith, the other half scanning low.
-            Expected behavior: switch between the two sides scanning with no additional data being sent.
+        Data profile: zigzag left and right, half of it scanning high in zenith, the other half scanning low.
+        Expected behavior: switch between the two sides scanning with no additional data being sent.
 
         Returns:
             A tuple containing the sensor pattern array and origin offsets array.

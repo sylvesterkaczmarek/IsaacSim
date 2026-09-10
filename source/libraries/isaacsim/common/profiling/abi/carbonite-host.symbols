@@ -1,0 +1,8 @@
+{
+    global:
+        isaacsimCommonProfilingCarboniteHostStart;
+        isaacsimCommonProfilingCarboniteHostStop;
+        isaacsimCommonProfilingCarboniteHostGetLastError;
+    local:
+        *;
+};

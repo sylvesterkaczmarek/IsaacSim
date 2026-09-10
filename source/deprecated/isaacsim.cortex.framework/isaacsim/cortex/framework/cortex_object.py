@@ -30,13 +30,13 @@ from pxr import Gf, Usd
 class CortexMeasuredPose(object):
     """Contains information about the measured pose of an object.
 
-    This includes the time stamp of the measurement, the pose, and a timeout (time to live) defining
-    how long we trust this measurement.
+    This includes the timestamp of the measurement, the pose, and a timeout (time to live) defining
+    how long to trust this measurement.
 
     Args:
         stamp: The timestamp of the measurement.
-        pose_pq: A tuple (p,q) containing the position and quaternion of the measurement.
-        timeout: How long we trust this measurement (time to live).
+        pose_pq: A tuple (p, q) containing the position and quaternion of the measurement.
+        timeout: How long to trust this measurement (time to live).
     """
 
     def __init__(self, stamp: float, pose_pq: tuple[np.ndarray, np.ndarray], timeout: float) -> None:
@@ -51,26 +51,22 @@ class CortexMeasuredPose(object):
             time: The current time.
 
         Returns:
-            Whether the measurement has not yet timed out (True if it's valid, False if timeout).
+            Whether the measurement has not yet timed out. True if it is valid, False if timed out.
         """
         return time - self.stamp < self.timeout
 
 
 class CortexObject(object):
-    """A CortexObject is an object (derived from the core API SingleXFormPrim) which may have measurement.
+    """A CortexObject is an object derived from the core API SingleXFormPrim that may have measurement information from perception.
 
-    information from perception.
-
-    It handles recording that measurement information and providing an API to both access it and
-    sync it to the underlying object. Since perception modules differ dramatically in their
-    performance characteristics, the specifics of how that measured pose is synchronized to the
-    underlying object is left to the user.
+    It handles recording that measurement information and providing an API to both access it and sync it to the
+    underlying object. Since perception modules differ dramatically in their performance characteristics, the specifics of
+    how that measured pose is synchronized to the underlying object is left to the user.
 
     Args:
-        obj: The underlying object in the scene, wrapped in a core API class deriving from
-            SingleXFormPrim.
-        sync_throttle_dt: Prevents synchronization (via sync_to_measured_pose()) within this number
-            of seconds of a previous sync. Defaults to None, which means no throttling.
+        obj: The underlying object in the scene, wrapped in a core API class deriving from SingleXFormPrim.
+        sync_throttle_dt: Prevents synchronization via sync_to_measured_pose() within this number of seconds of a
+            previous sync.
     """
 
     def __init__(self, obj: SingleXFormPrim, sync_throttle_dt: float | None = None) -> None:
@@ -82,12 +78,20 @@ class CortexObject(object):
 
     @property
     def name(self) -> str:
-        """The name of the underlying object."""
+        """The name of the underlying object.
+
+        Returns:
+            The name of the underlying object.
+        """
         return self.obj.name
 
     @property
     def prim(self) -> Usd.Prim:
-        """The underlying USD prim representing this object."""
+        """The underlying USD prim representing this object.
+
+        Returns:
+            The underlying USD prim representing this object.
+        """
         return self.obj.prim
 
     def set_world_pose(
@@ -110,7 +114,7 @@ class CortexObject(object):
         return self.obj.get_world_pose()
 
     def get_transform(self) -> np.ndarray:
-        """Returns the object's world pose (in meters) as a 4x4 homogeneous matrix.
+        """Returns the object's world pose in meters as a 4x4 homogeneous matrix.
 
         Returns:
             A 4x4 homogeneous transform matrix.
@@ -137,8 +141,7 @@ class CortexObject(object):
     def has_measured_pose(self) -> bool:
         """Queries whether this object has a valid measured pose.
 
-        A measured pose is valid if it's both available (has been set) and it's valid per the
-        CortexMeasuredPose.is_valid() method.
+        A measured pose is valid if it's both available and valid per the CortexMeasuredPose.is_valid() method.
 
         Returns:
             The truth value of whether it has a valid measured pose.
@@ -171,16 +174,13 @@ class CortexObject(object):
     def sync_to_measured_pose(self, use_throttle: bool = True) -> None:
         """Syncs the pose of the underlying USD object to match the measured pose.
 
-        If use_throttle is True (default) when this method will prevent two syncs from happening
-        within sync_throttle_dt seconds of one another.  i.e. it throttles the rate to <
-        1./sync_throttle_dt.
+        If use_throttle is True, this method prevents two syncs from happening within sync_throttle_dt
+        seconds of one another. It throttles the rate to less than 1./sync_throttle_dt.
 
-        This method doesn't check whether the measured pose is available. Use has_measured_pose() to
-        verify.
+        This method does not check whether the measured pose is available. Use has_measured_pose() to verify.
 
         Args:
-            use_throttle: Whether or not to use the throttling. Defaults to True. Note that this
-                will only throttle, even when True, when sync_throttle_dt is not None.
+            use_throttle: Whether to use throttling. This only throttles when sync_throttle_dt is not None.
         """
         current_time = time.time()
 
@@ -205,15 +205,15 @@ class CortexObject(object):
         self.time_at_last_sync = current_time
 
     def _sync_tensor_api_to_usd(self, p: np.ndarray, q: np.ndarray) -> None:
-        """Internal method used to synchronize the tensor API to the USD for this object. The Isaac.
+        """Synchronizes the tensor API pose to the USD prim for this object.
 
-        Sim core API goes through the tensor API, but the tensor API is only synced to USD when the
-        object is active. If we receive a measured pose, we want to sync to USD regardless of
-        whether the object is active so it's visualized correctly.
+        The Isaac Sim core API goes through the tensor API, but the tensor API is only synced to USD when
+        the object is active. If a measured pose is received, this syncs to USD regardless of whether the
+        object is active so it is visualized correctly.
 
         Args:
-            p: The position vector.
-            q: The orientation quaternion.
+            p: Position vector.
+            q: Orientation quaternion.
         """
         p = p.astype(float)
         q = q.astype(float)

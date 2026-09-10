@@ -1,5 +1,5 @@
 [package]
-version = "2.2.1"
+version = "2.2.4"
 category = "other"
 title = "Sensor Icon"
 description = "Renders sensor icons in the viewport and stage hierarchy for visual identification of camera, lidar, IMU, and other sensor prims."
@@ -44,6 +44,10 @@ name = "startup"
 enabled = false
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [[test]]
@@ -106,6 +110,8 @@ args = [
 
 
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*<class 'omni.kit.menu.utils.scripts.utils.MenuUtilsExtension'>: extension object is still alive*", # Leak
     "*<class 'omni.kit.window.tests.Extension'>: extension object is still alive*", # Leak
     "*createDLSSContext error: unable to initialize context. Optional DLSS feature is disabled.*",

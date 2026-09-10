@@ -14,19 +14,22 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/profiler/Profile.h>
 #include <carb/tasking/ITasking.h>
 #include <carb/tasking/TaskingUtils.h>
 
-#include <isaacsim/ros2/core/Ros2Node.h>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
+#include <isaacsim/ros2/nodes/LaserScanUtils.hpp>
 
 #include <GenericModelOutput.h>
 #include <OgnROS2PublishLaserScanDatabase.h>
 
 using namespace isaacsim::ros2::core;
+using isaacsim::ros2::nodes::getLaserScanOutputElementCount;
+using isaacsim::ros2::nodes::getLaserScanOutputIndex;
 
 class OgnROS2PublishLaserScan : public Ros2Node
 {
@@ -155,8 +158,9 @@ public:
             return false;
         }
 
-        const size_t numOutputElements = static_cast<size_t>(horizontalFov / horizontalRes);
+        const size_t numOutputElements = getLaserScanOutputElementCount(horizontalFov, horizontalRes);
         const float azimuthRangeStart = db.inputs.azimuthRange()[0];
+        const float azimuthRangeEnd = db.inputs.azimuthRange()[1];
         const size_t numInputElements = static_cast<size_t>(gmo->numElements);
 
         if (m_linearDepthBuffer.capacity() == 0)
@@ -191,10 +195,11 @@ public:
                 distance = gmo->elements.z[inIdx];
             }
             uint8_t intensity = static_cast<uint8_t>(gmo->elements.scalar[inIdx] * 255.0f);
-            size_t outIdx = static_cast<size_t>((azimuth - azimuthRangeStart) / horizontalRes);
-            if (outIdx >= numOutputElements)
+            size_t outIdx;
+            if (!getLaserScanOutputIndex(azimuth, azimuthRangeStart, azimuthRangeEnd, horizontalFov, horizontalRes,
+                                         numOutputElements, outIdx))
             {
-                outIdx = numOutputElements - 1;
+                continue;
             }
             m_linearDepthBuffer[outIdx] = distance;
             m_intensitiesBuffer[outIdx] = intensity;

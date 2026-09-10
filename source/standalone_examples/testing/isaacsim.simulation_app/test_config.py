@@ -23,7 +23,12 @@ from isaacsim import SimulationApp
 
 # Create single SimulationApp instance with combined configuration
 simulation_app = SimulationApp(
-    {"create_new_stage": False, "extra_args": ["--/app/extra/arg=1", "--/app/some/other/arg=2"]}
+    {
+        "active_cuda_gpus": [0],
+        "create_new_stage": False,
+        "extra_args": ["--/app/extra/arg=1", "--/app/some/other/arg=2"],
+        "multi_gpu": False,
+    }
 )
 
 import carb
@@ -93,13 +98,31 @@ def test_extra_args(kit: Any) -> None:
     print("[TEST 2] PASSED - extra_args configuration works correctly")
 
 
+def test_active_cuda_gpus_config(kit: Any) -> None:
+    """Test selecting renderer GPUs by CUDA index.
+
+    Args:
+        kit: The SimulationApp instance to test.
+    """
+    print("\n[TEST 3] Testing active_cuda_gpus configuration...")
+
+    kit.update()
+
+    active_cuda_gpus = carb.settings.get_settings().get_as_string("/renderer/multiGpu/activeCudaGpus")
+    if active_cuda_gpus != "0,":
+        print(f"[fatal] Renderer CUDA GPU list was {active_cuda_gpus!r} instead of '0,'", flush=True)
+        sys.exit(1)
+
+    print("[TEST 3] PASSED - active_cuda_gpus configuration works correctly")
+
+
 def test_unsaved_on_exit(kit: Any) -> None:
     """Test that app exits cleanly without prompting for unsaved changes.
 
     Args:
         kit: The SimulationApp instance to test.
     """
-    print("\n[TEST 3] Testing unsaved changes on exit...")
+    print("\n[TEST 4] Testing unsaved changes on exit...")
 
     # Create a new stage for this test
     stage_utils.create_new_stage()
@@ -120,7 +143,7 @@ def test_unsaved_on_exit(kit: Any) -> None:
             omni.kit.app.get_app().post_quit()
         frame_idx += 1
 
-    print("[TEST 3] PASSED - App exits cleanly without save dialog")
+    print("[TEST 4] PASSED - App exits cleanly without save dialog")
 
 
 # Run all configuration tests
@@ -131,6 +154,7 @@ print("=" * 60)
 try:
     test_createstage_config(simulation_app)
     test_extra_args(simulation_app)
+    test_active_cuda_gpus_config(simulation_app)
     test_unsaved_on_exit(simulation_app)
 
     print("\n" + "=" * 60)

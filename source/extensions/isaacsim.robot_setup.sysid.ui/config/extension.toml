@@ -1,0 +1,59 @@
+[package]
+version = "1.2.2"
+category = "Simulation"
+title = "System Identification UI (Beta)"
+description = "Beta: interactive UI for the System Identification backend. Workflow and APIs may change in future releases."
+keywords = ["isaac", "physics", "sysid", "robotics", "optimization", "ui"]
+changelog = "docs/CHANGELOG.md"
+readme = "docs/Overview.md"
+preview_image = "data/preview.png"
+icon = "data/icon.png"
+writeTarget.kit = true
+feature = true
+
+[dependencies]
+"isaacsim.gui.components" = {}
+"isaacsim.robot_setup.sysid" = {}
+"omni.kit.actions.core" = {}
+"omni.kit.menu.utils" = {}
+"omni.kit.uiapp" = {}
+"omni.kit.viewport.utility" = {}
+"omni.kit.window.file" = {}
+"omni.timeline" = {}
+"omni.ui" = {}
+"omni.usd" = {}
+
+[[python.module]]
+name = "isaacsim.robot_setup.sysid.ui"
+
+[[python.module]]
+name = "isaacsim.robot_setup.sysid.ui.tests"
+public = false
+
+[[test]]
+name = "startup"
+dependencies = [
+    "omni.isaac.ml_archive",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
+[[test]]
+name = "default"
+dependencies = [
+    "isaacsim.test.utils",
+    "omni.isaac.ml_archive",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    '*SyntheticData extension needs*FrameHistoryCount*',
+]
+
+[documentation]
+pages = [
+    "docs/Overview.md",
+    "docs/CHANGELOG.md",
+]

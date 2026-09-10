@@ -18,7 +18,7 @@
 #include <carb/logging/Log.h>
 
 #include <flatbuffers/flatbuffers.h>
-#include <isaacsim/ucx/nodes/UcxPublishImageNodeBase.h>
+#include <isaacsim/ucx/nodes/UcxPublishImageNodeBase.hpp>
 
 #include <OgnUCXPublishImageDatabase.h>
 #include <image_generated.h>

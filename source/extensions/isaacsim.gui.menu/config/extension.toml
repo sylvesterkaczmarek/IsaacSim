@@ -1,5 +1,5 @@
 [package]
-version = "2.10.5"
+version = "2.10.12"
 category = "Simulation"
 title = "Isaac Sim Menus"
 description = "Provides Isaac Sim-specific menu bar functionality including File, Edit, Create, Window, Tools, Utilities, Layouts, and Help menus with robotics-focused operations."
@@ -30,6 +30,10 @@ name = "isaacsim.gui.menu.tests"
 name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [[test]]
@@ -84,11 +88,14 @@ args = [
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
     '*[Error] [omni.kit.commands.command] Failed to execute a command: ChangeProperty*',
     '*[Error] [asyncio] Task exception was never retrieved*',
     '*[Error] [omni.hydra] Unsupported data type 0 on primvar *doNotCastShadows*',
+    '*[Error] [omni.rtx] Failed to request UJITSO build result for: *abandoned_parking_4k.hdr*',
+    '*[Error] [rtx.scenedb] Failed to upload DomeLight texture *abandoned_parking_4k.hdr*',
 ]
 
 [documentation]

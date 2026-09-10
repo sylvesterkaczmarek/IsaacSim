@@ -143,6 +143,29 @@ def _make_axis_flip_correction(axis_token: str) -> Gf.Matrix4d:
     return mat
 
 
+def _strip_scale(m: Gf.Matrix4d) -> Gf.Matrix4d:
+    """Strip scale/shear from a frame, keeping only rotation + translation.
+
+    URDF link frames carry pose only (joint origins are xyz + rpy). Some pose
+    sources (e.g. robot_schema GetJointPose) can return a child frame that
+    carries an ancestor/root scale. Leaving that scale in the frame cancels the
+    root scale that is re-applied, so child links export unscaled while the (identity)
+    root link does not. Stripping the scale from every frame keeps scale handling
+    consistent across all links.
+
+    Args:
+        m: Transform matrix to process.
+
+    Returns:
+        Transform matrix containing only rotation and translation.
+    """
+    t = Gf.Transform(m)
+    stripped = Gf.Matrix4d(1.0)
+    stripped.SetTranslateOnly(t.GetTranslation())
+    stripped.SetRotateOnly(t.GetRotation())
+    return stripped
+
+
 def build_urdf_frames(desc: RobotDescription) -> tuple[dict[str, Gf.Matrix4d], dict[str, bool]]:
     """Build the URDF frame (in robot coordinates) for every link.
 
@@ -169,7 +192,11 @@ def build_urdf_frames(desc: RobotDescription) -> tuple[dict[str, Gf.Matrix4d], d
     urdf_frames: dict[str, Gf.Matrix4d] = {}
     axis_flips: dict[str, bool] = {}
 
-    urdf_frames[root_link_path] = Gf.Matrix4d(1.0)
+    if desc.root_link:
+        xform_cache = UsdGeom.XformCache()
+        robot_world = Gf.Matrix4d(xform_cache.GetLocalToWorldTransform(robot_prim))
+        root_link_world = Gf.Matrix4d(xform_cache.GetLocalToWorldTransform(desc.root_link))
+        urdf_frames[root_link_path] = root_link_world * robot_world.GetInverse()
 
     for joint_prim in desc.ordered_joints:
         child_path = _get_joint_body_path(joint_prim, 1)
@@ -183,7 +210,7 @@ def build_urdf_frames(desc: RobotDescription) -> tuple[dict[str, Gf.Matrix4d], d
                 xfc = UsdGeom.XformCache()
                 robot_world = Gf.Matrix4d(xfc.GetLocalToWorldTransform(robot_prim))
                 child_world = Gf.Matrix4d(xfc.GetLocalToWorldTransform(child_prim))
-                urdf_frames[child_path] = child_world * robot_world.GetInverse()
+                urdf_frames[child_path] = _strip_scale(child_world * robot_world.GetInverse())
             continue
 
         flipped = _detect_axis_flip(joint_prim)
@@ -193,9 +220,9 @@ def build_urdf_frames(desc: RobotDescription) -> tuple[dict[str, Gf.Matrix4d], d
         if flipped:
             axis_token = _get_axis_token(joint_prim)
             correction = _make_axis_flip_correction(axis_token)
-            urdf_frames[child_path] = correction * joint_pose
+            urdf_frames[child_path] = _strip_scale(correction * joint_pose)
         else:
-            urdf_frames[child_path] = joint_pose
+            urdf_frames[child_path] = _strip_scale(joint_pose)
 
     return urdf_frames, axis_flips
 
@@ -215,14 +242,39 @@ def _build_urdf_frames_fallback(desc: RobotDescription) -> dict[str, Gf.Matrix4d
     urdf_frames: dict[str, Gf.Matrix4d] = {}
     for link_prim in desc.ordered_links:
         link_world = Gf.Matrix4d(xfc.GetLocalToWorldTransform(link_prim))
-        urdf_frames[str(link_prim.GetPath())] = link_world * robot_inv
+        urdf_frames[str(link_prim.GetPath())] = _strip_scale(link_world * robot_inv)
     return urdf_frames
+
+
+def root_world_scale_matrix(robot_prim: Usd.Prim) -> Gf.Matrix4d:
+    """Diagonal scale matrix of the robot root prim's world transform.
+
+    URDF frames and geometry are expressed in robot-local coordinates, which
+    divides out the root prim's full local-to-world transform (translation,
+    rotation AND scale). Translation and rotation should be removed to keep the
+    URDF placement-independent, but a scale on the root prim or an ancestor
+    Xform must be preserved in the exported URDF. Callers re-apply this matrix
+    to the frame-relative transforms so the scale reaches the output.
+
+    Args:
+        robot_prim: Robot root prim.
+
+    Returns:
+        Diagonal matrix containing the robot root's composed scale.
+    """
+    xfc = UsdGeom.XformCache()
+    world = Gf.Matrix4d(xfc.GetLocalToWorldTransform(robot_prim))
+    scale = Gf.Transform(world).GetScale()
+    scale_mat = Gf.Matrix4d(1.0)
+    scale_mat.SetScale(scale)
+    return scale_mat
 
 
 def compute_joint_origin_from_frames(
     urdf_frames: dict[str, Gf.Matrix4d],
     parent_path: str,
     child_path: str,
+    scale_mat: Gf.Matrix4d | None = None,
 ) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
     """Compute URDF joint origin from pre-built URDF frames.
 
@@ -232,6 +284,8 @@ def compute_joint_origin_from_frames(
         urdf_frames: Mapping from link prim paths to URDF frames.
         parent_path: Parent link prim path.
         child_path: Child link prim path.
+        scale_mat: Optional root-scale matrix (see :func:`root_world_scale_matrix`)
+            post-applied so an ancestor/root scale reaches the joint offsets.
 
     Returns:
         Joint origin translation and rotation.
@@ -243,6 +297,8 @@ def compute_joint_origin_from_frames(
         return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)
 
     relative = child_frame * parent_frame.GetInverse()
+    if scale_mat is not None:
+        relative = relative * scale_mat
     return matrix4_to_origin(relative)
 
 
@@ -284,7 +340,11 @@ def compute_geom_to_link_transform(
     geom_world = Gf.Matrix4d(xfc.GetLocalToWorldTransform(geom_prim))
 
     geom_in_robot = geom_world * robot_world.GetInverse()
-    return geom_in_robot * link_urdf.GetInverse()
+    # Re-apply the root/ancestor scale that robot_world.GetInverse() removed, so
+    # a scaled robot exports scaled meshes (baked vertices and <mesh scale=...>).
+    scale_mat = Gf.Matrix4d(1.0)
+    scale_mat.SetScale(Gf.Transform(robot_world).GetScale())
+    return geom_in_robot * link_urdf.GetInverse() * scale_mat
 
 
 def compute_geom_origin_from_frames(

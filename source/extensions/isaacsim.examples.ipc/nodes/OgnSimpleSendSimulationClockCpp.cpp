@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "TcpClockClient.h"
+#include "TcpClockClient.hpp"
 
-#include <isaacsim/core/includes/BaseResetNode.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
 
 #include <OgnSimpleSendSimulationClockCppDatabase.h>
 #include <cmath>

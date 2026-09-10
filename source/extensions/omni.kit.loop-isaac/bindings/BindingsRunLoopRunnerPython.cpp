@@ -20,7 +20,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include <RunLoopRunner.h>
+#include <RunLoopRunner.hpp>
 
 CARB_BINDINGS("omni.kit.loop-isaac.python")
 

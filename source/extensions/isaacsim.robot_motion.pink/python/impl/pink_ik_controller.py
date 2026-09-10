@@ -224,12 +224,18 @@ class PinkIKController(mg.BaseController):
             controlled joints, or None if the controller is not yet initialized.
         """
         if self._configuration is None:
+            carb.log_warn("PinkIKController: forward failed because reset() has not been called.")
             return None
 
         # Update configuration from estimated state
-        q = self._update_configuration_from_state(estimated_state)
-        if q is None:
+        configuration_update = self._update_configuration_from_state(estimated_state)
+        if configuration_update is None:
+            carb.log_warn(
+                "PinkIKController: forward failed because required controlled joint positions "
+                "are missing from estimated_state."
+            )
             return None
+        q, current_joint_positions = configuration_update
 
         # Update task targets from setpoint
         if setpoint_state is not None:
@@ -259,12 +265,12 @@ class PinkIKController(mg.BaseController):
                 barriers=self._extra_barriers if self._extra_barriers else None,
             )
         except Exception as e:
-            carb.log_warn(f"PINK solve_ik failed: {e}")
+            carb.log_warn(f"PinkIKController: PINK solve_ik failed: {e}")
             return None
 
         # Integrate and update internal state.
         # Save pre-integration q for the output mapping to avoid double integration.
-        q_current = self._q.copy()
+        q_current = q.copy()
         self._configuration.integrate_inplace(velocity, self._dt)
         self._q = self._configuration.q.copy()
 
@@ -276,6 +282,7 @@ class PinkIKController(mg.BaseController):
                 robot_joint_space=self._robot_joint_space,
                 dt=self._dt,
                 q_current=q_current,
+                current_joint_positions=current_joint_positions,
             )
         )
 
@@ -303,6 +310,10 @@ class PinkIKController(mg.BaseController):
         """
         joint_positions = self._extract_joint_positions(estimated_state)
         if joint_positions is None:
+            carb.log_warn(
+                "PinkIKController: reset failed because required controlled joint positions "
+                "are missing from estimated_state."
+            )
             self._configuration = None
             self._q = None
             return False
@@ -357,29 +368,30 @@ class PinkIKController(mg.BaseController):
             result[name] = float(positions[idx])
         return result
 
-    def _update_configuration_from_state(self, state: mg.RobotState) -> np.ndarray | None:
+    def _update_configuration_from_state(self, state: mg.RobotState) -> tuple[np.ndarray, np.ndarray] | None:
         """Update the PINK configuration from estimated joint positions.
 
         Args:
             state: Robot state containing current joint positions.
 
         Returns:
-            Updated Pinocchio configuration vector, or None if controlled joint
-            positions cannot be extracted.
+            Tuple containing the updated Pinocchio configuration and ordered Isaac Sim
+            joint positions, or None if controlled joint positions cannot be extracted.
         """
         joint_positions = self._extract_joint_positions(state)
         if joint_positions is None:
             return None
 
+        positions = np.array(list(joint_positions.values()))
         q = map_joint_positions_to_pinocchio(
             joint_names=list(joint_positions.keys()),
-            joint_positions=np.array(list(joint_positions.values())),
+            joint_positions=positions,
             model=self._pink_robot.model,
             q_current=self._q,
         )
         self._configuration.update(q)
         self._q = q
-        return q
+        return q, positions
 
     def _update_targets_from_setpoint(self, setpoint: mg.RobotState) -> None:
         """Update task targets from the setpoint state.

@@ -1,5 +1,67 @@
 # Changelog
 
+## [0.6.4] - 2026-08-21
+### Fixed
+- Apply off-center and local-frame rigid-body and articulation wrenches correctly on CPU and GPU.
+
+## [0.6.3] - 2026-08-20
+### Changed
+- Add Newton solver-switching coverage to rigid-body tensor view tests.
+
+## [0.6.2] - 2026-08-17
+### Added
+- Adding get/set gravity test
+
+## [0.6.1] - 2026-08-12
+### Fixed
+- Fixed get/set gravity crash with simulation tensor view
+
+## [0.6.0] - 2026-08-11
+### Added
+- `get_friction_data` support for Newton rigid-contact tensor views.
+
+## [0.5.0] - 2026-08-11
+### Changed
+- Updated the Newton pip package to 1.5.0.
+
+## [0.4.0] - 2026-08-05
+### Changed
+- Updated Newton pip package to 1.5.0rc2
+- Use `Control.joint_target_q` / `joint_target_qd` (Newton 1.5 rename)
+- Use `ModelFlags` for Newton 1.5 solver refresh notifications
+
+## [0.3.2] - 2026-07-29
+### Fixed
+- Adding Jacobian and Mass Matrix Computation to the tensor api
+
+## [0.3.1] - 2026-07-23
+### Fixed
+- Avoid repeated Newton initialization attempts after failure.
+
+## [0.3.0] - 2026-07-21
+### Changed
+- Updated Newton pip package to 1.4.0
+
+## [0.2.2] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [0.2.1] - 2026-07-13
+### Fixed
+- Resolve rigid contact sensor body paths with prefix and shape matching, including shapes under the sensor USD path.
+- Return empty raw contact buffers instead of failing when Newton contact forces are not yet available.
+
+## [0.2.0] - 2026-07-10
+### Changed
+- Updated Newton pip package to 1.4.0rc1
+
+### Fixed
+- Make the effort actuator-bridge test compare peak joint velocity instead of the final-step velocity.
+
+## [0.1.10] - 2026-06-29
+### Changed
+- Remove internal Warp kernel helpers from the generated public API inventory.
+
 ## [0.1.9] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

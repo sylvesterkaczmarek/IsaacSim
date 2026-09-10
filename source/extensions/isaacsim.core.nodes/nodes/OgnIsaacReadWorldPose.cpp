@@ -14,11 +14,11 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 
-#include <isaacsim/core/includes/Pose.h>
+#include <isaacsim/core/includes/Pose.hpp>
 #include <omni/fabric/FabricUSD.h>
 #include <omni/usd/UsdContext.h>
 #include <omni/usd/UsdContextIncludes.h>

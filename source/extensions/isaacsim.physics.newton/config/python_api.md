@@ -70,7 +70,6 @@
   - disable_contacts: bool
   - update_data_interval: int
   - save_to_mjcf: str | None
-  - ls_parallel: bool
   - use_mujoco_contacts: bool
   - tolerance: float
   - ls_tolerance: float

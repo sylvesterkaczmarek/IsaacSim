@@ -17,53 +17,26 @@
 
 import os
 
-import omni.ext
-from isaacsim.examples.base.base_sample_extension_experimental import BaseSampleUITemplate
-from isaacsim.examples.browser import get_instance as get_browser_instance
-from isaacsim.robot.policy.examples.interactive.go2 import Go2Example
+from isaacsim.robot.policy.examples.interactive.example_base import PolicyExampleExtension
+from isaacsim.robot.policy.examples.interactive.go2.go2_example import Go2Example
 
 
-class Go2ExampleExtension(omni.ext.IExt):
+class Go2ExampleExtension(PolicyExampleExtension):
     """Register the Go2 locomotion example in the examples browser."""
 
-    def on_startup(self, ext_id: str) -> None:
-        """Register the Go2 example on extension startup.
-
-        Args:
-            ext_id: Extension identifier.
-        """
-        self.example_name = "Go2"
-        self.category = "Policy"
-
-        overview = "This Example shows a Unitree Go2 running a flat terrain policy trained in Isaac Lab. "
-        overview += "Use the Physics Engine menu in the viewport to switch between PhysX and Newton before loading. "
-        overview += "\n\n\tKeybord Input:"
-        overview += "\n\t\tup arrow / numpad 8: Move Forward"
-        overview += "\n\t\tdown arrow/ numpad 2: Move Reverse"
-        overview += "\n\t\tleft arrow/ numpad 4: Move Left"
-        overview += "\n\t\tright arrow / numpad 6: Move Right"
-        overview += "\n\t\tN / numpad 7: Spin Counterclockwise"
-        overview += "\n\t\tM / numpad 9: Spin Clockwise"
-        overview += "\n\nPress the 'Open in IDE' button to view the source code."
-
-        ui_kwargs = {
-            "ext_id": ext_id,
-            "file_path": os.path.abspath(__file__),
-            "title": "Go2: Unitree Go2",
-            "doc_link": "https://docs.isaacsim.omniverse.nvidia.com/latest/isaac_lab_tutorials/tutorial_policy_deployment.html",
-            "overview": overview,
-            "sample": Go2Example(),
-        }
-
-        ui_handle = BaseSampleUITemplate(**ui_kwargs)
-
-        # Register the example with examples browser
-        get_browser_instance().register_example(
-            name=self.example_name,
-            ui_hook=ui_handle.build_ui,
-            category=self.category,
-        )
-
-    def on_shutdown(self) -> None:
-        """Deregister the Go2 example on extension shutdown."""
-        get_browser_instance().deregister_example(name=self.example_name, category=self.category)
+    example_name = "Go2"
+    title = "Go2: Unitree Go2"
+    sample_class = Go2Example
+    file_path = os.path.abspath(__file__)
+    overview = (
+        "This Example shows a Unitree Go2 running a flat terrain policy trained in Isaac Lab. "
+        "Use the Physics Engine menu in the viewport to switch between PhysX and Newton before loading. "
+        "\n\n\tKeybord Input:"
+        "\n\t\tup arrow / numpad 8: Move Forward"
+        "\n\t\tdown arrow/ numpad 2: Move Reverse"
+        "\n\t\tleft arrow/ numpad 4: Move Left"
+        "\n\t\tright arrow / numpad 6: Move Right"
+        "\n\t\tN / numpad 7: Spin Counterclockwise"
+        "\n\t\tM / numpad 9: Spin Clockwise"
+        "\n\nPress the 'Open in IDE' button to view the source code."
+    )

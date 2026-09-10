@@ -33,9 +33,10 @@ import yaml
 # Isaac Sim Imports
 from isaacsim.core.experimental.objects import Camera
 from isaacsim.core.experimental.prims import Articulation, XformPrim
-from isaacsim.core.experimental.utils.stage import get_current_stage
+from isaacsim.core.experimental.utils.prim import join_prim_paths
+from isaacsim.core.experimental.utils.stage import define_prim, get_current_stage
 
-from .common import Buffer, Module, _join_sdf_paths
+from .common import Buffer, Module
 from .types import Pose2d, SensorConfig
 from .utils.registry import Registry
 
@@ -171,10 +172,10 @@ class MobilityGenRobot(Module, ABC):
         Returns:
             The built front camera module.
         """
-        camera_path = _join_sdf_paths(prim_path, cls.front_camera_base_path)
+        camera_path = join_prim_paths(prim_path, cls.front_camera_base_path)
         stage = get_current_stage(backend="usd")
         if not stage.GetPrimAtPath(camera_path).IsValid():
-            stage.DefinePrim(camera_path, "Xform")
+            define_prim(camera_path, "Xform")
 
         orientation = transform_utils.euler_angles_to_quaternion(
             list(cls.front_camera_rotation), degrees=True, extrinsic=True
@@ -192,7 +193,7 @@ class MobilityGenRobot(Module, ABC):
         Returns:
             The USD prim path of the created chase camera.
         """
-        camera_path = _join_sdf_paths(self.prim_path, self.chase_camera_base_path, "chase_camera")
+        camera_path = join_prim_paths(self.prim_path, self.chase_camera_base_path, "chase_camera")
 
         camera = Camera(camera_path)
         camera.set_focal_lengths(10.0)
@@ -254,11 +255,30 @@ class MobilityGenRobot(Module, ABC):
         super().update_state()
 
     def write_replay_data(self) -> None:
-        """Write pose and joint positions back to the simulation for replay."""
+        """Write pose and joint positions back to the simulation for replay.
+
+        Raises:
+            ValueError: If `position`, `orientation`, or `joint_positions` is unset.
+        """
         position = self.position.get_value()
         orientation = self.orientation.get_value()
+        joint_positions = self.joint_positions.get_value()
+        missing = [
+            name
+            for name, value in (
+                ("position", position),
+                ("orientation", orientation),
+                ("joint_positions", joint_positions),
+            )
+            if value is None
+        ]
+        if missing:
+            raise ValueError(
+                f"Cannot replay '{self.prim_path}': recording is missing required state "
+                f"buffer(s) {', '.join(missing)}"
+            )
         self.articulation.set_world_poses(position[np.newaxis], orientation[np.newaxis])
-        self.articulation.set_dof_positions(self.joint_positions.get_value()[np.newaxis])
+        self.articulation.set_dof_positions(joint_positions[np.newaxis])
         super().write_replay_data()
 
     def set_pose_2d(self, pose: Pose2d) -> None:

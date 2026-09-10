@@ -15,6 +15,8 @@
 
 """Tests for base benchmark services and recorder registration."""
 
+from unittest import mock
+
 import isaacsim.core.experimental.utils.app as app_utils
 import omni
 from isaacsim.benchmark.services import DEFAULT_RECORDERS, BaseIsaacBenchmarkAsync
@@ -24,6 +26,7 @@ from isaacsim.benchmark.services.datarecorders.interface import (
     MeasurementDataRecorder,
     MeasurementDataRecorderRegistry,
 )
+from isaacsim.benchmark.services.metrics.backend import OmniPerfKPIFile
 from isaacsim.benchmark.services.metrics.measurements import (
     BooleanMeasurement,
     DictMeasurement,
@@ -86,6 +89,25 @@ class TestBaseIsaacBenchmarkAsync(BaseIsaacBenchmarkAsync):
         measurement = ListMeasurement(name="list_measure", value=[1, 2, 3])
         await self.store_custom_measurement("phase_4", measurement)
         await omni.kit.app.get_app().next_update_async()
+
+    async def test_store_custom_measurement_warns_for_unsupported_omniperf_type(self) -> None:
+        """Warn when an unsupported custom measurement type is used with OmniPerf."""
+        original_metrics = self._metrics
+        self._metrics = OmniPerfKPIFile()
+        try:
+            with mock.patch("isaacsim.benchmark.services.base_benchmark.carb.log_warn") as log_warn:
+                await self.store_custom_measurement("phase_1", BooleanMeasurement(name="bool_measure", bvalue=True))
+                await self.store_custom_measurement(
+                    "phase_1", SingleMeasurement(name="single_measure", value=1.23, unit="ms")
+                )
+
+            log_warn.assert_called_once_with(
+                "OmniPerfKPIFile supports only SingleMeasurement custom measurements. "
+                "BooleanMeasurement 'bool_measure' for phase 'phase_1' will not be written; "
+                "use JSONFileMetrics to preserve this measurement type."
+            )
+        finally:
+            self._metrics = original_metrics
 
     async def test_default_recorders_initialized(self) -> None:
         """Test that default recorders load correctly."""

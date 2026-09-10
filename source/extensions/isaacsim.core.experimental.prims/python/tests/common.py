@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
 import carb
@@ -39,7 +39,9 @@ def cprint(message: str) -> None:
 
 
 # simple decorator to skip test if default engine is not in supported engines
-def requires_engines(supported_engines: list[Literal["physx", "newton"]] = ["physx", "newton"]) -> Callable:
+def requires_engines(
+    supported_engines: Sequence[Literal["physx", "newton"]] = ("physx", "newton"),
+) -> Callable:
     """Requires engines.
 
     Args:
@@ -64,15 +66,15 @@ def requires_engines(supported_engines: list[Literal["physx", "newton"]] = ["phy
 
 def parametrize(
     *,
-    devices: list[Literal["cpu", "cuda"]] = ["cpu", "cuda"],
-    backends: list[Literal["usd", "usdrt", "fabric", "tensor"]] = ["usd", "usdrt", "fabric", "tensor"],
-    instances: list[Literal["one", "many"]] = ["one", "many"],
-    operations: list[Literal["wrap", "create"]] = ["wrap", "create"],
-    supported_engines: list[Literal["physx", "newton"]] = ["physx", "newton"],
+    devices: Sequence[Literal["cpu", "cuda"]] = ("cpu", "cuda"),
+    backends: Sequence[Literal["usd", "usdrt", "fabric", "tensor"]] = ("usd", "usdrt", "fabric", "tensor"),
+    instances: Sequence[Literal["one", "many"]] = ("one", "many"),
+    operations: Sequence[Literal["wrap", "create"]] = ("wrap", "create"),
+    supported_engines: Sequence[Literal["physx", "newton"]] = ("physx", "newton"),
     prim_class: type,
-    prim_class_kwargs: dict = {},
+    prim_class_kwargs: dict | None = None,
     populate_stage_func: Callable[[int, Literal["wrap", "create"]], None],
-    populate_stage_func_kwargs: dict = {},
+    populate_stage_func_kwargs: dict | None = None,
     max_num_prims: int = 5,
 ) -> Callable:
     """Parametrize.
@@ -92,6 +94,8 @@ def parametrize(
     Returns:
         Decorator that runs a test over the requested prim configurations.
     """
+    prim_class_kwargs = {} if prim_class_kwargs is None else prim_class_kwargs
+    populate_stage_func_kwargs = {} if populate_stage_func_kwargs is None else populate_stage_func_kwargs
 
     def decorator(func: Callable) -> Callable:
         async def wrapper(self: Any) -> None:
@@ -263,7 +267,7 @@ def draw_sample(
     *,
     shape: tuple,
     dtype: type,
-    types: list = [list, np.ndarray, wp.array],
+    types: Sequence[type] = (list, np.ndarray, wp.array),
     low: int | float = 0.0,
     high: int | float = 1.0,
     normalized: bool = False,
@@ -362,7 +366,9 @@ def draw_choice(*, shape: tuple, choices: list) -> list:
     return samples
 
 
-def draw_indices(*, count: int, step: int = 2, types: list = [list, np.ndarray, wp.array, None]) -> list:
+def draw_indices(
+    *, count: int, step: int = 2, types: Sequence[type | None] = (list, np.ndarray, wp.array, None)
+) -> list:
     """Draw indices.
 
     Args:

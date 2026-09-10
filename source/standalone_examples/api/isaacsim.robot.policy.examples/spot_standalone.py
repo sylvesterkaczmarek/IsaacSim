@@ -13,54 +13,77 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Demonstrate Spot robot simulation with policy control."""
+"""Demonstrate Spot robot simulation with policy control.
 
-from isaacsim import SimulationApp
-
-simulation_app = SimulationApp({"headless": False})
+The robot deploys through the generic :class:`RobotPolicyRunner` (bundled Spot spec, derived
+binding, policy runtime) instead of the legacy ``SpotFlatTerrainPolicy`` class. Everything
+term-level — including Spot's action scale — derives from the selected engine's IO descriptor,
+and the spawn pose falls back to the env config's ``init_state`` through the runner's built-in
+fallback chain.
+"""
 
 import argparse
 
+from isaacsim import SimulationApp
+
+parser = argparse.ArgumentParser(description="Select simulation engine and device.")
+parser.add_argument("--test", default=False, action="store_true", help="Run in test mode")
+parser.add_argument("--device", type=str, choices=["cpu", "cuda"], default="cuda", help="Simulation device")
+parser.add_argument("--engine", type=str, choices=["physx", "newton"], default="physx", help="Physics engine")
+
+args, unknown = parser.parse_known_args()
+extra_args = [f"--/exts/isaacsim.core.simulation_manager/default_engine={args.engine}"]
+if args.engine == "newton":
+    extra_args.extend(["--enable", "isaacsim.physics.newton", "--enable", "isaacsim.physics.newton.tensors"])
+simulation_app = SimulationApp({"headless": False, "extra_args": extra_args})
+
 import carb
+import numpy as np
 import omni.timeline
-from isaacsim.core.deprecation_manager import import_module
-from isaacsim.core.experimental.utils.stage import define_prim
+from command_path import TraveledPath, author_command_path, phase_boundary_frames, report_tracking
+from isaacsim.core.experimental.utils.stage import define_prim, set_stage_units, set_stage_up_axis
 from isaacsim.core.rendering_manager import RenderingManager
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.core.simulation_manager.impl.isaac_events import IsaacEvents
-from isaacsim.robot.policy.examples.robots import SpotFlatTerrainPolicy
+from isaacsim.robot.policy.examples import PolicyEnvConfig, RobotPolicyRunner, get_spot_spec
 from isaacsim.storage.native import get_assets_root_path
-
-torch = import_module("torch")
-
 
 first_step = True
 reset_needed = False
+policy_failed = False
 
-parser = argparse.ArgumentParser(description="Select simulation device.")
-parser.add_argument("--test", default=False, action="store_true", help="Run in test mode")
-parser.add_argument("--device", type=str, choices=["cpu", "cuda"], default="cpu", help="Simulation device")
-
-args, unknown = parser.parse_known_args()
+print(f"Using engine: {args.engine}")
 print(f"Using device: {args.device}")
 
 
 # initialize robot on first step, run robot advance
 def on_physics_step(step_size: float, context: object) -> None:
-    """Handle physics step for Spot initialization, reset, and control."""
-    global first_step
-    global reset_needed
-    if first_step:
-        spot.initialize()
-        first_step = False
-    elif reset_needed:
-        reset_needed = False
-        first_step = True
-    else:
-        spot.forward(step_size, base_command)
+    """Initialize, reset, or advance the Spot policy runner after a physics step.
+
+    Args:
+        step_size: Duration of the completed physics step.
+        context: User context supplied when the callback was registered.
+    """
+    global first_step, reset_needed, policy_failed
+    if policy_failed:
+        return
+    try:
+        if first_step:
+            spot.restart_from_default_state(base_command)
+            first_step = False
+        elif reset_needed:
+            reset_needed = False
+            first_step = True
+        else:
+            spot.step(step_size, base_command)
+    except Exception as error:  # noqa: BLE001 - a physics callback must not raise
+        policy_failed = True
+        carb.log_error(f"spot_standalone: policy deployment failed, stopping: {error}")
 
 
 # spawn world
+set_stage_up_axis("Z")
+set_stage_units(meters_per_unit=1.0)
 assets_root_path = get_assets_root_path()
 if assets_root_path is None:
     carb.log_error("Could not find Isaac Sim assets folder")
@@ -74,47 +97,70 @@ prim.GetReferences().AddReference(asset_path)
 # TODO: physics scene should be created by simulation manager
 define_prim("/World/PhysicsScene", "PhysicsScene")
 
-# set rendering manager
-RenderingManager.set_dt(8.0 / 200.0)
-
-# spawn simulation manager
+# select the simulation device before constructing the policy articulation
 SimulationManager.set_physics_sim_device(args.device)
-SimulationManager.set_physics_dt(1.0 / 200.0)
 
-# spawn robot
-spot = SpotFlatTerrainPolicy(
-    prim_path="/World/Spot",
-    position=[0, 0, 0.8],
-)
+# spawn robot through the generic policy runner (bundled Spot spec)
+spec = get_spot_spec()
+spot = RobotPolicyRunner(spec, prim_path="/World/Spot")
+spot.spawn()
+
+# timing from the deployed artifact's env config (render cadence comes from render_interval)
+timing = PolicyEnvConfig.from_file(spec.engines[args.engine].env_config_path).timing
+frame_dt = timing.render_interval * timing.physics_dt
+RenderingManager.set_dt(frame_dt)
+SimulationManager.set_physics_dt(spot.physics_dt)
+
+# scripted command loop: (app frames, [vx, vy, yaw_rate]), one command held per frame. The last
+# three phases turn toward the spawn point, walk back to it, and restore the spawn heading, so the
+# commanded course closes on itself and the robot patrols the same circuit every lap.
+COMMAND_PHASES = [
+    (55, [1.5, 0.0, 0.0]),  # forward
+    (30, [0.0, 1.0, 0.0]),  # strafe left
+    (68, [1.2, 0.0, 1.4]),  # arc left
+    (40, [1.4, 0.0, 0.0]),  # forward
+    (68, [1.2, 0.0, 1.4]),  # arc left
+    (25, [0.0, -0.9, 0.0]),  # strafe right
+    (40, [1.3, 0.0, 0.0]),  # forward
+    (68, [1.2, 0.0, 1.4]),  # arc left
+    (34, [0.0, 0.0, -1.2]),  # turn toward the spawn point
+    (51, [1.5, 0.0, 0.0]),  # return leg
+    (58, [0.0, 0.0, 1.2]),  # turn back to the spawn heading
+]
+frame_commands = np.concatenate([np.tile(np.asarray(c, dtype=np.float32), (n, 1)) for n, c in COMMAND_PHASES])
+phase_boundaries = phase_boundary_frames(COMMAND_PHASES)
+# green: the commanded course, with a waypoint arrow per phase; red: where the robot actually went
+commanded_end = author_command_path(COMMAND_PHASES, start_position=(0.0, 0.0), frame_dt=frame_dt)
+traveled = TraveledPath()
 # robot command
-base_command = torch.zeros(3, device=args.device)
+base_command = np.zeros(3, dtype=np.float32)
 
 # register physics callback
 _physics_callback_id = SimulationManager.register_callback(on_physics_step, IsaacEvents.POST_PHYSICS_STEP)
 
 # play simulation
-omni.timeline.get_timeline_interface().play()
+timeline = omni.timeline.get_timeline_interface()
+timeline.play()
 simulation_app.update()
 
 i = 0
+loop_index = 0
 while simulation_app.is_running():
     simulation_app.update()
     if SimulationManager.is_simulating():
-        if i >= 0 and i < 80:
-            # forward
-            base_command = torch.tensor([2, 0, 0], device=args.device)
-        elif i >= 80 and i < 130:
-            # rotate
-            base_command = torch.tensor([1, 0, 2], device=args.device)
-        elif i >= 130 and i < 200:
-            # side ways
-            base_command = torch.tensor([0, 1, 0], device=args.device)
-        elif i == 200:
+        if i == len(frame_commands):
             i = 0
+            loop_index += 1
             if args.test is True:
-                print("Reached: ", spot.robot.get_world_poses()[0])
+                report_tracking(commanded_end, traveled)
                 break
+        base_command = frame_commands[i]
+        # the commanded course describes the first circuit, so only mark its phase boundaries
+        traveled.record(spot.articulation, mark=(loop_index == 0 and i in phase_boundaries))
         i += 1
     else:
         reset_needed = True
+timeline.stop()
+SimulationManager.deregister_callback(_physics_callback_id)
+spot.close()
 simulation_app.close()

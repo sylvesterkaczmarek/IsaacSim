@@ -20,9 +20,11 @@ configured key, while unrelated keys and CHAR events continue through Kit's
 input pipeline.
 """
 
+import asyncio
+
 import carb
 import omni.kit.test
-from isaacsim.replicator.experimental.mobility_gen.impl.inputs import KeyboardButton
+from isaacsim.replicator.experimental.mobility_gen.impl.inputs import _KEY_HOLD_GRACE_S, KeyboardButton
 
 
 class _FakeKeyboardEvent:
@@ -62,11 +64,39 @@ class TestKeyboardButton(omni.kit.test.AsyncTestCase):
         self.assertTrue(button.value)
 
     async def test_event_callback_consumes_release_for_tracked_key(self) -> None:
-        """Verify a tracked key release is consumed and clears the button value."""
+        """Verify a tracked key release is consumed and clears the button after the grace window."""
         button = KeyboardButton(carb.input.KeyboardInput.S)
         # Pre-set the button so we can confirm release flips it back to False.
         button._event_callback(_FakeKeyboardEvent(carb.input.KeyboardInput.S, carb.input.KeyboardEventType.KEY_PRESS))
         event = _FakeKeyboardEvent(carb.input.KeyboardInput.S, carb.input.KeyboardEventType.KEY_RELEASE)
+        self.assertTrue(button._event_callback(event))
+        # The release is provisional until the grace window expires.
+        self.assertTrue(button.value)
+        await asyncio.sleep(_KEY_HOLD_GRACE_S * 1.5)
+        self.assertFalse(button.value)
+
+    async def test_release_then_press_within_grace_window_keeps_button_held(self) -> None:
+        """Verify an auto-repeat RELEASE->PRESS pair does not drop the button."""
+        # X11 auto-repeat emits this pair every ~33 ms while the key is physically
+        # held. The release must be cancelled by the following press.
+        button = KeyboardButton(carb.input.KeyboardInput.W)
+        button._event_callback(_FakeKeyboardEvent(carb.input.KeyboardInput.W, carb.input.KeyboardEventType.KEY_PRESS))
+        for _ in range(3):
+            button._event_callback(
+                _FakeKeyboardEvent(carb.input.KeyboardInput.W, carb.input.KeyboardEventType.KEY_RELEASE)
+            )
+            button._event_callback(
+                _FakeKeyboardEvent(carb.input.KeyboardInput.W, carb.input.KeyboardEventType.KEY_PRESS)
+            )
+            self.assertTrue(button.value)
+        # The cancelled releases must not expire into a key-up later on.
+        await asyncio.sleep(_KEY_HOLD_GRACE_S * 1.5)
+        self.assertTrue(button.value)
+
+    async def test_release_without_prior_press_leaves_button_up(self) -> None:
+        """Verify a stray release on an unpressed button does not latch it held."""
+        button = KeyboardButton(carb.input.KeyboardInput.D)
+        event = _FakeKeyboardEvent(carb.input.KeyboardInput.D, carb.input.KeyboardEventType.KEY_RELEASE)
         self.assertTrue(button._event_callback(event))
         self.assertFalse(button.value)
 

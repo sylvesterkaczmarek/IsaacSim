@@ -53,7 +53,6 @@ class SceneRegistry(object):
         >>> scene_registry = SceneRegistry()
         >>> scene_registry
         <isaacsim.core.api.scenes.scene_registry.SceneRegistry object at 0x...>
-
     """
 
     def __init__(self) -> None:
@@ -112,7 +111,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary containing the registered articulated systems.
-
         """
         return self._articulated_systems
 
@@ -122,7 +120,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary containing the registered rigid objects.
-
         """
         return self._rigid_objects
 
@@ -132,7 +129,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary containing the registered rigid prim views.
-
         """
         return self._rigid_prim_views
 
@@ -142,7 +138,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary containing the registered rigid contact views.
-
         """
         return self._rigid_contact_views
 
@@ -152,7 +147,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary containing the registered geometry prim views.
-
         """
         return self._geometry_prim_views
 
@@ -162,7 +156,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary containing the registered articulated views.
-
         """
         return self._articulated_views
 
@@ -172,7 +165,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary containing the registered robot views.
-
         """
         return self._robot_views
 
@@ -182,7 +174,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary containing the registered robots.
-
         """
         return self._robots
 
@@ -192,7 +183,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary containing the registered xforms.
-
         """
         return self._xforms
 
@@ -202,7 +192,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary containing the registered sensors.
-
         """
         return self._sensors
 
@@ -212,7 +201,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary of registered ``XFormPrim`` objects.
-
         """
         return self._xform_prim_views
 
@@ -222,7 +210,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary of registered ``SingleDeformablePrim`` objects.
-
         """
         return self._deformable_prims
 
@@ -232,7 +219,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary of registered ``DeformablePrim`` objects.
-
         """
         return self._deformable_prim_views
 
@@ -242,7 +228,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary of registered ``DeformableMaterial`` objects.
-
         """
         return self._deformable_materials
 
@@ -252,7 +237,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary of registered ``DeformableMaterialView`` objects.
-
         """
         return self._deformable_material_views
 
@@ -262,7 +246,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary of registered ``SingleClothPrim`` objects.
-
         """
         return self._cloth_prims
 
@@ -272,7 +255,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary of registered ``ClothPrim`` objects.
-
         """
         return self._cloth_prim_views
 
@@ -282,7 +264,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary of registered ``SingleParticleSystem`` objects.
-
         """
         return self._particle_systems
 
@@ -292,7 +273,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary of registered ``ParticleSystem`` objects.
-
         """
         return self._particle_system_views
 
@@ -302,7 +282,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary of registered ``ParticleMaterial`` objects.
-
         """
         return self._particle_materials
 
@@ -312,7 +291,6 @@ class SceneRegistry(object):
 
         Returns:
             Dictionary mapping names to registered particle material view objects.
-
         """
         return self._particle_material_views
 
@@ -339,6 +317,8 @@ class SceneRegistry(object):
             name: Object name.
             rigid_object: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, rigid_object, self._rigid_objects)
         return
@@ -350,6 +330,8 @@ class SceneRegistry(object):
             name: Object name.
             rigid_prim_view: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, rigid_prim_view, self._rigid_prim_views)
         return
@@ -361,6 +343,8 @@ class SceneRegistry(object):
             name: Object name.
             rigid_contact_view: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, rigid_contact_view, self._rigid_contact_views)
         return
@@ -372,6 +356,8 @@ class SceneRegistry(object):
             name: Object name.
             articulated_system: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, articulated_system, self._articulated_systems)
         return
@@ -383,6 +369,8 @@ class SceneRegistry(object):
             name: Object name.
             articulated_view: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, articulated_view, self._articulated_views)
         return
@@ -394,6 +382,8 @@ class SceneRegistry(object):
             name: Object name.
             geometry_object: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, geometry_object, self._geometry_objects)
         return
@@ -405,6 +395,8 @@ class SceneRegistry(object):
             name: Object name.
             geometry_prim_view: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, geometry_prim_view, self._geometry_prim_views)
         return
@@ -416,6 +408,8 @@ class SceneRegistry(object):
             name: Object name.
             robot: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, robot, self._robots)
         return
@@ -427,17 +421,21 @@ class SceneRegistry(object):
             name: Object name.
             robot_view: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, robot_view, self._robot_views)
         return
 
     def add_xform_view(self, name: str, xform_prim_view: XFormPrim) -> None:
-        """Register a ``XFormPrim`` (or subclass) object.
+        """Register an ``XFormPrim`` (or subclass) object.
 
         Args:
-            name: Object name
-            xform_prim_view: Object
+            name: Object name.
+            xform_prim_view: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, xform_prim_view, self._xform_prim_views)
         return
@@ -446,9 +444,11 @@ class SceneRegistry(object):
         """Register a ``SingleDeformablePrim`` (or subclass) object.
 
         Args:
-            name: Object name
-            deformable: Object
+            name: Object name.
+            deformable: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, deformable, self._deformable_prims)
         return
@@ -457,9 +457,11 @@ class SceneRegistry(object):
         """Register a ``DeformablePrim`` (or subclass) object.
 
         Args:
-            name: Object name
-            deformable_prim_view: Object
+            name: Object name.
+            deformable_prim_view: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, deformable_prim_view, self._deformable_prim_views)
         return
@@ -468,9 +470,11 @@ class SceneRegistry(object):
         """Register a ``DeformableMaterial`` (or subclass) object.
 
         Args:
-            name: Object name
-            deformable_material: Object
+            name: Object name.
+            deformable_material: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, deformable_material, self._deformable_materials)
         return
@@ -479,9 +483,11 @@ class SceneRegistry(object):
         """Register a ``DeformableMaterialView`` (or subclass) object.
 
         Args:
-            name: Object name
-            deformable_material_view: Object
+            name: Object name.
+            deformable_material_view: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, deformable_material_view, self._deformable_material_views)
         return
@@ -490,9 +496,11 @@ class SceneRegistry(object):
         """Register a ``SingleClothPrim`` (or subclass) object.
 
         Args:
-            name: Object name
-            cloth: Object
+            name: Object name.
+            cloth: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, cloth, self._cloth_prims)
         return
@@ -501,9 +509,11 @@ class SceneRegistry(object):
         """Register a ``ClothPrim`` (or subclass) object.
 
         Args:
-            name: Object name
-            cloth_prim_view: Object
+            name: Object name.
+            cloth_prim_view: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, cloth_prim_view, self._cloth_prim_views)
         return
@@ -512,9 +522,11 @@ class SceneRegistry(object):
         """Register a ``SingleParticleSystem`` (or subclass) object.
 
         Args:
-            name: Object name
-            particle_system: Object
+            name: Object name.
+            particle_system: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, particle_system, self._particle_systems)
         return
@@ -523,53 +535,63 @@ class SceneRegistry(object):
         """Register a ``ParticleSystem`` (or subclass) object.
 
         Args:
-            name: Object name
-            particle_system_view: Object
+            name: Object name.
+            particle_system_view: Object.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, particle_system_view, self._particle_system_views)
         return
 
     def add_particle_material(self, name: str, particle_material: ParticleMaterial) -> None:
-        """Register a ``ParticleMaterial`` (or subclass) object.
+        """Register a ``ParticleMaterial`` or subclass object.
 
         Args:
-            name: Object name
-            particle_material: Object
+            name: Object name.
+            particle_material: Object to register.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, particle_material, self._particle_materials)
         return
 
     def add_particle_material_view(self, name: str, particle_material_view: ParticleMaterialView) -> None:
-        """Register a ``ParticleMaterialView`` (or subclass) object.
+        """Register a ``ParticleMaterialView`` or subclass object.
 
         Args:
-            name: Object name
-            particle_material_view: Object
+            name: Object name.
+            particle_material_view: Object to register.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, particle_material_view, self._particle_material_views)
         return
 
     def add_xform(self, name: str, xform: SingleXFormPrim) -> None:
-        """Register a ``SingleXFormPrim`` (or subclass) object.
+        """Register a ``SingleXFormPrim`` or subclass object.
 
         Args:
-            name: Object name
-            xform: Object
+            name: Object name.
+            xform: Object to register.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, xform, self._xforms)
         return
 
     def add_sensor(self, name: str, sensor: BaseSensor) -> None:
-        """Register a ``BaseSensor`` (or subclass) object.
+        """Register a ``BaseSensor`` or subclass object.
 
         Args:
-            name: Object name
-            sensor: Object
+            name: Object name.
+            sensor: Object to register.
 
+        Raises:
+            ValueError: If the object name is not unique.
         """
         self._register_object(name, sensor, self._sensors)
 
@@ -579,10 +601,10 @@ class SceneRegistry(object):
         """Check if an object exists in the registry by its name.
 
         Args:
-            name: Object name
+            name: Object name.
 
         Returns:
-            Whether the object is registered or not.
+            Whether the object is registered.
 
         Example:
 
@@ -591,23 +613,22 @@ class SceneRegistry(object):
             >>> # given a registered ground plane named 'default_ground_plane'
             >>> scene_registry.name_exists("default_ground_plane")
             True
-
         """
         return any(name in object_dict for object_dict in self._all_object_dicts)
 
     def remove_object(self, name: str) -> None:
-        """Remove and object from the registry.
+        """Remove an object from the registry.
 
         .. note::
 
             This method will only remove the object from the internal registry.
-            The wrapped object will not be removed from the USD stage
+            The wrapped object will not be removed from the USD stage.
 
         Args:
-            name: Object name
+            name: Object name.
 
         Raises:
-            Exception: If the name doesn't exist in the registry
+            Exception: If the name does not exist in the registry.
 
         Example:
 
@@ -615,7 +636,6 @@ class SceneRegistry(object):
 
             >>> # given a registered ground plane named 'default_ground_plane'
             >>> scene_registry.remove_object("default_ground_plane")
-
         """
         for object_dict in self._all_object_dicts:
             if name in object_dict:
@@ -624,13 +644,13 @@ class SceneRegistry(object):
         raise Exception(f"Cannot remove object {name} from the scene since it doesn't exist")
 
     def get_object(self, name: str) -> SingleXFormPrim:
-        """Get a registered object by its name if exists otherwise None.
+        """Get a registered object by its name if it exists, otherwise None.
 
         Args:
-            name: Object name
+            name: Object name.
 
         Returns:
-            The object if it exists otherwise None.
+            The object if it exists, otherwise None.
 
         Example:
 
@@ -639,7 +659,6 @@ class SceneRegistry(object):
             >>> # given a registered ground plane named 'default_ground_plane'
             >>> scene_registry.get_object("default_ground_plane")
             <isaacsim.core.api.objects.ground_plane.GroundPlane object at 0x...>
-
         """
         for object_dict in self._all_object_dicts:
             if name in object_dict:

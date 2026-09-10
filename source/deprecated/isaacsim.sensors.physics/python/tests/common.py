@@ -15,6 +15,8 @@
 
 """Common test utilities and helpers."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,9 +24,10 @@ import carb
 import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.app
 import omni.timeline
+import omni.usd
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.storage.native import get_assets_root_path_async
-from pxr import Gf
+from pxr import Gf, PhysxSchema, Usd, UsdPhysics
 
 EARTH_GRAVITY = 9.81
 MOON_GRAVITY = 1.62
@@ -53,7 +56,7 @@ async def reset_timeline(timeline: Any = None, *, steps: int = 2) -> None:
     """Stop and restart the timeline.
 
     Args:
-        timeline: Timeline interface to control. Defaults to the global timeline if None.
+        timeline: Timeline interface to control. If None, uses the global timeline.
         steps: Number of simulation steps to run after restarting.
     """
     if timeline is None:
@@ -67,10 +70,22 @@ async def reset_timeline(timeline: Any = None, *, steps: int = 2) -> None:
 
 @dataclass
 class AntConfig:
-    """Configuration data for ant robot used in sensor tests."""
+    """Configuration data for the ant robot used in sensor tests.
+
+    Args:
+        leg_paths: Prim paths for the ant lower arm links.
+        sphere_path: Prim path for the ant sphere body.
+        sensor_offsets: Sensor offsets for the leg sensors.
+        imu_sensor_offsets: Sensor offsets for the IMU sensors.
+        sensor_quatd: Sensor orientation quaternions for the IMU sensors.
+        colors: RGBA colors for the leg sensors.
+        shoulder_joints: Prim paths for the ant shoulder joints.
+        lower_joints: Prim paths for the ant lower arm joints.
+    """
 
     leg_paths: list[str] = field(default_factory=lambda: [f"/Ant/Arm_{i + 1:02d}/Lower_Arm" for i in range(4)])
     sphere_path: str = "/Ant/Sphere"
+    """Path to the ant sphere prim."""
     sensor_offsets: list[Gf.Vec3d] = field(default_factory=lambda: [Gf.Vec3d(40, 0, 0) for _ in range(4)])
     # IMU sensor offsets (at origin for each sensor location)
     imu_sensor_offsets: list[Gf.Vec3d] = field(default_factory=lambda: [Gf.Vec3d(0, 0, 0) for _ in range(5)])
@@ -90,6 +105,30 @@ class AntConfig:
             self.lower_joints = [f"{path}/lower_arm_joint" for path in self.leg_paths]
 
 
+def disable_articulation_sleep(robot_path: str = "/Ant", stage: Usd.Stage | None = None) -> None:
+    """Disable sleep and stabilization thresholds under the robot.
+
+    Args:
+        robot_path: USD path to the robot root prim.
+        stage: Stage to modify. Uses the current USD context stage when ``None``.
+    """
+    if stage is None:
+        stage = omni.usd.get_context().get_stage()
+    if stage is None:
+        return
+    robot_prim = stage.GetPrimAtPath(robot_path)
+    if not robot_prim.IsValid():
+        return
+    for prim in Usd.PrimRange(robot_prim):
+        if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+            articulation_api = PhysxSchema.PhysxArticulationAPI.Apply(prim)
+            articulation_api.CreateSleepThresholdAttr().Set(0.0)
+            articulation_api.CreateStabilizationThresholdAttr().Set(0.0)
+        if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            rigid_body_api = PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
+            rigid_body_api.CreateSleepThresholdAttr().Set(0.0)
+
+
 async def setup_ant_scene(physics_rate: float = 60.0) -> AntConfig:
     """Load the ant USD scene and return configuration data.
 
@@ -97,17 +136,23 @@ async def setup_ant_scene(physics_rate: float = 60.0) -> AntConfig:
         physics_rate: Physics simulation rate in Hz.
 
     Returns:
-        AntConfig with paths and sensor configuration for the ant robot.
+        Paths and sensor configuration for the ant robot.
+
+    Raises:
+        RuntimeError: If the Isaac Sim assets folder cannot be found.
     """
     assets_root_path = await get_assets_root_path_async()
     if assets_root_path is None:
         carb.log_error("Could not find Isaac Sim assets folder")
         raise RuntimeError("Could not find Isaac Sim assets folder")
 
-    await stage_utils.open_stage_async(assets_root_path + "/Isaac/Robots/IsaacSim/Ant/ant_colored.usd")
+    ant_usd = assets_root_path + "/Isaac/Robots/IsaacSim/Ant/ant_colored.usd"
+    result, stage = await stage_utils.open_stage_async(ant_usd)
+    if not result or stage is None:
+        raise RuntimeError(f"Failed to open ant stage: {ant_usd}")
     await omni.kit.app.get_app().next_update_async()
 
-    stage_utils.set_stage_units(meters_per_unit=1.0)
+    disable_articulation_sleep("/Ant", stage=stage)
     SimulationManager.setup_simulation(dt=1.0 / physics_rate)
 
     return AntConfig()

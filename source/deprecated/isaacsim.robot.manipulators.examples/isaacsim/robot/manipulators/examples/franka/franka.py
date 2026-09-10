@@ -28,12 +28,12 @@ from isaacsim.storage.native import get_assets_root_path
 
 
 class Franka(Robot):
-    """Franka Panda robot arm with parallel gripper.
+    """Franka Panda robot arm with a parallel gripper.
 
     Args:
         prim_path: USD prim path for the robot.
         name: Name identifier for the robot.
-        usd_path: Path to custom USD file.
+        usd_path: Path to a custom USD file.
         position: Initial position of the robot.
         orientation: Initial orientation as quaternion.
         end_effector_prim_name: Name of the end effector prim.
@@ -110,7 +110,7 @@ class Franka(Robot):
         """End effector prim.
 
         Returns:
-            The end effector as a SingleRigidPrim.
+            The end effector prim.
         """
         return self._end_effector
 

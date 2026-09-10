@@ -31,6 +31,9 @@ class ClothPrim:
     Args:
         *args: Unused positional arguments.
         **kwargs: Unused keyword arguments.
+
+    Raises:
+        NotImplementedError: Raised because ClothPrim is no longer available.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

@@ -1,6 +1,6 @@
 {
     "IsaacAttachHydraTexture": {
-        "version": 1,
+        "version": 2,
         "icon": "icons/isaac-sim.svg",
         "description": "Isaac Sim node that attaches render vars and a hydra texture to an existing render product",
         "language": "Python",
@@ -22,6 +22,17 @@
                 "type": "token[]",
                 "description": "List of render vars (AOVs) to apply to the render product",
                 "default": []
+            },
+            "renderVarLocation": {
+                "type": "token",
+                "description": "Where to define requested render vars. Use global for /Render/Vars or renderProductChild for direct children of the render product.",
+                "metadata": {
+                    "allowedTokens": {
+                        "globalVars": "global",
+                        "renderProductChild": "renderProductChild"
+                    }
+                },
+                "default": "global"
             },
             "enabled": {
                 "type": "bool",

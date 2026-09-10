@@ -68,7 +68,7 @@ class TestGraspImporter(omni.kit.test.AsyncTestCase):
 
         asset_root_path = await get_assets_root_path_async()
 
-        gripper_usd_path = asset_root_path + "/Isaac/Robots/Robotiq/2F-85/Robotiq_2F_85_edit.usd"
+        gripper_usd_path = asset_root_path + "/Isaac/Robots_Multiphysics/Robotiq/2F-85/Robotiq_2F_85.usda"
         self._gripper_path = "/gripper"
         stage_utils.add_reference_to_stage(gripper_usd_path, self._gripper_path)
         self._gripper_xform = XformPrim(self._gripper_path, reset_xform_op_properties=True)

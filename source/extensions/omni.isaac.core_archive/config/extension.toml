@@ -4,7 +4,7 @@ order = -1000
 reloadable = false
 
 [package]
-version = "5.3.1"
+version = "5.4.0"
 category = "Internal"
 title = "Isaac Sim Core Pip Archive"
 description = "Pip packages needed by isaac sim extensions"
@@ -27,3 +27,6 @@ path = "pip_prebundle"
 # That is empty module, added here only to make tests discoverable in test run
 [[python.module]]
 name = "omni.isaac.core_archive"
+
+[[python.module]]
+name = "omni.isaac.core_archive.tests"

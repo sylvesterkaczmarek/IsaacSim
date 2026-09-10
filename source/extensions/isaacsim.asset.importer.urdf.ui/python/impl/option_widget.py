@@ -19,7 +19,8 @@ from collections.abc import Callable
 
 import omni.ui as ui
 from isaacsim.asset.importer.urdf import URDFImporterConfig
-from isaacsim.gui.components.ui_utils import checkbox_builder, dropdown_builder, string_filed_builder
+from isaacsim.gui.components import dropdown_builder
+from isaacsim.gui.components.ui_utils import checkbox_builder, string_filed_builder
 
 from .style import get_option_style
 from .ui_utils import RosPackageDelegate, RosPackageItem, RosPackageModel
@@ -228,6 +229,7 @@ class OptionWidget:
         Creates UI elements for:
         - Robot Type dropdown
         - Base Type dropdown (Source / Fixed / Mobile)
+        - Add Reference to Stage checkbox (default: False)
         - Merge Mesh checkbox (default: False)
         - Debug Mode checkbox (default: False)
         """
@@ -276,6 +278,13 @@ class OptionWidget:
                     identifier="urdf_base_type",
                     show_flourish=False,
                     label_width=90,
+                )
+
+                self._models["add_reference_to_stage"] = checkbox_builder(
+                    "Add Reference to Stage",
+                    tooltip="Add the imported USD as a reference to the current stage instead of opening it",
+                    default_val=False,
+                    identifier="urdf_add_reference_to_stage",
                 )
 
                 self._models["merge_mesh"] = checkbox_builder(

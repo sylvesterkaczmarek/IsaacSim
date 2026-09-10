@@ -104,7 +104,10 @@ class FrankaMultiTaskExample:
             Loaded robot articulation and target cube.
         """
         self._robot_prim_path = "/panda"
-        path_to_robot_usd = await get_assets_root_path_async() + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        path_to_robot_usd = (
+            await get_assets_root_path_async()
+            + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
+        )
 
         add_reference_to_stage(path_to_robot_usd, self._robot_prim_path)
         self._articulation = Articulation(self._robot_prim_path)

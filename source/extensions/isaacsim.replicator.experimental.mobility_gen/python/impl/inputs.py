@@ -15,6 +15,8 @@
 
 """Keyboard and gamepad input modules for robot teleoperation."""
 
+import time
+
 import carb
 import numpy as np
 import omni
@@ -25,9 +27,22 @@ from .common import Buffer, Module
 #  IMPLEMENTATION
 # =========================================================
 
+# Grace window for release debounce: must exceed one X11 auto-repeat interval (~33 ms at
+# 30 Hz).  A release seen within this window of the previous press is treated as an
+# auto-repeat artifact and ignored; only a release with no following press takes effect.
+# Ported from the same fix in zmq_bridge/zmq_server/teleop.py (Bug 6533297).
+_KEY_HOLD_GRACE_S = 0.1
+
 
 class KeyboardButton:
     """A single keyboard button tracker that monitors press, repeat, and release events.
+
+    X11 keyboard auto-repeat emits a rapid RELEASE→PRESS sequence while a key is
+    physically held.  Acting on every RELEASE immediately would make the button flutter
+    between True and False, so most physics steps would see False and the robot would
+    crawl.  Instead, a RELEASE starts a short grace timer; if a PRESS arrives before
+    the timer expires the release is cancelled (auto-repeat artifact).  Only a RELEASE
+    with no following PRESS within ``_KEY_HOLD_GRACE_S`` is treated as genuine.
 
     Args:
         key: The carb keyboard input to track.
@@ -35,12 +50,23 @@ class KeyboardButton:
 
     def __init__(self, key: carb.input.KeyboardInput) -> None:
         self._key = key
-        self._value = False
+        self._down = False
+        self._release_t: float | None = None  # wall time of the pending release, or None
 
     @property
     def value(self) -> bool:
-        """Return True if the button is currently pressed."""
-        return self._value
+        """Return True if the button is currently considered held.
+
+        A pending release is confirmed once the grace window expires with no
+        intervening press.
+        """
+        if not self._down:
+            return False
+        if self._release_t is not None and (time.perf_counter() - self._release_t) >= _KEY_HOLD_GRACE_S:
+            self._down = False
+            self._release_t = None
+            return False
+        return True
 
     def _event_callback(self, event: carb.input.KeyboardEvent, *args: object, **kwargs: object) -> bool:
         # Only consume events for this button's key and the press/repeat/release types we
@@ -52,10 +78,12 @@ class KeyboardButton:
             event.type == carb.input.KeyboardEventType.KEY_PRESS
             or event.type == carb.input.KeyboardEventType.KEY_REPEAT
         ):
-            self._value = True
+            self._down = True
+            self._release_t = None  # cancel any pending release
             return True
         if event.type == carb.input.KeyboardEventType.KEY_RELEASE:
-            self._value = False
+            if self._down:
+                self._release_t = time.perf_counter()  # start grace timer
             return True
         return False
 

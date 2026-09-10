@@ -114,7 +114,7 @@ def resolve_indices(indices: object, count: int, device: object) -> Any:
     """Resolve and convert indices to a proper tensor format.
 
     Args:
-        indices: Input indices. Can be a list, tensor, or None. If None, creates a range from 0 to count-1.
+        indices: Input indices. Can be a list, tensor, or None. If None, creates a range from 0 to count - 1.
         count: Total count for creating default indices when indices is None.
         device: Target device for the indices tensor.
 
@@ -147,7 +147,7 @@ def tensor_cat(data: object, device: object = None, dim: int = -1) -> Any:
 
     Args:
         data: Sequence of tensors to concatenate.
-        device: Target device for the operation.
+        device: Unused device argument.
         dim: Dimension along which to concatenate tensors.
 
     Returns:

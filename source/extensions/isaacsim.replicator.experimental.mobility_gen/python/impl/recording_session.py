@@ -215,10 +215,6 @@ class RecordingSession:
     def _add_ground_plane(self) -> None:
         """Add a physics-only ground plane, hidden to avoid z-fighting with the scene floor."""
         from isaacsim.core.experimental.objects import GroundPlane
-        from isaacsim.core.experimental.utils.stage import get_current_stage
-        from pxr import UsdGeom
 
         ground_plane = GroundPlane("/World/ground_plane", templates=None)
-        stage = get_current_stage()
-        for mesh_path in ground_plane.meshes.paths:
-            UsdGeom.Imageable(stage.GetPrimAtPath(mesh_path)).MakeInvisible()
+        ground_plane.meshes.set_visibilities([False])

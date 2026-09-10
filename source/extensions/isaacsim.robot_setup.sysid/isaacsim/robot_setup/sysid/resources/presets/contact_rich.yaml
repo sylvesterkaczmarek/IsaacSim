@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: contact_rich
+description: General contact-heavy identification for probes, grippers, and manipulation fixtures.
+include_basic: true
+include_com_offsets: true
+include_inertia_log_cholesky: false
+include_joint_limit_scales: true
+optimizer_backend:
+  backend: cma_es
+  cma_sigma: 0.3
+residual_weights:
+  position_weight: 0.8
+  velocity_weight: 0.3
+  torque_weight: 0.2
+  end_effector_pose_weight: 0.2
+  contact_force_weight: 1.2
+recommended_scenes:
+  - data/scenes/contact_probing.usda
+  - data/scenes/benchtop_force.usda
+notes:
+  - Verify collision geometry against the measured hardware before collecting contact-rich data.
+  - Weight force residuals only after the signal frame and sign convention are verified.

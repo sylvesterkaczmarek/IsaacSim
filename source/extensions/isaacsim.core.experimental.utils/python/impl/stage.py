@@ -335,7 +335,7 @@ def open_stage(usd_path: str) -> tuple[bool, Usd.Stage | None]:
         >>>
         >>> # open a USD file
         >>> result, stage = stage_utils.open_stage(
-        ...     get_assets_root_path() + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        ...     get_assets_root_path() + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
         ... )
         >>> result
         True
@@ -453,9 +453,9 @@ def add_reference_to_stage(
         >>> from isaacsim.storage.native import get_assets_root_path
         >>>
         >>> prim = stage_utils.add_reference_to_stage(
-        ...     usd_path=get_assets_root_path() + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+        ...     usd_path=get_assets_root_path() + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
         ...     path="/panda",
-        ...     variants=[("Gripper", "AlternateFinger"), ("Mesh", "Performance")],
+        ...     variants=[("Gripper", "alternatefinger"), ("Mesh", "performance")],
         ... )
     """
     if not Sdf.Path.IsValidPathString(path):

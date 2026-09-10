@@ -30,7 +30,7 @@ import carb
 import numpy as np
 
 from ..base import ChannelDescriptor, Recordable, ReplayPolicy
-from ._utils import is_missing_xform_ops_error, to_numpy_f32
+from ._utils import is_missing_xform_ops_error, is_singular_matrix_error, singular_matrix_pose_message, to_numpy_f32
 
 
 class _PoseBase(Recordable):
@@ -128,6 +128,12 @@ class _PoseBase(Recordable):
             _write()
         except Exception as exc:
             if self._xform_ops_reset or not is_missing_xform_ops_error(exc):
+                if is_singular_matrix_error(exc):
+                    msg = singular_matrix_pose_message(f"{type(self).__name__} {self.prim_path}")
+                    if policy.strictness == "strict":
+                        raise RuntimeError(msg) from exc
+                    carb.log_warn(msg)
+                    return
                 if policy.strictness == "strict":
                     raise
                 carb.log_warn(f"[{type(self).__name__} {self.prim_path}] apply failed: {exc}")
@@ -137,6 +143,12 @@ class _PoseBase(Recordable):
                 self._xform_ops_reset = True
                 _write()
             except Exception as retry_exc:
+                if is_singular_matrix_error(retry_exc):
+                    msg = singular_matrix_pose_message(f"{type(self).__name__} {self.prim_path}")
+                    if policy.strictness == "strict":
+                        raise RuntimeError(msg) from retry_exc
+                    carb.log_warn(msg)
+                    return
                 if policy.strictness == "strict":
                     raise
                 carb.log_warn(

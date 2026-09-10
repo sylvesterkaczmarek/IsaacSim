@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+import math
+
 import isaacsim.core.experimental.utils.prim as prim_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
 from pxr import Gf, PhysxSchema, Usd, UsdGeom, UsdPhysics
@@ -134,7 +136,11 @@ class PhysicsScene:
         meters_per_unit = UsdGeom.GetStageMetersPerUnit(stage)
         magnitude = self.physics_scene.GetGravityMagnitudeAttr().Get()
         direction = self.physics_scene.GetGravityDirectionAttr().Get()
-        return Gf.Vec3f(direction) * magnitude / meters_per_unit
+        if magnitude == -math.inf and direction == Gf.Vec3f(0.0):
+            return Gf.Vec3f(0.0, 0.0, -9.81)
+        if not math.isfinite(magnitude) or not all(math.isfinite(component) for component in direction):
+            return Gf.Vec3f(0.0)
+        return Gf.Vec3f(direction).GetNormalized() * magnitude / meters_per_unit
 
     def set_gravity(self, gravity: Gf.Vec3f | tuple[float, float, float] | list[float]) -> None:
         """Set the Physics Scene's gravity vector.

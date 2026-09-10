@@ -1,5 +1,5 @@
 [package]
-version = "0.8.1"
+version = "0.9.0"
 category = "Simulation"
 title = "Isaac Sim Core (Objects)"
 description = "The Core Objects extension provides a set of APIs to create and/or wrap one or more USD objects in the stage..."
@@ -27,6 +27,9 @@ name = "isaacsim.core.experimental.objects.tests"
 
 [[test]]
 timeout = 900
+dependencies = [
+    "isaacsim.storage.native",
+]
 args = [
     "--enable",
     "omni.kit.loop-isaac",

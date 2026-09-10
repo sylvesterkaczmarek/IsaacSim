@@ -16,6 +16,23 @@
 local ext = get_current_extension_info()
 project_ext(ext)
 
+project_ext_plugin(ext, "isaacsim.core.version.plugin")
+targetdir(ext.bin_dir)
+language("C++")
+staticruntime("Off")
+add_files("impl", "plugins")
+
+includedirs {
+    "%{root}/_build/generated/include/",
+    "%{target_deps}/carb_sdk_plugins/include",
+}
+
+filter { "configurations:debug" }
+defines { "_DEBUG" }
+filter { "configurations:release" }
+defines { "NDEBUG" }
+filter {}
+
 repo_build.prebuild_link {
     { "docs", ext.target_dir .. "/docs" },
     { "data", ext.target_dir .. "/data" },

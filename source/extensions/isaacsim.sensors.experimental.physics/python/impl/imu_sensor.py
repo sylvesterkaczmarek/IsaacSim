@@ -25,6 +25,13 @@ from .imu import IMU
 
 _INVALID_IMU_READING = None
 
+# Frame layout inside the sensor-owned backing buffer. Keeping the three channels in one
+# contiguous array means a copied frame costs a single allocation instead of three.
+_LINEAR_ACCELERATION_SLICE = slice(0, 3)
+_ANGULAR_VELOCITY_SLICE = slice(3, 6)
+_ORIENTATION_SLICE = slice(6, 10)
+_FRAME_BUFFER_SIZE = 10
+
 
 def _get_invalid_imu_reading() -> object:
     global _INVALID_IMU_READING
@@ -88,67 +95,105 @@ class IMUSensor(_PhysicsSensorRuntime):
     def _get_invalid_reading(self) -> object:
         return _get_invalid_imu_reading()
 
+    def __init__(self, path: "str | IMU") -> None:
+        super().__init__(path)
+        # Held for the per-step in-place writes in get_data. Derived from the frame the base
+        # class just built rather than stashed by _init_frame, so the backing buffer and the
+        # views into it cannot drift apart if the frame is ever rebuilt.
+        self._frame_buffer = self._current_frame["linear_acceleration"].base
+
     def _init_frame(self) -> dict[str, object]:
-        orientation_array = np.zeros((4,), dtype=np.float32)
-        orientation_array[0] = 1.0  # Identity quaternion [w, x, y, z]
+        buffer = np.zeros((_FRAME_BUFFER_SIZE,), dtype=np.float32)
+        buffer[_ORIENTATION_SLICE.start] = 1.0  # Identity quaternion [w, x, y, z]
         return {
             "time": 0.0,
             "physics_step": 0.0,
-            "linear_acceleration": np.zeros((3,), dtype=np.float32),
-            "angular_velocity": np.zeros((3,), dtype=np.float32),
-            "orientation": orientation_array,
+            "linear_acceleration": buffer[_LINEAR_ACCELERATION_SLICE],
+            "angular_velocity": buffer[_ANGULAR_VELOCITY_SLICE],
+            "orientation": buffer[_ORIENTATION_SLICE],
         }
 
     def get_sensor_reading(self, read_gravity: bool = True) -> object:
         """Get the current IMU sensor reading as the raw C++ struct.
 
+        See :meth:`get_data` for what ``read_gravity`` selects.
+
+        .. deprecated:: 3.2.0
+
+            |br| ``read_gravity`` is deprecated and still honored. ``IsaacComputeOdometry``'s
+            ``globalLinearAcceleration`` is gravity-free, but reports world-frame acceleration of
+            the body rather than sensor-frame acceleration at this prim.
+
         Args:
-            read_gravity: Whether to include gravity in the reading.
+            read_gravity: Whether the accelerometer channel includes the gravity reaction
+                term.
 
         Returns:
-            The C++ ``ImuSensorReading`` struct directly. Access fields via
-            ``reading.linear_acceleration_x`` / ``_y`` / ``_z``,
-            ``reading.angular_velocity_x`` / ``_y`` / ``_z``, and
-            ``reading.orientation_w`` / ``_x`` / ``_y`` / ``_z`` (no aggregate
-            ``orientation`` accessor — read the four scalar fields). For a
-            ``[w, x, y, z]`` numpy array, use :meth:`get_data` instead.
+            The C++ ``ImuSensorReading`` struct, with scalar ``linear_acceleration_x`` /
+            ``_y`` / ``_z``, ``angular_velocity_x`` / ``_y`` / ``_z``, and ``orientation_w`` /
+            ``_x`` / ``_y`` / ``_z`` fields; use :meth:`get_data` for numpy arrays. A valid
+            reading is a fresh struct, an invalid one (``is_valid`` is ``False``) a shared
+            placeholder, so check ``is_valid`` before retaining it.
         """
         return self._get_reading(read_gravity)
 
     def get_data(self, read_gravity: bool = True) -> dict:
         """Get the current IMU sensor data as a structured frame.
 
+        ``read_gravity=True`` reports specific force, what an accelerometer measures: ``+g`` at
+        rest and ``0`` in free fall. ``read_gravity=False`` reports coordinate acceleration:
+        ``0`` at rest and ``-g`` in free fall. ``g`` is in stage linear units per second squared
+        (``981`` on a centimetre stage), on the sensor axis opposing gravity.
+
+        .. deprecated:: 3.2.0
+
+            |br| ``read_gravity`` is deprecated and still honored. ``IsaacComputeOdometry``'s
+            ``globalLinearAcceleration`` is gravity-free, but reports world-frame acceleration of
+            the body rather than sensor-frame acceleration at this prim.
+
         Args:
-            read_gravity: If ``True``, include gravity in acceleration readings.
+            read_gravity: Whether the accelerometer channel includes the gravity reaction
+                term.
 
         Returns:
-            Frame data containing:
+            Newly allocated frame data, independent of any other call, containing:
                 - ``"linear_acceleration"``: Linear acceleration ``[x, y, z]``.
                 - ``"angular_velocity"``: Angular velocity ``[x, y, z]``.
                 - ``"orientation"``: Orientation as ``[w, x, y, z]`` quaternion.
                 - ``"time"``: Simulation time of reading.
                 - ``"physics_step"``: Physics step number.
+
+        Note:
+            The frame is refreshed only on a valid reading; otherwise the previous values are
+            returned. Use :meth:`get_sensor_reading` and check ``is_valid`` to tell them apart,
+            or on a hot path to read the values without allocating a frame.
         """
         reading = self.get_sensor_reading(read_gravity=read_gravity)
+        frame = self._current_frame
 
         if reading.is_valid:
-            linear_acceleration = self._current_frame["linear_acceleration"]
-            linear_acceleration[0] = reading.linear_acceleration_x
-            linear_acceleration[1] = reading.linear_acceleration_y
-            linear_acceleration[2] = reading.linear_acceleration_z
+            buffer = self._frame_buffer
+            buffer[0] = reading.linear_acceleration_x
+            buffer[1] = reading.linear_acceleration_y
+            buffer[2] = reading.linear_acceleration_z
+            buffer[3] = reading.angular_velocity_x
+            buffer[4] = reading.angular_velocity_y
+            buffer[5] = reading.angular_velocity_z
+            buffer[6] = reading.orientation_w
+            buffer[7] = reading.orientation_x
+            buffer[8] = reading.orientation_y
+            buffer[9] = reading.orientation_z
 
-            angular_velocity = self._current_frame["angular_velocity"]
-            angular_velocity[0] = reading.angular_velocity_x
-            angular_velocity[1] = reading.angular_velocity_y
-            angular_velocity[2] = reading.angular_velocity_z
+            frame["time"] = reading.time
+            frame["physics_step"] = float(SimulationManager.get_num_physics_steps())
 
-            orientation = self._current_frame["orientation"]
-            orientation[0] = reading.orientation_w
-            orientation[1] = reading.orientation_x
-            orientation[2] = reading.orientation_y
-            orientation[3] = reading.orientation_z
-
-            self._current_frame["time"] = reading.time
-            self._current_frame["physics_step"] = float(SimulationManager.get_num_physics_steps())
-
-        return self._current_frame
+        # One allocation for all three channels; the returned arrays are views into it, so the
+        # caller still sees three independent, contiguous, writable arrays.
+        buffer = self._frame_buffer.copy()
+        return {
+            "time": frame["time"],
+            "physics_step": frame["physics_step"],
+            "linear_acceleration": buffer[_LINEAR_ACCELERATION_SLICE],
+            "angular_velocity": buffer[_ANGULAR_VELOCITY_SLICE],
+            "orientation": buffer[_ORIENTATION_SLICE],
+        }

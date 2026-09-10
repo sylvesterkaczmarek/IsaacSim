@@ -23,7 +23,7 @@ import tempfile
 
 import omni.kit.test
 from isaacsim.asset.transformer.rules.core.remove_schema import RemoveSchemaRule
-from pxr import Sdf, Usd
+from pxr import Sdf, Usd, UsdGeom, UsdPhysics
 
 from .common import _TEST_DATA_DIR
 
@@ -109,4 +109,56 @@ class TestRemoveSchemaRule(omni.kit.test.AsyncTestCase):
         ]
         self.assertEqual(removed_props, [])
 
+        self._success = True
+
+    async def test_process_rule_reads_routed_physics_layer(self) -> None:
+        """Delete routed drive schemas from a stronger MuJoCo overlay."""
+        physics_dir = os.path.join(self._tmpdir, "payloads", "Physics")
+        os.makedirs(physics_dir)
+        physics_path = os.path.join(physics_dir, "physics.usda")
+        mujoco_path = os.path.join(physics_dir, "mujoco.usda")
+        base_path = os.path.join(self._tmpdir, "payloads", "base.usda")
+
+        physics_stage = Usd.Stage.CreateNew(physics_path)
+        robot = UsdGeom.Xform.Define(physics_stage, "/robot")
+        physics_stage.SetDefaultPrim(robot.GetPrim())
+        joint = UsdPhysics.RevoluteJoint.Define(physics_stage, "/robot/Physics/joint").GetPrim()
+        UsdPhysics.DriveAPI.Apply(joint, "angular")
+        joint.ApplyAPI("PhysicsJointStateAPI", "angular")
+        physics_stage.GetRootLayer().Save()
+
+        base_stage = Usd.Stage.CreateNew(base_path)
+        base_robot = UsdGeom.Xform.Define(base_stage, "/robot")
+        base_stage.SetDefaultPrim(base_robot.GetPrim())
+        base_stage.GetRootLayer().Save()
+
+        mujoco_layer = Sdf.Layer.CreateNew(mujoco_path)
+        mujoco_layer.subLayerPaths.append("./physics.usda")
+        mujoco_layer.Save()
+
+        rule = RemoveSchemaRule(
+            source_stage=base_stage,
+            package_root=self._tmpdir,
+            destination_path="payloads/Physics",
+            args={
+                "params": {
+                    "stage_name": "mujoco.usda",
+                    "input_stage_path": "payloads/Physics/physics.usda",
+                    "schema_patterns": [r"Physics(Drive|JointState)API:angular"],
+                    "prim_path_patterns": [r"/robot/Physics/.*"],
+                }
+            },
+        )
+        rule.process_rule()
+
+        output_layer = Sdf.Layer.FindOrOpen(mujoco_path)
+        prim_spec = output_layer.GetPrimAtPath("/robot/Physics/joint")
+        deleted_items = list(prim_spec.GetInfo("apiSchemas").deletedItems or [])
+        self.assertCountEqual(deleted_items, ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"])
+
+        mujoco_stage = Usd.Stage.Open(mujoco_path)
+        composed_joint = mujoco_stage.GetPrimAtPath("/robot/Physics/joint")
+        applied_schemas = [str(schema) for schema in composed_joint.GetAppliedSchemas()]
+        self.assertNotIn("PhysicsDriveAPI:angular", applied_schemas)
+        self.assertNotIn("PhysicsJointStateAPI:angular", applied_schemas)
         self._success = True

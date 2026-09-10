@@ -25,16 +25,16 @@ from isaacsim.robot.manipulators.examples.franka import Franka
 
 
 class FollowTarget(tasks.FollowTarget):
-    """Franka robot follow target task.
+    """Franka robot follow-target task.
 
     Args:
         name: Task name.
-        target_prim_path: USD path for target.
+        target_prim_path: USD path for the target.
         target_name: Target name.
         target_position: Initial target position.
         target_orientation: Initial target orientation.
         offset: Task offset.
-        franka_prim_path: USD path for Franka robot.
+        franka_prim_path: USD path for the Franka robot.
         franka_robot_name: Robot name.
     """
 
@@ -63,7 +63,7 @@ class FollowTarget(tasks.FollowTarget):
         return
 
     def set_robot(self) -> Franka:
-        """Create and configure the Franka robot.
+        """Creates and configures the Franka robot.
 
         Returns:
             Configured Franka robot instance.

@@ -133,19 +133,19 @@ SUPPORTED_CAMERA_CONFIGS: dict[str, dict[str, Any]] = {
         "display_name": "Sensing SG8S-AR0820C-5300-G2A-H60SA",
     },
     # SICK
-    "/Isaac/Sensors/SICK/Inspector83x/SICK_Inspector83x.usd": {"display_name": "Inspector83x"},
-    "/Isaac/Sensors/SICK/InspectorP61x/SICK_InspectorP61x.usd": {"display_name": "InspectorP61x"},
+    "/Isaac/Sensors/SICK/Inspector83x/SICK_Inspector83x.usd": {"display_name": "SICK Inspector83x"},
+    "/Isaac/Sensors/SICK/InspectorP61x/SICK_InspectorP61x.usd": {"display_name": "SICK InspectorP61x"},
     "/Isaac/Sensors/SICK/safeVisionary2/SICK_safeVisionary2.usd": {
-        "display_name": "safeVisionary2",
+        "display_name": "SICK safeVisionary2",
         "is_depth_sensor": True,
     },
     "/Isaac/Sensors/SICK/Visionary-T_Mini/SICK_Visionary-T_Mini.usd": {
-        "display_name": "Visionary-T Mini",
+        "display_name": "SICK Visionary-T Mini",
         "is_depth_sensor": True,
     },
     # Stereolabs
     "/Isaac/Sensors/Stereolabs/ZED_X/ZED_X.usd": {
-        "display_name": "ZED_X",
+        "display_name": "Stereolabs ZED_X",
         "is_depth_sensor": True,
     },
 }

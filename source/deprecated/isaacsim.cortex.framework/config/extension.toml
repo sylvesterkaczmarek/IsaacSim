@@ -1,5 +1,5 @@
 [package]
-version = "1.0.18"
+version = "1.0.20"
 category = "Robotics"
 title = "Omni Isaac Cortex"
 description = "Isaac Cortex is a framework within NVIDIA's Isaac Sim that integrates various robotics tools into a unified system, facilitating the development of collaborative robotic applications. It emphasizes reactivity and adaptability, enabling robots to operate safely alongside humans without the need for physical barriers."
@@ -33,6 +33,7 @@ dependencies = [
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]
@@ -41,6 +42,7 @@ stdoutFailPatterns.exclude = [
 dependencies = [
     "omni.isaac.ml_archive",
 ]
+
 stdoutFailPatterns.exclude = [
     "*WARNING: cannot load logging configuration file*", # exclude warning as failure
     '*The NumPy module was reloaded*',
@@ -92,3 +94,6 @@ args = [
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
 ]
+
+[documentation]
+pages = ["docs/Overview.md"]

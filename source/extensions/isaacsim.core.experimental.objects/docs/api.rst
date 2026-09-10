@@ -15,6 +15,12 @@ The following table summarizes the available objects.
 
 .. currentmodule:: isaacsim.core.experimental.objects
 
+.. rubric:: stage
+.. autosummary::
+    :nosignatures:
+
+    Stage
+
 .. rubric:: camera
 .. autosummary::
     :nosignatures:
@@ -60,6 +66,15 @@ The following table summarizes the available objects.
 .. Details
 
 .. API
+
+Stage
+^^^^^
+
+.. autoclass:: isaacsim.core.experimental.objects.Stage
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :show-inheritance:
 
 Camera
 ^^^^^^

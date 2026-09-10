@@ -31,6 +31,21 @@ export ISAAC_PATH=$SCRIPT_DIR
 export EXP_PATH=$SCRIPT_DIR/apps
 source ${SCRIPT_DIR}/setup_python_env.sh
 
+# Check args for a flag to disable ROS environment setup
+NO_ROS_ENV=false
+for arg in "$@"; do
+    if [ "$arg" == "--no-ros-env" ]; then
+        NO_ROS_ENV=true
+        echo "Skipping automatic ROS environment setup"
+        break
+    fi
+done
+
+# Source ROS environment setup script if flag was not found
+if [ "$NO_ROS_ENV" == "false" ] && [ -f "$SCRIPT_DIR/setup_ros_env.sh" ]; then
+    source "$SCRIPT_DIR/setup_ros_env.sh"
+fi
+
 # By default use our python, but allow overriding it by checking if PYTHONEXE env var is defined:
 python_exe=${PYTHONEXE:-"${SCRIPT_DIR}/kit/python/bin/python3"}
 
@@ -41,6 +56,8 @@ filtered_args=()
 for arg in "$@"; do
     if [[ "$arg" == "--lldb-debug" ]]; then
         use_lldb=true
+    elif [[ "$arg" == "--no-ros-env" ]]; then
+        continue
     else
         filtered_args+=("$arg")
     fi

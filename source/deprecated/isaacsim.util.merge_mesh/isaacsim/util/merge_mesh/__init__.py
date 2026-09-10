@@ -15,6 +15,8 @@
 
 """Mesh merge utility for combining multiple USD meshes into one."""
 
-from .commands import *
-from .extension import *
-from .mesh_merger import *
+from .commands import MergeMeshesCommand as MergeMeshesCommand
+from .extension import Extension as Extension
+from .mesh_merger import MeshMerger as MeshMerger
+
+__all__ = ["MeshMerger", "MergeMeshesCommand"]

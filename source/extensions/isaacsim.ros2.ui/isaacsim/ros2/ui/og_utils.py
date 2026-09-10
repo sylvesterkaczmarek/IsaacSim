@@ -15,24 +15,36 @@
 
 """Utility functions for creating ROS 2 OmniGraph shortcuts."""
 
-from pathlib import Path
-
-import omni.graph.core as og
+import isaacsim.core.experimental.utils.prim as prim_utils
 import omni.ui as ui
-import omni.usd
 import OmniGraphSchema
-from isaacsim.core.experimental.utils import stage as stage_utils
-from isaacsim.gui.components.callbacks import on_docs_link_clicked, on_open_IDE_clicked
-from isaacsim.gui.components.style import get_style
-from isaacsim.gui.components.ui_utils import dropdown_builder
+from isaacsim.gui.components import dropdown_builder
 from isaacsim.gui.components.widgets import ParamWidget, SelectPrimWidget
-from omni.kit.menu.utils import MenuHelperWindow
+from isaacsim.ros2.nodes import (
+    Ros2ClockGraphConfig,
+    Ros2GenericPublisherGraphConfig,
+    Ros2JointStatesGraphConfig,
+    Ros2OdometryGraphConfig,
+    Ros2TfGraphConfig,
+    create_ros2_clock_graph,
+    create_ros2_generic_publisher_graph,
+    create_ros2_joint_states_graph,
+    create_ros2_odometry_graph,
+    create_ros2_tf_graph,
+)
 from omni.kit.notification_manager import NotificationStatus, post_notification
 from omni.kit.window.extensions import SimpleCheckBox
-from pxr import Sdf
+
+from .og_common import (
+    Ros2GraphWindow,
+    add_ok_cancel_buttons,
+    add_script_docs_footer,
+    validate_existing_graph_path,
+    validate_new_graph_path,
+)
 
 
-class Ros2ClockGraph(MenuHelperWindow):
+class Ros2ClockGraph(Ros2GraphWindow):
     """A UI window for creating ROS2 Clock OmniGraph.
 
     This class provides a dialog interface that allows users to configure and generate an OmniGraph for publishing
@@ -63,29 +75,10 @@ class Ros2ClockGraph(MenuHelperWindow):
         Stops the timeline and constructs a graph containing nodes for playback tick, simulation time reading,
         clock publishing, and ROS2 context. The graph is set up to publish simulation time as ROS2 clock messages.
         """
-        self._timeline = omni.timeline.get_timeline_interface()
-        self._timeline.stop()
-
-        keys = og.Controller.Keys
-        graph, nodes, _, _ = og.Controller.edit(
-            {"graph_path": self._og_path, "evaluator_name": "execution"},
-            {
-                keys.CREATE_NODES: [
-                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                    ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
-                    ("PublishClock", "isaacsim.ros2.bridge.ROS2PublishClock"),
-                    ("Context", "isaacsim.ros2.bridge.ROS2Context"),
-                ],
-                keys.CONNECT: [
-                    ("OnPlaybackTick.outputs:tick", "PublishClock.inputs:execIn"),
-                    ("Context.outputs:context", "PublishClock.inputs:context"),
-                    ("ReadSimTime.outputs:simulationTime", "PublishClock.inputs:timeStamp"),
-                ],
-                keys.SET_VALUES: [
-                    ("ReadSimTime.inputs:resetOnStop", True),
-                ],
-            },
-        )
+        try:
+            self._og_path = create_ros2_clock_graph(Ros2ClockGraphConfig(graph_path=self._og_path))
+        except (ValueError, RuntimeError) as exc:
+            post_notification(str(exc), status=NotificationStatus.WARNING)
 
     def _build_ui(self) -> None:
         """Construct the UI elements for the ROS2 clock graph configuration window.
@@ -101,34 +94,11 @@ class Ros2ClockGraph(MenuHelperWindow):
         with self.frame:
             with ui.VStack(spacing=4):
                 self.og_path_input = ParamWidget(field_def=og_path_def)
-                with ui.HStack():
-                    ui.Spacer(width=ui.Percent(10))
-                    ui.Button("OK", height=40, width=ui.Percent(30), clicked_fn=self._on_ok)
-                    ui.Spacer(width=ui.Percent(20))
-                    ui.Button("Cancel", height=40, width=ui.Percent(30), clicked_fn=self._on_cancel)
-                    ui.Spacer(width=ui.Percent(10))
-                with ui.Frame(height=30):
-                    with ui.VStack():
-                        with ui.HStack():
-                            ui.Label("Python Script for Graph Generation", width=ui.Percent(30))
-                            ui.Button(
-                                name="IconButton",
-                                width=24,
-                                height=24,
-                                clicked_fn=lambda: on_open_IDE_clicked("", __file__),
-                                style=get_style()["IconButton.Image::OpenConfig"],
-                            )
-                        with ui.HStack():
-                            ui.Label("Documentations", width=0, word_wrap=True)
-                            ui.Button(
-                                name="IconButton",
-                                width=24,
-                                height=24,
-                                clicked_fn=lambda: on_docs_link_clicked(
-                                    "https://docs.isaacsim.omniverse.nvidia.com/latest/ros2_tutorials/tutorial_ros2_clock.html#graph-shortcut"
-                                ),
-                                style=get_style()["IconButton.Image::OpenLink"],
-                            )
+                add_ok_cancel_buttons(self._on_ok, self._on_cancel)
+                add_script_docs_footer(
+                    __file__,
+                    "https://docs.isaacsim.omniverse.nvidia.com/latest/ros2_tutorials/tutorial_ros2_clock.html#graph-shortcut",
+                )
 
         return
 
@@ -140,19 +110,7 @@ class Ros2ClockGraph(MenuHelperWindow):
         """
         self._og_path = self.og_path_input.get_value()
 
-        param_check = self._check_params()
-        if param_check:
-            self.make_graph()
-            self.visible = False
-        else:
-            post_notification("Parameter check failed", status=NotificationStatus.WARNING)
-
-    def _on_cancel(self) -> None:
-        """Handle the Cancel button click event.
-
-        Closes the ROS2 clock graph configuration window without creating a graph.
-        """
-        self.visible = False
+        self._finish_on_ok()
 
     def _check_params(self) -> bool:
         """Validate the graph path parameter.
@@ -163,19 +121,10 @@ class Ros2ClockGraph(MenuHelperWindow):
             False if a graph already exists at the specified path, True otherwise.
 
         """
-        stage = omni.usd.get_context().get_stage()
-        og_prim = stage.GetPrimAtPath(self._og_path)
-        if og_prim.IsValid() and og_prim.IsA(OmniGraphSchema.OmniGraph):
-            msg = self._og_path + "already exist. Delete the existing clock graph or change the graph path"
-            post_notification(msg, status=NotificationStatus.WARNING)
-            return False
-        else:
-            pass
-
-        return True
+        return validate_new_graph_path(self._og_path, "clock graph")
 
 
-class Ros2GenericPubGraph(MenuHelperWindow):
+class Ros2GenericPubGraph(Ros2GraphWindow):
     """A UI window for creating ROS2 generic publisher graphs in Isaac Sim.
 
     This window provides a user interface to generate OmniGraph graphs that publish various message types to ROS2 topics.
@@ -217,36 +166,7 @@ class Ros2GenericPubGraph(MenuHelperWindow):
         The graph includes nodes for playback tick, generic publisher configured for Float32 messages, RTF computation,
         and ROS2 context.
         """
-        self._timeline = omni.timeline.get_timeline_interface()
-        self._timeline.stop()
-
-        keys = og.Controller.Keys
-        graph, nodes, _, _ = og.Controller.edit(
-            {"graph_path": self._og_path, "evaluator_name": "execution"},
-            {
-                keys.CREATE_NODES: [
-                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                    ("GenericPublisher", "isaacsim.ros2.bridge.ROS2Publisher"),
-                    ("RTF", "isaacsim.core.nodes.IsaacRealTimeFactor"),
-                    ("Context", "isaacsim.ros2.bridge.ROS2Context"),
-                ],
-                keys.SET_VALUES: [
-                    ("GenericPublisher.inputs:messageName", "Float32"),
-                    ("GenericPublisher.inputs:messagePackage", "std_msgs"),
-                    ("GenericPublisher.inputs:messageSubfolder", "msg"),
-                ],
-                keys.CONNECT: [
-                    ("OnPlaybackTick.outputs:tick", "GenericPublisher.inputs:execIn"),
-                    ("Context.outputs:context", "GenericPublisher.inputs:context"),
-                ],
-            },
-        )
-
-        # Have a separate connection since we need GenericPublisher to run least one frame for it generate the input fields
-        og.Controller.connect(
-            og.Controller.attribute(self._og_path + "/RTF.outputs:rtf"),
-            og.Controller.attribute(self._og_path + "/GenericPublisher.inputs:data"),
-        )
+        self._make_generic_graph("rtf_float32")
 
     def make_bool_graph(self) -> None:
         """Create a ROS2 publisher graph that publishes a boolean value.
@@ -254,37 +174,7 @@ class Ros2GenericPubGraph(MenuHelperWindow):
         The graph includes nodes for playback tick, generic publisher configured for Bool messages, a constant boolean
         value, and ROS2 context.
         """
-        self._timeline = omni.timeline.get_timeline_interface()
-        self._timeline.stop()
-
-        keys = og.Controller.Keys
-        graph, nodes, _, _ = og.Controller.edit(
-            {"graph_path": self._og_path, "evaluator_name": "execution"},
-            {
-                keys.CREATE_NODES: [
-                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                    ("GenericPublisher", "isaacsim.ros2.bridge.ROS2Publisher"),
-                    ("ConstBool", "omni.graph.nodes.ConstantBool"),
-                    ("Context", "isaacsim.ros2.bridge.ROS2Context"),
-                ],
-                keys.SET_VALUES: [
-                    ("GenericPublisher.inputs:messageName", "Bool"),
-                    ("GenericPublisher.inputs:messagePackage", "std_msgs"),
-                    ("GenericPublisher.inputs:messageSubfolder", "msg"),
-                    ("ConstBool.inputs:value", True),
-                ],
-                keys.CONNECT: [
-                    ("OnPlaybackTick.outputs:tick", "GenericPublisher.inputs:execIn"),
-                    ("Context.outputs:context", "GenericPublisher.inputs:context"),
-                ],
-            },
-        )
-
-        # Have a separate connection since we need GenericPublisher to run least one frame for it generate the input fields
-        og.Controller.connect(
-            og.Controller.attribute(self._og_path + "/ConstBool.inputs:value"),
-            og.Controller.attribute(self._og_path + "/GenericPublisher.inputs:data"),
-        )
+        self._make_generic_graph("bool")
 
     def make_int64_graph(self) -> None:
         """Create a ROS2 publisher graph that publishes an Int64 value.
@@ -292,37 +182,7 @@ class Ros2GenericPubGraph(MenuHelperWindow):
         The graph includes nodes for playback tick, generic publisher configured for Int64 messages, a constant integer
         value set to 42, and ROS2 context.
         """
-        self._timeline = omni.timeline.get_timeline_interface()
-        self._timeline.stop()
-
-        keys = og.Controller.Keys
-        graph, nodes, _, _ = og.Controller.edit(
-            {"graph_path": self._og_path, "evaluator_name": "execution"},
-            {
-                keys.CREATE_NODES: [
-                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                    ("GenericPublisher", "isaacsim.ros2.bridge.ROS2Publisher"),
-                    ("ConstInt", "omni.graph.nodes.ConstantInt64"),
-                    ("Context", "isaacsim.ros2.bridge.ROS2Context"),
-                ],
-                keys.SET_VALUES: [
-                    ("GenericPublisher.inputs:messageName", "Int64"),
-                    ("GenericPublisher.inputs:messagePackage", "std_msgs"),
-                    ("GenericPublisher.inputs:messageSubfolder", "msg"),
-                    ("ConstInt.inputs:value", 42),
-                ],
-                keys.CONNECT: [
-                    ("OnPlaybackTick.outputs:tick", "GenericPublisher.inputs:execIn"),
-                    ("Context.outputs:context", "GenericPublisher.inputs:context"),
-                ],
-            },
-        )
-
-        # Have a separate connection since we need GenericPublisher to run least one frame for it generate the input fields
-        og.Controller.connect(
-            og.Controller.attribute(self._og_path + "/ConstInt.inputs:value"),
-            og.Controller.attribute(self._og_path + "/GenericPublisher.inputs:data"),
-        )
+        self._make_generic_graph("int64")
 
     def make_string_graph(self) -> None:
         """Create a ROS2 publisher graph that publishes a string message.
@@ -330,37 +190,15 @@ class Ros2GenericPubGraph(MenuHelperWindow):
         The graph includes nodes for playback tick, generic publisher configured for String messages, a constant string
         value, and ROS2 context.
         """
-        self._timeline = omni.timeline.get_timeline_interface()
-        self._timeline.stop()
+        self._make_generic_graph("string")
 
-        keys = og.Controller.Keys
-        graph, nodes, _, _ = og.Controller.edit(
-            {"graph_path": self._og_path, "evaluator_name": "execution"},
-            {
-                keys.CREATE_NODES: [
-                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                    ("GenericPublisher", "isaacsim.ros2.bridge.ROS2Publisher"),
-                    ("ConstToken", "omni.graph.nodes.ConstantToken"),
-                    ("Context", "isaacsim.ros2.bridge.ROS2Context"),
-                ],
-                keys.SET_VALUES: [
-                    ("GenericPublisher.inputs:messageName", "String"),
-                    ("GenericPublisher.inputs:messagePackage", "std_msgs"),
-                    ("GenericPublisher.inputs:messageSubfolder", "msg"),
-                    ("ConstToken.inputs:value", "Hello from Isaac Sim!"),
-                ],
-                keys.CONNECT: [
-                    ("OnPlaybackTick.outputs:tick", "GenericPublisher.inputs:execIn"),
-                    ("Context.outputs:context", "GenericPublisher.inputs:context"),
-                ],
-            },
-        )
-
-        # Have a separate connection since we need GenericPublisher to run least one frame for it generate the input fields
-        og.Controller.connect(
-            og.Controller.attribute(self._og_path + "/ConstToken.inputs:value"),
-            og.Controller.attribute(self._og_path + "/GenericPublisher.inputs:data"),
-        )
+    def _make_generic_graph(self, publisher_kind: str) -> None:
+        try:
+            self._og_path = create_ros2_generic_publisher_graph(
+                Ros2GenericPublisherGraphConfig(graph_path=self._og_path, publisher_kind=publisher_kind)
+            )
+        except (ValueError, RuntimeError) as exc:
+            post_notification(str(exc), status=NotificationStatus.WARNING)
 
     def _build_ui(self) -> None:
         """Build the UI for the ROS2 Generic Publisher Graph window.
@@ -382,34 +220,11 @@ class Ros2GenericPubGraph(MenuHelperWindow):
                     items=[names for (names, _) in self._dropdown_operations_list],
                     tooltip="Select an example generic publisher graph",
                 )
-                with ui.HStack():
-                    ui.Spacer(width=ui.Percent(10))
-                    ui.Button("OK", height=40, width=ui.Percent(30), clicked_fn=self._on_ok)
-                    ui.Spacer(width=ui.Percent(20))
-                    ui.Button("Cancel", height=40, width=ui.Percent(30), clicked_fn=self._on_cancel)
-                    ui.Spacer(width=ui.Percent(10))
-                with ui.Frame(height=30):
-                    with ui.VStack():
-                        with ui.HStack():
-                            ui.Label("Python Script for Graph Generation", width=ui.Percent(30))
-                            ui.Button(
-                                name="IconButton",
-                                width=24,
-                                height=24,
-                                clicked_fn=lambda: on_open_IDE_clicked("", __file__),
-                                style=get_style()["IconButton.Image::OpenConfig"],
-                            )
-                        with ui.HStack():
-                            ui.Label("Documentations", width=0, word_wrap=True)
-                            ui.Button(
-                                name="IconButton",
-                                width=24,
-                                height=24,
-                                clicked_fn=lambda: on_docs_link_clicked(
-                                    "https://docs.isaacsim.omniverse.nvidia.com/latest/ros2_tutorials/tutorial_ros2_generic_publisher_subscriber.html"
-                                ),
-                                style=get_style()["IconButton.Image::OpenLink"],
-                            )
+                add_ok_cancel_buttons(self._on_ok, self._on_cancel)
+                add_script_docs_footer(
+                    __file__,
+                    "https://docs.isaacsim.omniverse.nvidia.com/latest/ros2_tutorials/tutorial_ros2_generic_publisher_subscriber.html",
+                )
         return
 
     def _on_ok(self) -> None:
@@ -419,20 +234,9 @@ class Ros2GenericPubGraph(MenuHelperWindow):
         """
         self._og_path = self.og_path_input.get_value()
 
-        param_check = self._check_params()
-        if param_check:
-            # self.make_graph()
-            self._dropdown_operations_list[self._dropdown_model.get_item_value_model().as_int][1]()
-            self.visible = False
-        else:
-            post_notification("Parameter check failed", status=NotificationStatus.WARNING)
-
-    def _on_cancel(self) -> None:
-        """Handle the Cancel button click event.
-
-        Closes the window without creating a graph.
-        """
-        self.visible = False
+        self._finish_on_ok(
+            lambda: self._dropdown_operations_list[self._dropdown_model.get_item_value_model().as_int][1]()
+        )
 
     def _check_params(self) -> bool:
         """Validate the graph parameters.
@@ -443,19 +247,10 @@ class Ros2GenericPubGraph(MenuHelperWindow):
             True if parameters are valid, False otherwise.
 
         """
-        stage = omni.usd.get_context().get_stage()
-        og_prim = stage.GetPrimAtPath(self._og_path)
-        if og_prim.IsValid() and og_prim.IsA(OmniGraphSchema.OmniGraph):
-            msg = self._og_path + "already exist. Delete the existing clock graph or change the graph path"
-            post_notification(msg, status=NotificationStatus.WARNING)
-            return False
-        else:
-            pass
-
-        return True
+        return validate_new_graph_path(self._og_path, "generic publisher graph")
 
 
-class Ros2JointStatesGraph(MenuHelperWindow):
+class Ros2JointStatesGraph(Ros2GraphWindow):
     """A UI window for generating OmniGraph graphs that publish and subscribe to ROS 2 joint state messages.
 
     This class provides a graphical interface to create OmniGraph configurations for ROS 2 joint state communication.
@@ -504,153 +299,22 @@ class Ros2JointStatesGraph(MenuHelperWindow):
         When subscribing is enabled, it adds a joint state subscriber node and optionally an articulation controller
         node to move the robot based on received joint commands.
         """
-        self._timeline = omni.timeline.get_timeline_interface()
-        self._timeline.stop()
-
-        keys = og.Controller.Keys
-
-        # if starting from a new graph, start it with just a tick,context, and sim_time node, the rest is the same for adding to exsiting graph
-        if not self._add_to_existing_graph:
-            self._og_path = stage_utils.generate_next_free_path(self._og_path, prepend_default_prim=False)
-            graph_handle, nodes, _, _ = og.Controller.edit(
-                {"graph_path": self._og_path, "evaluator_name": "execution"},
-                {
-                    keys.CREATE_NODES: [
-                        ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                        ("Context", "isaacsim.ros2.bridge.ROS2Context"),
-                        ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
-                    ],
-                    keys.SET_VALUES: [
-                        ("ReadSimTime.inputs:resetOnStop", True),
-                    ],
-                },
+        try:
+            self._og_path = create_ros2_joint_states_graph(
+                Ros2JointStatesGraphConfig(
+                    graph_path=self._og_path,
+                    articulation_root=self._art_root_path,
+                    node_namespace=self._node_namespace,
+                    publish_topic=self._pub_topic,
+                    subscribe_topic=self._sub_topic,
+                    add_to_existing_graph=self._add_to_existing_graph,
+                    publish_joint_states=self._publisher,
+                    subscribe_joint_states=self._subscriber,
+                    move_robot_on_subscribe=self._sub_move_robot,
+                )
             )
-        else:
-            graph_handle = og.get_graph_by_path(self._og_path)
-
-        # to an existin graph
-        # traverse through the graph
-        all_nodes = graph_handle.get_nodes()
-        js_pub_node_name = "PublisherJointState"
-        js_sub_node_name = "SubscriberJointState"
-        art_node_name = "ArticulationController"
-        tick_node = None
-        context_node = None
-        sim_time_node = None
-        for node in all_nodes:
-            node_path = node.get_prim_path()
-            node_type = node.get_type_name()
-            if node_type == "omni.graph.action.OnPlaybackTick" or node_type == "omni.graph.action.OnTick":
-                tick_node = node_path
-            elif node_type == "isaacsim.ros2.bridge.ROS2Context":
-                context_node = node_path
-            elif node_type == "isaacsim.core.nodes.IsaacReadSimulationTime":
-                sim_time_node = node_path
-            elif node_type == "isaacsim.ros2.bridge.ROS2PublishJointState":
-                # if there already exist a js pub node, add a new one with a different name
-                js_pub_node_path = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
-                js_pub_node_name = Path(js_pub_node_path).name
-            elif node_type == "isaacsim.ros2.bridge.ROS2SubscribeJointState":
-                # if there already exist a js sub node, add a new one with a different name
-                js_sub_node_path = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
-                js_sub_node_name = Path(js_sub_node_path).name
-            elif node_type == "isaacsim.core.nodes.IsaacArticulationController":
-                msg = "already has an articulation controller node, CREATING A NEW ARTICULATION NODE"
-                print(msg)
-                post_notification(msg, status=NotificationStatus.WARNING)
-                art_node = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
-                art_node_name = Path(art_node).name
-
-        if self._publisher:
-            og.Controller.edit(
-                graph_handle,
-                {
-                    keys.CREATE_NODES: [
-                        (js_pub_node_name, "isaacsim.ros2.bridge.ROS2PublishJointState"),
-                    ],
-                    keys.SET_VALUES: [
-                        (js_pub_node_name + ".inputs:targetPrim", self._art_root_path),
-                        (js_pub_node_name + ".inputs:topicName", self._pub_topic),
-                        (js_pub_node_name + ".inputs:nodeNamespace", self._node_namespace),
-                    ],
-                },
-            )
-
-            if tick_node:
-                og.Controller.connect(
-                    og.Controller.attribute(tick_node + ".outputs:tick"),
-                    og.Controller.attribute(self._og_path + "/" + js_pub_node_name + ".inputs:execIn"),
-                )
-            if context_node:
-                og.Controller.connect(
-                    og.Controller.attribute(context_node + ".outputs:context"),
-                    og.Controller.attribute(self._og_path + "/" + js_pub_node_name + ".inputs:context"),
-                )
-            if sim_time_node:
-                og.Controller.connect(
-                    og.Controller.attribute(sim_time_node + ".outputs:simulationTime"),
-                    og.Controller.attribute(self._og_path + "/" + js_pub_node_name + ".inputs:timeStamp"),
-                )
-
-        if self._subscriber:
-            og.Controller.edit(
-                graph_handle,
-                {
-                    keys.CREATE_NODES: [
-                        (js_sub_node_name, "isaacsim.ros2.bridge.ROS2SubscribeJointState"),
-                    ],
-                    keys.SET_VALUES: [
-                        (js_sub_node_name + ".inputs:topicName", self._sub_topic),
-                        (self._og_path + "/" + js_sub_node_name + ".inputs:nodeNamespace", self._node_namespace),
-                    ],
-                },
-            )
-
-            if tick_node:
-                og.Controller.connect(
-                    og.Controller.attribute(tick_node + ".outputs:tick"),
-                    og.Controller.attribute(self._og_path + "/" + js_sub_node_name + ".inputs:execIn"),
-                )
-            if context_node:
-                og.Controller.connect(
-                    og.Controller.attribute(context_node + ".outputs:context"),
-                    og.Controller.attribute(self._og_path + "/" + js_sub_node_name + ".inputs:context"),
-                )
-
-            if self._sub_move_robot:
-                og.Controller.edit(
-                    graph_handle,
-                    {
-                        keys.CREATE_NODES: [
-                            (art_node_name, "isaacsim.core.nodes.IsaacArticulationController"),
-                        ],
-                        keys.SET_VALUES: [
-                            (art_node_name + ".inputs:targetPrim", self._art_root_path),
-                        ],
-                        keys.CONNECT: [
-                            (
-                                tick_node + ".outputs:tick",
-                                self._og_path + "/" + art_node_name + ".inputs:execIn",
-                            ),
-                            (
-                                self._og_path + "/" + js_sub_node_name + ".outputs:positionCommand",
-                                self._og_path + "/" + art_node_name + ".inputs:positionCommand",
-                            ),
-                            (
-                                self._og_path + "/" + js_sub_node_name + ".outputs:velocityCommand",
-                                self._og_path + "/" + art_node_name + ".inputs:velocityCommand",
-                            ),
-                            (
-                                self._og_path + "/" + js_sub_node_name + ".outputs:effortCommand",
-                                self._og_path + "/" + art_node_name + ".inputs:effortCommand",
-                            ),
-                            (
-                                self._og_path + "/" + js_sub_node_name + ".outputs:jointNames",
-                                self._og_path + "/" + art_node_name + ".inputs:jointNames",
-                            ),
-                        ],
-                    },
-                )
+        except (ValueError, RuntimeError) as exc:
+            post_notification(str(exc), status=NotificationStatus.WARNING)
 
     def _build_ui(self) -> None:
         """Construct the user interface for the ROS2 Joint States Graph window.
@@ -697,34 +361,11 @@ class Ros2JointStatesGraph(MenuHelperWindow):
                     ui.Label("Move Robot?", width=ui.Percent(15))
                     cb = ui.SimpleBoolModel(default_value=self._sub_move_robot)
                     SimpleCheckBox(self._sub_move_robot, self._on_sub_move_robot, model=cb)
-                with ui.HStack():
-                    ui.Spacer(width=ui.Percent(10))
-                    ui.Button("OK", height=40, width=ui.Percent(30), clicked_fn=self._on_ok)
-                    ui.Spacer(width=ui.Percent(20))
-                    ui.Button("Cancel", height=40, width=ui.Percent(30), clicked_fn=self._on_cancel)
-                    ui.Spacer(width=ui.Percent(10))
-                with ui.Frame(height=30):
-                    with ui.VStack():
-                        with ui.HStack():
-                            ui.Label("Python Script for Graph Generation", width=ui.Percent(30))
-                            ui.Button(
-                                name="IconButton",
-                                width=24,
-                                height=24,
-                                clicked_fn=lambda: on_open_IDE_clicked("", __file__),
-                                style=get_style()["IconButton.Image::OpenConfig"],
-                            )
-                        with ui.HStack():
-                            ui.Label("Documentations", width=0, word_wrap=True)
-                            ui.Button(
-                                name="IconButton",
-                                width=24,
-                                height=24,
-                                clicked_fn=lambda: on_docs_link_clicked(
-                                    "https://docs.isaacsim.omniverse.nvidia.com/latest/ros2_tutorials/tutorial_ros2_manipulation.html#graph-shortcut"
-                                ),
-                                style=get_style()["IconButton.Image::OpenLink"],
-                            )
+                add_ok_cancel_buttons(self._on_ok, self._on_cancel)
+                add_script_docs_footer(
+                    __file__,
+                    "https://docs.isaacsim.omniverse.nvidia.com/latest/ros2_tutorials/tutorial_ros2_manipulation.html#graph-shortcut",
+                )
         return
 
     def _on_ok(self) -> None:
@@ -739,19 +380,7 @@ class Ros2JointStatesGraph(MenuHelperWindow):
         self._pub_topic = self.pub_topic_input.get_value()
         self._sub_topic = self.sub_topic_input.get_value()
 
-        param_check = self._check_params()
-        if param_check:
-            self.make_graph()
-            self.visible = False
-        else:
-            post_notification("Parameter check failed", status=NotificationStatus.WARNING)
-
-    def _on_cancel(self) -> None:
-        """Handle the Cancel button click event.
-
-        This method hides the window without creating or modifying the graph.
-        """
-        self.visible = False
+        self._finish_on_ok()
 
     def _check_params(self) -> bool:
         """Validate the graph parameters.
@@ -763,28 +392,10 @@ class Ros2JointStatesGraph(MenuHelperWindow):
             True if all parameters are valid, False otherwise.
 
         """
-        stage = omni.usd.get_context().get_stage()
-
-        if self._add_to_existing_graph:
-            # make sure the "existing" graph exist
-            og_prim = stage.GetPrimAtPath(self._og_path)
-            if og_prim.IsValid() and og_prim.IsA(OmniGraphSchema.OmniGraph):
-                pass
-            else:
-                msg = self._og_path + "is not an existing graph, check the og path"
-                post_notification(msg, status=NotificationStatus.WARNING)
-                return False
+        if self._add_to_existing_graph and not validate_existing_graph_path(self._og_path):
+            return False
 
         return True
-
-    def _on_use_existing_graph(self, check_state: bool) -> None:
-        """Handle the checkbox state change for adding to an existing graph.
-
-        Args:
-            check_state: Whether to add to an existing graph.
-
-        """
-        self._add_to_existing_graph = check_state
 
     def _on_pub_graph(self, check_state: bool) -> None:
         """Handle the checkbox state change for enabling the publisher.
@@ -814,7 +425,7 @@ class Ros2JointStatesGraph(MenuHelperWindow):
         self._sub_move_robot = check_state
 
 
-class Ros2TfPubGraph(MenuHelperWindow):
+class Ros2TfPubGraph(Ros2GraphWindow):
     """A UI window for creating ROS2 transform (TF) publisher graphs.
 
     This class provides an interface for setting up OmniGraph graphs that publish coordinate frame transformations
@@ -851,93 +462,21 @@ class Ros2TfPubGraph(MenuHelperWindow):
         transform tree publisher nodes to an existing graph. Configures connections between nodes based on the
         graph structure and user preferences.
         """
-        self._timeline = omni.timeline.get_timeline_interface()
-        self._timeline.stop()
-
-        keys = og.Controller.Keys
-        # if starting from a new graph, start it with just a tick,context, and sim_time node, the rest is the same for adding to exsiting graph
-        if not self._add_to_existing_graph:
-            self._og_path = stage_utils.generate_next_free_path(self._og_path, prepend_default_prim=False)
-            graph_handle, nodes, _, _ = og.Controller.edit(
-                {"graph_path": self._og_path, "evaluator_name": "execution"},
-                {
-                    keys.CREATE_NODES: [
-                        ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                        ("Context", "isaacsim.ros2.bridge.ROS2Context"),
-                        ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
-                    ],
-                    keys.SET_VALUES: [
-                        ("ReadSimTime.inputs:resetOnStop", True),
-                    ],
-                },
+        try:
+            self._og_path = create_ros2_tf_graph(
+                Ros2TfGraphConfig(
+                    graph_path=self._og_path,
+                    target_prim=self._target_prim,
+                    parent_prim=self._parent_prim,
+                    topic=self._pub_topic,
+                    node_namespace=self._node_namespace,
+                    add_to_existing_graph=self._add_to_existing_graph,
+                    append_to_existing_tf_node=self._add_to_existing_node,
+                    existing_tf_node_path=self._existing_node_path,
+                )
             )
-        else:
-            graph_handle = og.get_graph_by_path(self._og_path)
-
-        # to an existin graph
-        # traverse through the graph
-        all_nodes = graph_handle.get_nodes()
-        tf_pub_name = "PublisherTF"
-        tick_node = None
-        context_node = None
-        sim_time_node = None
-        for node in all_nodes:
-            node_path = node.get_prim_path()
-            node_type = node.get_type_name()
-            if node_type == "omni.graph.action.OnPlaybackTick" or node_type == "omni.graph.action.OnTick":
-                tick_node = node_path
-            elif node_type == "isaacsim.ros2.bridge.ROS2Context":
-                context_node = node_path
-            elif node_type == "isaacsim.core.nodes.IsaacReadSimulationTime":
-                sim_time_node = node_path
-            elif node_type == "isaacsim.ros2.bridge.ROS2PublishTransformTree":
-                self._has_existing_node = True
-                if self._add_to_existing_node:
-                    # if adding to an existing node, simply append the target prim to the existing list of target prims
-                    tf_pub_node = self._existing_node_path
-
-                else:
-                    # get ready to add a new tf node
-                    tf_pub_node = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
-                    tf_pub_name = Path(tf_pub_node).name
-
-        if self._has_existing_node and self._add_to_existing_node:
-            ## if add to existing node, simply append it to the existing list of target prims
-            existing_targets = og.Controller.attribute(tf_pub_node + ".inputs:targetPrims").get()
-            existing_targets.append(Sdf.Path(self._target_prim))
-            # must use this controller edit function, not og.controller.attribute().set() for some reason
-            og.Controller.edit(
-                graph_handle, {keys.SET_VALUES: [(tf_pub_node + ".inputs:targetPrims", existing_targets)]}
-            )
-
-        else:
-            ## if need to create a new tf node
-            compute_tf_name = "Compute" + tf_pub_name
-            og.Controller.edit(
-                graph_handle,
-                {
-                    keys.CREATE_NODES: [
-                        (compute_tf_name, "isaacsim.core.nodes.IsaacComputeTransformTree"),
-                        (tf_pub_name, "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
-                    ],
-                    keys.SET_VALUES: [
-                        (compute_tf_name + ".inputs:parentPrim", self._parent_prim),
-                        (compute_tf_name + ".inputs:targetPrims", self._target_prim),
-                        (tf_pub_name + ".inputs:topicName", self._pub_topic),
-                        (tf_pub_name + ".inputs:nodeNamespace", self._node_namespace),
-                    ],
-                    keys.CONNECT: [
-                        (tick_node + ".outputs:tick", compute_tf_name + ".inputs:execIn"),
-                        (compute_tf_name + ".outputs:execOut", tf_pub_name + ".inputs:execIn"),
-                        (compute_tf_name + ".outputs:parentFrames", tf_pub_name + ".inputs:parentFrames"),
-                        (compute_tf_name + ".outputs:childFrames", tf_pub_name + ".inputs:childFrames"),
-                        (compute_tf_name + ".outputs:translations", tf_pub_name + ".inputs:translations"),
-                        (compute_tf_name + ".outputs:orientations", tf_pub_name + ".inputs:orientations"),
-                        (sim_time_node + ".outputs:simulationTime", tf_pub_name + ".inputs:timeStamp"),
-                        (context_node + ".outputs:context", tf_pub_name + ".inputs:context"),
-                    ],
-                },
-            )
+        except (ValueError, RuntimeError) as exc:
+            post_notification(str(exc), status=NotificationStatus.WARNING)
 
     def _build_ui(self) -> None:
         """Construct the UI elements for the ROS2 TF Publisher Graph window.
@@ -979,34 +518,11 @@ class Ros2TfPubGraph(MenuHelperWindow):
                 self.pub_topic_input = ParamWidget(field_def=pub_topic_def)
                 ui.Spacer(width=ui.Percent(20))
 
-                with ui.HStack():
-                    ui.Spacer(width=ui.Percent(10))
-                    ui.Button("OK", height=40, width=ui.Percent(30), clicked_fn=self._on_ok)
-                    ui.Spacer(width=ui.Percent(20))
-                    ui.Button("Cancel", height=40, width=ui.Percent(30), clicked_fn=self._on_cancel)
-                    ui.Spacer(width=ui.Percent(10))
-                with ui.Frame(height=30):
-                    with ui.VStack():
-                        with ui.HStack():
-                            ui.Label("Python Script for Graph Generation", width=ui.Percent(30))
-                            ui.Button(
-                                name="IconButton",
-                                width=24,
-                                height=24,
-                                clicked_fn=lambda: on_open_IDE_clicked("", __file__),
-                                style=get_style()["IconButton.Image::OpenConfig"],
-                            )
-                        with ui.HStack():
-                            ui.Label("Documentations", width=0, word_wrap=True)
-                            ui.Button(
-                                name="IconButton",
-                                width=24,
-                                height=24,
-                                clicked_fn=lambda: on_docs_link_clicked(
-                                    "https://docs.isaacsim.omniverse.nvidia.com/latest/ros2_tutorials/tutorial_ros2_tf.html"
-                                ),
-                                style=get_style()["IconButton.Image::OpenLink"],
-                            )
+                add_ok_cancel_buttons(self._on_ok, self._on_cancel)
+                add_script_docs_footer(
+                    __file__,
+                    "https://docs.isaacsim.omniverse.nvidia.com/latest/ros2_tutorials/tutorial_ros2_tf.html",
+                )
         return
 
     def _on_ok(self) -> None:
@@ -1023,19 +539,7 @@ class Ros2TfPubGraph(MenuHelperWindow):
         self._target_prim = self.target_prim_input.get_value()
         self._pub_topic = self.pub_topic_input.get_value()
 
-        param_check = self._check_params()
-        if param_check:
-            self.make_graph()
-            self.visible = False
-        else:
-            post_notification("Parameter check failed", status=NotificationStatus.WARNING)
-
-    def _on_cancel(self) -> None:
-        """Handle the Cancel button click event.
-
-        Closes the window without generating or modifying any graph.
-        """
-        self.visible = False
+        self._finish_on_ok()
 
     def _check_params(self) -> bool:
         """Validate the user-provided parameters before graph creation.
@@ -1048,25 +552,21 @@ class Ros2TfPubGraph(MenuHelperWindow):
             True if all parameter checks pass, False otherwise.
 
         """
-        stage = omni.usd.get_context().get_stage()
-
         if not self._target_prim:
             post_notification("Target prim is required", status=NotificationStatus.WARNING)
             return False
 
-        if self._add_to_existing_graph:
-            # make sure the "existing" graph exist
-            og_prim = stage.GetPrimAtPath(self._og_path)
-            if og_prim.IsValid() and og_prim.IsA(OmniGraphSchema.OmniGraph):
-                pass
-            else:
-                msg = self._og_path + " is not an existing graph, check the og path"
-                post_notification(msg, status=NotificationStatus.WARNING)
-                return False
+        if self._add_to_existing_graph and not validate_existing_graph_path(self._og_path):
+            return False
+
+        if self._add_to_existing_node and not self._add_to_existing_graph:
+            msg = "Adding to an existing node requires adding to an existing graph, check the add to existing graph checkbox"
+            post_notification(msg, status=NotificationStatus.WARNING)
+            return False
 
         if self._add_to_existing_node:
             # make sure the "existing" node exist
-            node_prim = stage.GetPrimAtPath(self._existing_node_path)
+            node_prim = prim_utils.get_prim_at_path(self._existing_node_path)
             if node_prim.IsValid() and node_prim.IsA(OmniGraphSchema.OmniGraphNode):
                 pass
             else:
@@ -1074,21 +574,7 @@ class Ros2TfPubGraph(MenuHelperWindow):
                 post_notification(msg, status=NotificationStatus.WARNING)
                 return False
 
-        if self._add_to_existing_node and not self._add_to_existing_graph:
-            msg = "Adding to an existing node requires adding to an existing graph, check the add to existing graph checkbox"
-            post_notification(msg, status=NotificationStatus.WARNING)
-            return False
-
         return True
-
-    def _on_use_existing_graph(self, check_state: bool) -> None:
-        """Update the state when the existing graph checkbox is toggled.
-
-        Args:
-            check_state: Whether the checkbox is checked.
-
-        """
-        self._add_to_existing_graph = check_state
 
     def _on_use_existing_node(self, check_state: bool) -> None:
         """Update the state when the existing node checkbox is toggled.
@@ -1100,7 +586,7 @@ class Ros2TfPubGraph(MenuHelperWindow):
         self._add_to_existing_node = check_state
 
 
-class Ros2OdometryGraph(MenuHelperWindow):
+class Ros2OdometryGraph(Ros2GraphWindow):
     """A UI window for creating ROS2 odometry computation and publishing graphs.
 
     This class provides an interactive interface to generate OmniGraph action graphs that compute and publish robot
@@ -1139,186 +625,21 @@ class Ros2OdometryGraph(MenuHelperWindow):
         Sets up nodes for computing odometry from an articulated robot, publishing odometry messages, and publishing
         transform trees between world, odom, and robot frames. If configured, also publishes the robot's internal TF tree.
         """
-        self._timeline = omni.timeline.get_timeline_interface()
-        self._timeline.stop()
-
-        keys = og.Controller.Keys
-        # if starting from a new graph, start it with just a tick,context, and sim_time node, the rest is the same for adding to exsiting graph
-        if not self._add_to_existing_graph:
-            self._og_path = stage_utils.generate_next_free_path(self._og_path, prepend_default_prim=False)
-            graph_handle, nodes, _, _ = og.Controller.edit(
-                {"graph_path": self._og_path, "evaluator_name": "execution"},
-                {
-                    keys.CREATE_NODES: [
-                        ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                        ("Context", "isaacsim.ros2.bridge.ROS2Context"),
-                        ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
-                    ],
-                    keys.SET_VALUES: [
-                        ("ReadSimTime.inputs:resetOnStop", True),
-                    ],
-                },
-            )
-        else:
-            graph_handle = og.get_graph_by_path(self._og_path)
-
-        # to an existin graph
-        # traverse through the graph and pick out all the relevant nodes
-        all_nodes = graph_handle.get_nodes()
-        odom_compute_name = "ComputeOdometry"
-        odom_pub_name = "PublisherOdometry"
-        tf_odom2robot_name = "TFOdom2Robot"
-        tf_world2odom_name = "TFWorld2Odom"
-        tf_robot_name = "TFRobot"
-        tf_robot_node = None
-        tick_node = None
-        context_node = None
-        sim_time_node = None
-        for node in all_nodes:
-            node_path = node.get_prim_path()
-            node_type = node.get_type_name()
-            if node_type == "omni.graph.action.OnPlaybackTick" or node_type == "omni.graph.action.OnTick":
-                tick_node = node_path
-            elif node_type == "isaacsim.ros2.bridge.ROS2Context":
-                context_node = node_path
-            elif node_type == "isaacsim.core.nodes.IsaacReadSimulationTime":
-                sim_time_node = node_path
-            elif node_type == "isaacsim.ros2.bridge.ROS2PublishOdometry":
-                # get ready to add a new odom publisher nodes
-                odom_pub_node = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
-                odom_pub_name = Path(odom_pub_node).name
-            elif node_type == "isaacsim.core.nodes.IsaacComputeOdometry":
-                # get ready to add a new odom compute nodes
-                odom_compute_node = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
-                odom_compute_name = Path(odom_compute_node).name
-            elif node_type == "isaacsim.ros2.bridge.ROS2PublishRawTransformTree":
-                # get ready to add two new raw tf publisher nodes
-                tf_world2odom_node = stage_utils.generate_next_free_path(
-                    self._og_path + "/" + tf_world2odom_name, prepend_default_prim=False
+        try:
+            self._og_path = create_ros2_odometry_graph(
+                Ros2OdometryGraphConfig(
+                    graph_path=self._og_path,
+                    articulation_root=self._art_root_prim,
+                    chassis_prim=self._chassis_prim,
+                    node_namespace=self._node_namespace,
+                    odometry_topic=self._odom_pub_topic,
+                    tf_topic=self._tf_pub_topic,
+                    add_to_existing_graph=self._add_to_existing_graph,
+                    publish_robot_tf=self._tf_robot_pub,
                 )
-                tf_odom2robot_node = stage_utils.generate_next_free_path(
-                    self._og_path + "/" + tf_odom2robot_name, prepend_default_prim=False
-                )
-                tf_world2odom_name = Path(tf_world2odom_node).name
-                tf_odom2robot_name = Path(tf_odom2robot_node).name
-            elif node_type == "isaacsim.ros2.bridge.ROS2PublishTransformTree":
-                tf_robot_node = stage_utils.generate_next_free_path(node_path, prepend_default_prim=False)
-                tf_robot_name = Path(tf_robot_node).name
-
-        # add odometry related nodes and connections:
-        og.Controller.edit(
-            graph_handle,
-            {
-                keys.CREATE_NODES: [
-                    (tf_world2odom_name, "isaacsim.ros2.bridge.ROS2PublishRawTransformTree"),
-                    (tf_odom2robot_name, "isaacsim.ros2.bridge.ROS2PublishRawTransformTree"),
-                    (odom_compute_name, "isaacsim.core.nodes.IsaacComputeOdometry"),
-                    (odom_pub_name, "isaacsim.ros2.bridge.ROS2PublishOdometry"),
-                ],
-                keys.SET_VALUES: [
-                    (odom_compute_name + ".inputs:chassisPrim", self._art_root_prim),
-                    (odom_pub_name + ".inputs:topicName", self._odom_pub_topic),
-                    (odom_pub_name + ".inputs:chassisFrameId", self._chassis_link_name),
-                    (odom_pub_name + ".inputs:nodeNamespace", self._node_namespace),
-                    (tf_odom2robot_name + ".inputs:childFrameId", self._chassis_link_name),
-                    (tf_world2odom_name + ".inputs:childFrameId", "odom"),
-                    (tf_world2odom_name + ".inputs:parentFrameId", "world"),
-                    (tf_odom2robot_name + ".inputs:nodeNamespace", self._node_namespace),
-                    (tf_world2odom_name + ".inputs:nodeNamespace", self._node_namespace),
-                ],
-                keys.CONNECT: [
-                    (tick_node + ".outputs:tick", tf_world2odom_name + ".inputs:execIn"),
-                    (tick_node + ".outputs:tick", tf_odom2robot_name + ".inputs:execIn"),
-                    (tick_node + ".outputs:tick", odom_compute_name + ".inputs:execIn"),
-                    (odom_compute_name + ".outputs:execOut", odom_pub_name + ".inputs:execIn"),
-                    (odom_compute_name + ".outputs:angularVelocity", odom_pub_name + ".inputs:angularVelocity"),
-                    (odom_compute_name + ".outputs:linearVelocity", odom_pub_name + ".inputs:linearVelocity"),
-                    (odom_compute_name + ".outputs:orientation", odom_pub_name + ".inputs:orientation"),
-                    (odom_compute_name + ".outputs:position", odom_pub_name + ".inputs:position"),
-                    (odom_compute_name + ".outputs:orientation", tf_odom2robot_name + ".inputs:rotation"),
-                    (odom_compute_name + ".outputs:position", tf_odom2robot_name + ".inputs:translation"),
-                ],
-            },
-        )
-
-        if context_node:
-            og.Controller.edit(
-                graph_handle,
-                {
-                    keys.CONNECT: [
-                        (
-                            context_node + ".outputs:context",
-                            self._og_path + "/" + tf_world2odom_name + ".inputs:context",
-                        ),
-                        (
-                            context_node + ".outputs:context",
-                            self._og_path + "/" + tf_odom2robot_name + ".inputs:context",
-                        ),
-                        (context_node + ".outputs:context", self._og_path + "/" + odom_pub_name + ".inputs:context"),
-                    ]
-                },
             )
-
-        if sim_time_node:
-            og.Controller.edit(
-                graph_handle,
-                {
-                    keys.CONNECT: [
-                        (
-                            sim_time_node + ".outputs:simulationTime",
-                            self._og_path + "/" + tf_world2odom_name + ".inputs:timeStamp",
-                        ),
-                        (
-                            sim_time_node + ".outputs:simulationTime",
-                            self._og_path + "/" + tf_odom2robot_name + ".inputs:timeStamp",
-                        ),
-                        (
-                            sim_time_node + ".outputs:simulationTime",
-                            self._og_path + "/" + odom_pub_name + ".inputs:timeStamp",
-                        ),
-                    ]
-                },
-            )
-
-        # if user also wanted to publish TF tree of the robot
-        if self._tf_robot_pub:
-            compute_tf_robot_name = "Compute" + tf_robot_name
-            og.Controller.edit(
-                graph_handle,
-                {
-                    keys.CREATE_NODES: [
-                        (compute_tf_robot_name, "isaacsim.core.nodes.IsaacComputeTransformTree"),
-                        (tf_robot_name, "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
-                    ],
-                    keys.SET_VALUES: [
-                        (compute_tf_robot_name + ".inputs:parentPrim", self._chassis_prim),
-                        (compute_tf_robot_name + ".inputs:targetPrims", self._art_root_prim),
-                        (tf_robot_name + ".inputs:topicName", self._tf_pub_topic),
-                        (tf_robot_name + ".inputs:nodeNamespace", self._node_namespace),
-                    ],
-                    keys.CONNECT: [
-                        (tick_node + ".outputs:tick", compute_tf_robot_name + ".inputs:execIn"),
-                        (compute_tf_robot_name + ".outputs:execOut", tf_robot_name + ".inputs:execIn"),
-                        (compute_tf_robot_name + ".outputs:parentFrames", tf_robot_name + ".inputs:parentFrames"),
-                        (compute_tf_robot_name + ".outputs:childFrames", tf_robot_name + ".inputs:childFrames"),
-                        (compute_tf_robot_name + ".outputs:translations", tf_robot_name + ".inputs:translations"),
-                        (compute_tf_robot_name + ".outputs:orientations", tf_robot_name + ".inputs:orientations"),
-                        (sim_time_node + ".outputs:simulationTime", tf_robot_name + ".inputs:timeStamp"),
-                        (context_node + ".outputs:context", tf_robot_name + ".inputs:context"),
-                    ],
-                },
-            )
-            if context_node:
-                og.Controller.connect(
-                    og.Controller.attribute(context_node + ".outputs:context"),
-                    og.Controller.attribute(self._og_path + "/" + tf_robot_name + ".inputs:context"),
-                )
-
-            if sim_time_node:
-                og.Controller.connect(
-                    og.Controller.attribute(sim_time_node + ".outputs:simulationTime"),
-                    og.Controller.attribute(self._og_path + "/" + tf_robot_name + ".inputs:timeStamp"),
-                )
+        except (ValueError, RuntimeError) as exc:
+            post_notification(str(exc), status=NotificationStatus.WARNING)
 
     def _build_ui(self) -> None:
         """Build the user interface for configuring the ROS2 odometry graph.
@@ -1350,34 +671,11 @@ class Ros2OdometryGraph(MenuHelperWindow):
 
                 ui.Spacer(height=5)
 
-                with ui.HStack():
-                    ui.Spacer(width=ui.Percent(10))
-                    ui.Button("OK", height=40, width=ui.Percent(30), clicked_fn=self._on_ok)
-                    ui.Spacer(width=ui.Percent(20))
-                    ui.Button("Cancel", height=40, width=ui.Percent(30), clicked_fn=self._on_cancel)
-                    ui.Spacer(width=ui.Percent(10))
-                with ui.Frame(height=30):
-                    with ui.VStack():
-                        with ui.HStack():
-                            ui.Label("Python Script for Graph Generation", width=ui.Percent(30))
-                            ui.Button(
-                                name="IconButton",
-                                width=24,
-                                height=24,
-                                clicked_fn=lambda: on_open_IDE_clicked("", __file__),
-                                style=get_style()["IconButton.Image::OpenConfig"],
-                            )
-                        with ui.HStack():
-                            ui.Label("Documentations", width=0, word_wrap=True)
-                            ui.Button(
-                                name="IconButton",
-                                width=24,
-                                height=24,
-                                clicked_fn=lambda: on_docs_link_clicked(
-                                    "https://docs.isaacsim.omniverse.nvidia.com/latest/ros2_tutorials/tutorial_ros2_tf.html#setting-up-odometry"
-                                ),
-                                style=get_style()["IconButton.Image::OpenLink"],
-                            )
+                add_ok_cancel_buttons(self._on_ok, self._on_cancel)
+                add_script_docs_footer(
+                    __file__,
+                    "https://docs.isaacsim.omniverse.nvidia.com/latest/ros2_tutorials/tutorial_ros2_tf.html#setting-up-odometry",
+                )
         return
 
     def _on_ok(self) -> None:
@@ -1391,19 +689,7 @@ class Ros2OdometryGraph(MenuHelperWindow):
         self._chassis_prim = self.chassis_prim_input.get_value()
         self._chassis_link_name = self._chassis_prim.split("/")[-1]
 
-        param_check = self._check_params()
-        if param_check:
-            self.make_graph()
-            self.visible = False
-        else:
-            post_notification("Parameter check failed", status=NotificationStatus.WARNING)
-
-    def _on_cancel(self) -> None:
-        """Handle the Cancel button click.
-
-        Closes the dialog without generating a graph.
-        """
-        self.visible = False
+        self._finish_on_ok()
 
     def _check_params(self) -> bool:
         """Validate the user-provided parameters.
@@ -1412,32 +698,14 @@ class Ros2OdometryGraph(MenuHelperWindow):
             True if all parameters are valid, False otherwise.
 
         """
-        stage = omni.usd.get_context().get_stage()
-
         if not self._art_root_prim:
             post_notification("Robot Articulation Root prim is required", status=NotificationStatus.WARNING)
             return False
 
-        if self._add_to_existing_graph:
-            # make sure the "existing" graph exist
-            og_prim = stage.GetPrimAtPath(self._og_path)
-            if og_prim.IsValid() and og_prim.IsA(OmniGraphSchema.OmniGraph):
-                pass
-            else:
-                msg = self._og_path + "is not an existing graph, check the og path"
-                post_notification(msg, status=NotificationStatus.WARNING)
-                return False
+        if self._add_to_existing_graph and not validate_existing_graph_path(self._og_path):
+            return False
 
         return True
-
-    def _on_use_existing_graph(self, check_state: bool) -> None:
-        """Handle the checkbox state change for adding to an existing graph.
-
-        Args:
-            check_state: Whether the checkbox is checked.
-
-        """
-        self._add_to_existing_graph = check_state
 
     def _on_publish_robot_tf(self, check_state: bool) -> None:
         """Handle the checkbox state change for publishing robot TF.

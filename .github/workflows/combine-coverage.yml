@@ -1,0 +1,199 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Combine Coverage
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        required: true
+        type: string
+      config:
+        required: true
+        type: string
+
+jobs:
+  combine:
+    name: "Combine Coverage"
+    runs-on: [self-hosted, cpu]
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      OMNI_KIT_ALLOW_ROOT: 1
+      PM_PACKAGES_ROOT: ${{ github.workspace }}/.cache/packman
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          lfs: false
+
+      - name: Make scripts executable
+        run: |
+          chmod -R u+w .
+          find . -type f -iname "*.sh" -exec chmod +x {} +
+
+      - name: Download gcno files (from build)
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-gcno-${{ inputs.platform }}-${{ inputs.config }}
+          path: _build/intermediate/
+
+      - name: Download all coverage artifacts (from tests)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: _coverage_all/
+          merge-multiple: false
+
+      - name: Merge coverage data
+        run: |
+          set -euo pipefail
+          set -x
+
+          echo "=== Merging C++ coverage (.gcda + .gcno) ==="
+
+          # Copy all .gcda files from test artifacts into _build/intermediate
+          find _coverage_all -name "*.gcda" | while read gcda; do
+            rel_path=$(echo "$gcda" | sed -n 's|.*intermediate/\(.*\)|\1|p')
+            if [ -n "$rel_path" ]; then
+              dest="_build/intermediate/$rel_path"
+              mkdir -p "$(dirname "$dest")"
+              cp "$gcda" "$dest"
+            fi
+          done
+
+          find _coverage_all -path "*/_build/intermediate/*.gcda" | while read gcda; do
+            rel_path=$(echo "$gcda" | sed -n 's|.*_build/intermediate/\(.*\)|\1|p')
+            if [ -n "$rel_path" ]; then
+              dest="_build/intermediate/$rel_path"
+              mkdir -p "$(dirname "$dest")"
+              cp "$gcda" "$dest"
+            fi
+          done
+
+          GCNO_COUNT=$(find _build/intermediate -name "*.gcno" 2>/dev/null | wc -l)
+          GCDA_COUNT=$(find _build/intermediate -name "*.gcda" 2>/dev/null | wc -l)
+          echo "gcno files (from build): $GCNO_COUNT"
+          echo "gcda files (from tests): $GCDA_COUNT"
+
+          if [ "$GCNO_COUNT" -eq 0 ]; then
+            echo "::warning::No .gcno files found — C++ coverage will be empty"
+          fi
+
+          # Generate C++ coverage with lcov
+          if command -v lcov >/dev/null 2>&1; then
+            echo "lcov already available"
+          else
+            sudo apt-get update -qq && sudo apt-get install -y -qq lcov > /dev/null 2>&1 || true
+          fi
+
+          if command -v lcov >/dev/null 2>&1 && [ "$GCNO_COUNT" -gt 0 ]; then
+            lcov --capture --directory _build/intermediate \
+                 --output-file _build/coverage.info \
+                 --ignore-errors source \
+                 --rc lcov_branch_coverage=0 || true
+
+            if [ -f _build/coverage.info ]; then
+              lcov --remove _build/coverage.info '/usr/include/*' '/usr/lib/*' \
+                   --output-file _build/coverage.filtered.info || true
+            fi
+          fi
+
+          echo ""
+          echo "=== Merging Python coverage (.pycov) ==="
+
+          PYCOV_COUNT=$(find _coverage_all -name "*.pycov" 2>/dev/null | wc -l)
+          echo "Found $PYCOV_COUNT .pycov files"
+
+          if [ "$PYCOV_COUNT" -gt 0 ]; then
+            # Use packman python for coverage tooling
+            touch .eula_accepted
+            ./tools/packman/python.sh -m pip install coverage==7.4.4 --quiet 2>/dev/null || true
+
+            # Generate path mappings from .pycov files
+            ./tools/packman/python.sh tools/github/ci/coverage/read_pycov_paths.py \
+              "_coverage_all/**/*.pycov" \
+              --exclude-prefix extscache --exclude-prefix kit -o .coveragemergerc || true
+
+            RCFILE=".coveragerc"
+            if [ -f .coveragemergerc ]; then
+              RCFILE=".coveragemergerc"
+              echo "Using generated .coveragemergerc with path mappings"
+            fi
+
+            # Combine Python coverage data
+            find _coverage_all -name "*.pycov" -print0 | xargs -0 ./tools/packman/python.sh -m coverage combine --rcfile="$RCFILE" --keep
+            ./tools/packman/python.sh -m coverage xml --rcfile="$RCFILE" --ignore-errors -o coverage.xml
+
+            echo "Python coverage.xml generated"
+            ./tools/packman/python.sh -m coverage report --rcfile="$RCFILE" --ignore-errors 2>/dev/null | tail -5 || true
+          else
+            echo "::warning::No .pycov files found — Python coverage will be empty"
+          fi
+
+          echo ""
+          echo "=== Generating C++ Cobertura XML ==="
+
+          if [ -f _build/coverage.filtered.info ] || [ -f _build/coverage.info ]; then
+            ./tools/packman/python.sh -m pip install lcov_cobertura==2.1.1 --quiet 2>/dev/null || true
+            INFO_FILE="_build/coverage.filtered.info"
+            [ -f "$INFO_FILE" ] || INFO_FILE="_build/coverage.info"
+            ./tools/packman/python.sh -m lcov_cobertura "$INFO_FILE" -o cpp_coverage.xml || true
+            echo "cpp_coverage.xml generated"
+          else
+            echo "::warning::No C++ coverage info generated"
+          fi
+
+          echo ""
+          echo "=== Coverage Summary ==="
+          if [ -f coverage.xml ]; then
+            echo "Python: $(grep -o 'line-rate="[^"]*"' coverage.xml | head -1 || echo 'unknown')"
+          fi
+          if [ -f cpp_coverage.xml ]; then
+            echo "C++: $(grep -o 'line-rate="[^"]*"' cpp_coverage.xml | head -1 || echo 'unknown')"
+          fi
+
+          if [ -f cpp_coverage.xml ] && [ -f coverage.xml ]; then
+            ./tools/packman/python.sh tools/github/ci/coverage/combine_line_counts.py cpp_coverage.xml coverage.xml
+          elif [ -f coverage.xml ]; then
+            echo "Only Python coverage available"
+          elif [ -f cpp_coverage.xml ]; then
+            echo "Only C++ coverage available"
+          else
+            echo "::warning::No coverage data available to combine"
+          fi
+
+      - name: Upload combined coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-combined
+          path: |
+            coverage.xml
+            cpp_coverage.xml
+            _build/coverage.info
+            _build/coverage.filtered.info
+          retention-days: 30
+        if: always()
+
+      - name: Coverage summary annotation
+        if: always()
+        run: |
+          if [ -f coverage.xml ]; then
+            PY_RATE=$(grep -o 'line-rate="[^"]*"' coverage.xml | head -1 | grep -o '[0-9.]*' || true)
+            if [ -n "$PY_RATE" ]; then
+              PY_PCT=$(python3 -c "print(f'{float($PY_RATE) * 100:.2f}')" 2>/dev/null || echo "$PY_RATE")
+              echo "::notice::Python coverage: ${PY_PCT}%"
+            fi
+          fi
+          if [ -f cpp_coverage.xml ]; then
+            CPP_RATE=$(grep -o 'line-rate="[^"]*"' cpp_coverage.xml | head -1 | grep -o '[0-9.]*' || true)
+            if [ -n "$CPP_RATE" ]; then
+              CPP_PCT=$(python3 -c "print(f'{float($CPP_RATE) * 100:.2f}')" 2>/dev/null || echo "$CPP_RATE")
+              echo "::notice::C++ coverage: ${CPP_PCT}%"
+            fi
+          fi

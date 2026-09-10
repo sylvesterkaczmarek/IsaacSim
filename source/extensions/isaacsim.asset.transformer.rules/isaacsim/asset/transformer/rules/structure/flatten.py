@@ -168,6 +168,14 @@ class FlattenRule(RuleInterface):
             self.log_operation("Failed to flatten input stage")
             return None
 
+        # ``Usd.Stage.Flatten`` stamps the pseudo-root ``documentation`` field
+        # with "Generated from Composed Stage of root layer <path>", embedding the
+        # absolute/remote source path (e.g. ``omniverse://...``). Clear it so the
+        # exported package stays portable and free of host-specific provenance.
+        # Cleared before both export branches below so the cached-layer
+        # ``TransferContent`` path also picks up the empty value.
+        flattened_layer.documentation = ""
+
         # Resolve output path
         output_abs_path = os.path.join(self.package_root, os.path.join(self.destination_path, output_path))
         os.makedirs(os.path.dirname(output_abs_path), exist_ok=True)

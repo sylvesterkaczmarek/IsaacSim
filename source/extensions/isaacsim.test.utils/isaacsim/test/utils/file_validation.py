@@ -25,6 +25,7 @@ def validate_folder_contents(
     *,
     recursive: bool = False,
     fail_on_empty_files: bool = False,
+    fail_on_empty_extensions: set[str] | None = None,
     allowed_extra_extensions: set[str] | None = None,
     min_file_size_bytes: int = 0,
     exact_match: bool = True,
@@ -40,6 +41,8 @@ def validate_folder_contents(
         expected_counts: Dictionary mapping file extensions (without dots) to expected counts.
         recursive: If True, search subdirectories recursively.
         fail_on_empty_files: If True, return False if any files are empty (0 bytes).
+        fail_on_empty_extensions: If set, return False if any file with one of these
+            extensions (without dots) is empty (0 bytes).
         allowed_extra_extensions: Set of file extensions that are allowed to exist
             beyond those in expected_counts. If None, any extra extensions are allowed.
         min_file_size_bytes: Minimum file size in bytes. Files smaller than this are considered invalid.
@@ -98,12 +101,18 @@ def validate_folder_contents(
     # Filter files that have extensions
     files_with_extensions = [f for f in all_files if f.suffix]
 
+    fail_on_empty_exts = None
+    if fail_on_empty_extensions is not None:
+        fail_on_empty_exts = {ext.lower() for ext in fail_on_empty_extensions}
+
     # Check for empty files if required
-    if fail_on_empty_files or min_file_size_bytes > 0:
+    if fail_on_empty_files or fail_on_empty_exts is not None or min_file_size_bytes > 0:
         for file_path in files_with_extensions:
             try:
                 file_size = file_path.stat().st_size
-                if fail_on_empty_files and file_size == 0:
+                ext = file_path.suffix[1:].lower()
+                check_empty = fail_on_empty_files or (fail_on_empty_exts is not None and ext in fail_on_empty_exts)
+                if check_empty and file_size == 0:
                     return False
                 if file_size < min_file_size_bytes:
                     return False

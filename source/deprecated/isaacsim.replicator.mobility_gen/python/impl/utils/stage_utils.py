@@ -32,8 +32,8 @@ def stage_add_camera(
         stage: The USD stage to modify.
         path: The path to add the USD prim.
         focal_length: The focal length of the camera.
-        horizontal_aperature: The horizontal aperature of the camera.
-        vertical_aperature: The vertical aperature of the camera.
+        horizontal_aperature: The horizontal aperture of the camera.
+        vertical_aperature: The vertical aperture of the camera.
         clipping_range: The clipping range of the camera.
 
     Returns:

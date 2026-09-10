@@ -62,6 +62,19 @@ _TEST_URDF = """\
 </robot>
 """
 
+_CONTINUOUS_TEST_URDF = _TEST_URDF.replace(
+    """  <joint name="joint2" type="revolute">
+    <parent link="link1"/><child link="link2"/>
+    <origin xyz="0 0 0.5"/><axis xyz="0 1 0"/>
+    <limit lower="-3.14" upper="3.14" effort="100" velocity="1.0"/>
+  </joint>""",
+    """  <joint name="joint2" type="continuous">
+    <parent link="link1"/><child link="link2"/>
+    <origin xyz="0 0 0.5"/><axis xyz="0 1 0"/>
+    <limit effort="100" velocity="1.0"/>
+  </joint>""",
+)
+
 _JOINT_NAMES = ["joint1", "joint2", "joint3"]
 _TOOL_FRAME = "end_effector"
 
@@ -324,6 +337,35 @@ class TestPinkIKController(omni.kit.test.AsyncTestCase):
         self.assertIsNotNone(result.joints.positions)
         self.assertIsNotNone(result.joints.velocities)
         self.assertEqual(len(result.joints.position_names), 3)
+
+    async def test_forward_with_continuous_joint(self) -> None:
+        """Forward preserves a continuous joint angle and valid Pinocchio configuration."""
+        urdf_path = os.path.join(self._tmpdir, "continuous_robot.urdf")
+        with open(urdf_path, "w") as urdf_file:
+            urdf_file.write(_CONTINUOUS_TEST_URDF)
+
+        try:
+            pink_robot = load_pink_robot(urdf_path)
+            controller = PinkIKController(
+                pink_robot=pink_robot,
+                robot_joint_space=_JOINT_NAMES,
+                robot_site_space=[_TOOL_FRAME],
+                tool_frame=_TOOL_FRAME,
+                dt=1.0 / 60.0,
+            )
+            positions = np.array([0.1, 4.0 * np.pi + 0.22, 0.3])
+            state = _make_estimated_state(_JOINT_NAMES, positions)
+
+            self.assertTrue(controller.reset(state, None, 0.0))
+            joint = pink_robot.model.joints[pink_robot.model.getJointId("joint2")]
+            continuous_configuration = controller._q[joint.idx_q : joint.idx_q + joint.nq]
+            self.assertAlmostEqual(np.dot(continuous_configuration, continuous_configuration), 1.0)
+
+            result = controller.forward(estimated_state=state, setpoint_state=None, t=0.1)
+            self.assertIsNotNone(result)
+            self.assertAlmostEqual(result.joints.positions.numpy()[1], positions[1], places=5)
+        finally:
+            os.remove(urdf_path)
 
     async def test_forward_with_site_target(self) -> None:
         """Forward with an end-effector target pose returns a valid result."""

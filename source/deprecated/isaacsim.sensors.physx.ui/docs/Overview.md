@@ -4,23 +4,28 @@
 This extension is deprecated in favor of `isaacsim.sensors.physics.ui`.
 ```
 
-The isaacsim.sensors.physx.ui extension provides UI components for Isaac Sim PhysX-raycast-based sensor simulation, specifically menu options for range sensor operations. This extension acts as a UI layer on top of the PhysX sensor system, enabling users to interact with range sensors through menu interfaces.
+`**isaacsim.sensors.physx.ui**` provides UI components for Isaac Sim PhysX-raycast-based sensor simulation. It focuses on user-facing controls such as menu options for working with physics-based sensor features, including sensor types such as lidar. The extension is intended for users who need access to PhysX sensor simulation controls through the application UI rather than through scripting.
 
-```{image} ../data/preview.png
----
-align: center
----
-```
+## Functionality
 
+The extension adds UI-facing functionality around PhysX sensor simulation workflows. Its main role is to expose sensor-related actions through menus and UI components so users can access common sensor operations from the interface.
 
-## Key Components
+The functionality is centered on:
 
-### {class}`RangeSensorMenu <isaacsim.sensors.physx.ui.RangeSensorMenu>`
+- PhysX-raycast-based sensor simulation controls.
+- UI menu options for sensor-related workflows.
+- Support for Isaac Sim sensor workflows, including lidar-related use cases.
 
-The {class}`RangeSensorMenu <isaacsim.sensors.physx.ui.RangeSensorMenu>` class provides menu integration for range sensor operations within Isaac Sim. This menu component allows users to access range sensor functionality through the application's menu system, offering a convenient interface for sensor configuration and control.
+## UI Components
 
-The menu integrates with Isaac Sim's context menu system to provide sensor-specific options when working with range sensors in the scene. Users can access range sensor operations directly from the interface without needing to write code or use lower-level APIs.
+### Sensor menu options
+
+The extension provides menu-oriented UI components for PhysX sensor simulation. These menu options give users access to sensor functionality without needing to call Python APIs directly.
+
+The menu entries are intended to connect the user interface with the underlying PhysX sensor simulation extension.
+
+The extension is focused on exposing controls through the UI. It does not define a separate standalone window or custom scripting interface.
 
 ## Relationships
 
-This extension depends on isaacsim.sensors.physx for the underlying PhysX sensor simulation capabilities and isaacsim.gui.components for UI component infrastructure. It uses **omni.kit.actions.core** for action registration and **omni.kit.context_menu** for menu integration, enabling the menu components to appear in appropriate contexts within the Isaac Sim interface.
+`**isaacsim.sensors.physx.ui**` is built around the PhysX sensor simulation functionality provided by `**isaacsim.sensors.physx**`. The UI extension contributes menu and interface components, while the underlying sensor extension provides the simulation behavior for PhysX-raycast-based sensors.

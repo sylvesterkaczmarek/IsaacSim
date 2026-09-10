@@ -176,6 +176,9 @@ class RotatingLidarPhysX(BaseSensor):
         """Disable depth data collection in the sensor frame.
 
         Removes the 'depth' key from the current frame dictionary.
+
+        Raises:
+            KeyError: If depth data collection is not enabled in the current frame.
         """
         del self._current_frame["depth"]
         return
@@ -192,6 +195,9 @@ class RotatingLidarPhysX(BaseSensor):
         """Disable linear depth data collection in the sensor frame.
 
         Removes the 'linear_depth' key from the current frame dictionary.
+
+        Raises:
+            KeyError: If linear depth data collection is not enabled in the current frame.
         """
         del self._current_frame["linear_depth"]
         return
@@ -208,6 +214,9 @@ class RotatingLidarPhysX(BaseSensor):
         """Disable intensity data collection in the sensor frame.
 
         Removes the 'intensity' key from the current frame dictionary.
+
+        Raises:
+            KeyError: If intensity data collection is not enabled in the current frame.
         """
         del self._current_frame["intensity"]
         return
@@ -318,7 +327,7 @@ class RotatingLidarPhysX(BaseSensor):
         """Current frame data from the lidar sensor.
 
         Returns:
-            Dictionary containing the current frame data with keys like 'time', 'physics_step', and any enabled data types.
+            Current frame data with keys like 'time', 'physics_step', and any enabled data types.
         """
         return self._current_frame
 
@@ -350,7 +359,7 @@ class RotatingLidarPhysX(BaseSensor):
         """Sets the field of view for the lidar sensor.
 
         Args:
-            value: Tuple of (horizontal_fov, vertical_fov) in degrees.
+            value: Horizontal and vertical field of view in degrees as (horizontal_fov, vertical_fov).
         """
         if self.prim.GetAttribute("horizontalFov").Get() is None:
             self._lidar_prim.CreateHorizontalFovAttr().Set(value[0])
@@ -365,7 +374,7 @@ class RotatingLidarPhysX(BaseSensor):
         """Field of view of the lidar sensor.
 
         Returns:
-            Tuple of (horizontal_fov, vertical_fov) in degrees.
+            Horizontal and vertical field of view in degrees as (horizontal_fov, vertical_fov).
         """
         return self.prim.GetAttribute("horizontalFov").Get(), self.prim.GetAttribute("verticalFov").Get()
 
@@ -373,7 +382,7 @@ class RotatingLidarPhysX(BaseSensor):
         """Sets the resolution for the lidar sensor.
 
         Args:
-            value: Resolution value in degrees per sample.
+            value: Horizontal and vertical resolution in degrees per sample as (horizontal_resolution, vertical_resolution).
         """
         if self.prim.GetAttribute("horizontalResolution").Get() is None:
             self._lidar_prim.CreateHorizontalResolutionAttr().Set(value[0])
@@ -388,7 +397,7 @@ class RotatingLidarPhysX(BaseSensor):
         """Resolution of the lidar sensor.
 
         Returns:
-            Tuple of (horizontal_resolution, vertical_resolution) in degrees per sample.
+            Horizontal and vertical resolution in degrees per sample as (horizontal_resolution, vertical_resolution).
         """
         return self.prim.GetAttribute("horizontalResolution").Get(), self.prim.GetAttribute("verticalResolution").Get()
 
@@ -443,7 +452,7 @@ class RotatingLidarPhysX(BaseSensor):
             self.prim.GetAttribute("enableSemantics").Set(True)
 
     def disable_semantics(self) -> None:
-        """Disables semantic data collection for the lidar sensor."""
+        """Sets semantic data collection enabled for the lidar sensor."""
         if self.prim.GetAttribute("enableSemantics").Get() is None:
             self._lidar_prim.CreateEnableSemanticsAttr().Set(True)
         else:
@@ -482,6 +491,6 @@ class RotatingLidarPhysX(BaseSensor):
         return
 
     def disable_visualization(self) -> None:
-        """Disables visualization of the lidar sensor data."""
+        """Disables point cloud and line visualization for the lidar sensor data."""
         self.enable_visualization(high_lod=False, draw_points=False, draw_lines=False)
         return

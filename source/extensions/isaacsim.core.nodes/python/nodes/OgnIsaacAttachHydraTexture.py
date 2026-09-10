@@ -26,7 +26,10 @@ import omni.kit.hydra_texture
 import omni.timeline
 from isaacsim.core.nodes import BaseResetNode
 from isaacsim.core.nodes.ogn.OgnIsaacAttachHydraTextureDatabase import OgnIsaacAttachHydraTextureDatabase
-from pxr import Sdf, Usd, UsdRender
+from pxr import Sdf, Tf, Usd, UsdRender
+
+_RENDER_VAR_LOCATION_GLOBAL = "global"
+_RENDER_VAR_LOCATION_RENDER_PRODUCT_CHILD = "renderProductChild"
 
 
 class OgnIsaacAttachHydraTextureInternalState(BaseResetNode):
@@ -76,13 +79,37 @@ class OgnIsaacAttachHydraTexture:
         return OgnIsaacAttachHydraTextureInternalState()
 
     @staticmethod
-    def _add_render_var(stage: Usd.Stage, render_product_path: str, render_var_name: str) -> tuple[bool, str]:
+    def _get_render_var_path(render_product_path: str, render_var_name: str, render_var_location: str) -> Sdf.Path:
+        """Resolve where a requested render var prim should be authored.
+
+        Args:
+            render_product_path: Path to the render product prim.
+            render_var_name: Name of the render var to add.
+            render_var_location: Location policy for render var authoring.
+
+        Returns:
+            USD path where the render var prim should be authored.
+
+        Raises:
+            ValueError: If the location policy is unsupported.
+        """
+        if render_var_location == _RENDER_VAR_LOCATION_GLOBAL:
+            return Sdf.Path(f"/Render/Vars/{render_var_name}")
+        if render_var_location == _RENDER_VAR_LOCATION_RENDER_PRODUCT_CHILD:
+            return Sdf.Path(render_product_path).AppendChild(Tf.MakeValidIdentifier(render_var_name))
+        raise ValueError(f'Unsupported renderVarLocation "{render_var_location}"')
+
+    @staticmethod
+    def _add_render_var(
+        stage: Usd.Stage, render_product_path: str, render_var_name: str, render_var_prim_path: Sdf.Path
+    ) -> tuple[bool, str]:
         """Add a render var (AOV) to the render product.
 
         Args:
             stage: The USD stage.
             render_product_path: Path to the render product prim.
             render_var_name: Name of the render var to add.
+            render_var_prim_path: Resolved USD path where the render var prim is authored.
 
         Returns:
             Tuple of (success, error_message). If success is True, error_message is empty.
@@ -91,7 +118,6 @@ class OgnIsaacAttachHydraTexture:
         if not render_prod_prim:
             return False, f'Invalid renderProduct "{render_product_path}"'
 
-        render_var_prim_path = Sdf.Path(f"/Render/Vars/{render_var_name}")
         render_var_prim = stage.GetPrimAtPath(render_var_prim_path)
         if not render_var_prim:
             render_var_prim = stage.DefinePrim(render_var_prim_path)
@@ -162,16 +188,26 @@ class OgnIsaacAttachHydraTexture:
         with Usd.EditContext(stage, stage.GetSessionLayer()):
             # Apply render vars
             render_vars = db.inputs.renderVars
+            render_var_location = str(db.inputs.renderVarLocation)
             for render_var in render_vars:
                 render_var_name = str(render_var)
-                if render_var_name and render_var_name not in state.applied_render_vars:
+                if render_var_name:
+                    try:
+                        render_var_path = OgnIsaacAttachHydraTexture._get_render_var_path(
+                            render_product_path, render_var_name, render_var_location
+                        )
+                    except ValueError as exc:
+                        db.log_error(str(exc))
+                        return False
+                    if str(render_var_path) in state.applied_render_vars:
+                        continue
                     success, error_msg = OgnIsaacAttachHydraTexture._add_render_var(
-                        stage, render_product_path, render_var_name
+                        stage, render_product_path, render_var_name, render_var_path
                     )
                     if not success:
                         db.log_error(error_msg)
                         return False
-                    state.applied_render_vars.add(render_var_name)
+                    state.applied_render_vars.add(str(render_var_path))
                     carb.log_info(f'Added render var "{render_var_name}" to render product "{render_product_path}"')
 
             # Create/attach hydra texture if not already done

@@ -23,18 +23,17 @@ wp.config.enable_backward = False
 
 
 class VelocityFieldVisualizer:
-    """Debug marker visualizer for velocity field speeds and directions."""
+    """Debug marker visualizer for velocity field speeds and directions.
+
+    Args:
+        velocity_startup_duration: Ramp duration in seconds before the fields reach their target velocity
+            magnitudes.
+    """
 
     def __init__(
         self,
         velocity_startup_duration: float,
     ) -> None:
-        """Initialize the velocity field visualizer.
-
-        Args:
-            velocity_startup_duration: Time until the velocity fields reach the defined
-                velocity magnitudes.
-        """
         self._velocity_startup_duration = velocity_startup_duration
 
         self.reset()

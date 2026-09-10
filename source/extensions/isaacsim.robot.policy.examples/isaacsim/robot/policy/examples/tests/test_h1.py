@@ -13,7 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for H1 humanoid robot policy examples in Isaac Sim."""
+"""Behavioral tests for the bundled H1 flat-terrain policy on the runner deployment path.
+
+These are the retained H1 movement suites of the refactor's verification matrix: the same
+spawn/forward/turn criteria that drove the removed ``H1FlatTerrainPolicy`` class now drive
+the generic ``RobotPolicyRunner`` with the bundled H1 spec.
+"""
 
 import asyncio
 
@@ -27,22 +32,21 @@ import numpy as np
 #   For most things refer to unittest docs: https://docs.python.org/3/library/unittest.html
 import omni.kit.test
 import omni.timeline
-from isaacsim.core.deprecation_manager import import_module
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.core.simulation_manager.impl.isaac_events import IsaacEvents
-from isaacsim.robot.policy.examples.robots.h1 import H1FlatTerrainPolicy
+from isaacsim.robot.policy.examples.bundled.h1 import get_h1_spec
+from isaacsim.robot.policy.examples.runtime import RobotPolicyRunner
 from isaacsim.storage.native import get_assets_root_path
 from pxr import UsdPhysics
 
-torch = import_module("torch")
-
 
 class TestH1ExampleExtension(omni.kit.test.AsyncTestCase):
-    """Test case for the H1 humanoid robot policy examples.
+    """Test case for the bundled H1 humanoid locomotion policy.
 
-    This class provides comprehensive testing for the H1FlatTerrainPolicy, validating robot spawning,
-    movement commands, and basic locomotion behaviors. The tests ensure the H1 robot can be properly
-    instantiated in the simulation environment and respond correctly to movement commands.
+    This class provides comprehensive testing for the H1 flat-terrain deployment, validating
+    robot spawning, movement commands, and basic locomotion behaviors. The tests ensure the H1
+    robot can be properly deployed through the runner runtime (spawn, binding, model) and
+    respond correctly to movement commands.
 
     The test suite includes verification of:
     - Robot spawning and articulation setup with proper degrees of freedom
@@ -53,24 +57,24 @@ class TestH1ExampleExtension(omni.kit.test.AsyncTestCase):
     Tests run on CPU by default but can be overridden for GPU execution through device selection.
     """
 
-    def get_device(self) -> object:
-        """Return the device to use for tensors. Override in subclasses.
+    def get_device(self) -> str:
+        """Return the simulation device. Override in subclasses.
 
         Returns:
-            The device to use for tensors.
+            The simulation device string.
         """
-        return torch.device("cpu")
+        return "cpu"
 
     async def setUp(self) -> None:
         """Set up the test environment with physics scene and ground plane."""
+        self._physics_callback_id = None
+        self._h1 = None
         await stage_utils.create_new_stage_async()
         # This needs to be set so that kit updates match physics updates
         self._physics_rate = 200
 
-        device_str = str(self.get_device())
-        backend = "torch" if device_str != "cpu" else "numpy"
-
-        print(f"Setting up test with device: {device_str}, backend: {backend}")
+        device_str = self.get_device()
+        print(f"Setting up test with device: {device_str}")
 
         self._physics_dt = 1 / self._physics_rate
         stage_utils.define_prim("/World/PhysicsScene", "PhysicsScene")
@@ -79,12 +83,12 @@ class TestH1ExampleExtension(omni.kit.test.AsyncTestCase):
         SimulationManager.set_physics_sim_device(device_str)
         SimulationManager.set_physics_dt(self._physics_dt)
 
-        ground_plane = stage_utils.add_reference_to_stage(
+        stage_utils.add_reference_to_stage(
             usd_path=get_assets_root_path() + "/Isaac/Environments/Grid/default_environment.usd",
             path="/World/ground",
         )
 
-        self._base_command = torch.zeros(3, dtype=torch.float32, device=self.get_device())
+        self._base_command = np.zeros(3, dtype=np.float32)
         self._stage = omni.usd.get_context().get_stage()
         self._timeline = omni.timeline.get_timeline_interface()
         await omni.kit.app.get_app().next_update_async()
@@ -93,6 +97,8 @@ class TestH1ExampleExtension(omni.kit.test.AsyncTestCase):
         """Clean up the test environment by stopping timeline and deregistering callbacks."""
         await omni.kit.app.get_app().next_update_async()
         self._timeline.stop()
+        if self._h1 is not None:
+            self._h1.close()
         if self._physics_callback_id is not None:
             try:
                 SimulationManager.deregister_callback(self._physics_callback_id)
@@ -109,7 +115,7 @@ class TestH1ExampleExtension(omni.kit.test.AsyncTestCase):
         """Test spawning H1 robot and verify it has correct number of DOFs and valid physics setup."""
         await self.spawn_h1()
         await omni.kit.app.get_app().next_update_async()
-        self.assertEqual(self._h1.robot.num_dofs, 19)
+        self.assertEqual(self._h1.articulation.num_dofs, 19)
 
         # Verify root prim exists at spawn path
         root_prim = stage_utils.get_current_stage().GetPrimAtPath(self._prim_path)
@@ -117,7 +123,7 @@ class TestH1ExampleExtension(omni.kit.test.AsyncTestCase):
         self.assertTrue(root_prim.IsValid(), "Robot root prim should be valid")
 
         # Verify articulation root (may be nested under root for some USD assets) has ArticulationRootAPI
-        articulation_root_path = self._h1.robot.paths[0]
+        articulation_root_path = self._h1.articulation.paths[0]
         articulation_prim = stage_utils.get_current_stage().GetPrimAtPath(articulation_root_path)
         self.assertTrue(
             prim_utils.has_api(articulation_prim, UsdPhysics.ArticulationRootAPI),
@@ -130,17 +136,17 @@ class TestH1ExampleExtension(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
 
         # Get current poses and convert to numpy arrays for efficient operations
-        start_positions_wp, _ = self._h1.robot.get_world_poses()
+        start_positions_wp, _ = self._h1.articulation.get_world_poses()
 
         self.start_pos = start_positions_wp.numpy()[0]
 
-        self._base_command = torch.tensor([1, 0, 0], dtype=torch.float32, device=self.get_device())
+        self._base_command = np.array([1, 0, 0], dtype=np.float32)
 
         # Simulate for 2 seconds (120 steps at 60 Hz default)
-        for i in range(120):
+        for _ in range(120):
             await omni.kit.app.get_app().next_update_async()
 
-        current_positions_wp, _ = self._h1.robot.get_world_poses()
+        current_positions_wp, _ = self._h1.articulation.get_world_poses()
 
         self.current_pos = current_positions_wp.numpy()[0]
 
@@ -156,17 +162,17 @@ class TestH1ExampleExtension(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
 
         # Get current poses and convert to numpy arrays for efficient operations
-        _, start_orientations_wp = self._h1.robot.get_world_poses()
+        _, start_orientations_wp = self._h1.articulation.get_world_poses()
 
         self.start_orientation = start_orientations_wp.numpy()[0]
 
-        self._base_command = torch.tensor([0, 0, 1], dtype=torch.float32, device=self.get_device())
+        self._base_command = np.array([0, 0, 1], dtype=np.float32)
 
         # Simulate for 2 seconds (120 steps at 60 Hz default)
         for _ in range(120):
             await omni.kit.app.get_app().next_update_async()
 
-        _, current_orientations_wp = self._h1.robot.get_world_poses()
+        _, current_orientations_wp = self._h1.articulation.get_world_poses()
 
         self.current_orientation = current_orientations_wp.numpy()[0]
 
@@ -188,14 +194,15 @@ class TestH1ExampleExtension(omni.kit.test.AsyncTestCase):
         self.assertGreater(heading_delta, 1.4)
 
     async def spawn_h1(self, name: str = "h1") -> None:
-        """Spawn H1 robot in the scene and initialize physics simulation.
+        """Spawn H1 robot in the scene and initialize the policy session.
 
         Args:
             name: Name for the robot prim in the scene.
         """
         self._prim_path = "/World/" + name
 
-        self._h1 = H1FlatTerrainPolicy(prim_path=self._prim_path, position=[0, 0, 1.05])
+        self._h1 = RobotPolicyRunner(get_h1_spec(), prim_path=self._prim_path, position=[0, 0, 1.05])
+        self._h1.spawn()
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
         await omni.kit.app.get_app().next_update_async()
@@ -214,26 +221,22 @@ class TestH1ExampleExtension(omni.kit.test.AsyncTestCase):
             context: Physics simulation context.
         """
         if self._h1:
-            self._h1.forward(step_size, self._base_command)
+            self._h1.step(step_size, self._base_command)
 
 
 class TestH1GPU(TestH1ExampleExtension):
-    """GPU-accelerated test suite for the H1 humanoid robot using PyTorch CUDA backend.
+    """GPU-accelerated test suite for the H1 humanoid robot on the CUDA simulation device.
 
-    This test class extends the base H1 robot test functionality to run on GPU using CUDA,
+    This test class extends the base H1 runner test functionality to run on GPU using CUDA,
     providing accelerated tensor operations and physics computations. It inherits all test
-    methods from TestH1ExampleExtension while configuring the robot to use GPU device for
-    enhanced performance in simulation scenarios.
-
-    The class automatically configures PyTorch tensors and robot operations to use CUDA
-    device, enabling faster execution of robot control policies and physics simulations
-    compared to CPU-based testing.
+    methods from TestH1ExampleExtension while configuring the simulation to use the CUDA
+    device for enhanced performance in simulation scenarios.
     """
 
-    def get_device(self) -> object:
-        """Return the device to use for tensors.
+    def get_device(self) -> str:
+        """Return the simulation device.
 
         Returns:
-            The torch device to use for tensor operations.
+            The CUDA simulation device string.
         """
-        return torch.device("cuda")
+        return "cuda"

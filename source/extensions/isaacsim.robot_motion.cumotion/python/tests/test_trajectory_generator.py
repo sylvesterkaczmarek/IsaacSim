@@ -15,6 +15,8 @@
 
 """Test suite for TrajectoryGenerator class."""
 
+from unittest.mock import patch
+
 import cumotion
 import isaacsim.core.experimental.utils.stage as stage_utils
 import isaacsim.robot_motion.cumotion as cu_mg
@@ -411,6 +413,20 @@ class TestTrajectoryGeneratorFranka(omni.kit.test.AsyncTestCase):
 
         self.assertTrue(np.allclose(initial_pose.matrix(), initial_trajectory_pose.matrix(), atol=1e-2))
         self.assertTrue(np.allclose(target_position, final_trajectory_pose.translation, atol=1e-2))
+
+    async def test_generate_trajectory_from_task_space_path_spec_conversion_failure(self) -> None:
+        """Test that task-space conversion failure returns None."""
+        q_default = self.cumotion_robot.robot_description.default_cspace_configuration()
+        tool_frame_name = self.cumotion_robot.robot_description.tool_frame_names()[0]
+        initial_pose = self.cumotion_robot.kinematics.pose(q_default, tool_frame_name)
+        path_spec = cumotion.create_task_space_path_spec(initial_pose)
+
+        with patch.object(cumotion, "convert_task_space_path_spec_to_cspace", return_value=None):
+            trajectory = self.trajectory_generator.generate_trajectory_from_path_specification(
+                path_specification=path_spec, tool_frame_name=tool_frame_name
+            )
+
+        self.assertIsNone(trajectory)
 
     async def test_generate_trajectory_from_task_space_path_spec_linear_path(self) -> None:
         """Test trajectory generation from TaskSpacePathSpec with linear path."""

@@ -20,8 +20,6 @@ from __future__ import annotations
 import os
 import tempfile
 
-from pxr import UsdGeom
-
 from .occupancy_map import OccupancyMap
 from .reader import MobilityGenReader
 from .robot import ROBOTS
@@ -85,9 +83,7 @@ def load_scenario(path: str) -> MobilityGenScenario:
 
     ground_plane = GroundPlane("/World/ground_plane", templates=None)
     # Hide the render mesh to prevent z-fighting with the warehouse USD floor.
-    # Develop uses GroundPlane(visible=False); experimental API has no such parameter.
-    for mesh_path in ground_plane.meshes.paths:
-        UsdGeom.Imageable(stage.GetPrimAtPath(mesh_path)).MakeInvisible()
+    ground_plane.meshes.set_visibilities([False])
     robot = robot_type.build(robot_prim_path)
     chase_camera_path = robot.build_chase_camera()
     if ViewportManager.get_viewport_api() is not None:

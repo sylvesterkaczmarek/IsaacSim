@@ -15,7 +15,8 @@
 
 """Extension for generating grasping-related synthetic data using Isaac Sim Replicator."""
 
-from .extension import *
-from .grasping_manager import GraspingManager, GraspPhase
+from .extension import Extension as Extension
+from .grasping_manager import GraspingManager as GraspingManager
+from .grasping_manager import GraspPhase as GraspPhase
 
 __all__ = ["GraspingManager", "GraspPhase"]

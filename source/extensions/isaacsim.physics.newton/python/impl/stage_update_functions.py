@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING
 
 import carb
 
+from . import carb_config
+
 if TYPE_CHECKING:
     from .newton_stage import NewtonStage
 
@@ -149,8 +151,9 @@ class NewtonStageUpdateFunctions:
             self.update_count = 0
             self.is_paused_state = False
             self.newton_stage.playing = False
-            self.newton_stage.init()
             self.newton_stage.sim_time = 0.0  # type: ignore[assignment]
+            if carb_config.reset_on_stop():
+                self.newton_stage.init()
             return True
         except Exception as e:
             carb.log_error(f"[Newton] on_reset failed: {e}")

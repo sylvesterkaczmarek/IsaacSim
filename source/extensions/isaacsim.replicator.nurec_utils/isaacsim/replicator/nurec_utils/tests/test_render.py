@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""render.py helpers on synthetic in-memory stages (no rendering): camera-xform save/restore and
-the SPG RenderProduct clone.
+"""Test ``render.py`` helpers on synthetic in-memory stages.
+
+The tests cover camera-transform save and restore behavior and SPG render-product cloning without rendering.
 """
 
 from __future__ import annotations
@@ -81,8 +82,9 @@ class TestCopyRenderProduct(omni.kit.test.AsyncTestCase):
         return stage
 
     async def test_clone_remaps_targets_and_rewrites_spg_assets(self) -> None:
-        """The clone repoints to the new camera, keeps resolution, remaps internal targets, and
-        package-qualifies its SPG asset paths.
+        """Check that the clone remaps targets and SPG asset paths.
+
+        The clone points to the new camera, keeps its resolution, and package-qualifies its SPG asset paths.
         """
         from isaacsim.replicator.nurec_utils.render import copy_render_product
 
@@ -105,8 +107,9 @@ class TestCopyRenderProduct(omni.kit.test.AsyncTestCase):
         self.assertEqual([str(t) for t in clone_shader.GetRelationship("renderProduct").GetTargets()], ["/Render/dst"])
 
     async def test_clone_is_separate_layer_and_leaves_source_unchanged(self) -> None:
-        """The clone is a distinct prim authored only in the session layer with its own render var, and
-        the authored RenderProduct keeps its camera, var, and un-rewritten SPG asset.
+        """Check that cloning leaves the source render product unchanged.
+
+        The clone is authored only in the session layer with its own render variable.
         """
         from isaacsim.replicator.nurec_utils.render import copy_render_product
 

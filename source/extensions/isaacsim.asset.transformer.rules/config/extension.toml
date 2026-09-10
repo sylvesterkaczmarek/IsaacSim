@@ -1,5 +1,5 @@
 [package]
-version = "1.7.10"
+version = "1.7.18"
 category = "Simulation"
 title = "Isaac Sim Asset Transformer Rules"
 description = "Rule implementations for the Asset Transformer"
@@ -22,6 +22,16 @@ name = "isaacsim.asset.transformer.rules"
 
 [[python.module]]
 name = "isaacsim.asset.transformer.rules.tests"
+
+[[test]]
+timeout = 900
+dependencies = [
+    "isaacsim.storage.native", # tests resolve Isaac assets root for the UR10 gripper-variant regression
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
 
 [documentation]
 pages = ["docs/Overview.md", "docs/CHANGELOG.md"]

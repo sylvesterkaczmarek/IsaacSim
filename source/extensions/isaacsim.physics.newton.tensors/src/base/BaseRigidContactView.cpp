@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "BaseRigidContactView.h"
+#include "BaseRigidContactView.hpp"
 
-#include "utils/TensorOps.h"
-#include "utils/WarpInterop.h"
+#include "utils/TensorOps.hpp"
+#include "utils/WarpInterop.hpp"
 
 #include <carb/logging/Log.h>
 
@@ -36,6 +36,81 @@ namespace tensors
 {
 
 using namespace omni::physics::tensors;
+
+namespace
+{
+
+int resolvePathToBodyIndex(const std::string& path,
+                           const std::vector<std::string>& bodyLabels,
+                           const std::vector<std::string>& shapeLabels,
+                           const std::vector<int>& shapeBodyArr,
+                           int worldBodyIndex)
+{
+    if (path.empty())
+    {
+        return -1;
+    }
+
+    for (size_t bi = 0; bi < bodyLabels.size(); ++bi)
+    {
+        if (bodyLabels[bi] == path)
+        {
+            return static_cast<int>(bi);
+        }
+    }
+
+    int bestBi = -1;
+    size_t bestLen = 0;
+    for (size_t bi = 0; bi < bodyLabels.size(); ++bi)
+    {
+        const std::string prefix = bodyLabels[bi] + "/";
+        if (path.rfind(prefix, 0) == 0 && bodyLabels[bi].size() > bestLen)
+        {
+            bestBi = static_cast<int>(bi);
+            bestLen = bodyLabels[bi].size();
+        }
+    }
+    if (bestBi >= 0)
+    {
+        return bestBi;
+    }
+
+    bestBi = -1;
+    bestLen = 0;
+    const std::string pathPrefix = path + "/";
+    for (size_t bi = 0; bi < bodyLabels.size(); ++bi)
+    {
+        if (bodyLabels[bi].rfind(pathPrefix, 0) == 0 && bodyLabels[bi].size() > bestLen)
+        {
+            bestBi = static_cast<int>(bi);
+            bestLen = bodyLabels[bi].size();
+        }
+    }
+    if (bestBi >= 0)
+    {
+        return bestBi;
+    }
+
+    for (size_t shi = 0; shi < shapeLabels.size() && shi < shapeBodyArr.size(); ++shi)
+    {
+        const std::string& sl = shapeLabels[shi];
+        if (sl == path || path.rfind(sl + "/", 0) == 0 || sl.rfind(path + "/", 0) == 0)
+        {
+            if (shapeBodyArr[shi] >= 0)
+            {
+                return shapeBodyArr[shi];
+            }
+            if (shapeBodyArr[shi] == -1)
+            {
+                return worldBodyIndex;
+            }
+        }
+    }
+
+    return -1;
+}
+
+} // namespace
 
 BaseRigidContactView::BaseRigidContactView(py::object newtonStage,
                                            const std::vector<std::string>& sensorPaths,
@@ -93,24 +168,16 @@ BaseRigidContactView::BaseRigidContactView(py::object newtonStage,
         for (py::ssize_t i = 0; i < sbData.shape(0); ++i)
             shapeBodyArr[i] = sbData(i);
     }
+    m_shapeLabels = std::move(shapeLabels);
+    m_shapeBodyArr = std::move(shapeBodyArr);
 
     m_sensorCount = static_cast<uint32_t>(m_sensorPaths.size());
-    m_hostBodySensorMap.assign(m_bodyCount, -1);
 
     m_sensorNames.reserve(m_sensorCount);
     for (uint32_t si = 0; si < m_sensorCount; ++si)
     {
         pxr::SdfPath sdfPath(m_sensorPaths[si]);
         m_sensorNames.push_back(sdfPath.GetName());
-
-        for (size_t bi = 0; bi < m_bodyLabels.size(); ++bi)
-        {
-            if (m_bodyLabels[bi] == m_sensorPaths[si])
-            {
-                m_hostBodySensorMap[bi] = static_cast<int>(si);
-                break;
-            }
-        }
     }
 
     m_filterCount = 0;
@@ -133,61 +200,7 @@ BaseRigidContactView::BaseRigidContactView(py::object newtonStage,
         }
     }
 
-    m_hostBodyFilterMap.assign(static_cast<size_t>(m_sensorCount) * m_bodyCount, -1);
-    for (uint32_t si = 0; si < m_sensorCount; ++si)
-    {
-        if (si >= m_filterPaths.size())
-            continue;
-        for (uint32_t fi = 0; fi < static_cast<uint32_t>(m_filterPaths[si].size()); ++fi)
-        {
-            const std::string& filterPath = m_filterPaths[si][fi];
-            if (filterPath.empty())
-                continue;
-
-            bool resolved = false;
-            for (size_t bi = 0; bi < m_bodyLabels.size(); ++bi)
-            {
-                if (m_bodyLabels[bi] == filterPath)
-                {
-                    m_hostBodyFilterMap[si * m_bodyCount + bi] = static_cast<int>(fi);
-                    resolved = true;
-                    break;
-                }
-            }
-            if (resolved)
-                continue;
-
-            int bestBi = -1;
-            size_t bestLen = 0;
-            for (size_t bi = 0; bi < m_bodyLabels.size(); ++bi)
-            {
-                std::string prefix = m_bodyLabels[bi] + "/";
-                if (filterPath.rfind(prefix, 0) == 0 && m_bodyLabels[bi].size() > bestLen)
-                {
-                    bestBi = static_cast<int>(bi);
-                    bestLen = m_bodyLabels[bi].size();
-                }
-            }
-            if (bestBi >= 0)
-            {
-                m_hostBodyFilterMap[si * m_bodyCount + bestBi] = static_cast<int>(fi);
-                continue;
-            }
-
-            for (size_t shi = 0; shi < shapeLabels.size() && shi < shapeBodyArr.size(); ++shi)
-            {
-                const std::string& sl = shapeLabels[shi];
-                if (shapeBodyArr[shi] != -1)
-                    continue;
-                if (sl == filterPath || filterPath.rfind(sl + "/", 0) == 0 || sl.rfind(filterPath + "/", 0) == 0)
-                {
-                    m_hostBodyFilterMap[si * m_bodyCount + m_worldBodyIndex] = static_cast<int>(fi);
-                    resolved = true;
-                    break;
-                }
-            }
-        }
-    }
+    _rebuildBodyMaps();
 
     size_t maxScratch = static_cast<size_t>(m_sensorCount) * std::max(m_filterCount, 1u);
     m_scratchCounts.resize(maxScratch, 0);
@@ -206,6 +219,83 @@ void BaseRigidContactView::_cacheStaticPointers()
 {
     py::gil_scoped_acquire gil;
     m_cachedShapeBody = warpArrayFromPython<int>(m_model.attr("shape_body")).data;
+}
+
+void BaseRigidContactView::_rebuildBodyMaps()
+{
+    py::gil_scoped_acquire gil;
+
+    int bodyCount = m_model.attr("body_count").cast<int>();
+    m_worldBodyIndex = bodyCount;
+    m_bodyCount = bodyCount + 1;
+
+    py::list bodyLabel = m_model.attr("body_label").cast<py::list>();
+    m_bodyLabels.clear();
+    m_bodyLabels.reserve(static_cast<size_t>(py::len(bodyLabel)));
+    for (auto item : bodyLabel)
+    {
+        m_bodyLabels.push_back(py::str(item));
+    }
+
+    m_hostBodySensorMap.assign(m_bodyCount, -1);
+    for (uint32_t si = 0; si < m_sensorCount; ++si)
+    {
+        const std::string& sensorPath = m_sensorPaths[si];
+        const int bi = resolvePathToBodyIndex(sensorPath, m_bodyLabels, m_shapeLabels, m_shapeBodyArr, m_worldBodyIndex);
+        if (bi >= 0 && bi < m_bodyCount)
+        {
+            m_hostBodySensorMap[bi] = static_cast<int>(si);
+        }
+
+        const std::string pathPrefix = sensorPath + "/";
+        for (size_t bodyIdx = 0; bodyIdx < m_bodyLabels.size(); ++bodyIdx)
+        {
+            const std::string& label = m_bodyLabels[bodyIdx];
+            if (label == sensorPath || label.rfind(pathPrefix, 0) == 0)
+            {
+                m_hostBodySensorMap[static_cast<int>(bodyIdx)] = static_cast<int>(si);
+            }
+        }
+
+        for (size_t shi = 0; shi < m_shapeLabels.size() && shi < m_shapeBodyArr.size(); ++shi)
+        {
+            const int shapeBodyIdx = m_shapeBodyArr[shi];
+            if (shapeBodyIdx < 0 || shapeBodyIdx >= m_bodyCount)
+            {
+                continue;
+            }
+            const std::string& shapePath = m_shapeLabels[shi];
+            if (shapePath == sensorPath || shapePath.rfind(pathPrefix, 0) == 0)
+            {
+                m_hostBodySensorMap[shapeBodyIdx] = static_cast<int>(si);
+            }
+        }
+    }
+
+    m_hostBodyFilterMap.assign(static_cast<size_t>(m_sensorCount) * static_cast<size_t>(m_bodyCount), -1);
+    for (uint32_t si = 0; si < m_sensorCount; ++si)
+    {
+        if (si >= m_filterPaths.size())
+        {
+            continue;
+        }
+        for (uint32_t fi = 0; fi < static_cast<uint32_t>(m_filterPaths[si].size()); ++fi)
+        {
+            const std::string& filterPath = m_filterPaths[si][fi];
+            if (filterPath.empty())
+            {
+                continue;
+            }
+
+            const int bi =
+                resolvePathToBodyIndex(filterPath, m_bodyLabels, m_shapeLabels, m_shapeBodyArr, m_worldBodyIndex);
+            if (bi >= 0 && bi < m_bodyCount)
+            {
+                m_hostBodyFilterMap[static_cast<size_t>(si) * static_cast<size_t>(m_bodyCount) + static_cast<size_t>(bi)] =
+                    static_cast<int>(fi);
+            }
+        }
+    }
 }
 
 void BaseRigidContactView::_refreshContactPointers() const
@@ -377,17 +467,28 @@ void BaseRigidContactView::getOtherActorPathsFromIds(const TensorDesc* otherActo
     for (uint32_t i = 0; i < n; ++i)
     {
         uint64_t bodyIdx = hostIds[i];
-        if (bodyIdx == static_cast<uint64_t>(m_worldBodyIndex))
-        {
-            outPaths[i] = "world";
-        }
-        else if (bodyIdx < m_bodyLabels.size())
+        if (bodyIdx < m_bodyLabels.size())
         {
             outPaths[i] = m_bodyLabels[bodyIdx];
         }
-        else
+        else if (bodyIdx > static_cast<uint64_t>(m_worldBodyIndex))
         {
-            outPaths[i] = "";
+            const uint64_t shapeIdx = bodyIdx - static_cast<uint64_t>(m_worldBodyIndex) - 1u;
+            if (shapeIdx < m_shapeLabels.size())
+            {
+                outPaths[i] = m_shapeLabels[shapeIdx];
+            }
+        }
+        else if (bodyIdx == static_cast<uint64_t>(m_worldBodyIndex))
+        {
+            // Retain a valid absolute sentinel for callers holding an ID emitted by an
+            // older backend. New raw-contact data encodes the specific static shape.
+            outPaths[i] = "/";
+        }
+
+        if (!outPaths[i].empty() && outPaths[i][0] != '/')
+        {
+            outPaths[i].insert(outPaths[i].begin(), '/');
         }
     }
 }

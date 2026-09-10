@@ -150,7 +150,9 @@ class TestArticulationControllerNode(ogts.OmniGraphTestCase):
         if assets_root_path is None:
             carb.log_error("Could not find Isaac Sim assets folder")
             return
-        await stage_utils.open_stage_async(assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd")
+        await stage_utils.open_stage_async(
+            assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
+        )
 
     # ----------------------------------------------------------------------
     async def tearDown(self) -> None:
@@ -438,6 +440,52 @@ class TestArticulationControllerNode(ogts.OmniGraphTestCase):
 
         self.assertAlmostEqual(robot.get_dof_positions().numpy()[0, 2], 1.7, delta=0.002)
         self.assertGreater(abs(robot.get_dof_positions().numpy()[0, 3] - 1.7), 0.002)
+
+    # ----------------------------------------------------------------------
+    async def test_single_joint_index_zero_ogn(self) -> None:
+        """Verify jointIndices=[0] selects only DOF 0, not all DOFs.
+
+        Regression test: np.asarray([0]).any() is False, which previously caused
+        the "no indices provided" branch to be taken and the command to be
+        broadcast to every DOF instead of just DOF 0.
+        """
+        test_graph, new_nodes, _, _ = og.Controller.edit(
+            {"graph_path": "/ActionGraph", "evaluator_name": "execution"},
+            {
+                og.Controller.Keys.CREATE_NODES: [
+                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+                    ("Joint1Index", "omni.graph.nodes.ConstantInt"),
+                    ("JointIndexArray", "omni.graph.nodes.ConstructArray"),
+                    ("Joint1Position", "omni.graph.nodes.ConstantDouble"),
+                    ("JointCommandArray", "omni.graph.nodes.ConstructArray"),
+                    ("ArticulationController", "isaacsim.core.nodes.IsaacArticulationController"),
+                ],
+                og.Controller.Keys.SET_VALUES: [
+                    ("Joint1Index.inputs:value", 0),
+                    ("Joint1Position.inputs:value", 1.7),
+                    ("JointIndexArray.inputs:arraySize", 1),
+                    ("JointCommandArray.inputs:arraySize", 1),
+                    ("ArticulationController.inputs:robotPath", "/panda"),
+                ],
+                og.Controller.Keys.CONNECT: [
+                    ("OnPlaybackTick.outputs:tick", "ArticulationController.inputs:execIn"),
+                    ("Joint1Index.inputs:value", "JointIndexArray.inputs:input0"),
+                    ("JointIndexArray.outputs:array", "ArticulationController.inputs:jointIndices"),
+                    ("Joint1Position.inputs:value", "JointCommandArray.inputs:input0"),
+                    ("JointCommandArray.outputs:array", "ArticulationController.inputs:positionCommand"),
+                ],
+            },
+        )
+
+        await og.Controller.evaluate(test_graph)
+
+        # check where the joints are after evaluate
+        robot = Articulation("/panda")
+        app_utils.play()
+        await app_utils.update_app_async(steps=120)
+
+        self.assertAlmostEqual(robot.get_dof_positions().numpy()[0, 0], 1.7, delta=0.002)
+        self.assertGreater(abs(robot.get_dof_positions().numpy()[0, 1] - 1.7), 0.002)
 
     # ----------------------------------------------------------------------
     async def test_joint_indices_different_shape(self) -> None:

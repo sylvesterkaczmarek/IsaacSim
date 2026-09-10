@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <isaacsim/ros2/core/Ros2Node.h>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
 
 #include <OgnROS2SubscribeAckermannDatabase.h>
 

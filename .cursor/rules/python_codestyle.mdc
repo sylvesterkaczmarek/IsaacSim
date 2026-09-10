@@ -1,6 +1,7 @@
 ---
 description: This rule file should be used for Python code development
-globs: *.py
+globs:
+  - "**/*.py"
 ---
 
 # Python Development Rules
@@ -100,7 +101,8 @@ You are a senior Python developer with expertise in modern Python (3.10+), type 
 - Keep `__init__.py` files minimal; use them primarily for re-exports.
 
 ## Syntax and Formatting
-- Run `repo format` to format code. It uses Black (line length 120) and isort (`--profile black`) under the hood.
+- Format code with Black at line length 120 and isort using the Black profile. Run them through the entry point provided
+  by the owning build.
 - Do not manually override formatting choices that Black handles (quotes, trailing commas, bracket placement, whitespace, etc.). Let the formatter decide.
 - Use parentheses for line continuation instead of backslashes.
 
@@ -112,9 +114,12 @@ You are a senior Python developer with expertise in modern Python (3.10+), type 
 - Prefer explicit validation over silent failures.
 - Use `try/except/else/finally` blocks appropriately.
 - Never use bare `except:` clauses; catch specific exceptions.
-- Log errors using `carb.log_error` in Isaac Sim extensions; use `carb.log_info` and `carb.log_warn` for other levels (avoid `print` for errors).
+- Use the logging facility selected by the owning component. Use `print` only for intentional command-line or
+  result-style output.
 - Use `assert` only for debugging, never for runtime validation.
-- Start print/log messages with a capital letter and continue in normal sentence case (e.g., `print("Loading stage completed")`, `carb.log_info("Simulation started successfully")`). Exceptions: identifiers that are naturally lowercase (e.g., variable names) may start the message only when necessary.
+- Start print/log messages with a capital letter and continue in normal sentence case (for example,
+  `print("Loading completed")` or `logger.info("Simulation started successfully")`). Identifiers that are naturally
+  lowercase may start the message when necessary.
 
 ## Performance Optimization
 - Profile before optimizing; use `cProfile` or `line_profiler`.
@@ -140,12 +145,10 @@ You are a senior Python developer with expertise in modern Python (3.10+), type 
 - Use `copy.deepcopy()` when you need independent copies of mutable objects.
 
 ## Testing
-- Write unit tests using `unittest` and `omni.kit.test.AsyncTestCase` for extension tests.
+- Use the test framework selected by the owning component.
 - Use descriptive test function names: `test_<function_name>_<scenario>`.
-- Use `setUp` and `tearDown` (or `async setUp`/`async tearDown`) methods for test setup and teardown.
 - Mock external dependencies with `unittest.mock`.
 - Aim for high test coverage of critical code paths.
-- Use `unittest.TestCase.subTest` for testing multiple inputs within a single test method.
 - Keep tests isolated and independent.
 
 ## Security
@@ -166,15 +169,3 @@ You are a senior Python developer with expertise in modern Python (3.10+), type 
 - Add inline comments for complex logic.
 - Keep comments up to date with code changes.
 - When referring to identifiers (variables, functions, classes, parameters, prim paths, constants) in comments, wrap them in backticks (e.g., `# Monitor \`cube_2\` state`, `# Called by \`initialize()\``). See python_docstrings.mdc for full details.
-
-## Isaac Sim Specific Rules
-- Use `carb.log_info`, `carb.log_warn`, and `carb.log_error` for logging instead of `print` or standard `logging`.
-- Follow the extension structure conventions defined in extension_structure.mdc.
-- Use `carb.settings.get_settings()` for configuration values.
-- Import Omniverse modules lazily when possible to reduce startup time.
-- Use asyncio for async operations within extensions.
-- Handle USD stage operations within proper contexts.
-- Clean up subscriptions and callbacks in `on_shutdown`.
-- Use `isaacsim.core.simulation_manager.SimulationEvent` for simulation lifecycle events (e.g., `SimulationEvent.PHYSICS_POST_STEP`).
-- Use `isaacsim.core.experimental.utils.app` for timeline-related utility functions rather than `omni.timeline` directly.
-- Use `isaacsim.core.simulation_manager.SimulationManager` for simulation setup and callback registration.

@@ -1,5 +1,9 @@
 # Changelog
 
+## [4.1.4] - 2026-07-07
+### Changed
+- Update the generated Python API inventory.
+
 ## [4.1.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

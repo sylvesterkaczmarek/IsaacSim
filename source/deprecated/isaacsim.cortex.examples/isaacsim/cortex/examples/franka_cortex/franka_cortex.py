@@ -99,7 +99,8 @@ class FrankaCortex(CortexBase):
     def setup_scene(self) -> None:
         """Sets up the simulation scene with a Franka robot and colored cube obstacles.
 
-        Adds a Franka robot to the world and creates four colored cubes (Red, Blue, Yellow, Green) as obstacles that the robot must navigate around. Also adds a default ground plane to the scene.
+        Adds a Franka robot to the world and creates four colored cubes (Red, Blue, Yellow, Green) as obstacles that the
+        robot must navigate around. Also adds a default ground plane to the scene.
         """
         world = self.get_world()
         self.robot = world.add_robot(add_franka_to_stage(name="franka", prim_path="/World/Franka"))
@@ -145,7 +146,8 @@ class FrankaCortex(CortexBase):
     async def setup_post_load(self, soft: bool = False) -> None:
         """Sets up the decider network after loading a behavior module.
 
-        Creates and configures the decider network from the loaded behavior module, adds monitoring capabilities, and integrates it with the world.
+        Creates and configures the decider network from the loaded behavior module, adds monitoring capabilities, and
+        integrates it with the world.
 
         Args:
             soft: Whether to perform a soft setup.
@@ -162,7 +164,8 @@ class FrankaCortex(CortexBase):
     def _on_monitor_update(self, context: object) -> None:
         """Handles context updates from the behavior monitoring system.
 
-        Extracts diagnostic messages and decision stack information from the context and passes them to the registered monitor function for UI display.
+        Extracts diagnostic messages and decision stack information from the context and passes them to the registered
+        monitor function for UI display.
 
         Args:
             context: The context object containing diagnostic information and current state.

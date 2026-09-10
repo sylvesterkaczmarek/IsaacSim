@@ -44,9 +44,9 @@ def add_articulation_root(prim: Usd.Prim) -> None:
 
 
 def move_articulation_root(src_prim: Usd.Prim, dst_prim: Usd.Prim) -> None:
-    """Move the Articulation Root from `src_prim` to `dst_prim`. If `src_prim` is not an.
+    """Move the Articulation Root from `src_prim` to `dst_prim`.
 
-    Articulation Root, nothing will happen.
+    If `src_prim` is not an Articulation Root, nothing will happen.
 
     Args:
         src_prim: A prim from which an Articulation Root will be removed.

@@ -901,3 +901,66 @@ class TestTransform(omni.kit.test.AsyncTestCase):
         result_np = transform_utils.compute_relative_transform(source_np, target_np)
         result_wp = transform_utils.compute_relative_transform(source_wp, target_wp)
         np.testing.assert_allclose(result_wp, result_np, atol=1e-10)
+
+    async def test_rotate_vectors_by_quaternion_identity(self) -> None:
+        """Test rotating a vector with the identity quaternion."""
+        vector = transform_utils.rotate_vectors_by_quaternion([1.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])
+        np.testing.assert_allclose(vector.numpy(), [1.0, 0.0, 0.0], atol=self.tolerance)
+
+    async def test_rotate_vectors_by_quaternion_z_90(self) -> None:
+        """Test rotating +X by 90 degrees around Z."""
+        angle = np.radians(90.0)
+        quat = np.array([np.cos(angle / 2), 0.0, 0.0, np.sin(angle / 2)])
+        vector = transform_utils.rotate_vectors_by_quaternion([1.0, 0.0, 0.0], quat)
+        np.testing.assert_allclose(vector.numpy(), [0.0, 1.0, 0.0], atol=self.tolerance)
+
+    async def test_transform_local_to_world_translated(self) -> None:
+        """Test transforming a local point with translation only."""
+        world_point = transform_utils.transform_local_to_world([1.0, 0.0, 0.0], [10.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])
+        np.testing.assert_allclose(world_point.numpy(), [11.0, 0.0, 0.0], atol=self.tolerance)
+
+    async def test_rotate_vectors_by_quaternion_inherits_orientation_dtype(self) -> None:
+        """Test that float64 orientation yields float64 output when dtype is omitted."""
+        orientation = wp.array([1.0, 0.0, 0.0, 0.0], dtype=wp.float64)
+        vector = transform_utils.rotate_vectors_by_quaternion([1.0, 0.0, 0.0], orientation)
+        self.assertEqual(vector.dtype, wp.float64)
+
+    async def test_transform_local_to_world_inherits_orientation_dtype(self) -> None:
+        """Test that float64 orientation yields float64 output when dtype is omitted."""
+        orientation = wp.array([1.0, 0.0, 0.0, 0.0], dtype=wp.float64)
+        world_point = transform_utils.transform_local_to_world([1.0, 0.0, 0.0], [10.0, 0.0, 0.0], orientation)
+        self.assertEqual(world_point.dtype, wp.float64)
+
+    async def test_transform_world_to_local_translated(self) -> None:
+        """Test transforming a world point into a translated local frame."""
+        local_point = transform_utils.transform_world_to_local([11.0, 0.0, 0.0], [10.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])
+        np.testing.assert_allclose(local_point.numpy(), [1.0, 0.0, 0.0], atol=self.tolerance)
+
+    async def test_transform_world_to_local_rotated(self) -> None:
+        """Test applying the inverse frame rotation to a world point."""
+        angle = np.radians(90.0)
+        orientation = [np.cos(angle / 2), 0.0, 0.0, np.sin(angle / 2)]
+        local_point = transform_utils.transform_world_to_local([10.0, 1.0, 0.0], [10.0, 0.0, 0.0], orientation)
+        np.testing.assert_allclose(local_point.numpy(), [1.0, 0.0, 0.0], atol=self.tolerance)
+
+    async def test_world_local_point_transforms_round_trip(self) -> None:
+        """Test that world-to-local inverts local-to-world."""
+        position = [1.0, 2.0, 3.0]
+        orientation = transform_utils.euler_angles_to_quaternion([0.3, -0.2, 0.5])
+        local_points = np.array([[1.0, 2.0, 3.0], [-0.5, 0.25, 4.0]])
+        world_points = transform_utils.transform_local_to_world(local_points, position, orientation)
+        recovered = transform_utils.transform_world_to_local(world_points, position, orientation)
+        np.testing.assert_allclose(recovered.numpy(), local_points, atol=self.tolerance)
+
+    async def test_transform_world_to_local_inherits_orientation_dtype(self) -> None:
+        """Test that float64 orientation yields float64 output when dtype is omitted."""
+        orientation = wp.array([1.0, 0.0, 0.0, 0.0], dtype=wp.float64)
+        local_point = transform_utils.transform_world_to_local([11.0, 0.0, 0.0], [10.0, 0.0, 0.0], orientation)
+        self.assertEqual(local_point.dtype, wp.float64)
+
+    async def test_quaternion_multiplication_mixed_input_dtypes(self) -> None:
+        """Test quaternion multiplication when inputs use different float dtypes."""
+        first = wp.array([1.0, 0.0, 0.0, 0.0], dtype=wp.float32)
+        second = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+        result = transform_utils.quaternion_multiplication(first, second)
+        np.testing.assert_allclose(result.numpy(), [1.0, 0.0, 0.0, 0.0], atol=self.tolerance)

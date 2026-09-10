@@ -431,7 +431,7 @@ class TestStageMetadataCopy(omni.kit.test.AsyncTestCase):
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     async def test_copy_metadata_from_stage_and_layer(self) -> None:
-        """copy_stage_metadata copies metersPerUnit/upAxis; copy_stage_metadata_from_layer skips defaultPrim."""
+        """copy_stage_metadata copies metersPerUnit/upAxis; copy_stage_metadata_from_layer skips defaultPrim/documentation."""
         failures = []
 
         # From stage
@@ -442,12 +442,16 @@ class TestStageMetadataCopy(omni.kit.test.AsyncTestCase):
             if dst1.pseudoRoot.GetInfo(key) is None:
                 failures.append(f"copy_stage_metadata: {key} not copied")
 
-        # From layer - defaultPrim should be skipped
+        # From layer - defaultPrim and documentation should be skipped
         src_layer = src_stage.GetRootLayer()
+        src_layer.documentation = "Generated from Composed Stage of root layer omniverse://server/asset.usd"
         dst2 = Sdf.Layer.CreateNew(os.path.join(self._tmpdir, "dst2.usda"))
         utils.copy_stage_metadata_from_layer(src_layer, dst2)
         if dst2.defaultPrim:
             failures.append("copy_stage_metadata_from_layer: defaultPrim should not be copied")
+        # The provenance documentation must not leak the source path into outputs.
+        if dst2.documentation:
+            failures.append("copy_stage_metadata_from_layer: documentation should not be copied")
         # But other metadata should be present
         if dst2.pseudoRoot.GetInfo("metersPerUnit") is None:
             failures.append("copy_stage_metadata_from_layer: metersPerUnit not copied")
@@ -616,4 +620,220 @@ class TestAssetPathResolution(omni.kit.test.AsyncTestCase):
         if arc3 is not None:
             failures.append(f"Both empty should be None, got {arc3!r}")
 
+        self.assertEqual(failures, [], "\n".join(failures))
+
+
+class TestRemoteAssetPathHelpers(omni.kit.test.AsyncTestCase):
+    """URL-safe helpers for asset paths that may be remote (``omniverse://`` etc.).
+
+    These helpers must preserve the ``scheme://`` double-slash that
+    :func:`os.path.normpath` would otherwise collapse, and must route
+    existence checks through ``omni.client`` so the variant routing rule
+    can resolve and collect dependencies from remote Nucleus servers.
+    """
+
+    async def test_is_absolute_asset_path(self) -> None:
+        """Remote URLs and local absolute paths are absolute; relative paths are not."""
+        failures = []
+        cases = [
+            ("omniverse://server/a.usd", True),
+            ("http://x.com/a.usd", True),
+            ("https://x.com/a.usd", True),
+            ("/tmp/a.usda", True),
+            ("./a.usda", False),
+            ("a.usda", False),
+            ("", False),
+        ]
+        for path, expected in cases:
+            result = utils.is_absolute_asset_path(path)
+            if result != expected:
+                failures.append(f"is_absolute_asset_path({path!r}) -> {result}, expected {expected}")
+        self.assertEqual(failures, [], "\n".join(failures))
+
+    async def test_asset_dirname(self) -> None:
+        """Remote URLs preserve scheme prefix; local paths use os.path.dirname."""
+        failures = []
+        cases = [
+            ("omniverse://host/a/b/c.usd", "omniverse://host/a/b"),
+            ("omniverse://host/file.usd", "omniverse://host"),
+            ("omniverse://host", "omniverse://host"),
+            ("http://example.com/a/b.usd", "http://example.com/a"),
+            ("/tmp/dir/file.usda", "/tmp/dir"),
+            ("", ""),
+        ]
+        for path, expected in cases:
+            result = utils.asset_dirname(path)
+            if result != expected:
+                failures.append(f"asset_dirname({path!r}) -> {result!r}, expected {expected!r}")
+        self.assertEqual(failures, [], "\n".join(failures))
+
+    async def test_join_asset_path_remote(self) -> None:
+        """Remote bases keep the ``://`` and resolve ``./``/``..`` correctly."""
+        failures = []
+        cases = [
+            # (base_dir, relative_path, expected)
+            ("omniverse://host/dir", "./payloads/sensors.usda", "omniverse://host/dir/payloads/sensors.usda"),
+            ("omniverse://host/dir", "../other/file.usda", "omniverse://host/other/file.usda"),
+            ("omniverse://host/dir", "file.usda", "omniverse://host/dir/file.usda"),
+            ("omniverse://host", "file.usda", "omniverse://host/file.usda"),
+            ("omniverse://host/a/b", "../../c.usd", "omniverse://host/c.usd"),
+            # ``..`` does not consume the host portion.
+            ("omniverse://host", "../../etc/passwd", "omniverse://host/etc/passwd"),
+            # An absolute relative_path overrides the base.
+            ("omniverse://host/dir", "/abs/path.usd", "/abs/path.usd"),
+            ("omniverse://host/dir", "omniverse://other/x.usd", "omniverse://other/x.usd"),
+            # Empty relative returns base.
+            ("omniverse://host/dir", "", "omniverse://host/dir"),
+        ]
+        for base, rel, expected in cases:
+            result = utils.join_asset_path(base, rel)
+            if result != expected:
+                failures.append(f"join_asset_path({base!r}, {rel!r}) -> {result!r}, expected {expected!r}")
+        self.assertEqual(failures, [], "\n".join(failures))
+
+    async def test_join_asset_path_local(self) -> None:
+        """Local bases use normpath(join) and absolute relative_path passes through."""
+        failures = []
+        # On POSIX os.path.normpath collapses redundant separators and ``./``.
+        expected_local = os.path.normpath(os.path.join("/tmp/dir", "./a/../b.usda"))
+        result = utils.join_asset_path("/tmp/dir", "./a/../b.usda")
+        if result != expected_local:
+            failures.append(f"local join: {result!r} != {expected_local!r}")
+
+        # Absolute relative path returns unchanged.
+        if utils.join_asset_path("/tmp/dir", "/abs/x.usda") != "/abs/x.usda":
+            failures.append("absolute relative_path should pass through unchanged")
+
+        self.assertEqual(failures, [], "\n".join(failures))
+
+    async def test_norm_path_preserves_remote_urls(self) -> None:
+        """``norm_path`` must NOT collapse ``//`` after a remote scheme."""
+        failures = []
+        for url in (
+            "omniverse://server/dir/file.usda",
+            "omniverse://host:port/a/b.usd",
+            "http://x.com/a.usd",
+            "https://x.com/a.usd",
+        ):
+            result = utils.norm_path(url)
+            if result != url:
+                failures.append(f"norm_path({url!r}) corrupted URL: {result!r}")
+        # Local paths still get normalized.
+        local_norm = utils.norm_path("a/./b/../c")
+        local_expected = os.path.normcase(os.path.normpath("a/c"))
+        if local_norm != local_expected:
+            failures.append(f"local norm: {local_norm!r} != {local_expected!r}")
+        self.assertEqual(failures, [], "\n".join(failures))
+
+
+class TestRemoteAwareResolution(omni.kit.test.AsyncTestCase):
+    """``resolve_asset_path`` and ``remap_asset_path`` with remote-URL inputs.
+
+    These tests do not require live Nucleus access; they exercise the
+    URL-safe path joining and the fallback semantics when remote checks
+    cannot be performed (``omni.client`` unavailable or remote files
+    unreachable).
+    """
+
+    async def setUp(self) -> None:
+        """Create temporary directory for local fixtures."""
+        self._tmpdir = tempfile.mkdtemp()
+
+    async def tearDown(self) -> None:
+        """Remove temporary directory."""
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    async def test_resolve_with_remote_fallback_dir_does_not_corrupt_url(self) -> None:
+        """Joining ``./a.usda`` onto an omniverse:// fallback must keep ``://``.
+
+        The previous implementation used ``os.path.normpath(os.path.join(...))``
+        which silently corrupted the URL scheme ("omniverse://" -> "omniverse:/"),
+        causing every remote variant arc to look unresolvable. This test
+        guards against that regression by intercepting the existence check
+        and asserting the candidate it sees is well-formed.
+        """
+        candidates_observed: list[str] = []
+
+        original_try = utils._try_usd_extensions
+
+        def spy_try(path: str) -> str | None:
+            candidates_observed.append(path)
+            return None
+
+        utils._try_usd_extensions = spy_try
+        try:
+            result = utils.resolve_asset_path(
+                "./payloads/Sensor/sensors.usda",
+                fallback_dirs=["omniverse://server/dir/ur10"],
+            )
+        finally:
+            utils._try_usd_extensions = original_try
+
+        failures = []
+        if result != "":
+            failures.append(f"resolve should return '' when nothing exists, got {result!r}")
+        if not candidates_observed:
+            failures.append("resolve_asset_path did not attempt a fallback candidate")
+        else:
+            expected_candidate = "omniverse://server/dir/ur10/payloads/Sensor/sensors.usda"
+            if candidates_observed[0] != expected_candidate:
+                failures.append(
+                    f"fallback candidate was corrupted: got {candidates_observed[0]!r}, "
+                    f"expected {expected_candidate!r}"
+                )
+        self.assertEqual(failures, [], "\n".join(failures))
+
+    async def test_remap_asset_path_remote_in_collected_deps(self) -> None:
+        """A remote URL key in ``collected_deps`` resolves to the local copy."""
+        failures = []
+        dest_dir = os.path.join(self._tmpdir, "out")
+        os.makedirs(dest_dir)
+        local_dep = os.path.join(dest_dir, "dependencies", "sensors.usda")
+        os.makedirs(os.path.dirname(local_dep))
+        Sdf.Layer.CreateNew(local_dep)
+
+        remote_url = "omniverse://server/dir/ur10/payloads/Sensor/sensors.usda"
+        collected = {utils.norm_path(remote_url): local_dep}
+
+        result = utils.remap_asset_path(remote_url, "", dest_dir, {}, collected)
+        # remap should produce a path relative to dest_dir.
+        expected = "./dependencies/sensors.usda"
+        if result != expected:
+            failures.append(f"remap (absolute remote): {result!r} != {expected!r}")
+
+        # Same call with relative path against a remote source_dir.
+        rel_result = utils.remap_asset_path(
+            "./payloads/Sensor/sensors.usda",
+            "omniverse://server/dir/ur10",
+            dest_dir,
+            {},
+            collected,
+        )
+        if rel_result != expected:
+            failures.append(f"remap (relative against remote base): {rel_result!r} != {expected!r}")
+
+        self.assertEqual(failures, [], "\n".join(failures))
+
+    async def test_remap_asset_path_remote_not_collected_passes_through(self) -> None:
+        """Remote URLs absent from the maps remain unchanged (still resolvable)."""
+        result = utils.remap_asset_path(
+            "omniverse://server/dir/external.usda",
+            "",
+            self._tmpdir,
+            {},
+            {},
+        )
+        self.assertEqual(result, "omniverse://server/dir/external.usda")
+
+    async def test_asset_exists_local_paths(self) -> None:
+        """``asset_exists`` mirrors ``os.path.isfile`` for local paths."""
+        failures = []
+        existing = os.path.join(self._tmpdir, "real.usda")
+        Sdf.Layer.CreateNew(existing)
+        if not utils.asset_exists(existing):
+            failures.append("Existing local file should be reported as existing")
+        if utils.asset_exists(os.path.join(self._tmpdir, "ghost.usda")):
+            failures.append("Nonexistent local file should NOT exist")
+        if utils.asset_exists(""):
+            failures.append("Empty path must not exist")
         self.assertEqual(failures, [], "\n".join(failures))

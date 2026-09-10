@@ -41,3 +41,5 @@ This provides immediate access to the running application's version details with
 The extension handles version strings that follow semantic versioning conventions, supporting complex formats with prerelease tags and build metadata. The parsed components enable version comparison logic, compatibility checks, and feature detection based on specific Isaac Sim releases.
 
 {class}`Version <isaacsim.core.version.Version>` information is accessed directly from Isaac Sim's internal VERSION file, ensuring accuracy and consistency with the actual application build being executed.
+
+The extension also registers Isaac Sim build metadata with the crash reporter, including build version, repository, hash, branch, and date, so crash data can be tied to the exact build that produced it.

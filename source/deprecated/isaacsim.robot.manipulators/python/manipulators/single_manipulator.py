@@ -26,24 +26,24 @@ from isaacsim.robot.manipulators.grippers.surface_gripper import SurfaceGripper
 
 
 class SingleManipulator(SingleArticulation):
-    """Provides high level functions to set/ get properties and actions of a manipulator with a single end effector.
+    """Provides high level functions to set/get properties and actions of a manipulator with a single end effector.
 
-    and optionally a gripper.
+    And optionally a gripper.
 
     Args:
         prim_path: Prim path of the Prim to encapsulate or create.
         end_effector_prim_path: End effector prim path to be used to track the rigid body that corresponds
-            to the end effector. One of the following args can be specified only:
+            to the end effector. Only one of the following arguments can be specified:
             end_effector_prim_name or end_effector_prim_path.
-        name: Shortname to be used as a key by Scene class. Note: needs to be unique if the
+        name: Short name to be used as a key by Scene class. Note: needs to be unique if the
             object is added to the Scene.
-        position: Position in the world frame of the prim. shape is (3, ).
+        position: Position in the world frame of the prim. Shape is (3, ).
         translation: Translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: Quaternion orientation in the world/ local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world/local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: Local scale to be applied to the prim's dimensions. shape is (3, ).
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
         visible: Set to false for an invisible prim in the stage while rendering.
         gripper: Gripper to be used with the manipulator.
     """
@@ -95,7 +95,7 @@ class SingleManipulator(SingleArticulation):
         return self._gripper
 
     def initialize(self, physics_sim_view: omni.physics.tensors.SimulationView = None) -> None:
-        """Create a physics simulation view if not passed and creates an articulation view using physX tensor api.
+        """Creates a physics simulation view if not passed and creates an articulation view using PhysX tensor API.
 
         This needs to be called after each hard reset (i.e stop + play on the timeline) before interacting with any
         of the functions of this class.
@@ -119,7 +119,7 @@ class SingleManipulator(SingleArticulation):
         return
 
     def post_reset(self) -> None:
-        """Resets the manipulator, the end effector and the gripper to its default state."""
+        """Resets the manipulator, the end effector, and the gripper to their default states."""
         SingleArticulation.post_reset(self)
         self._end_effector.post_reset()
         if self._gripper is not None:

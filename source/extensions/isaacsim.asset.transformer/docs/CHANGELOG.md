@@ -1,5 +1,9 @@
 # Changelog
 
+## [6.1.0] - 2026-08-03
+### Changed
+- Load `isaacsim.asset.transformer` from the independently built `isaacsim-asset` wheel while preserving existing imports.
+
 ## [1.2.5] - 2026-06-10
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

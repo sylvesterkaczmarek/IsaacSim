@@ -17,11 +17,10 @@
 
 import os
 
-import omni.kit.app
-import omni.kit.commands
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
 import omni.replicator.core as rep
-import omni.usd
 from isaacsim.replicator.synthetic_recorder.synthetic_recorder import RecorderState, SyntheticRecorder
 from isaacsim.storage.native import get_assets_root_path_async
 from isaacsim.test.utils.file_validation import validate_folder_contents
@@ -155,17 +154,17 @@ class TestRecorderBasic(omni.kit.test.AsyncTestCase):
     """Test the basic functionality of the recorder."""
 
     async def setUp(self) -> None:
-        """Set up a new stage before each test."""
-        await omni.kit.app.get_app().next_update_async()
-        await omni.usd.get_context().new_stage_async()
-        await omni.kit.app.get_app().next_update_async()
+        """Create a clean stage before each test."""
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
 
     async def tearDown(self) -> None:
-        """Wait for assets to finish loading and clean up after each test."""
-        await omni.kit.app.get_app().next_update_async()
-        # In some cases the test will end before the asset is loaded, in this case wait for assets to load
-        while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+        """Close the test stage and wait for assets to finish loading."""
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
+        while stage_utils.is_stage_loading():
+            await app_utils.update_app_async()
 
     async def setup_stage_with_no_semantics(self) -> None:
         """Create a stage with primitives but no semantic labels."""
@@ -218,7 +217,7 @@ class TestRecorderBasic(omni.kit.test.AsyncTestCase):
             recorder.backend_params = {"output_dir": out_dir_path}
             print(f"Starting recorder {i}; writing data to {out_dir_path}")
             await recorder.start_stop_async()
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             self.assertTrue(
                 recorder.get_state() == RecorderState.STOPPED, "Recorder did not stop after start_stop_async()"
             )

@@ -34,10 +34,13 @@ class TestPipArchive(omni.kit.test.AsyncTestCase):
         import nest_asyncio
         import osqp
         import packaging
+        import py_trees
+        import pydot
         import pyparsing
         import pyperclip
         import qdldl
         import six
+        import transitions
 
         self.assertIsNotNone(contourpy)
         self.assertIsNotNone(cycler)
@@ -49,7 +52,10 @@ class TestPipArchive(omni.kit.test.AsyncTestCase):
         self.assertIsNotNone(nest_asyncio)
         self.assertIsNotNone(osqp)
         self.assertIsNotNone(packaging)
+        self.assertIsNotNone(py_trees)
+        self.assertIsNotNone(pydot)
         self.assertIsNotNone(pyparsing)
         self.assertIsNotNone(pyperclip)
         self.assertIsNotNone(qdldl)
         self.assertIsNotNone(six)
+        self.assertIsNotNone(transitions)

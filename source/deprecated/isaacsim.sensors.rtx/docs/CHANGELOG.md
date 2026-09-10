@@ -1,5 +1,26 @@
 # Changelog
 
+## [15.17.5] - 2026-08-11
+### Fixed
+- `IsaacSensorCreateRtxLidar`, `IsaacSensorCreateRtxRadar`: derive Replicator's GenericModelOutput channels from the sensor's authored `auxOutputType`, not only from creation arguments, so aux outputs appear for referenced sensor assets.
+- Warn instead of authoring unusable metadata when `auxOutputType` is not one of `NONE`, `BASIC`, `EXTRA`, or `FULL`.
+
+### Changed
+- Document that `auxOutputType` must be set at sensor creation time, before the render product or GenericModelOutput annotator exists.
+
+## [15.17.4] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [15.17.3] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+- Update the generated Python API inventory.
+
+## [15.17.2] - 2026-06-29
+### Removed
+- Removed the legacy lidar configuration for the retired SICK TiM781 asset.
+
 ## [15.17.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.
@@ -327,7 +348,7 @@
 
 ## [15.1.4] - 2025-06-04
 ### Changed
-- Changed CUDA_CHECK in ScopedCudaDevice.h to indicate file and line for more verbose error logging
+- Changed CUDA_CHECK in ScopedCudaDevice.hpp to indicate file and line for more verbose error logging
 
 ## [15.1.3] - 2025-06-03
 ### Changed
@@ -389,7 +410,7 @@
 
 ## [15.0.2] - 2025-05-15
 ### Changed
-- UsdUtilities.h was updated
+- UsdUtilities.hpp was updated
 
 ## [15.0.1] - 2025-05-12
 ### Added

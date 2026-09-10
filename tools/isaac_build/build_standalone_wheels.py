@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Build standalone pip wheels from extensions that have an in-source pyproject.toml.
+"""Build standalone pip wheels from packages that have an in-source pyproject.toml.
 
 This is a repo tool that integrates with ``./repo.sh``:
 
     ./repo.sh build_standalone_wheels              # build all
-    ./repo.sh build_standalone_wheels --list       # list eligible extensions
+    ./repo.sh build_standalone_wheels --list       # list eligible packages
     ./repo.sh build_standalone_wheels --ext isaacsim.asset.transformer  # build one
 
 Wheels are output to ``_build/packages/standalone_wheels/``.
@@ -27,7 +27,7 @@ The tool uses Kit's bundled Python for building so that the Python version and
 ABI tags are consistent with the monolithic ``isaacsim-*`` wheels built by
 ``./repo.sh python_package``.
 
-Extensions whose source layout differs from their import namespace (e.g.
+Packages whose source layout differs from their import namespace (e.g.
 ``python/`` dirs, non-standard module names) declare symlinks in their
 ``pyproject.toml`` under ``[tool.standalone-wheel] symlinks``.  This tool
 creates the symlinks before building and removes them afterwards so they
@@ -40,6 +40,7 @@ import glob
 import logging
 import os
 import platform as platform_mod
+import re
 import shutil
 import subprocess
 import sys
@@ -59,20 +60,20 @@ PLATFORM_TAGS = {
 def setup_repo_tool(parser, config):
     """Register CLI arguments for ``./repo.sh build_standalone_wheels``."""
     parser.prog = "build_standalone_wheels"
-    parser.description = "Build standalone pip wheels from extensions with in-source pyproject.toml"
+    parser.description = "Build standalone pip wheels from packages with in-source pyproject.toml"
 
     parser.add_argument(
         "--list",
         default=False,
         action="store_true",
-        help="List eligible extensions and exit.",
+        help="List eligible packages and exit.",
     )
     parser.add_argument(
         "--ext",
         dest="extensions",
         nargs="*",
         default=None,
-        help="Build only the specified extension(s). Default: build all.",
+        help="Build only the specified package(s). Default: build all.",
     )
     parser.add_argument(
         "-c",
@@ -122,15 +123,60 @@ def _find_kit_python(repo_root: str, build_platform: str, build_config: str) -> 
     return path
 
 
-def _find_eligible_extensions(repo_root: str) -> list[str]:
-    """Return sorted list of extension directory paths that have a pyproject.toml."""
-    extensions_dir = os.path.join(repo_root, "source", "extensions")
+def _find_eligible_packages(repo_root: str) -> list[str]:
+    """Return package directories eligible for direct standalone-wheel builds.
+
+    Extension packages retain the historical behavior: every top-level
+    extension with a ``pyproject.toml`` is eligible. Library packages must
+    explicitly opt in with a ``[tool.standalone-wheel]`` table because many
+    native libraries use ``pyproject.toml`` only as metadata for their
+    CMake-driven wheel build.
+    """
     results = []
+
+    extensions_dir = os.path.join(repo_root, "source", "extensions")
     for entry in sorted(os.listdir(extensions_dir)):
-        ext_dir = os.path.join(extensions_dir, entry)
-        if os.path.isdir(ext_dir) and os.path.isfile(os.path.join(ext_dir, "pyproject.toml")):
-            results.append(ext_dir)
-    return results
+        package_dir = os.path.join(extensions_dir, entry)
+        if os.path.isdir(package_dir) and os.path.isfile(os.path.join(package_dir, "pyproject.toml")):
+            results.append(package_dir)
+
+    libraries_dir = os.path.join(repo_root, "source", "libraries")
+    if os.path.isdir(libraries_dir):
+        for current_dir, directory_names, file_names in os.walk(libraries_dir):
+            directory_names.sort()
+            if "pyproject.toml" in file_names and _has_standalone_wheel_config(current_dir):
+                results.append(current_dir)
+
+    return sorted(results)
+
+
+def _get_package_metadata(package_dir: str) -> dict:
+    """Read a package's ``pyproject.toml``."""
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib  # type: ignore[no-redef]
+
+    with open(os.path.join(package_dir, "pyproject.toml"), "rb") as file_handle:
+        return tomllib.load(file_handle)
+
+
+def _has_standalone_wheel_config(package_dir: str) -> bool:
+    """Return whether a package explicitly opts into the standalone builder."""
+    metadata = _get_package_metadata(package_dir)
+    return "standalone-wheel" in metadata.get("tool", {})
+
+
+def _get_package_name(package_dir: str) -> str:
+    """Read the normalized project name from a package's ``pyproject.toml``."""
+    return _get_package_metadata(package_dir)["project"]["name"]
+
+
+def _get_package_id(package_dir: str) -> str:
+    """Return the dotted package identifier accepted by ``--ext``."""
+    metadata = _get_package_metadata(package_dir)
+    package_id = metadata.get("tool", {}).get("standalone-wheel", {}).get("package-id")
+    return package_id or metadata["project"]["name"].replace("-", ".")
 
 
 def _is_native_package(ext_dir: str) -> bool:
@@ -151,7 +197,7 @@ def _parse_symlinks(ext_dir: str) -> list[tuple[str, str]]:
     """Parse [tool.standalone-wheel] symlinks from pyproject.toml.
 
     Returns a list of (link_path, target) tuples where paths are relative to
-    the extension directory.  The format in pyproject.toml is::
+    the package directory.  The format in pyproject.toml is::
 
         [tool.standalone-wheel]
         symlinks = [
@@ -177,7 +223,7 @@ def _parse_symlinks(ext_dir: str) -> list[tuple[str, str]]:
 
 
 def _create_symlinks(ext_dir: str, symlinks: list[tuple[str, str]]) -> list[str]:
-    """Create symlinks for an extension.  Returns list of created paths for cleanup."""
+    """Create symlinks for a package.  Returns list of created paths for cleanup."""
     created = []
     for link_rel, target_rel in symlinks:
         link_path = os.path.join(ext_dir, link_rel)
@@ -221,8 +267,8 @@ def _cleanup_symlinks(ext_dir: str, symlinks: list[tuple[str, str]]) -> None:
 
 
 def _build_wheel(python: str, ext_dir: str, output_dir: str, plat_tag: str | None = None) -> bool:
-    """Build a wheel for a single extension using Kit's Python."""
-    ext_name = os.path.basename(ext_dir)
+    """Build a wheel for a single package using Kit's Python."""
+    ext_name = _get_package_id(ext_dir)
     omni.repo.man.print_log(f"Building standalone wheel: {ext_name}", logging.INFO)
 
     # Create temporary symlinks declared in pyproject.toml.
@@ -266,16 +312,31 @@ def _build_wheel(python: str, ext_dir: str, output_dir: str, plat_tag: str | Non
     return True
 
 
-def _find_standalone_tests(eligible: list[str]) -> list[tuple[str, str]]:
-    """Find extensions that have standalone_tests/ directories.
+def _find_built_wheel(package_dir: str, output_dir: str) -> str:
+    """Return the single wheel matching a package's declared name and version."""
+    metadata = _get_package_metadata(package_dir)
+    project = metadata.get("project", {})
+    name = project.get("name")
+    version = project.get("version")
+    if not isinstance(name, str) or not isinstance(version, str):
+        raise RuntimeError(f"Package must declare string project.name and project.version: {package_dir}")
+    normalized_name = re.sub(r"[-_.]+", "_", name).lower()
+    matches = sorted(glob.glob(os.path.join(output_dir, f"{normalized_name}-{version}-*.whl")))
+    if len(matches) != 1:
+        raise RuntimeError(f"Expected one built wheel for {name}=={version}, found {len(matches)}")
+    return matches[0]
 
-    Returns list of (ext_name, tests_dir) tuples.
+
+def _find_standalone_tests(eligible: list[str]) -> list[tuple[str, str]]:
+    """Find packages that have standalone_tests/ directories.
+
+    Returns list of (package_name, tests_dir) tuples.
     """
     results = []
     for ext_dir in eligible:
         tests_dir = os.path.join(ext_dir, "standalone_tests")
         if os.path.isdir(tests_dir):
-            results.append((os.path.basename(ext_dir), tests_dir))
+            results.append((_get_package_id(ext_dir), tests_dir))
     return results
 
 
@@ -283,20 +344,21 @@ def _run_standalone_tests(
     python: str,
     repo_root: str,
     output_dir: str,
+    build_config: str,
     eligible: list[str],
 ) -> int:
-    """Install wheels into a temp venv and run standalone_tests/ for each extension.
+    """Install wheels into a temp venv and run standalone_tests/ for each package.
 
     Returns 0 on success, 1 on failure.
     """
     import tempfile as _tempfile
 
-    test_extensions = _find_standalone_tests(eligible)
-    if not test_extensions:
+    test_packages = _find_standalone_tests(eligible)
+    if not test_packages:
         omni.repo.man.print_log("No standalone_tests/ directories found.", logging.WARN)
         return 0
 
-    omni.repo.man.print_log(f"Running standalone tests for {len(test_extensions)} extension(s)...", logging.INFO)
+    omni.repo.man.print_log(f"Running standalone tests for {len(test_packages)} package(s)...", logging.INFO)
 
     venv_dir = _tempfile.mkdtemp(prefix="isaacsim_standalone_test_")
     try:
@@ -311,20 +373,30 @@ def _run_standalone_tests(
         if not os.path.isfile(venv_python):
             venv_python = os.path.join(venv_dir, "Scripts", "python.exe")
 
-        # Install all built wheels into the clean venv with normal dependency
-        # resolution.  The local wheelhouse satisfies isaacsim-* inter-package
+        # Install the selected wheels into the clean venv with normal dependency
+        # resolution. The local wheelhouses satisfy isaacsim-* inter-package
         # requirements while PyPI/index configuration supplies external deps.
-        wheel_pattern = os.path.join(output_dir, "*.whl")
-        wheels = sorted(glob.glob(wheel_pattern))
-        if not wheels:
-            omni.repo.man.print_log(f"No wheels found in {output_dir}", logging.ERROR)
+        try:
+            wheels = sorted(_find_built_wheel(package_dir, output_dir) for package_dir in eligible)
+        except RuntimeError as error:
+            omni.repo.man.print_log(str(error), logging.ERROR)
             return 1
 
         omni.repo.man.print_log(f"  Installing {len(wheels)} wheel(s) with dependency resolution...", logging.INFO)
-        ret = omni.repo.man.run_process(
-            [venv_python, "-s", "-m", "pip", "install", "--quiet", "--find-links", output_dir] + wheels,
-            exit_on_error=False,
-        )
+        install_command = [
+            venv_python,
+            "-s",
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            "--find-links",
+            output_dir,
+        ]
+        module_wheelhouse = os.path.join(repo_root, "_cmake_build", "module-carrier-artifacts", build_config)
+        if os.path.isdir(module_wheelhouse):
+            install_command.extend(["--find-links", module_wheelhouse])
+        ret = omni.repo.man.run_process(install_command + wheels, exit_on_error=False)
         if ret != 0:
             omni.repo.man.print_log("Failed to install wheels.", logging.ERROR)
             return 1
@@ -338,11 +410,11 @@ def _run_standalone_tests(
             omni.repo.man.print_log("Dependency check failed.", logging.ERROR)
             return 1
 
-        # Run tests for each extension.
+        # Run tests for each package.
         passed = 0
         test_failed = 0
-        for ext_name, tests_dir in test_extensions:
-            omni.repo.man.print_log(f"  Testing: {ext_name}", logging.INFO)
+        for package_name, tests_dir in test_packages:
+            omni.repo.man.print_log(f"  Testing: {package_name}", logging.INFO)
             ret = omni.repo.man.run_process(
                 [venv_python, "-s", "-m", "unittest", "discover", "-s", tests_dir, "-p", "test_*.py", "-v"],
                 exit_on_error=False,
@@ -374,31 +446,37 @@ def run_repo_tool(options, config):
         omni.repo.man.print_log(str(e), logging.ERROR)
         return 1
 
-    # Find eligible extensions.
-    eligible = _find_eligible_extensions(repo_root)
+    # Find eligible packages.
+    eligible = _find_eligible_packages(repo_root)
     if not eligible:
-        omni.repo.man.print_log("No extensions with pyproject.toml found.", logging.WARN)
+        omni.repo.man.print_log("No packages with pyproject.toml found.", logging.WARN)
         return 0
 
     # --list mode: print and exit.
     if options.list:
-        omni.repo.man.print_log("Eligible extensions for standalone packaging:", logging.INFO)
+        omni.repo.man.print_log("Eligible packages for standalone packaging:", logging.INFO)
         for ext_dir in eligible:
             native = " (native)" if _is_native_package(ext_dir) else ""
             symlinks = _parse_symlinks(ext_dir)
             sym = f" ({len(symlinks)} symlinks)" if symlinks else ""
             tests = " (has tests)" if os.path.isdir(os.path.join(ext_dir, "standalone_tests")) else ""
-            print(f"  {os.path.basename(ext_dir)}{native}{sym}{tests}")
+            print(f"  {_get_package_id(ext_dir)}{native}{sym}{tests}")
         return 0
 
-    # Filter to requested extensions.
+    # Filter to requested packages.
     if options.extensions:
         requested = set(options.extensions)
-        filtered = [d for d in eligible if os.path.basename(d) in requested]
-        not_found = requested - {os.path.basename(d) for d in filtered}
+        filtered = [
+            package_dir
+            for package_dir in eligible
+            if _get_package_id(package_dir) in requested or _get_package_name(package_dir) in requested
+        ]
+        matched = {_get_package_id(package_dir) for package_dir in filtered}
+        matched.update(_get_package_name(package_dir) for package_dir in filtered)
+        not_found = requested - matched
         if not_found:
             omni.repo.man.print_log(
-                f"Extensions not found or missing pyproject.toml: {', '.join(sorted(not_found))}",
+                f"Packages not found or missing pyproject.toml: {', '.join(sorted(not_found))}",
                 logging.ERROR,
             )
             return 1
@@ -436,6 +514,6 @@ def run_repo_tool(options, config):
 
     # Run tests if requested.
     if options.test:
-        return _run_standalone_tests(python, repo_root, output_dir, eligible)
+        return _run_standalone_tests(python, repo_root, output_dir, build_config, eligible)
 
     return 0

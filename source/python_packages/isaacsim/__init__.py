@@ -20,6 +20,8 @@ import os
 import platform
 import sys
 
+_NON_INTERACTIVE_EULA_ERROR = "EULA not accepted. Set OMNI_KIT_ACCEPT_EULA=YES to accept the EULA non-interactively."
+
 # Workaround for PyTorch >=2.9 c10.dll WinError 1114 (pytorch/pytorch#166628).
 # Kit's sitecustomize.py registers DLL directories via os.add_dll_directory()
 # before Python code runs. When torch's _load_dll_libraries() later calls
@@ -121,6 +123,8 @@ def bootstrap_kernel():
         try:
             import kit_app  # importing 'kit_app' will bootstrap kernel
 
+        except EOFError:
+            sys.exit(f"Unable to bootstrap inner kit kernel: {_NON_INTERACTIVE_EULA_ERROR}")
         except Exception as e:
             sys.exit(f"Unable to bootstrap inner kit kernel: {e}")
     # kit path (omniverse-kit kernel package)
@@ -129,6 +133,8 @@ def bootstrap_kernel():
             import omni.kit_app  # importing 'kit_app' will bootstrap kernel
 
             kit_path = os.path.dirname(os.path.abspath(os.path.realpath(omni.kit_app.__file__)))
+        except EOFError:
+            sys.exit(f"Unable to bootstrap omniverse-kit kernel: {_NON_INTERACTIVE_EULA_ERROR}")
         except ModuleNotFoundError:
             sys.exit("Unable to find 'omniverse-kit' package")
 

@@ -26,7 +26,7 @@ import omni.kit.actions.core
 import omni.kit.menu.utils
 from isaacsim.core.rendering_manager import ViewportManager
 from isaacsim.gui.components.menu import create_submenu, open_content_browser_to_path
-from isaacsim.storage.native.nucleus import get_assets_root_path
+from isaacsim.storage.native import get_assets_root_path
 from omni.kit.menu.utils import MenuItemDescription, MenuLayout, add_menu_items, remove_menu_items
 
 
@@ -50,7 +50,7 @@ def create_asset(
     Example:
         .. code-block:: python
 
-            create_asset("/Isaac/Robots/IsaacSim/Ant/ant_instanceable.usd", "/Ant")
+            create_asset("/Isaac/Robots_Multiphysics/IsaacSim/Ant/ant.usda", "/Ant")
     """
     assets_root_path = get_assets_root_path()
     if assets_root_path is None:
@@ -196,18 +196,23 @@ class CreateMenuExtension:
 
         # Register robot asset actions
         robot_assets = [
-            ("create_robot_ant", "Ant", "/Isaac/Robots/IsaacSim/Ant/ant_instanceable.usd", "/Ant"),
-            ("create_robot_spot", "Boston Dynamics Spot", "/Isaac/Robots/BostonDynamics/spot/spot.usd", "/spot"),
+            ("create_robot_ant", "Ant", "/Isaac/Robots_Multiphysics/IsaacSim/Ant/ant.usda", "/Ant"),
+            (
+                "create_robot_spot",
+                "Boston Dynamics Spot",
+                "/Isaac/Robots_Multiphysics/BostonDynamics/spot/spot.usda",
+                "/spot",
+            ),
             (
                 "create_robot_franka",
                 "Franka Emika Panda Arm",
-                "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+                "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
                 "/Franka",
             ),
             (
                 "create_robot_humanoid",
                 "Humanoid",
-                "/Isaac/Robots/IsaacSim/Humanoid/humanoid_instanceable.usd",
+                "/Isaac/Robots_Multiphysics/IsaacSim/Humanoid/humanoid.usda",
                 "/Humanoid",
             ),
             (
@@ -219,7 +224,7 @@ class CreateMenuExtension:
             (
                 "create_robot_quadcopter",
                 "Quadcopter",
-                "/Isaac/Robots/IsaacSim/Quadcopter/quadcopter.usd",
+                "/Isaac/Robots_Multiphysics/IsaacSim/Quadcopter/quadcopter.usda",
                 "/Quadcopter",
             ),
         ]

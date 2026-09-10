@@ -15,6 +15,7 @@
 
 """Verify LidarSensor GMO writer integration, stable IDs, object IDs, and auxiliary output channels."""
 
+import gc
 from typing import Any
 
 import carb
@@ -32,9 +33,9 @@ from isaacsim.sensors.experimental.rtx import (
     parse_stable_id_map_data,
 )
 from omni.replicator.core import Writer
-from pxr import Sdf
+from pxr import Sdf, UsdShade
 
-from .common import create_sarcophagus
+from .common import FakeAnnotator, create_sarcophagus
 
 NEAR_EDGE_THRESHOLD = 0.5  # degrees — skip returns near octant edges
 
@@ -297,6 +298,39 @@ class TestLidarSensor(omni.kit.test.AsyncTestCase):
 
         self.assertGreater(writer.valid_frame_count, 0, "Expected at least one valid GMO frame.")
 
+    async def test_parse_cuda_gmo_keeps_host_buffer_alive(self) -> None:
+        """Keep the CPU copy backing a parsed CUDA GMO alive with the returned structure."""
+        lidar = Lidar("/World/lidar")
+        sensor = LidarSensor(lidar, annotators=["generic-model-output"])
+
+        self._timeline.play()
+        data = None
+        for _ in range(180):
+            await omni.kit.app.get_app().next_update_async()
+            data, _ = sensor.get_data("generic-model-output")
+            if data is not None and parse_generic_model_output_data(data).numElements > 0:
+                break
+        self.assertIsNotNone(data)
+        assert data is not None
+
+        data_cuda = data.to("cuda")
+        gmo = parse_generic_model_output_data(data_cuda)
+        self.assertGreater(gmo.numElements, 0)
+        expected_x = np.asarray(gmo.x).copy()
+
+        del data, data_cuda
+        gc.collect()
+        corrupted = False
+        for pattern in (0x7F, 0x5A, 0x33, 0xAA, 0xFF):
+            churn = [np.full(6_000_000, pattern, dtype=np.uint8) for _ in range(8)]
+            del churn
+            gc.collect()
+            if not np.array_equal(np.asarray(gmo.x), expected_x):
+                corrupted = True
+                break
+
+        self.assertFalse(corrupted, "Parsed GMO fields changed after the CUDA host copy was collected.")
+
     async def test_aux_output_level_sets_channels_attribute(self) -> None:
         """Verify aux_output_level sets the channels attribute on the sensor prim."""
         for level in ("NONE", "BASIC", "EXTRA", "FULL"):
@@ -326,3 +360,113 @@ class TestLidarSensor(omni.kit.test.AsyncTestCase):
         """Verify invalid aux_output_level raises ValueError."""
         with self.assertRaises(ValueError):
             Lidar("/World/lidar", aux_output_level="INVALID")
+
+    async def test_get_data_empty_and_scalar_payloads(self) -> None:
+        """Keep empty-payload info and accept a zero-dimensional payload."""
+        sensor = LidarSensor.__new__(LidarSensor)
+        sensor._hydra_texture = None
+        sensor._data_ready = False
+        sensor._annotators_spec = {"generic-model-output": {"name": "GenericModelOutput"}}
+        sensor._annotators = {
+            "generic-model-output": FakeAnnotator({"data": np.zeros(0, dtype=np.uint8), "info": {"frameId": 7}})
+        }
+
+        try:
+            data, info = sensor.get_data("generic-model-output")
+            self.assertEqual(data.size, 0)
+            self.assertEqual(info, {"frameId": 7})
+            # `has_data()` is gated on the render product, so assert the latch an empty payload drives
+            self.assertFalse(sensor._data_ready)
+
+            scalar = np.array(7, dtype=np.uint8)
+            sensor._annotators["generic-model-output"] = FakeAnnotator({"data": scalar, "info": {"frameId": 8}})
+            data, info = sensor.get_data("generic-model-output")
+            self.assertIs(data, scalar)
+            self.assertEqual(info, {"frameId": 8})
+            self.assertTrue(sensor._data_ready)
+        finally:
+            sensor._writers = {}
+            sensor._annotators = {}
+            sensor._hydra_texture = None
+
+
+class TestNonVisualMaterialBackwardsCompatibility(omni.kit.test.AsyncTestCase):
+    """Backwards compatibility for RTX lidar non-visual materials authored with the previous custom string types.
+
+    Before adopting the SimReady spec, non-visual material attributes were authored as custom ``string`` scalars
+    (including the ``attributes`` field). These tests verify the current ``NonVisualMaterial`` API still reads and
+    encodes such legacy materials, so RTX lidar ``matId`` output remains correct for previously authored stages.
+    """
+
+    async def setUp(self) -> None:
+        """Create a fresh stage for each backwards-compatibility test."""
+        super().setUp()
+        self._stage = await stage_utils.create_new_stage_async()
+
+    async def tearDown(self) -> None:
+        """Tear down the test fixture."""
+        super().tearDown()
+
+    def _author_legacy_string_material(self, path: str, base: str, coating: str, attribute: str) -> Any:
+        """Author a non-visual material using the previous custom ``string`` attribute types.
+
+        Args:
+            path: Path of the material prim to create.
+            base: Base material token to store as a scalar string.
+            coating: Coating token to store as a scalar string.
+            attribute: Single attribute token to store as a scalar string.
+
+        Returns:
+            The created USD Material prim.
+        """
+        from isaacsim.core.experimental.materials.impl.non_visual_material import (
+            ATTRIBUTE_ATTR,
+            BASE_ATTR,
+            COATING_ATTR,
+        )
+
+        prim = UsdShade.Material.Define(self._stage, path).GetPrim()
+        prim.CreateAttribute(BASE_ATTR, Sdf.ValueTypeNames.String, custom=True).Set(base)
+        prim.CreateAttribute(COATING_ATTR, Sdf.ValueTypeNames.String, custom=True).Set(coating)
+        prim.CreateAttribute(ATTRIBUTE_ATTR, Sdf.ValueTypeNames.String, custom=True).Set(attribute)
+        return prim
+
+    async def test_legacy_string_attributes_encode_matches_token(self) -> None:
+        """Legacy custom-string materials encode to the same material ID as SimReady token materials."""
+        from isaacsim.core.experimental.materials import NonVisualMaterial
+
+        self._author_legacy_string_material(
+            "/World/legacy_material", base="aluminum", coating="paint", attribute="emissive"
+        )
+        legacy_id = NonVisualMaterial.encode_material_ids("/World/legacy_material").numpy().item()
+
+        modern = NonVisualMaterial("/World/modern_material", bases="aluminum", coatings="paint", attributes="emissive")
+        modern_id = NonVisualMaterial.encode_material_ids(modern).numpy().item()
+
+        self.assertEqual(legacy_id, modern_id)
+        self.assertEqual(legacy_id, 2305)
+        # decoding recovers the original values (attributes as a single-element list)
+        self.assertEqual(NonVisualMaterial.decode_material_ids(legacy_id), [("aluminum", "paint", ["emissive"])])
+
+    async def test_wrapping_legacy_material_preserves_string_type(self) -> None:
+        """Wrapping a legacy material must read its values without overwriting the custom string attributes."""
+        from isaacsim.core.experimental.materials import NonVisualMaterial
+        from isaacsim.core.experimental.materials.impl.non_visual_material import (
+            ATTRIBUTE_ATTR,
+            BASE_ATTR,
+            COATING_ATTR,
+        )
+
+        legacy_prim = self._author_legacy_string_material(
+            "/World/legacy_material", base="steel", coating="clearcoat", attribute="retroreflective"
+        )
+        wrapped = NonVisualMaterial("/World/legacy_material")
+
+        # getters read the legacy scalar values (attributes returned as a single-element list)
+        self.assertEqual(wrapped.get_bases(), ["steel"])
+        self.assertEqual(wrapped.get_coatings(), ["clearcoat"])
+        self.assertEqual(wrapped.get_attributes(), [["retroreflective"]])
+        # the existing custom string attribute types are preserved (not overwritten with token types)
+        self.assertEqual(legacy_prim.GetAttribute(BASE_ATTR).GetTypeName(), Sdf.ValueTypeNames.String)
+        self.assertEqual(legacy_prim.GetAttribute(COATING_ATTR).GetTypeName(), Sdf.ValueTypeNames.String)
+        self.assertEqual(legacy_prim.GetAttribute(ATTRIBUTE_ATTR).GetTypeName(), Sdf.ValueTypeNames.String)

@@ -64,7 +64,7 @@ def copy_prim_hierarchy(src_prim: object, dst_stage: object, dst_path: object, f
         src_prim: The source USD prim whose hierarchy to copy.
         dst_stage: The destination USD stage.
         dst_path: The destination path for the copied hierarchy.
-        filter_fn: Optional filter function to determine which prims to include.
+        filter_fn: Function called with each source prim during hierarchy traversal.
     """
     # new_prim =dst_stage.DefinePrim(dst_path, src_prim.GetTypeName())
     dst_prim = dst_stage.DefinePrim(dst_path.pathString, src_prim.GetTypeName())
@@ -81,9 +81,7 @@ def copy_prim_hierarchy(src_prim: object, dst_stage: object, dst_path: object, f
 
 
 def copy_prim(src_prim: object, dst_stage: object, dst_path: object) -> None:
-    """Recursively copy src_prim along with its attributes, relationships, and children.
-
-    to dst_stage at the specified dst_path.
+    """Recursively copy src_prim with its attributes, relationships, and children to dst_stage.
 
     Args:
         src_prim: The source USD prim to copy.
@@ -122,7 +120,7 @@ def find_unique_filename(filename: str) -> None:
         filename: The original filename to make unique.
 
     Returns:
-        A unique filename that doesn't exist on the filesystem.
+        A unique filename that does not exist on the filesystem.
     """
     base_name, ext = os.path.splitext(filename)
     counter = 1
@@ -133,7 +131,7 @@ def find_unique_filename(filename: str) -> None:
 
 
 def apply_standard_stage_settings(stage: object) -> None:
-    """Apply standard settings to a USD stage including Z-up axis, meters unit, and default lighting.
+    """Apply standard settings to a USD stage, including Z-up axis, meter units, and default lighting.
 
     Args:
         stage: The USD stage to configure with standard settings.
@@ -149,8 +147,8 @@ def apply_standard_stage_settings(stage: object) -> None:
 def can_create_dir(path: str) -> bool:
     """Return True if we can write into `path` if it existed.
 
-    - If `path` exists and is a directory: test write permission on it.
-    - Otherwise: walk upward to find the nearest existing parent and test write there.
+    - If `path` exists and is a directory, test write permission on it.
+    - Otherwise, walk upward to find the nearest existing parent and test write there.
 
     Args:
         path: The directory path to test for write permissions.

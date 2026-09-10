@@ -18,7 +18,7 @@
 import carb
 import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.usd
-from isaacsim.examples.base.base_sample_experimental import BaseSample
+from isaacsim.examples.base import BaseSample
 from isaacsim.storage.native import get_assets_root_path
 from pxr import Sdf
 

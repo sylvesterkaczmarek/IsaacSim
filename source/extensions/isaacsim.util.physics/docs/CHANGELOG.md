@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.5] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [1.2.4] - 2026-06-29
+### Changed
+- Replace package-root star imports with explicit lifecycle imports.
+
+## [1.2.3] - 2026-06-23
+### Changed
+- Replace `omni.physx.scripts.utils` (`setCollider`/`removeCollider`/`hasSchema`) usage with `isaacsim.core.experimental.utils.physics` helpers and direct USD schema checks; drop the `omni.physx` dependency
+
 ## [1.2.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

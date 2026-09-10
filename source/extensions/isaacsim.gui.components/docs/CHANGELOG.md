@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.8.9] - 2026-08-14
+### Fixed
+- Clamps the float input for `combo_floatfield_slider_builder`, as would be expected given the min/max inputs.
+
+## [1.8.8] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [1.8.7] - 2026-07-13
+### Added
+- Added a public `ParamWidget.set_value()` method for programmatic field updates.
+
+## [1.8.6] - 2026-06-23
+### Removed
+- Removed the unused `omni.physx` entry from the test dependencies; the extension's PhysX subscription and simulation-control code already migrated to Omni Physics, and the tests do not reference any `omni.physx` API.
+
 ## [1.8.5] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

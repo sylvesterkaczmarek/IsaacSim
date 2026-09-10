@@ -4,28 +4,31 @@
 This extension is deprecated. No replacement is provided.
 ```
 
-The **omni.isaac.ml_archive** extension provides machine learning pip packages required by Isaac Sim extensions. This extension bundles essential ML libraries and dependencies into the Isaac Sim environment, making them available to other extensions that require machine learning functionality.
+`**omni.isaac.ml_archive**` provides archived pip packages needed by Isaac extensions that use machine learning related Python dependencies. It is a package distribution extension rather than a user-facing tool, so its purpose is to make bundled Python packages available to other extensions during application startup.
+
+The extension is platform-specific because the pip prebundle content can vary by operating system and Python environment.
 
 ## Functionality
 
-The extension serves as a pip package archive specifically tailored for machine learning workflows within Isaac Sim. It pre-bundles ML-related Python packages to ensure they are available when needed by other Isaac Sim extensions without requiring separate installation or dependency management by users.
+`**omni.isaac.ml_archive**` contributes a `pip_prebundle` Python module path that contains the packaged Python dependencies. Other extensions can rely on those bundled packages being available without downloading them at runtime.
 
-**Package Delivery**: The extension uses a pip prebundle module to deliver pre-packaged Python libraries directly into the Isaac Sim environment. This approach ensures consistent availability of ML dependencies across different installations and platforms.
-
-**Platform Compatibility**: The extension is designed to be platform-specific, adapting to different operating systems while maintaining consistent ML package availability.
+The extension is loaded early so dependent extensions can import their required Python packages before their own functionality runs. This is important for extensions that expect machine learning dependencies to already be present in the Python environment.
 
 ## Key Components
 
-### Pip Prebundle Module
+### Pip Prebundle
 
-The pip_prebundle module contains the actual ML packages that are made available to the Isaac Sim environment. This module handles the integration of pre-packaged Python libraries without requiring runtime pip installations.
+The `pip_prebundle` path is the main packaged content of the extension. It provides the archived pip packages that are distributed with the application build.
 
-### Archive Integration
+### Archive Module
 
-The extension integrates with the broader Isaac Sim archive system, building upon the core archive infrastructure to provide specialized ML package support.
+The `**omni.isaac.ml_archive**` Python module is present as an extension module entry. It is used for extension discovery and test discovery rather than exposing runtime functionality.
 
-## Relationships
+## Dependencies
 
-The extension builds upon **omni.isaac.core_archive** to access the main Isaac Sim pip archive infrastructure and extends **omni.kit.pip_archive** for base Python package management capabilities. This layered approach ensures that ML packages are properly integrated with the existing package management system while maintaining compatibility with the core Isaac Sim environment.
+`**omni.isaac.ml_archive**` depends on:
 
-The extension loads early in the startup sequence to ensure ML packages are available before other extensions that depend on them attempt to load.
+- `**omni.isaac.core_archive**`, which pulls in the main Isaac pip archive.
+- `**omni.kit.pip_archive**`, which provides the base Kit Python archive support.
+
+Together, these archive extensions provide the Python package bundle used by Isaac extensions.

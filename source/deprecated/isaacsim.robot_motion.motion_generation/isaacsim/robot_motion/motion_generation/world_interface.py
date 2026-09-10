@@ -35,21 +35,21 @@ class WorldInterface:
 
         Args:
             updated_obstacles: If provided, only the given obstacles will have their poses updated.
-                For motion policies that use obstacle poses relative to the robot base (e.g. Lula based policies),
+                For motion policies that use obstacle poses relative to the robot base, such as Lula based policies,
                 this list will be ignored if the robot base has moved because all object poses will have changed
                 relative to the robot.
         """
 
     def add_obstacle(self, obstacle: isaacsim.core.api.objects, static: Optional[bool] = False) -> bool:
-        """Add an obstacle.
+        """Adds an obstacle.
 
         Args:
-            obstacle: An obstacle from the package isaacsim.core.api.obstacles
-                            The type of the obstacle will be checked, and the appropriate add function will be called
-            static: When True, the obstacle will be assumed to remain stationary relative to the USD global frame over time
+            obstacle: An obstacle from the package isaacsim.core.api.objects.
+                The obstacle type is checked, and the appropriate add function is called.
+            static: When True, the obstacle is assumed to remain stationary relative to the USD global frame over time.
 
         Returns:
-            Returns True if the obstacle type is valid and the appropriate add function has been implemented
+            True if the obstacle type is valid and the appropriate add function has been implemented.
         """
         if isinstance(obstacle, (cuboid.DynamicCuboid, cuboid.VisualCuboid, cuboid.FixedCuboid)):
             return self.add_cuboid(obstacle, static=static)
@@ -80,7 +80,7 @@ class WorldInterface:
     def add_cuboid(
         self, cuboid: cuboid.DynamicCuboid | cuboid.FixedCuboid | cuboid.VisualCuboid, static: bool = False
     ) -> bool:
-        """Add a block obstacle.
+        """Adds a block obstacle.
 
         Args:
             cuboid: Wrapper object for handling rectangular prism Usd Prims.
@@ -88,13 +88,13 @@ class WorldInterface:
                 world updates.
 
         Returns:
-            Return True if underlying WorldInterface has implemented add_cuboid()
+            True if the underlying WorldInterface has implemented add_cuboid().
         """
         carb.log_warn("Function add_cuboid() has not been implemented for this WorldInterface")
         return False
 
     def add_sphere(self, sphere: sphere.DynamicSphere | sphere.VisualSphere, static: bool = False) -> bool:
-        """Add a sphere obstacle.
+        """Adds a sphere obstacle.
 
         Args:
             sphere: Wrapper object for handling sphere Usd Prims.
@@ -102,13 +102,13 @@ class WorldInterface:
                 world updates.
 
         Returns:
-            Return True if underlying WorldInterface has implemented add_sphere()
+            True if the underlying WorldInterface has implemented add_sphere().
         """
         carb.log_warn("Function add_sphere() has not been implemented for this WorldInterface")
         return False
 
     def add_capsule(self, capsule: capsule.DynamicCapsule | capsule.VisualCapsule, static: bool = False) -> bool:
-        """Add a capsule obstacle.
+        """Adds a capsule obstacle.
 
         Args:
             capsule: Wrapper object for handling capsule Usd Prims.
@@ -116,13 +116,13 @@ class WorldInterface:
                 world updates.
 
         Returns:
-            Return True if underlying WorldInterface has implemented add_capsule()
+            True if the underlying WorldInterface has implemented add_capsule().
         """
         carb.log_warn("Function add_capsule() has not been implemented for this WorldInterface")
         return False
 
     def add_cylinder(self, cylinder: cylinder.DynamicCylinder | cylinder.VisualCylinder, static: bool = False) -> bool:
-        """Add a cylinder obstacle.
+        """Adds a cylinder obstacle.
 
         Args:
             cylinder: Wrapper object for handling rectangular prism Usd Prims.
@@ -130,13 +130,13 @@ class WorldInterface:
                 world updates.
 
         Returns:
-            Return True if underlying WorldInterface has implemented add_cylinder()
+            True if the underlying WorldInterface has implemented add_cylinder().
         """
         carb.log_warn("Function add_cylinder() has not been implemented for this WorldInterface")
         return False
 
     def add_cone(self, cone: cone.DynamicCone | cone.VisualCone, static: bool = False) -> bool:
-        """Add a cone obstacle.
+        """Adds a cone obstacle.
 
         Args:
             cone: Wrapper object for handling cone Usd Prims.
@@ -144,57 +144,55 @@ class WorldInterface:
                 world updates.
 
         Returns:
-            Return True if underlying WorldInterface has implemented add_cone()
+            True if the underlying WorldInterface has implemented add_cone().
         """
         carb.log_warn("Function add_cone() has not been implemented for this WorldInterface")
         return False
 
     def add_ground_plane(self, ground_plane: ground_plane.GroundPlane) -> bool:
-        """Add a ground_plane.
+        """Adds a ground_plane.
 
         Args:
             ground_plane: Wrapper object for handling ground_plane Usd Prims.
 
         Returns:
-            Return True if underlying WorldInterface has implemented add_ground_plane()
+            True if the underlying WorldInterface has implemented add_ground_plane().
         """
         carb.log_warn("Function add_ground_plane() has not been implemented for this WorldInterface")
         return False
 
     def disable_obstacle(self, obstacle: isaacsim.core.api.objects) -> bool:
-        """Disable collision avoidance for obstacle.
+        """Disables collision avoidance for obstacle.
 
         Args:
-            obstacle: obstacle to be disabled.
+            obstacle: Obstacle to be disabled.
 
         Returns:
-            Return True if obstacle was identified and successfully disabled.
+            True if obstacle was identified and successfully disabled.
         """
         carb.log_warn("Function disable_obstacle() has not been implemented for this WorldInterface")
         return False
 
     def enable_obstacle(self, obstacle: isaacsim.core.api.objects) -> bool:
-        """Enable collision avoidance for obstacle.
+        """Enables collision avoidance for obstacle.
 
         Args:
-            obstacle: obstacle to be enabled.
+            obstacle: Obstacle to be enabled.
 
         Returns:
-            Return True if obstacle was identified and successfully enabled.
+            True if obstacle was identified and successfully enabled.
         """
         carb.log_warn("Function enable_obstacle() has not been implemented for this WorldInterface")
         return False
 
     def remove_obstacle(self, obstacle: isaacsim.core.api.objects) -> bool:
-        """Remove obstacle from collision avoidance. Obstacle cannot be re-enabled via enable_obstacle() after.
-
-        removal.
+        """Remove an obstacle from collision avoidance. The obstacle cannot be re-enabled via enable_obstacle() after removal.
 
         Args:
             obstacle: Obstacle to be removed.
 
         Returns:
-            True if obstacle was identified and successfully removed.
+            True if the obstacle was identified and successfully removed.
         """
         carb.log_warn("Function remove_obstacle() has not been implemented for this WorldInterface")
         return False

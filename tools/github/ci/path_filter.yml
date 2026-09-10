@@ -1,0 +1,29 @@
+# External contribution path policy
+#
+# This file is the authoritative allowlist for external pull requests. Every
+# changed file must match both the allowed root and one allowed suffix. Paths and
+# suffixes are case-sensitive.
+#
+# Everything else is denied. See CONTRIBUTING_PATHS.md for generated contributor
+# documentation.
+
+allowed_root: "source/extensions/"
+
+allowed_suffixes:
+  - ".py"       # Python
+  - ".c"        # C source
+  - ".h"        # C header
+  - ".cpp"      # C++ source
+  - ".hpp"      # C++ header
+  - ".cu"       # CUDA source
+  - ".cuh"      # CUDA header
+  - ".md"       # Markdown
+  - ".rst"      # reStructuredText
+
+# Explicitly denied even if under allowed root + suffix:
+# (none currently — all denials are handled by the suffix/root check)
+
+# Notes:
+# - For renames, both old and new path must match
+# - Symlinks, generated output, and binary/encoded content are not allowed
+# - No exceptions mechanism yet — propose scope changes via GitHub Issue/Discussion

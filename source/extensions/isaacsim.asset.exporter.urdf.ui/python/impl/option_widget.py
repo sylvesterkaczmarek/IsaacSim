@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 import omni.ui as ui
-from isaacsim.gui.components.element_wrappers import CheckBox, DropDown, StringField
+from isaacsim.gui.components import CheckBox, DropDown, StringField
 
 from .style import get_option_style
 
@@ -35,6 +35,7 @@ class OptionWidget:
         self._visualize_collision_meshes = False
         self._package_name = ""
         self._use_physx_inertia = True
+        self._export_duplicate_ghost_links = False
 
     @property
     def mesh_dir_name(self) -> str:
@@ -66,12 +67,18 @@ class OptionWidget:
         """Whether to use PhysX-computed inertia."""
         return self._use_physx_inertia
 
+    @property
+    def export_duplicate_ghost_links(self) -> bool:
+        """Whether to export colliding site ghost links with numeric suffixes."""
+        return self._export_duplicate_ghost_links
+
     def cleanup(self) -> None:
         """Reset widget state."""
         self._mesh_dir = None
         self._mesh_path_prefix = ""
         self._root = None
         self._visualize_collision_meshes = False
+        self._export_duplicate_ghost_links = False
 
     def _on_value_changed(self, param_name: str, new_value: Any) -> None:
         setattr(self, f"_{param_name}", new_value)
@@ -128,4 +135,11 @@ class OptionWidget:
                 default_value=False,
                 tooltip="Visualization collider meshes even if their visibility is disabled.",
                 on_click_fn=lambda v: self._on_value_changed("visualize_collision_meshes", v),
+            )
+
+            CheckBox(
+                "Export Duplicate Ghost Links",
+                default_value=False,
+                tooltip="Export site ghost links that collide with existing link names using numeric suffixes.",
+                on_click_fn=lambda v: self._on_value_changed("export_duplicate_ghost_links", v),
             )

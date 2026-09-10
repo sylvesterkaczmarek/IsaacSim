@@ -15,7 +15,7 @@
 
 #define CARB_EXPORTS
 
-#include <{{python_module_path}}/IExample.h>
+#include <{{python_module_path}}/IExample.hpp>
 
 #include <carb/Framework.h>
 #include <carb/PluginUtils.h>

@@ -13,12 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for Robot Poser UI helper utilities (fk_helpers, named-pose table model)."""
+"""Tests for Robot Poser UI helper utilities (fk_helpers, named-pose table model, site combo)."""
+
+import gc
+import weakref
 
 import numpy as np
 import omni.kit.app
 import omni.kit.test
+import omni.ui as ui
 import omni.usd
+from isaacsim.robot.poser.math import Transform
 from isaacsim.robot.poser.ui.utils.fk_helpers import (
     build_pose_from_current_joints,
     find_robot_ancestor,
@@ -29,7 +34,6 @@ from isaacsim.robot.poser.ui.utils.fk_helpers import (
 from pxr import Gf, UsdGeom, UsdPhysics
 from usd.schema.isaac import robot_schema
 from usd.schema.isaac.robot_schema import utils as robot_utils
-from usd.schema.isaac.robot_schema.math import Transform
 
 
 class TestFkHelpers(omni.kit.test.AsyncTestCase):
@@ -465,3 +469,69 @@ class TestNamedPoseTableModel(omni.kit.test.AsyncTestCase):
 
         self.assertTrue(model.drop_accepted(a, b))
         self.assertFalse(model.drop_accepted(a, None))
+
+
+class TestSiteSearchComboBoxTeardown(omni.kit.test.AsyncTestCase):
+    """Tests for deterministic teardown of the site search combo box."""
+
+    async def setUp(self) -> None:
+        """Create a hidden window to parent the combo box under."""
+        self._window = ui.Window("test_site_combo_teardown", width=200, height=100, visible=False)
+        await omni.kit.app.get_app().next_update_async()
+
+    async def tearDown(self) -> None:
+        """Destroy the host window and drain any queued popups."""
+        from isaacsim.robot.poser.ui.ui.site_widget import flush_retired_popups
+
+        self._window.destroy()
+        self._window = None
+        flush_retired_popups()
+        await omni.kit.app.get_app().next_update_async()
+
+    def _build_combo(self) -> object:
+        """Build a site combo box parented under the test window.
+
+        Returns:
+            The new SiteSearchComboBox.
+        """
+        from isaacsim.robot.poser.ui.ui.site_widget import SiteSearchComboBox
+
+        with self._window.frame:
+            with ui.VStack():
+                return SiteSearchComboBox(items=["/World/Robot/Link1"], current_value="/World/Robot/Link1")
+
+    async def test_destroy_releases_combo_without_cyclic_collection(self) -> None:
+        """Verify destroy breaks every reference cycle so the combo dies with its last reference.
+
+        A combo that outlives its owner is otherwise collected by the cyclic
+        garbage collector, which can run inside an omni.ui event or draw and
+        destroy the popup's widgets there.
+        """
+        combo = self._build_combo()
+        ref = weakref.ref(combo)
+
+        gc.disable()
+        try:
+            combo.destroy()
+            combo = None
+            self.assertIsNone(ref(), "Destroyed combo must not survive its last reference")
+        finally:
+            gc.enable()
+
+    async def test_destroy_defers_popup_destruction(self) -> None:
+        """Verify the popup window is destroyed on a later frame, not inside destroy."""
+        from isaacsim.robot.poser.ui.ui import site_widget
+
+        combo = self._build_combo()
+        combo.destroy()
+        self.assertEqual(len(site_widget._retired_popups), 1)
+
+        await omni.kit.app.get_app().next_update_async()
+        await omni.kit.app.get_app().next_update_async()
+        self.assertEqual(len(site_widget._retired_popups), 0)
+
+    async def test_destroy_is_idempotent(self) -> None:
+        """Verify a second destroy call is a no-op."""
+        combo = self._build_combo()
+        combo.destroy()
+        combo.destroy()

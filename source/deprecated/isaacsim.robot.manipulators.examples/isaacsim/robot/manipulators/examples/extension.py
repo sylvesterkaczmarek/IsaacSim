@@ -24,6 +24,7 @@ class Extension(omni.ext.IExt):
     This extension serves as a collection of practical examples showcasing how to work with robot manipulators
     within the Isaac Sim environment. It demonstrates various manipulator operations, configurations, and
     interactions that can be used as reference implementations or starting points for robotics applications.
+
     """
 
     def on_startup(self, ext_id: str) -> None:

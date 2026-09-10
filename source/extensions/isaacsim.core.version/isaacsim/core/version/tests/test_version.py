@@ -15,6 +15,7 @@
 
 """Test for version."""
 
+import carb.settings
 import omni.kit.test
 from isaacsim.core.version import get_version, parse_version
 
@@ -38,3 +39,17 @@ class TestIsaacVersion(omni.kit.test.AsyncTestCase):
 
         version = get_version()
         self.assertTrue(len(version) == 8)
+
+    async def test_crashreporter_metadata(self) -> None:
+        """Test Isaac Sim build metadata is registered for crash reports."""
+        settings = carb.settings.get_settings()
+        metadata_keys = [
+            "lib_isaacSim_buildVersion",
+            "lib_isaacSim_buildRepo",
+            "lib_isaacSim_buildHash",
+            "lib_isaacSim_buildBranch",
+            "lib_isaacSim_buildDate",
+        ]
+
+        for key in metadata_keys:
+            self.assertTrue(settings.get_as_string(f"/crashreporter/data/{key}"))

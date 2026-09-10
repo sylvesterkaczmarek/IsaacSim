@@ -1,5 +1,5 @@
 [package]
-version = "2.3.3"
+version = "2.3.5"
 category = "Simulation"
 title = "Grasp Editor"
 description = "Author grasps by hand for a specific robot gripper and USD asset."
@@ -27,6 +27,10 @@ args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 dependencies = [
     "isaacsim.core.experimental.objects",
@@ -35,6 +39,7 @@ dependencies = [
     "omni.graph.nodes",
     "omni.hydra.rtx",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

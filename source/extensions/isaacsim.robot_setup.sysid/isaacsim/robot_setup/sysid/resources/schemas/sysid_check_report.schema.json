@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nvidia.com/isaac/schemas/sysid_check_report.schema.json",
+  "title": "SysID Check Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ok",
+    "telemetry_quality",
+    "presolve",
+    "parameter_verdicts",
+    "issues"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "ok": { "type": "boolean" },
+    "telemetry_quality": { "type": "object" },
+    "presolve": { "type": ["object", "null"] },
+    "parameter_verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["index", "name", "param_type", "verdict", "dof_index", "column_norm", "notes"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "name": { "type": "string" },
+          "param_type": { "type": "string" },
+          "verdict": {
+            "enum": ["identifiable", "weak", "not_identifiable", "unknown"]
+          },
+          "dof_index": { "type": "integer" },
+          "column_norm": { "type": ["number", "null"] },
+          "notes": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message", "severity"],
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "severity": { "enum": ["warning", "error"] }
+        }
+      }
+    }
+  }
+}

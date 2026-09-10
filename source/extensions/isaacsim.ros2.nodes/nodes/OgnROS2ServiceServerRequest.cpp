@@ -14,13 +14,13 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 
-#include <isaacsim/ros2/core/Ros2Node.h>
-#include <isaacsim/ros2/nodes/Ros2OgnUtils.h>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
+#include <isaacsim/ros2/nodes/Ros2OgnUtils.hpp>
 #include <omni/fabric/FabricUSD.h>
 
 #include <OgnROS2ServiceServerRequestDatabase.h>
@@ -97,9 +97,20 @@ public:
         {
             state.m_messageRequest = state.m_factory->createDynamicMessage(
                 state.m_messagePackage, state.m_messageSubfolder, state.m_messageName, BackendMessageType::eRequest);
-            isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceServerRequestDatabase, true>(
-                db, nodeObj, state.m_messagePackage, state.m_messageSubfolder, state.m_messageName,
-                state.m_messageRequest, "Request:");
+            if (!isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceServerRequestDatabase, true>(
+                    db, nodeObj, state.m_messagePackage, state.m_messageSubfolder, state.m_messageName,
+                    state.m_messageRequest, "Request:"))
+            {
+                if (state.m_serverHandle != 0 && state.m_ros2Bridge != nullptr)
+                {
+                    state.m_ros2Bridge->removeHandle(state.m_serverHandle);
+                    state.m_serverHandle = 0;
+                    db.outputs.serverHandle() = 0;
+                }
+                state.m_serviceServer.reset();
+                state.m_messageRequest.reset();
+                return false;
+            }
             state.m_messageUpdateNeeded = false;
         }
 
@@ -138,8 +149,34 @@ public:
             }
 
             CARB_LOG_INFO("Creating server for topic name %s", fullServiceName.c_str());
-            state.m_serviceServer = state.m_factory->createService(
-                state.m_nodeHandle.get(), fullServiceName.c_str(), state.m_messageRequest->getTypeSupportHandle(), qos);
+            if (!state.m_messageRequest)
+            {
+                db.logWarning("%s/%s/%s request message is invalid", state.m_messagePackage.c_str(),
+                              state.m_messageSubfolder.c_str(), state.m_messageName.c_str());
+                db.outputs.serverHandle() = 0;
+                state.m_serviceUpdateNeeded = false;
+                return false;
+            }
+            const void* typeSupport = state.m_messageRequest->getTypeSupportHandle();
+            if (!typeSupport)
+            {
+                db.logWarning("%s/%s/%s service type support is unavailable", state.m_messagePackage.c_str(),
+                              state.m_messageSubfolder.c_str(), state.m_messageName.c_str());
+                db.outputs.serverHandle() = 0;
+                state.m_serviceUpdateNeeded = false;
+                return false;
+            }
+
+            state.m_serviceServer =
+                state.m_factory->createService(state.m_nodeHandle.get(), fullServiceName.c_str(), typeSupport, qos);
+            if (!state.m_serviceServer || !state.m_serviceServer->isValid())
+            {
+                db.logWarning("Unable to create ROS 2 service server");
+                state.m_serviceServer.reset();
+                db.outputs.serverHandle() = 0;
+                state.m_serviceUpdateNeeded = false;
+                return false;
+            }
 
             state.m_serverHandle = state.m_ros2Bridge->addHandle(&state.m_serviceServer);
             db.outputs.serverHandle() = state.m_serverHandle;
@@ -153,14 +190,23 @@ public:
     {
         auto& state = db.perInstanceState<OgnROS2ServiceServerRequest>();
         db.outputs.onReceived() = kExecutionAttributeStateDisabled;
+        if (!state.m_serviceServer)
+        {
+            db.logWarning("service is invalid");
+            return false;
+        }
+        if (!state.m_messageRequest)
+        {
+            db.logWarning("Request message is invalid");
+            return false;
+        }
+        if (!state.m_serviceServer->isValid())
+        {
+            db.logWarning("service is invalid");
+            return false;
+        }
         if (state.m_serviceServer->takeRequest(state.m_messageRequest->getPtr()))
         {
-            // Check if all sub-message size match size of actuators before setting data
-            if (!state.m_serviceServer->isValid())
-            {
-                db.logWarning("service is invalid");
-                return false;
-            }
             // Write incoming request data field/data to output
             isaacsim::ros2::omnigraph_utils::writeNodeAttributeFromMessage(db, state.m_messageRequest, "Request:", true);
             // Only if the server received  a request
@@ -212,6 +258,12 @@ private:
         NodeObj nodeObj = attrObj.iAttribute->getNode(attrObj);
         auto db = OgnROS2ServiceServerRequestDatabase(nodeObj);
         auto& state = db.perInstanceState<OgnROS2ServiceServerRequest>();
+        state.m_messageUpdateNeeded = true;
+        if (!state.isInitialized())
+        {
+            return;
+        }
+
         std::string messagePackage = std::string(db.inputs.messagePackage());
         std::string messageSubfolder = std::string(db.inputs.messageSubfolder());
         std::string messageName = std::string(db.inputs.messageName());
@@ -232,8 +284,20 @@ private:
         // Build message attributes
         state.m_messageRequest = state.m_factory->createDynamicMessage(
             messagePackage, messageSubfolder, messageName, BackendMessageType::eRequest);
-        isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceServerRequestDatabase, true, false>(
-            db, nodeObj, messagePackage, messageSubfolder, messageName, state.m_messageRequest, "Request:");
+        if (!isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceServerRequestDatabase, true, false>(
+                db, nodeObj, messagePackage, messageSubfolder, messageName, state.m_messageRequest, "Request:"))
+        {
+            if (state.m_serverHandle != 0 && state.m_ros2Bridge != nullptr)
+            {
+                state.m_ros2Bridge->removeHandle(state.m_serverHandle);
+                state.m_serverHandle = 0;
+            }
+            state.m_serviceServer.reset();
+            state.m_messageRequest.reset();
+            state.m_messageUpdateNeeded = true;
+            return;
+        }
+        state.m_serviceUpdateNeeded = true;
     }
 };
 

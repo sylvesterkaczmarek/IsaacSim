@@ -23,17 +23,18 @@ import yaml
 from isaacsim import SimulationApp
 
 # Default config dict, can be updated/replaced using json/yaml config files ('--config' cli argument)
+# <start-config-snippet>
 config = {
     "launch_config": {
         "renderer": "RealTimePathTracing",
         "headless": False,
     },
     "env_url": "",
-    "working_area_size": (4, 4, 3),
+    "working_area_size": (2.5, 2.5, 1.5),
     "rt_subframes": 4,
-    "num_frames": 4,
+    "num_frames": 3,
     "num_cameras": 2,
-    "camera_collider_radius": 0.5,
+    "camera_collider_radius": 0.25,
     "disable_render_products_between_captures": False,
     "simulation_duration_between_captures": 0.05,
     "resolution": (640, 480),
@@ -43,13 +44,13 @@ config = {
         "f_stop": 0.0,
         "clipping_range": (0.01, 10000),
     },
-    "camera_look_at_target_offset": 0.15,
-    "camera_distance_to_target_min_max": (0.25, 0.75),
+    "camera_look_at_target_offset": 0.1,
+    "camera_distance_to_target_min_max": (0.35, 0.9),
     "writer_type": "PoseWriter",
     "writer_kwargs": {
         "output_dir": "_out_obj_based_sdg_pose_writer",
         "format": None,
-        "use_subfolders": False,
+        "use_subfolders": True,
         "write_debug_images": True,
         "skip_empty_frames": False,
     },
@@ -57,36 +58,48 @@ config = {
         {
             "url": "/Isaac/Props/YCB/Axis_Aligned/008_pudding_box.usd",
             "label": "pudding_box",
-            "count": 5,
+            "count": 4,
             "floating": True,
+            "scale_min_max": (0.85, 1.25),
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/011_banana.usd",
+            "label": "banana",
+            "count": 3,
+            "floating": False,
             "scale_min_max": (0.85, 1.25),
         },
         {
             "url": "/Isaac/Props/YCB/Axis_Aligned_Physics/006_mustard_bottle.usd",
             "label": "mustard_bottle",
-            "count": 7,
+            "count": 4,
             "floating": True,
             "scale_min_max": (0.85, 1.25),
         },
     ],
     "shape_distractors_types": ["capsule", "cone", "cylinder", "sphere", "cube"],
     "shape_distractors_scale_min_max": (0.015, 0.15),
-    "shape_distractors_num": 350,
+    "shape_distractors_num": 80,
     "mesh_distractors_urls": [
         "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_04_1847.usd",
         "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxA_01_414.usd",
         "/Isaac/Environments/Simple_Warehouse/Props/S_TrafficCone.usd",
     ],
-    "mesh_distractors_scale_min_max": (0.35, 1.35),
-    "mesh_distractors_num": 75,
+    "mesh_distractors_scale_min_max": (0.35, 1.0),
+    "mesh_distractors_num": 4,
 }
-
-import carb
+# <end-config-snippet>
 
 # Check if there are any config files (yaml or json) are passed as arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", required=False, help="Include specific config parameters (json or yaml))")
-args, unknown = parser.parse_known_args()
+parser.add_argument(
+    "--num-frames",
+    type=int,
+    default=None,
+    help="Override the number of frames to capture.",
+)
+args, _ = parser.parse_known_args()
 args_config = {}
 if args.config and os.path.isfile(args.config):
     with open(args.config) as f:
@@ -95,38 +108,49 @@ if args.config and os.path.isfile(args.config):
         elif args.config.endswith(".yaml"):
             args_config = yaml.safe_load(f)
         else:
-            carb.log_warn(f"File {args.config} is not json or yaml, will use default config")
+            print(f"[SDG][WARN] File {args.config} is not json or yaml, will use default config")
 else:
-    carb.log_warn(f"File {args.config} does not exist, will use default config")
+    print(f"[SDG][WARN] File {args.config} does not exist, will use default config")
 
 # Update the default config dict with the external one
 config.update(args_config)
+if args.num_frames is not None:
+    config["num_frames"] = args.num_frames
 
 print(f"[SDG] Using config:\n{config}")
 
 launch_config = config.get("launch_config", {})
 simulation_app = SimulationApp(launch_config=launch_config)
 
-import random
 import time
 from itertools import chain
 
+import carb
 import carb.settings
+import isaacsim.core.experimental.utils.app as app_utils
 
 # Custom util functions for the example
 import object_based_sdg_utils
+import omni.kit.app
 import omni.physics.core
 import omni.replicator.core as rep
 import omni.timeline
 import omni.usd
-from isaacsim.core.utils.semantics import add_labels, remove_labels, upgrade_prim_semantics_to_labels
+from isaacsim.core.experimental.objects import Sphere
+from isaacsim.core.experimental.prims import GeomPrim, RigidPrim, XformPrim
+from isaacsim.core.experimental.utils.semantics import add_labels, remove_all_labels, upgrade_prim_semantics_to_labels
+from isaacsim.core.simulation_manager import PhysicsScene, SimulationManager
 from isaacsim.storage.native import get_assets_root_path
 from omni.physics.core import get_physics_scene_query_interface
-from pxr import PhysicsSchemaTools, PhysxSchema, UsdGeom, UsdPhysics
+from pxr import PhysicsSchemaTools
 
 # Isaac nucleus assets root path
 assets_root_path = get_assets_root_path()
 stage = None
+
+# Deterministic RNG for spawn and runtime randomizations
+rep.set_global_seed(42)
+rng = rep.rng.ReplicatorRNG(seed=42)
 
 # ENVIRONMENT
 # Create an empty or load a custom stage (clearing any previous semantics)
@@ -139,7 +163,7 @@ if env_url:
     for prim in stage.Traverse():
         # Make sure old semantics api are upgraded to the new labels api
         upgrade_prim_semantics_to_labels(prim, include_descendants=True)
-        remove_labels(prim, include_descendants=True)
+        remove_all_labels(prim, include_descendants=True)
 else:
     omni.usd.get_context().new_stage()
     stage = omni.usd.get_context().get_stage()
@@ -147,18 +171,19 @@ else:
     rep.functional.create.distant_light(intensity=400.0, rotation=(0, 60, 0), name="DistantLight")
 
 # Get the working area size and bounds (width=x, depth=y, height=z)
-working_area_size = config.get("working_area_size", (3, 3, 3))
+working_area_size = config.get("working_area_size", (2.5, 2.5, 1.5))
 working_area_min = (working_area_size[0] / -2, working_area_size[1] / -2, working_area_size[2] / -2)
 working_area_max = (working_area_size[0] / 2, working_area_size[1] / 2, working_area_size[2] / 2)
 
 # Create a collision box area around the assets to prevent them from drifting away
 object_based_sdg_utils.create_collision_box_walls(
-    stage, "/World/CollisionWalls", working_area_size[0], working_area_size[1], working_area_size[2]
+    "/World/CollisionWalls", working_area_size[0], working_area_size[1], working_area_size[2]
 )
 
 rep.functional.physics.create_physics_scene("/PhysicsScene", timeStepsPerSecond=60)
-physx_scene = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene"))
+physics_scene = PhysicsScene("/PhysicsScene")
 
+# <start-labeled-assets-snippet>
 # TRAINING ASSETS
 # Add the objects to be trained in the environment with their labels and properties
 labeled_assets_and_properties = config.get("labeled_assets_and_properties", [])
@@ -171,11 +196,11 @@ for obj in labeled_assets_and_properties:
     label = obj.get("label", "unknown")
     count = obj.get("count", 1)
     floating = obj.get("floating", False)
-    scale_min_max = obj.get("randomize_scale", (1, 1))
+    scale_min_max = obj.get("scale_min_max", (1, 1))
     for i in range(count):
         # Create a prim and add the asset reference
         rand_loc, rand_rot, rand_scale = object_based_sdg_utils.get_random_transform_values(
-            loc_min=working_area_min, loc_max=working_area_max, scale_min_max=scale_min_max
+            rng, loc_min=working_area_min, loc_max=working_area_max, scale_min_max=scale_min_max
         )
         asset_path = obj_url if obj_url.startswith("omniverse://") else assets_root_path + obj_url
         prim = rep.functional.create.reference(
@@ -187,54 +212,69 @@ for obj in labeled_assets_and_properties:
             scale=rand_scale,
         )
         # Apply colliders and rigid body dynamics
-        object_based_sdg_utils.add_colliders(prim)
-        rep.functional.physics.apply_rigid_body(prim, disableGravity=False)
-        #  Label the asset (any previous 'class' label will be overwritten)
-        add_labels(prim, labels=[label], instance_name="class")
+        object_based_sdg_utils.add_colliders(str(prim.GetPrimPath()))
+        rep.functional.physics.apply_rigid_body(prim, disableGravity=floating)
+        # Label the asset (any previous 'class' label will be overwritten)
+        add_labels(prim, labels=[label], taxonomy="class")
         if floating:
             floating_labeled_prims.append(prim)
         else:
             falling_labeled_prims.append(prim)
 labeled_prims = floating_labeled_prims + falling_labeled_prims
+# <end-labeled-assets-snippet>
 
 
+# <start-shape-distractors-snippet>
 # DISTRACTORS
 # Add shape distractors to the environment as floating or falling objects
+rep.functional.create.scope(name="Distractors", parent="/World")
 shape_distractors_types = config.get("shape_distractors_types", ["capsule", "cone", "cylinder", "sphere", "cube"])
 shape_distractors_scale_min_max = config.get("shape_distractors_scale_min_max", (0.02, 0.2))
-shape_distractors_num = config.get("shape_distractors_num", 350)
+shape_distractors_num = config.get("shape_distractors_num", 80)
 shape_distractors = []
 floating_shape_distractors = []
 falling_shape_distractors = []
+shape_creators = {
+    "capsule": rep.functional.create.capsule,
+    "cone": rep.functional.create.cone,
+    "cube": rep.functional.create.cube,
+    "cylinder": rep.functional.create.cylinder,
+    "sphere": rep.functional.create.sphere,
+}
 for i in range(shape_distractors_num):
     rand_loc, rand_rot, rand_scale = object_based_sdg_utils.get_random_transform_values(
-        loc_min=working_area_min, loc_max=working_area_max, scale_min_max=shape_distractors_scale_min_max
+        rng, loc_min=working_area_min, loc_max=working_area_max, scale_min_max=shape_distractors_scale_min_max
     )
-    rand_shape = random.choice(shape_distractors_types)
-    prim_path = omni.usd.get_stage_next_free_path(stage, f"/World/Distractors/{rand_shape}", False)
-    prim = stage.DefinePrim(prim_path, rand_shape.capitalize())
-    rep.functional.modify.pose(prim, position_value=rand_loc, rotation_value=rand_rot, scale_value=rand_scale)
-    disable_gravity = random.choice([True, False])
-    object_based_sdg_utils.add_colliders(prim)
+    rand_shape = shape_distractors_types[int(rng.generator.integers(0, len(shape_distractors_types)))]
+    prim = shape_creators[rand_shape](
+        parent="/World/Distractors",
+        name=rand_shape,
+        position=rand_loc,
+        rotation=rand_rot,
+        scale=rand_scale,
+    )
+    disable_gravity = bool(rng.generator.integers(0, 2))
+    object_based_sdg_utils.add_colliders(str(prim.GetPrimPath()))
     rep.functional.physics.apply_rigid_body(prim, disableGravity=disable_gravity)
     if disable_gravity:
         floating_shape_distractors.append(prim)
     else:
         falling_shape_distractors.append(prim)
     shape_distractors.append(prim)
+# <end-shape-distractors-snippet>
 
 # Add mesh distractors to the environment as floating of falling objects
 mesh_distactors_urls = config.get("mesh_distractors_urls", [])
 mesh_distactors_scale_min_max = config.get("mesh_distractors_scale_min_max", (0.1, 2.0))
-mesh_distactors_num = config.get("mesh_distractors_num", 10)
+mesh_distactors_num = config.get("mesh_distractors_num", 4)
 mesh_distractors = []
 floating_mesh_distractors = []
 falling_mesh_distractors = []
 for i in range(mesh_distactors_num):
     rand_loc, rand_rot, rand_scale = object_based_sdg_utils.get_random_transform_values(
-        loc_min=working_area_min, loc_max=working_area_max, scale_min_max=mesh_distactors_scale_min_max
+        rng, loc_min=working_area_min, loc_max=working_area_max, scale_min_max=mesh_distactors_scale_min_max
     )
-    mesh_url = random.choice(mesh_distactors_urls)
+    mesh_url = mesh_distactors_urls[int(rng.generator.integers(0, len(mesh_distactors_urls)))]
     prim_name = os.path.basename(mesh_url).split(".")[0]
     asset_path = mesh_url if mesh_url.startswith("omniverse://") else assets_root_path + mesh_url
     prim = rep.functional.create.reference(
@@ -245,8 +285,8 @@ for i in range(mesh_distactors_num):
         rotation=rand_rot,
         scale=rand_scale,
     )
-    disable_gravity = random.choice([True, False])
-    object_based_sdg_utils.add_colliders(prim)
+    disable_gravity = bool(rng.generator.integers(0, 2))
+    object_based_sdg_utils.add_colliders(str(prim.GetPrimPath()))
     rep.functional.physics.apply_rigid_body(prim, disableGravity=disable_gravity)
     if disable_gravity:
         floating_mesh_distractors.append(prim)
@@ -255,12 +295,9 @@ for i in range(mesh_distactors_num):
     mesh_distractors.append(prim)
     # Remove any previous semantics on the mesh distractor
     upgrade_prim_semantics_to_labels(prim, include_descendants=True)
-    remove_labels(prim, include_descendants=True)
+    remove_all_labels(prim, include_descendants=True)
 
 # REPLICATOR
-# Initialize randomization
-rep.set_global_seed(42)
-random.seed(42)
 
 # Disable capturing every frame (capture will be triggered manually using the step function)
 rep.orchestrator.set_capture_on_play(False)
@@ -274,22 +311,23 @@ num_cameras = config.get("num_cameras", 1)
 camera_properties_kwargs = config.get("camera_properties_kwargs", {})
 rep.functional.create.scope(name="Cameras", parent="/World")
 for i in range(num_cameras):
-    cam_prim = rep.functional.create.camera(parent="/World/Cameras", name="cam", **camera_properties_kwargs)
+    cam_prim = rep.functional.create.camera(parent="/World/Cameras", name=f"cam_{i}", **camera_properties_kwargs)
     cameras.append(cam_prim)
 
 # Add collision spheres (disabled by default) to cameras to avoid objects overlaping with the camera view
 camera_colliders = []
+camera_collider_geoms = []
 camera_collider_radius = config.get("camera_collider_radius", 0)
 if camera_collider_radius > 0:
     for cam in cameras:
         cam_path = cam.GetPath()
-        cam_collider = stage.DefinePrim(f"{cam_path}/CollisionSphere", "Sphere")
-        cam_collider.GetAttribute("radius").Set(camera_collider_radius)
-        rep.functional.physics.apply_collider(cam_collider)
-        collision_api = UsdPhysics.CollisionAPI(cam_collider)
-        collision_api.GetCollisionEnabledAttr().Set(False)
-        UsdGeom.Imageable(cam_collider).MakeInvisible()
-        camera_colliders.append(cam_collider)
+        cam_collider_path = f"{cam_path}/CollisionSphere"
+        cam_collider = Sphere(cam_collider_path, radii=camera_collider_radius)
+        cam_collider_geom = GeomPrim(cam_collider_path, apply_collision_apis=True)
+        cam_collider_geom.set_enabled_collisions([False])
+        cam_collider.set_visibilities([False])
+        camera_colliders.append(cam_collider.prims[0])
+        camera_collider_geoms.append(cam_collider_geom)
 
 # Wait an app update to ensure the prim changes are applied
 simulation_app.update()
@@ -298,7 +336,7 @@ simulation_app.update()
 render_products = []
 resolution = config.get("resolution", (640, 480))
 for cam in cameras:
-    rp = rep.create.render_product(cam.GetPath(), resolution)
+    rp = rep.create.render_product(cam.GetPath(), resolution, name=cam.GetName())
     render_products.append(rp)
 
 # Enable rendering only at capture time
@@ -307,7 +345,7 @@ if disable_render_products_between_captures:
     object_based_sdg_utils.set_render_products_updates(render_products, False, include_viewport=False)
 
 # Create the writer and attach the render products
-writer_type = config.get("writer_type", "PoseWriter")
+writer_type = config.get("writer_type", None)
 writer_kwargs = config.get("writer_kwargs", {})
 # If not an absolute path, set it relative to the current working directory
 if out_dir := writer_kwargs.get("output_dir"):
@@ -319,17 +357,31 @@ if writer_type is not None and len(render_products) > 0:
     writer = rep.writers.get(writer_type)
     writer.initialize(**writer_kwargs)
     writer.attach(render_products)
+else:
+    print("[SDG][WARN] No writer attached, the capture loop will not write any data to disk")
 
 
+# <start-overlap-randomizer-snippet>
 # RANDOMIZERS
 def on_overlap_hit(hit: object) -> bool:
-    """Apply a random upwards velocity to objects overlapping the bounce area."""
+    """Apply a random upwards velocity to objects overlapping the bounce area.
+
+    Args:
+        hit: PhysX overlap result identifying the rigid body in the bounce area.
+
+    Returns:
+        ``True`` so the overlap query continues visiting additional bodies.
+    """
     prim_path = str(PhysicsSchemaTools.intToSdfPath(hit.rigid_body))
     prim = stage.GetPrimAtPath(prim_path)
     # Skip the camera collision spheres
     if prim not in camera_colliders:
-        rand_vel = (random.uniform(-2, 2), random.uniform(-2, 2), random.uniform(4, 8))
-        prim.GetAttribute("physics:velocity").Set(rand_vel)
+        rand_vel = (
+            float(rng.generator.uniform(-2, 2)),
+            float(rng.generator.uniform(-2, 2)),
+            float(rng.generator.uniform(4, 8)),
+        )
+        RigidPrim(prim_path).set_velocities(linear_velocities=[rand_vel])
     return True  # return True to continue the query
 
 
@@ -344,7 +396,12 @@ overlap_area_extent = (
 
 
 def on_physics_step(dt: float, context: object) -> None:
-    """Check for overlapping objects on every physics update step."""
+    """Check for overlapping objects on every physics update step.
+
+    Args:
+        dt: Duration of the physics step. The callback does not use it.
+        context: Physics callback context. The callback does not use it.
+    """
     get_physics_scene_query_interface().overlap_box(
         carb.Float3(overlap_area_extent),
         carb.Float3(overlap_area_origin),
@@ -357,6 +414,15 @@ def on_physics_step(dt: float, context: object) -> None:
 physics_sub = omni.physics.core.get_physics_simulation_interface().subscribe_physics_on_step_events(
     pre_step=False, order=0, on_update=on_physics_step
 )
+# <end-overlap-randomizer-snippet>
+
+
+def unsubscribe_physics() -> None:
+    """Release the physics step callback subscription."""
+    global physics_sub
+    if physics_sub is not None:
+        physics_sub.unsubscribe()
+        physics_sub = None
 
 
 camera_distance_to_target_min_max = config.get("camera_distance_to_target_min_max", (0.1, 0.5))
@@ -366,41 +432,47 @@ camera_look_at_target_offset = config.get("camera_look_at_target_offset", 0.2)
 def randomize_camera_poses() -> None:
     """Randomize camera poses to look at a random target asset with random distance and offset."""
     for cam in cameras:
-        target_asset = random.choice(labeled_prims)
+        target_asset = labeled_prims[int(rng.generator.integers(0, len(labeled_prims)))]
         # Add a look_at offset so the target is not always in the center of the camera view
-        loc_offset = (
-            random.uniform(-camera_look_at_target_offset, camera_look_at_target_offset),
-            random.uniform(-camera_look_at_target_offset, camera_look_at_target_offset),
-            random.uniform(-camera_look_at_target_offset, camera_look_at_target_offset),
+        loc_offset = rng.generator.uniform(-camera_look_at_target_offset, camera_look_at_target_offset, size=3)
+        target_loc = XformPrim(str(target_asset.GetPrimPath())).get_local_poses()[0].numpy()[0] + loc_offset
+        distance = float(
+            rng.generator.uniform(camera_distance_to_target_min_max[0], camera_distance_to_target_min_max[1])
         )
-        target_loc = target_asset.GetAttribute("xformOp:translate").Get() + loc_offset
-        distance = random.uniform(camera_distance_to_target_min_max[0], camera_distance_to_target_min_max[1])
-        cam_loc, quat = object_based_sdg_utils.get_random_pose_on_sphere(origin=target_loc, radius=distance)
-        rep.functional.modify.pose(cam, position_value=cam_loc, rotation_value=quat)
+        cam_loc, quat = object_based_sdg_utils.get_random_pose_on_sphere(
+            rng, origin=tuple(target_loc.tolist()), radius=distance
+        )
+        XformPrim(str(cam.GetPrimPath()), reset_xform_op_properties=True).set_local_poses(
+            translations=[cam_loc], orientations=[quat]
+        )
 
 
-def simulate_camera_collision(num_frames: int = 1) -> None:
-    """Enable camera colliders temporarily and simulate to push out overlapping objects."""
-    for cam_collider in camera_colliders:
-        collision_api = UsdPhysics.CollisionAPI(cam_collider)
-        collision_api.GetCollisionEnabledAttr().Set(True)
-    if not timeline.is_playing():
-        timeline.play()
-    for _ in range(num_frames):
-        simulation_app.update()
-    for cam_collider in camera_colliders:
-        collision_api = UsdPhysics.CollisionAPI(cam_collider)
-        collision_api.GetCollisionEnabledAttr().Set(False)
+def simulate_camera_collision(num_simulation_steps: int = 1) -> None:
+    """Enable camera colliders temporarily and simulate to push out overlapping objects.
+
+    Args:
+        num_simulation_steps: Number of physics steps during which camera collisions remain enabled.
+    """
+    for cam_collider_geom in camera_collider_geoms:
+        cam_collider_geom.set_enabled_collisions([True])
+    if not app_utils.is_playing():
+        app_utils.play()
+    SimulationManager.step(steps=num_simulation_steps)
+    for cam_collider_geom in camera_collider_geoms:
+        cam_collider_geom.set_enabled_collisions([False])
 
 
+# <start-colors-randomizer-snippet>
 # Create a randomizer for the shape distractors colors, manually triggered at custom events
 with rep.trigger.on_custom_event(event_name="randomize_shape_distractor_colors"):
     shape_distractors_paths = [prim.GetPath() for prim in chain(floating_shape_distractors, falling_shape_distractors)]
     shape_distractors_group = rep.create.group(shape_distractors_paths)
     with shape_distractors_group:
         rep.randomizer.color(colors=rep.distribution.uniform((0, 0, 0), (1, 1, 1)))
+# <end-colors-randomizer-snippet>
 
 
+# <start-lights-randomizer-snippet>
 # Create a randomizer for lights in the working area, manually triggered at custom events
 with rep.trigger.on_custom_event(event_name="randomize_lights"):
     lights = rep.create.light(
@@ -412,6 +484,7 @@ with rep.trigger.on_custom_event(event_name="randomize_lights"):
         scale=rep.distribution.uniform(0.1, 1),
         count=3,
     )
+# <end-lights-randomizer-snippet>
 
 
 # Create a randomizer for the dome background, manually triggered at custom events
@@ -429,21 +502,31 @@ with rep.trigger.on_custom_event(event_name="randomize_dome_background"):
 
 
 def capture_with_motion_blur_and_pathtracing(
-    physx_scene: PhysxSchema.PhysxSceneAPI, duration: float = 0.05, num_samples: int = 8, spp: int = 64
+    physics_scene: PhysicsScene,
+    duration: float = 1.0 / 90.0,
+    num_samples: int = 16,
+    spp: int = 64,
 ) -> None:
-    """Capture motion blur by combining pathtraced subframe samples simulated for the given duration."""
-    # For small step sizes the physics FPS needs to be temporarily increased to provide movements every sub sample
-    orig_physics_fps = physx_scene.GetTimeStepsPerSecondAttr().Get()
-    target_physics_fps = 1 / duration * num_samples
-    if target_physics_fps > orig_physics_fps:
-        print(f"[SDG] Changing physics FPS from {orig_physics_fps} to {target_physics_fps}")
-        physx_scene.GetTimeStepsPerSecondAttr().Set(target_physics_fps)
+    """Capture motion blur by combining pathtraced subframe samples simulated for the given duration.
 
-    # Enable motion blur (if not enabled)
+    On normal completion, restore the prior render mode, motion-blur enablement, and physics rate.
+
+    Args:
+        physics_scene: Physics scene whose step rate may be raised for the capture.
+        duration: Positive simulated exposure interval in seconds.
+        num_samples: Positive number of motion-blur subframes to accumulate.
+        spp: Positive number of path-tracing samples per pixel for each captured frame.
+    """
+    original_physics_dt = physics_scene.get_dt()
+    target_physics_fps = 1 / duration * num_samples
+    target_physics_dt = 1.0 / target_physics_fps
+    if target_physics_dt < original_physics_dt:
+        print(f"[SDG] Changing physics FPS from {1.0 / original_physics_dt:.0f} to {target_physics_fps:.0f}")
+        physics_scene.set_dt(target_physics_dt)
+
     is_motion_blur_enabled = carb.settings.get_settings().get("/omni/replicator/captureMotionBlur")
     if not is_motion_blur_enabled:
         carb.settings.get_settings().set("/omni/replicator/captureMotionBlur", True)
-    # Number of sub samples to render for motion blur in PathTracing mode
     carb.settings.get_settings().set("/omni/replicator/pathTracedMotionBlurSubSamples", num_samples)
 
     # Set the render mode to PathTracing
@@ -454,30 +537,32 @@ def capture_with_motion_blur_and_pathtracing(
     carb.settings.get_settings().set("/rtx/pathtracing/optixDenoiser/enabled", 0)
 
     # Make sure the timeline is playing
-    if not timeline.is_playing():
-        timeline.play()
+    if not app_utils.is_playing():
+        app_utils.play()
 
     # Capture the frame by advancing the simulation for the given duration and combining the sub samples
     rep.orchestrator.step(delta_time=duration, pause_timeline=False)
 
     # Restore the original physics FPS
-    if target_physics_fps > orig_physics_fps:
-        print(f"[SDG] Restoring physics FPS from {target_physics_fps} to {orig_physics_fps}")
-        physx_scene.GetTimeStepsPerSecondAttr().Set(orig_physics_fps)
+    if target_physics_dt < original_physics_dt:
+        print(f"[SDG] Restoring physics FPS from {1.0 / target_physics_dt:.0f} " f"to {1.0 / original_physics_dt:.0f}")
+        physics_scene.set_dt(original_physics_dt)
 
-    # Restore the previous render and motion blur  settings
     carb.settings.get_settings().set("/omni/replicator/captureMotionBlur", is_motion_blur_enabled)
-    print(f"[SDG] Restoring render mode from 'PathTracing' to '{prev_render_mode}'")
     carb.settings.get_settings().set("/rtx/rendermode", prev_render_mode)
 
 
 def run_simulation_loop(duration: float) -> None:
-    """Update the app until a given simulation duration has passed."""
+    """Update the app until a given simulation duration has passed.
+
+    Args:
+        duration: Amount of simulation time to advance in seconds.
+    """
     timeline = omni.timeline.get_timeline_interface()
     elapsed_time = 0.0
     previous_time = timeline.get_current_time()
-    if not timeline.is_playing():
-        timeline.play()
+    if not app_utils.is_playing():
+        app_utils.play()
     app_updates_counter = 0
     while elapsed_time <= duration:
         simulation_app.update()
@@ -494,7 +579,7 @@ def run_simulation_loop(duration: float) -> None:
 
 # SDG
 # Number of frames to capture
-num_frames = config.get("num_frames", 10)
+num_frames = config.get("num_frames", 3)
 
 # Increase subframes if materials are not loaded on time, or ghosting artifacts appear on moving objects,
 # see: https://docs.omniverse.nvidia.com/extensions/latest/ext_replicator/subframes_examples.html
@@ -515,51 +600,37 @@ timeline.set_start_time(0)
 timeline.set_end_time(1000000)
 timeline.set_looping(False)
 # If no custom physx scene is created, a default one will be created by the physics engine once the timeline starts
-timeline.play()
-timeline.commit()
+physics_scene.set_dt(1.0 / 60.0)
+SimulationManager.initialize_physics()
+app_utils.play(commit=True)
 simulation_app.update()
 
 # Store the wall start time for stats
 wall_time_start = time.perf_counter()
 
+# <start-sdg-loop-snippet>
 # Run the simulation and capture data triggering randomizations and actions at custom frame intervals
 for i in range(num_frames):
-    # Cameras will be moved to a random position and look at a randomly selected labeled asset
-    if i % 3 == 0:
+    if i % 2 == 0:
         print(f"\t Randomizing camera poses")
         randomize_camera_poses()
         # Temporarily enable camera colliders and simulate for a few frames to push out any overlapping objects
         if camera_colliders:
-            simulate_camera_collision(num_frames=4)
-
-    # Apply a random velocity towards the origin to the working area to pull the assets closer to the center
-    if i % 10 == 0:
-        print(f"\t Applying velocity towards the origin")
-        object_based_sdg_utils.apply_velocities_towards_target(
-            list(chain(labeled_prims, shape_distractors, mesh_distractors))
-        )
-
-    # Randomize lights locations and colors
-    if i % 5 == 0:
+            simulate_camera_collision(num_simulation_steps=2)
         print(f"\t Randomizing lights")
         rep.utils.send_og_event(event_name="randomize_lights")
-
-    # Randomize the colors of the primitive shape distractors
-    if i % 15 == 0:
         print(f"\t Randomizing shape distractors colors")
         rep.utils.send_og_event(event_name="randomize_shape_distractor_colors")
-
-    # Randomize the texture of the dome background
-    if i % 25 == 0:
+        object_based_sdg_utils.apply_random_velocities(
+            [str(p.GetPrimPath()) for p in chain(floating_shape_distractors, floating_mesh_distractors)], rng
+        )
+    if i % 4 == 0:
+        print(f"\t Applying velocity towards the origin")
+        object_based_sdg_utils.apply_velocities_towards_target(
+            [str(p.GetPrimPath()) for p in chain(labeled_prims, shape_distractors, mesh_distractors)], rng
+        )
         print(f"\t Randomizing dome background")
         rep.utils.send_og_event(event_name="randomize_dome_background")
-
-    # Apply a random velocity on the floating distractors (shapes and meshes)
-    if i % 17 == 0:
-        print(f"\t Randomizing shape distractors velocities")
-        object_based_sdg_utils.apply_random_velocities(
-            list(chain(floating_shape_distractors, floating_mesh_distractors))
-        )
 
     # Enable render products only at capture time
     if disable_render_products_between_captures:
@@ -567,8 +638,8 @@ for i in range(num_frames):
 
     # Capture the current frame
     print(f"[SDG] Capturing frame {i}/{num_frames}, at simulation time: {timeline.get_current_time():.2f}")
-    if i % 5 == 0:
-        capture_with_motion_blur_and_pathtracing(physx_scene, duration=0.025, num_samples=8, spp=128)
+    if (i + 1) % 3 == 0:
+        capture_with_motion_blur_and_pathtracing(physics_scene, duration=1.0 / 90.0, num_samples=16, spp=32)
     else:
         rep.orchestrator.step(delta_time=0.0, rt_subframes=rt_subframes, pause_timeline=False)
 
@@ -584,6 +655,7 @@ for i in range(num_frames):
 
 # Wait for the data to be written (default writer backends are asynchronous)
 rep.orchestrator.wait_until_complete()
+# <end-sdg-loop-snippet>
 
 # Get the stats
 wall_duration = time.perf_counter() - wall_time_start
@@ -599,9 +671,103 @@ print(
     f"\t Average capture entries (frames * cameras) FPS: {avg_capture_fps:.2f}\n"
 )
 
-# Unsubscribe the physics overlap checks and stop the timeline
-physics_sub = None
+unsubscribe_physics()
 simulation_app.update()
-timeline.stop()
+app_utils.stop()
+
+# <start-object-based-sdg-test>
+test_parser = argparse.ArgumentParser()
+test_parser.add_argument(
+    "--test",
+    action="store_true",
+    help="Validate captured output files against expected counts and exit.",
+)
+test_args, _ = test_parser.parse_known_args()
+
+if test_args.test:
+    import sys
+
+    app_utils.enable_extension("isaacsim.test.utils")
+    app_utils.enable_extension("isaacsim.replicator.examples")
+    from isaacsim.test.utils.file_validation import get_folder_file_summary, validate_folder_contents
+    from isaacsim.test.utils.image_comparison import compare_images_in_directories
+
+    rgb_mean_diff_tolerance = 5
+    writer_type = config.get("writer_type", "PoseWriter")
+    writer_kwargs = config.get("writer_kwargs", {})
+    out_dir = writer_kwargs.get("output_dir")
+    if out_dir and not os.path.isabs(out_dir):
+        out_dir = os.path.join(os.getcwd(), out_dir)
+    num_frames = config.get("num_frames", 3)
+    num_cameras = config.get("num_cameras", 1)
+    num_captures = num_frames * num_cameras
+    if writer_type == "PoseWriter":
+        # PoseWriter with use_subfolders numbers 000000..num_frames-1 in each camera folder.
+        # write_debug_images adds 1 overlay png per capture (000000.png + 000000_overlay.png).
+        expected_counts = {"json": num_captures, "png": num_captures * 2}
+        if not writer_kwargs.get("write_debug_images", False):
+            expected_counts = {"json": num_captures, "png": num_captures}
+    elif writer_type == "BasicWriter":
+        # BasicWriter with rgb + semantic_segmentation (colorize default True) writes
+        # 1 rgb png + 1 colorized seg png + 1 labels json per capture.
+        expected_counts = {"png": num_captures * 2, "json": num_captures}
+    else:
+        print(f"[SDG][Test][FAIL] Unsupported writer_type for validation: {writer_type}")
+        sys.exit(1)
+
+    ok = validate_folder_contents(
+        path=out_dir,
+        recursive=True,
+        expected_counts=expected_counts,
+        fail_on_empty_files=True,
+    )
+    if not ok:
+        summary = get_folder_file_summary(out_dir, recursive=True)
+        print(
+            f"[SDG][Test][FAIL] Output validation failed for {out_dir}\n"
+            f"\t Expected: {expected_counts}\n"
+            f"\t Found: {summary['extension_counts']}"
+        )
+        sys.exit(1)
+
+    replicator_examples_ext_path = (
+        omni.kit.app.get_app().get_extension_manager().get_extension_path_by_module("isaacsim.replicator.examples")
+    )
+    golden_dir = os.path.join(
+        replicator_examples_ext_path,
+        "isaacsim",
+        "replicator",
+        "examples",
+        "tests",
+        "data",
+        "golden",
+        "_out_obj_based_sdg_pose_writer",
+    )
+    compare_rgb = os.path.basename(os.path.normpath(out_dir)) == "_out_obj_based_sdg_pose_writer"
+    rgb_results = []
+    if compare_rgb:
+        for golden_root, _, golden_files in os.walk(golden_dir):
+            if any(file_name.endswith(".png") for file_name in golden_files):
+                relative_root = os.path.relpath(golden_root, golden_dir)
+                test_root = out_dir if relative_root == "." else os.path.join(out_dir, relative_root)
+                rgb_results.append(
+                    compare_images_in_directories(
+                        golden_dir=golden_root,
+                        test_dir=test_root,
+                        path_pattern=r"^\d+\.png$",
+                        allclose_rtol=None,
+                        allclose_atol=None,
+                        mean_tolerance=rgb_mean_diff_tolerance,
+                        print_all_stats=False,
+                    )
+                )
+    if compare_rgb and (not rgb_results or not all(result["all_passed"] for result in rgb_results)):
+        print(
+            f"[SDG][Test][FAIL] RGB image comparison failed (tol={rgb_mean_diff_tolerance}). "
+            f"Golden dir: {golden_dir}, output dir: {out_dir}"
+        )
+        sys.exit(1)
+    print(f"[SDG][Test][PASS] Output validation succeeded for {out_dir} ({num_captures} captures)")
+# <end-object-based-sdg-test>
 
 simulation_app.close()

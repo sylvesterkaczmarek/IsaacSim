@@ -62,7 +62,7 @@ class Extension(omni.ext.IExt):
             configs=SUPPORTED_LIDAR_CONFIGS,
             action_id_prefix="create_lidar",
             modality_label="RTX Lidar",
-            create_callback=lambda sn, sc, dv: self._create_sensor_from_config(Lidar, sn, sc, dv),
+            create_callback=lambda sn, sc: self._create_sensor_from_config(Lidar, sn, sc),
         )
 
         radar_action_id = self._register_action(
@@ -74,7 +74,7 @@ class Extension(omni.ext.IExt):
             configs=SUPPORTED_RADAR_CONFIGS,
             action_id_prefix="create_radar",
             modality_label="RTX Radar",
-            create_callback=lambda sn, sc, dv: self._create_sensor_from_config(Radar, sn, sc, dv),
+            create_callback=lambda sn, sc: self._create_sensor_from_config(Radar, sn, sc),
             seed_vendor_entries={
                 "NVIDIA": [{"name": "Generic RTX Radar", "onclick_action": (self._ext_name, radar_action_id)}]
             },
@@ -89,7 +89,7 @@ class Extension(omni.ext.IExt):
             configs=SUPPORTED_ACOUSTIC_CONFIGS,
             action_id_prefix="create_acoustic",
             modality_label="RTX Acoustic",
-            create_callback=lambda sn, sc, dv: self._create_sensor_from_config(Acoustic, sn, sc, dv),
+            create_callback=lambda sn, sc: self._create_sensor_from_config(Acoustic, sn, sc),
             seed_vendor_entries={
                 "NVIDIA": [{"name": "Generic RTX Acoustic", "onclick_action": (self._ext_name, acoustic_action_id)}]
             },
@@ -147,20 +147,18 @@ class Extension(omni.ext.IExt):
         configs: dict,
         action_id_prefix: str,
         modality_label: str,
-        create_callback: Callable[[str, str, object], None],
+        create_callback: Callable[[str, str], None],
         seed_vendor_entries: dict[str, list] | None = None,
     ) -> list:
         """Register one action per sensor config.
 
         Paths are assumed to use the ``/Isaac/Sensors/<Vendor>/<Sensor>/<Sensor>.usd`` layout.
-        The first variant (if any) is picked as the default so multi-variant-set USDs (e.g. SICK
-        family USDs) materialize a valid prim from a single menu click.
 
         Args:
             configs: Supported config paths mapped to variant metadata.
             action_id_prefix: Prefix used to build unique action identifiers.
             modality_label: Sensor modality label used in action descriptions.
-            create_callback: Callback called with the sensor name, config name, and default variant.
+            create_callback: Callback called with the sensor name and config name.
             seed_vendor_entries: Optional vendor menu entries to include before config-derived entries.
 
         Returns:
@@ -177,11 +175,9 @@ class Extension(omni.ext.IExt):
                 sensor_name = sensor_name[len(display_vendor) + 1 :]
 
             sensor_config = config_path.stem
-            variants = configs[config]
-            default_variant = next(iter(variants), None) if variants else None
             action_id = self._register_action(
                 f"{action_id_prefix}_{sensor_config}",
-                lambda *_, sn=sensor_name, sc=sensor_config, dv=default_variant: create_callback(sn, sc, dv),
+                lambda *_, sn=sensor_name, sc=sensor_config: create_callback(sn, sc),
                 f"Create {vendor_name} {sensor_name} {modality_label} sensor",
             )
             vendor_dict.setdefault(display_vendor, []).append(
@@ -212,21 +208,17 @@ class Extension(omni.ext.IExt):
             return generate_next_free_path(f"{selected}/{base_name}", prepend_default_prim=False)
         return generate_next_free_path(f"/{base_name}")
 
-    def _create_sensor_from_config(
-        self, sensor_cls: Any, sensor_name: str, sensor_config: str, variant: str | dict[str, str] | None
-    ) -> None:
+    def _create_sensor_from_config(self, sensor_cls: Any, sensor_name: str, sensor_config: str) -> None:
         """Create an RTX sensor from a supported config at the selected location.
 
         Args:
             sensor_cls: Sensor class exposing a ``create`` factory method.
             sensor_name: Display name used to derive the prim name.
             sensor_config: Sensor config name passed to the factory.
-            variant: Variant metadata passed to the factory.
         """
         sensor_cls.create(
             self._resolve_prim_path(Tf.MakeValidIdentifier(sensor_name)),
             config=sensor_config,
-            variant=variant,
         )
 
     def _create_generic_sensor(self, sensor_cls: Any, base_name: str) -> None:

@@ -18,6 +18,6 @@
 """Interactive Franka robot policy example demonstrating autonomous drawer opening tasks in Isaac Sim."""
 
 from .franka_example import FrankaExample
-from .franka_example_extension import FrankaExampleExtension
+from .franka_example_extension import FrankaExampleExtension as FrankaExampleExtension
 
-__all__ = ["FrankaExample", "FrankaExampleExtension"]
+__all__ = ["FrankaExample"]

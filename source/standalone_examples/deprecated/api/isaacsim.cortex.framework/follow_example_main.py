@@ -57,7 +57,11 @@ class FollowState(DfState):
         self.follow_sphere.set_world_pose(*self.robot.arm.get_fk_pq().as_tuple())
 
     def step(self) -> Any:
-        """Send the end effector toward the follow sphere position."""
+        """Send the end effector toward the follow sphere position.
+
+        Returns:
+            This state so the state machine continues following the sphere.
+        """
         target_position, _ = self.follow_sphere.get_world_pose()
         self.robot.arm.send_end_effector(target_position=target_position)
         return self  # Always transition back to this state.

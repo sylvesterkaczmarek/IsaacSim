@@ -15,6 +15,6 @@
 
 """VS Code launcher and menu integration for Isaac Sim."""
 
-from .extension import *
+from .extension import Extension as Extension
 
 __all__ = []

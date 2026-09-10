@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.0] - 2026-08-11
+### Added
+- Declare the `rtx.materialDb.nonVisualMaterialSemantics.prefix` setting, defaulting to `omni:simready:nonvisual`.
+
+### Fixed
+- `NonVisualMaterial`: fall back to the default attribute prefix when the RTX setting is unset, instead of building attribute names from `None`.
+
+## [0.9.0] - 2026-07-10
+### Changed
+- `NonVisualMaterial`: author a minimal `UsdPreviewSurface` connected to `outputs:surface` when the material has no shader, so non-visual material IDs resolve after a cold stage load (not only when authored live). Materials that already have a shader are left untouched.
+
+## [0.8.0] - 2026-07-08
+### Changed
+- `NonVisualMaterial`: author attributes using the SimReady spec USD types (`base`/`coating` as `token`, `attributes` as `token[]`), and support multiple attributes per material combined into the material-ID bitfield.
+- `NonVisualMaterial.decode_material_ids`: return the decoded attributes as a list of strings instead of a single string.
+- Fix base material spelling `calibration_lambertion` -> `calibration_lambertian`.
+
 ## [0.7.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

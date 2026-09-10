@@ -89,10 +89,10 @@ class _SinglePrimWrapper(object):
 
     @property
     def non_root_articulation_link(self) -> bool:
-        """Used to query if the prim is a non root articulation link.
+        """Whether the prim is a non-root articulation link.
 
         Returns:
-            True if the prim itself is a non root link
+            True if the prim itself is a non-root link.
 
         Example:
 
@@ -108,7 +108,7 @@ class _SinglePrimWrapper(object):
         """Set the visibility of the prim in stage.
 
         Args:
-            visible: Flag to set the visibility of the usd prim in stage.
+            visible: Flag to set the visibility of the USD prim in stage.
 
         Example:
 
@@ -132,7 +132,7 @@ class _SinglePrimWrapper(object):
 
         .. code-block:: python
 
-            >>> # get the visible state of an visible prim on the stage
+            >>> # get the visible state of a visible prim on the stage
             >>> prim.get_visibility()
             True
         """
@@ -145,7 +145,7 @@ class _SinglePrimWrapper(object):
 
             For an articulation, in addition to configuring the root prim's default position and spatial orientation
             (defined via the ``set_default_state`` method), the joint's positions, velocities, and efforts
-            (defined via the ``set_joints_default_state`` method) are imposed
+            (defined via the ``set_joints_default_state`` method) are imposed.
 
         Example:
 
@@ -160,7 +160,7 @@ class _SinglePrimWrapper(object):
         """Get the default prim states (spatial position and orientation).
 
         Returns:
-            An object that contains the default state of the prim (position and orientation)
+            An object that contains the default state of the prim (position and orientation).
 
         Example:
 
@@ -186,10 +186,10 @@ class _SinglePrimWrapper(object):
 
         Args:
             position: Position in the world frame of the prim. shape is (3, ).
-                Which means left unchanged.
+                If None, the position is left unchanged.
             orientation: Quaternion orientation in the world frame of the prim.
                 Quaternion is scalar-first (w, x, y, z). shape is (4, ).
-                Which means left unchanged.
+                If None, the orientation is left unchanged.
 
         Example:
 
@@ -241,9 +241,7 @@ class _SinglePrimWrapper(object):
         return
 
     def get_applied_visual_material(self) -> "VisualMaterial":
-        """Return the current applied visual material in case it was applied using apply_visual_material.
-
-        or it's one of the following materials that was already applied before: PreviewSurface, OmniPBR and OmniGlass.
+        """Return the current applied visual material if it was applied using apply_visual_material or is one of the following materials that was already applied before: PreviewSurface, OmniPBR and OmniGlass.
 
         Returns:
             The current applied visual material if its type is currently supported.
@@ -312,7 +310,7 @@ class _SinglePrimWrapper(object):
 
         Returns:
             First index is the position in the world frame (with shape (3, )).
-            Second index is quaternion orientation (with shape (4, )) in the world frame
+            Second index is quaternion orientation (with shape (4, )) in the world frame.
 
         Example:
 
@@ -336,7 +334,7 @@ class _SinglePrimWrapper(object):
 
         Returns:
             First index is the position in the local frame (with shape (3, )).
-            Second index is quaternion orientation (with shape (4, )) in the local frame
+            Second index is quaternion orientation (with shape (4, )) in the local frame.
 
         Example:
 
@@ -369,6 +367,7 @@ class _SinglePrimWrapper(object):
                 (with respect to its parent prim). shape is (3, ).
             orientation: Quaternion orientation in the local frame of the prim.
                 quaternion is scalar-first (w, x, y, z). shape is (4, ).
+
         .. hint::
 
             This method belongs to the methods used to set the prim state
@@ -443,7 +442,7 @@ class _SinglePrimWrapper(object):
         """Check if the prim path has a valid USD Prim at it.
 
         Returns:
-            True is the current prim path corresponds to a valid prim in stage. False otherwise.
+            True if the current prim path corresponds to a valid prim in stage. False otherwise.
 
         Example:
 

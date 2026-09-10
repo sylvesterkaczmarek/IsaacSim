@@ -30,6 +30,9 @@ class CortexRigidPrim(SingleXFormPrim):
     Args:
         *args: Positional arguments passed to SingleXFormPrim.
         **kwargs: Keyword arguments passed to SingleXFormPrim.
+
+    Raises:
+        RuntimeError: If the prim does not have the UsdPhysics.RigidBodyAPI schema.
     """
 
     def __init__(self, *args: object, **kwargs: object) -> None:

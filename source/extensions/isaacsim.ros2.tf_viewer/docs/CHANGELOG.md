@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.3.8] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+### Fixed
+- `test_transform_listener`: connect simulation time to the TF publisher timestamp input so published TF messages carry frame timestamps and are visible through TF aggregation.
+
+## [2.3.7] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [2.3.6] - 2026-07-10
+### Fixed
+- `test_transform_listener`: wait for expected TF frames instead of using a fixed frame count.
+
+## [2.3.5] - 2026-07-06
+### Changed
+- Classify the TF Viewer UI extension as lifecycle-only; its listener facade remains a separate API design task.
+
+## [2.3.4] - 2026-06-26
+### Removed
+- Remove the ROS 1 transform listener (`transform_listener_ros`) and the ROS-version dispatch; the extension now targets ROS 2 only.
+
 ## [2.3.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

@@ -26,7 +26,15 @@ from isaacsim.storage.native import get_assets_root_path
 
 
 class PickPlace(tasks.PickPlace):
-    """Pick up a cube and place it at a target location using the Cobotta Pro 900."""
+    """Pick up a cube and place it at a target location using the Cobotta Pro 900.
+
+    Args:
+        name: Name used to register the task in the world.
+        cube_initial_position: Optional initial world position of the cube.
+        cube_initial_orientation: Optional initial world orientation of the cube.
+        target_position: Optional world position at which to place the cube.
+        offset: Optional positional offset applied to the grasp pose.
+    """
 
     def __init__(
         self,
@@ -48,7 +56,14 @@ class PickPlace(tasks.PickPlace):
         return
 
     def set_robot(self) -> SingleManipulator:
-        """Create and configure the Cobotta Pro 900 manipulator for the task."""
+        """Create and configure the Cobotta Pro 900 manipulator for the task.
+
+        Returns:
+            Configured Cobotta manipulator with its parallel gripper.
+
+        Raises:
+            Exception: If the Isaac Sim asset root cannot be found.
+        """
         assets_root_path = get_assets_root_path()
         if assets_root_path is None:
             raise Exception("Could not find Isaac Sim assets folder")

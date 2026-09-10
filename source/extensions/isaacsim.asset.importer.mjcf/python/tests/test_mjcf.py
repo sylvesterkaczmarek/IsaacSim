@@ -344,6 +344,7 @@ class TestMJCF(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
 
         prim = stage.GetPrimAtPath("/ant")
+        prim.GetVariantSet("Physics").SetVariantSelection("physics")
         self.assertNotEqual(prim.GetPath(), Sdf.Path.emptyPath)
 
         prim = stage.GetPrimAtPath("/ant/Geometry/torso")

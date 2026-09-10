@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.8] - 2026-06-30
+### Changed
+- Publish ROS 2 simulation-control APIs explicitly and stop publishing the Kit lifecycle class.
+
+## [1.6.7] - 2026-06-26
+### Fixed
+- Update the `GetAvailableWorlds` test coverage to use the current SICK `picoScan100` asset folder instead of the removed `picoScan150` folder.
+
 ## [1.6.6] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

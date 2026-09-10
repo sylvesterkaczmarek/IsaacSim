@@ -1,5 +1,112 @@
 # Changelog
 
+## [7.2.0] - 2026-08-14
+### Added
+- Binary joint-position actions that map one policy channel to multiple joints.
+- Add Franka drawer-policy deployment on Newton using an engine-specific exported policy and task configuration.
+
+### Fixed
+- Improve Franka drawer-policy deployment parity using exported task state and current physics poses.
+
+### Security
+- Require and verify trusted SHA-256 digests before loading TorchScript policy artifacts.
+
+## [7.1.0] - 2026-08-14
+### Added
+- Add `DelayedDCMotor` actuator composition for exported Isaac Lab policies.
+- Add exported observation-history deployment.
+- Add a standalone Unitree H2 custom-policy deployment example.
+
+### Fixed
+- Support partial initial joint-position maps and policies that reference a subset of the robot's actuator groups.
+
+## [7.0.2] - 2026-08-07
+### Added
+- Add Go2 PhysX/Newton regression coverage and atomic policy restart through `RobotPolicyRunner.restart_from_default_state()`.
+
+### Changed
+- Temporarily disabled Cartpole tests on the Newton backend
+
+### Fixed
+- Improve Go2 and H1 Newton deployment parity with robot-local physics defaults, preserved authored armatures, and clean policy reset and priming after timeline restarts.
+
+## [7.0.0] - 2026-07-31
+### Added
+- `RobotPolicyRunner`: deploys any bundled robot through one spawn/initialize/step/close lifecycle, driven from the caller's physics callback.
+- `PolicySpec` and `PolicyArtifact`, with a `get_<robot>_spec` factory per robot in `isaacsim.robot.policy.examples.bundled`.
+- `derive_binding`/`bind_policy` for non-bundled policies.
+- A standalone and interactive example per shipped robot, and migration shims at the 6.x import paths.
+
+### Changed
+- The exported IO descriptor is the policy-interface source; a deployment must carry `IO_descriptors.yaml` or an explicit binding hook.
+- Terms bind by literal joint name, so the Newton H1 example now deploys `h1_minimal.usd`.
+
+### Removed
+- `PolicyController` and the six articulation-owning policy classes; use the matching bundled spec.
+- `controllers.config_loader`, whose parsing helpers live in `env_config`.
+- `OnnxRuntimeModel` and the generic ONNX/array utilities, absorbed by `OnnxPolicyModel`.
+
+## [6.0.3] - 2026-07-28
+### Fixed
+- `PolicyController.initialize()`: scope all per-DOF configuration, including simulation effort and velocity limits, to the policy's own joints, fixing the shape-mismatch `ValueError` and misapplied limits when another robot shares the same articulation. No-op for single-robot articulations.
+
+### Added
+- `get_robot_joint_names_expr()` and `match_joint_names()` in `config_loader` to select a policy's own joints from a shared articulation.
+
+## [6.0.2] - 2026-07-27
+### Fixed
+- Make ONNX Runtime and its CUDA library bootstrap available in `isaacsim-robot` pip and source installations.
+
+## [6.0.1] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [6.0.0] - 2026-07-16
+### Added
+- Add env-config-driven actuator deployment for PhysX and Newton through `isaacsim.core.experimental.actuators`.
+- Support exported `ActuatorNetLSTM`, `ActuatorNetMLP`, `DCMotor`, `IdealPDActuator`, `DelayedPDActuator`, and `RemotizedPDActuator` configurations.
+- Add hosted Newton policy and environment configuration files for ANYmal C.
+
+### Changed
+- Update the hosted PhysX and Newton policy and environment configuration files for Spot.
+- Add physics-engine and simulation-device selection to the H1, ANYmal, and Spot standalone examples.
+- Exclude Go2 unit tests from the configured PhysX and Newton extension test suites due to known issues.
+
+### Fixed
+- Use the same ANYmal C, Spot, and Go2 USD assets as the Isaac Lab policy training configurations.
+- Preserve imported joint effort and velocity limits when an exported actuator config leaves `effort_limit_sim` or `velocity_limit_sim` unset.
+
+### Removed
+- Remove the legacy `LstmSeaNetwork` helper now that exported actuator configurations use `isaacsim.core.experimental.actuators`.
+
+## [5.3.4] - 2026-07-13
+### Changed
+- Relax the Go2 forward-motion test tolerance to 0.45 m.
+
+## [5.3.3] - 2026-07-11
+### Fixed
+- Lower the Go2 locomotion policy test initial spawn height temporarily
+
+## [5.3.2] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+- Update the generated Python API inventory.
+
+## [5.3.1] - 2026-06-29
+### Changed
+- Stop publishing Kit lifecycle classes from interactive example modules.
+
+## [5.3.0] - 2026-06-23
+### Added
+- `CartpolePolicy`: add Isaac Lab ONNX policy deployment from exported `policy.onnx` and `env.yaml` files.
+- Add strict Cartpole transfer regressions for PhysX- and Newton-trained policies across PhysX and Newton, CPU and CUDA, and Linux and Windows.
+- `PolicyController.load_policy`: support ONNX policies and exported env configuration for pre-import rigid-body, articulation, and joint-drive properties.
+
+### Changed
+- `PolicyController.initialize`: replace `set_articulation_props` with `reset_to_default_state`; articulation properties are now authored before articulation creation.
+- `parse_env_config`: preserve tagged YAML values and support exact, regex, glob, and legacy prefix joint-name matching.
+- Use `isaacsim.pip.onnx` for ONNX Runtime while retaining Torch policy support.
+
 ## [5.2.12] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

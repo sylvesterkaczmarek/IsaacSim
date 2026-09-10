@@ -1,5 +1,46 @@
 # Changelog
 
+## [3.11.10] - 2026-08-23
+### Changed
+- Pin `usd-exchange` to version 2.3.0 for reproducible standalone installs.
+
+### Fixed
+- Remove the standalone dependency on `isaacsim.core.experimental` when authoring default time-code ranges.
+
+## [3.11.9] - 2026-08-21
+### Fixed
+- Author a playback range when an imported robot provides no time-code range.
+
+## [3.11.8] - 2026-08-17
+### Fixed
+- Resolve package mesh URIs after fixed-joint merging.
+
+## [3.11.7] - 2026-08-05
+### Changed
+- urdf-usd-converter update to 0.3.2
+
+## [3.11.6] - 2026-07-29
+### Fixed
+- Preserve XML comments during fixed-joint merging and relative mesh path rewriting.
+
+### Removed
+- Remove duplicated UI font and icon assets from the core importer package.
+
+## [3.11.5] - 2026-07-15
+### Fixed
+- Joint fricion is now imported as newton:friction instead of physxJoint:jointFriction
+
+### Changed
+- Update urdf-usd-converter to v0.3.0.
+
+## [3.11.4] - 2026-07-09
+### Fixed
+- Explicitly set physics variant in unit test
+
+## [3.11.3] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [3.11.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

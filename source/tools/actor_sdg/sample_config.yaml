@@ -14,7 +14,7 @@
 # limitations under the License.
 
 isaacsim.replicator.agent:
-  version: 1.6.0
+  version: 1.7.0
   simulation_duration: 60
   environment:
     base_stage_asset_path: "Isaac/Environments/Simple_Warehouse/full_warehouse.usd"

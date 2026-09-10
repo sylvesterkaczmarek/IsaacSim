@@ -1,5 +1,5 @@
 [package]
-version = "1.0.2"
+version = "1.0.4"
 category = "Simulation"
 title = "IPC OmniGraph Node Examples"
 description = "Example OmniGraph nodes (C++ and Python) for inter-process communication over TCP/IP, for use in tutorials."
@@ -43,6 +43,7 @@ name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]
@@ -61,7 +62,10 @@ pythonTests.exclude = [
     "isaacsim.examples.ipc.ogn.tests.TestOgnSimpleReceiveExternalStepCpp.*",
     "isaacsim.examples.ipc.ogn.tests.TestOgnSimpleSendSimulationClockCpp.*",
 ]
+
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*omni.replicator.nv*",
 ]
 args = [
@@ -79,7 +83,10 @@ pythonTests.exclude = [
     "*test_data_access*",
     "isaacsim.examples.ipc.ogn.tests.*",
 ]
+
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*omni.replicator.nv*",
     "*Width 0 or height 0 is not valid*",
 ]

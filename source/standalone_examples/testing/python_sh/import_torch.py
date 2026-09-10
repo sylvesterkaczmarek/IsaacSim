@@ -30,7 +30,15 @@ assert torch.cuda.is_available()
 
 @torch.jit.script
 def add(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """Add two tensors element-wise using torch.jit.script."""
+    """Add two tensors element-wise using torch.jit.script.
+
+    Args:
+        a: First tensor operand.
+        b: Second tensor operand, broadcast-compatible with the first.
+
+    Returns:
+        Element-wise sum of the operands.
+    """
     return a + b
 
 

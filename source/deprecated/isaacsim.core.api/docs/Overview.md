@@ -4,57 +4,42 @@
 This extension is deprecated in favor of the Core Experimental extensions: `isaacsim.core.experimental.*`.
 ```
 
-The `isaacsim.core.api` extension provides APIs for controlling simulation state and physics scenes within Isaac Sim. This extension serves as the primary interface for managing simulation execution, physics interactions, and USD object manipulation in robotics and AI simulation workflows.
+The `isaacsim.core.api` extension provides the legacy Isaac Sim core layer for controlling simulation state and physics scenes. It also supports working with USD objects, physics materials, and visual materials in Isaac Sim workflows.
+
+New work should use the Core Experimental extensions under `isaacsim.core.experimental.*`. Use `isaacsim.core.api` only when maintaining existing workflows that still depend on the older core behavior.
 
 ## Key Components
 
-### Core Classes
+### Simulation control
 
-{class}`World <isaacsim.core.api.World>` serves as the primary orchestration layer for scene management, providing control over simulation stepping, reset operations, and object lifecycle management. It manages the integration between physics simulation and USD stage operations.
+- {class}`World <isaacsim.core.api.World>` is the main entry point for most workflows. It extends {class}`SimulationContext <isaacsim.core.api.SimulationContext>` with a managed {class}`Scene <isaacsim.core.api.scenes.Scene>`, task registration, observations, metrics, and a data logger.
+- {class}`SimulationContext <isaacsim.core.api.SimulationContext>` controls the simulation lifecycle (play, pause, stop, step, reset) and manages physics, stage, timeline, and render callbacks.
+- {class}`PhysicsContext <isaacsim.core.api.PhysicsContext>` wraps the USD physics scene and exposes solver, GPU, gravity, and timestep settings.
 
-{class}`SimulationContext <isaacsim.core.api.SimulationContext>` manages simulation state, physics stepping, and rendering parameters. It provides the foundational control for simulation timing, physics solver settings, and stage initialization.
+```python
+from isaacsim.core.api import World
+from isaacsim.core.api.objects import DynamicCuboid
 
-{class}`PhysicsContext <isaacsim.core.api.PhysicsContext>` controls physics scene configuration including gravity, collision settings, and solver parameters. It provides direct access to physics scene properties and performance tuning options.
+world = World()
+world.scene.add_default_ground_plane()
+cube = world.scene.add(DynamicCuboid(prim_path="/World/Cube", name="cube"))
 
-### Controllers
+world.reset()
+for _ in range(100):
+    world.step(render=True)
+```
 
-{class}`ArticulationController <isaacsim.core.api.ArticulationController>` provides high-level control for robotic articulated systems with position, velocity, and effort control modes. It supports joint-level control and kinematic state queries.
+### Scene helpers
 
-{class}`BaseController <isaacsim.core.api.BaseController>` defines the base interface for all control systems with standardized initialization, stepping, and reset behaviors.
+The extension groups higher-level building blocks into submodules:
 
-{class}`BaseGripperController <isaacsim.core.api.BaseGripperController>` extends controller functionality for gripper-specific operations including open/close commands and grasp detection.
+- `isaacsim.core.api.objects`: visual, fixed, and dynamic primitive shapes such as {class}`DynamicCuboid <isaacsim.core.api.objects.DynamicCuboid>`, `VisualSphere`, `FixedCylinder`, `DynamicCone`, `VisualCapsule`, and {class}`GroundPlane <isaacsim.core.api.objects.GroundPlane>`.
+- `isaacsim.core.api.materials`: visual and physics material wrappers including {class}`VisualMaterial <isaacsim.core.api.materials.VisualMaterial>`, `PreviewSurface`, `OmniPBR`, `OmniGlass`, {class}`PhysicsMaterial <isaacsim.core.api.materials.PhysicsMaterial>`, `ParticleMaterial`, and `DeformableMaterial` (with matching view classes).
+- `isaacsim.core.api.robots`: {class}`Robot <isaacsim.core.api.robots.Robot>` and {class}`RobotView <isaacsim.core.api.robots.RobotView>`.
+- `isaacsim.core.api.controllers`: {class}`BaseController <isaacsim.core.api.controllers.BaseController>`, {class}`ArticulationController <isaacsim.core.api.controllers.ArticulationController>`, and {class}`BaseGripperController <isaacsim.core.api.controllers.BaseGripperController>`.
+- `isaacsim.core.api.tasks`: {class}`BaseTask <isaacsim.core.api.tasks.BaseTask>` and ready-made tasks such as `FollowTarget`, `PickPlace`, and `Stacking`.
+- `isaacsim.core.api.scenes`: {class}`Scene <isaacsim.core.api.scenes.Scene>` and {class}`SceneRegistry <isaacsim.core.api.scenes.SceneRegistry>`.
+- `isaacsim.core.api.sensors`: {class}`BaseSensor <isaacsim.core.api.sensors.BaseSensor>` and {class}`RigidContactView <isaacsim.core.api.sensors.RigidContactView>`.
+- `isaacsim.core.api.loggers`: {class}`DataLogger <isaacsim.core.api.loggers.DataLogger>` for recording simulation data.
 
-### Objects
-
-The extension provides geometric primitive creators for common shapes including spheres, boxes, cylinders, capsules, and cones. Each primitive supports Dynamic, Fixed, and Visual variants:
-- **Dynamic variants** include rigid body physics properties for simulation
-- **Fixed variants** create static collision geometry  
-- **Visual variants** provide rendering-only geometry
-
-{class}`GroundPlane <isaacsim.core.api.GroundPlane>` creates infinite ground surfaces with configurable physics materials and visual properties.
-
-### Materials
-
-{class}`PhysicsMaterial <isaacsim.core.api.PhysicsMaterial>` defines collision and friction properties for rigid body interactions.
-
-{class}`VisualMaterial <isaacsim.core.api.VisualMaterial>` serves as the base for rendering materials with support for textures and shader parameters.
-
-{class}`DeformableMaterial <isaacsim.core.api.DeformableMaterial>` and {class}`DeformableMaterialView <isaacsim.core.api.DeformableMaterialView>` provide material properties for soft body and cloth simulations.
-
-### Tasks
-
-{class}`BaseTask <isaacsim.core.api.BaseTask>` defines the framework for simulation tasks with observation, action, and reward computation interfaces.
-
-{class}`FollowTarget <isaacsim.core.api.FollowTarget>`, {class}`PickPlace <isaacsim.core.api.PickPlace>`, and {class}`Stacking <isaacsim.core.api.Stacking>` implement specific robotic task scenarios with configurable objectives and success metrics.
-
-### Robots
-
-{class}`Robot <isaacsim.core.api.Robot>` provides a high-level interface for single robot management including initialization, control, and state queries.
-
-{class}`RobotView <isaacsim.core.api.RobotView>` extends robot functionality to handle multiple robot instances efficiently with batch operations.
-
-## Functionality
-
-The extension integrates physics simulation capabilities through omni.physics and omni.physx.tensors, enabling precise control over physical interactions and dynamics. It provides wrappers for USD objects that simplify working with Universal Scene Description assets in simulation contexts. The extension also includes utilities for managing both physics and visual materials, allowing users to define realistic material properties that affect simulation behavior and rendering.
-
-Additionally, the extension incorporates computational tools through omni.pip.compute for advanced mathematical operations and omni.warp.core for high-performance parallel computing tasks commonly required in robotics simulations.
+Prim-level state wrappers used by these helpers (rigid bodies, articulations, geometry, and so on) live in the `isaacsim.core.prims` extension.

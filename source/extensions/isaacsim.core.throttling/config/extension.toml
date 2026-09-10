@@ -1,5 +1,5 @@
 [package]
-version = "2.3.5"
+version = "2.3.7"
 category = "Other"
 title = "Isaac Sim Throttling"
 description = "Control throttling behaviors for isaac sim"
@@ -11,6 +11,7 @@ icon = "data/icon.png"
 writeTarget.kit = true
 
 [dependencies]
+"isaacsim.core.experimental.utils" = {}
 "omni.kit.window.preferences" = {}
 "omni.timeline" = {}
 
@@ -76,6 +77,10 @@ args = [
     "--/rtx/reservedDescriptors=900000",
     ### Extension specific args
     "--/rtx/ecoMode/enabled=True"
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [documentation]

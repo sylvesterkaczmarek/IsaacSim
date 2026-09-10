@@ -35,12 +35,10 @@ class TestSmoke(unittest.TestCase):
         from isaacsim.asset.exporter.urdf.converter.joint_reader import (
             _read_armature,
             _read_physx_friction,
-            _read_physx_max_velocity,
         )
 
         self.assertTrue(callable(_read_armature))
         self.assertTrue(callable(_read_physx_friction))
-        self.assertTrue(callable(_read_physx_max_velocity))
 
     def test_no_omni_modules(self) -> None:
         """No omni.* modules should be loaded after import."""

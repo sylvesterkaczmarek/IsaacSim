@@ -40,6 +40,7 @@ from .physx_scene import PhysxScene
 from .simulation_event import SimulationEvent
 
 _SETTING_PLAY_SIMULATION = "/app/player/playSimulations"
+_SETTING_ENABLE_DEFAULT_CALLBACKS = "/exts/isaacsim.core.simulation_manager/enable_default_callbacks"
 _SETTING_PHYSICS_CUDA_DEVICE = "/physics/cudaDevice"
 _SETTING_PHYSICS_SUPPRESS_READBACK = "/physics/suppressReadback"
 
@@ -85,8 +86,9 @@ class SimulationManager:
     _assets_loaded_callback = None
     """Callback subscription for asset loaded events."""
 
-    _physics_scenes: dict[str, PhysicsScene] = {}
-    """Dictionary mapping physics scene paths to PhysicsScene objects."""
+    # We will no longer store PhysicsScene objects, they will be created dynamically based on the API schema when requested
+    _physics_scenes: dict[str, Usd.Prim] = {}
+    """Dictionary mapping physics scene paths to PhysicsScene prims."""
 
     # physics engine
     _engine = "physx"
@@ -262,14 +264,22 @@ class SimulationManager:
         cls._warmup_needed = True
 
         for path in list(cls._physics_scenes):
-            prim = cls._physics_scenes[path].prim
+            prim = cls._physics_scenes[path]
             if engine_name == "physx":
-                prim.RemoveAPI("MjcSceneAPI")
-                prim.RemoveAPI("NewtonXpbdSceneAPI")
+                # in case we do not have newton enabled, the import can fail, but it is fine
+                try:
+                    from isaacsim.physics.newton import newton_solver_to_api_schema as newton_solver_to_api_schema
+
+                    # iterate through all newton solver api and remove them
+                    for api in newton_solver_to_api_schema.values():
+                        if prim.HasAPI(api):
+                            prim.RemoveAPI(api)
+                except Exception as e:
+                    pass
             else:
                 if prim.HasAPI(PhysxSchema.PhysxSceneAPI):
                     prim.RemoveAPI(PhysxSchema.PhysxSceneAPI)
-            cls._physics_scenes[path] = cls._create_physics_scene(path)
+            cls._physics_scenes[path] = cls._ensure_physics_scene_prim(path)
 
     @classmethod
     def _sync_engine_state(cls) -> None:
@@ -341,7 +351,8 @@ class SimulationManager:
         This method synchronizes the engine state with the active physics engine and subscribes
         to simulation registry events to maintain consistency with UI and other systems.
         """
-        cls.enable_all_default_callbacks(True)
+        enable_default_callbacks = cls._carb_settings.get_as_bool(_SETTING_ENABLE_DEFAULT_CALLBACKS)
+        cls.enable_all_default_callbacks(enable_default_callbacks)
         cls._reset(
             reset_assets=True,
             reset_callbacks=True,
@@ -478,7 +489,7 @@ class SimulationManager:
         def add_physics_scene(path: str) -> None:
             prim = prim_utils.get_prim_at_path(path)
             if prim.GetTypeName() == "PhysicsScene":
-                cls._physics_scenes[path] = cls._create_physics_scene(path)
+                cls._physics_scenes[path] = cls._ensure_physics_scene_prim(path)
 
         def remove_physics_scene(path: str) -> None:
             # TODO: search for child prims that are also physics scenes???
@@ -489,29 +500,41 @@ class SimulationManager:
         cls._simulation_manager_interface.register_deletion_callback(remove_physics_scene)
 
     @classmethod
-    def _create_physics_scene(cls, path: str = "/PhysicsScene") -> PhysicsScene | None:
-        """Create a physics scene at the specified path.
+    def _ensure_physics_scene_prim(cls, path: str = "/PhysicsScene") -> Usd.Prim | None:
+        """Create a physics scene at the specified path with the appropriate schema based on current engine.
 
         Args:
             path: Path where the physics scene will be created.
 
         Returns:
-            The created physics scene, or None if creation failed.
+            The created physics scene prim, or None if creation failed.
         """
         try:
             if cls._engine == "physx":
-                return PhysxScene(path)
+                return PhysxScene(path).prim
             elif cls._engine == "newton":
                 # Lazy import to avoid loading heavy Newton dependencies at module load time
-                from .mjc_scene import NewtonMjcScene
+                # Check the attribute on the prim to slap on the correct API
+                physics_scene_prim = omni.usd.get_context().get_stage().GetPrimAtPath(path)
+                if physics_scene_prim:
+                    from isaacsim.physics.newton import get_newton_solver as get_newton_solver
+                    from isaacsim.physics.newton import newton_solver_to_api_schema as newton_solver_to_api_schema
 
-                return NewtonMjcScene(path)
+                    api_schema = newton_solver_to_api_schema[get_newton_solver(physics_scene_prim)]
+                    if not physics_scene_prim.HasAPI(api_schema):
+                        physics_scene_prim.ApplyAPI(api_schema)
+                    return physics_scene_prim
+                else:
+                    # Mujoco is the default newton solver
+                    from .mjc_scene import NewtonMjcScene
+
+                    return NewtonMjcScene(path).prim
             elif cls._engine == "remotesim":
                 # Remote-sim backend only needs a lightweight scene wrapper for dt/config access.
-                return PhysicsScene(path)
+                return PhysicsScene(path).prim
             else:
                 carb.log_warn(f"Unknown engine '{cls._engine}', defaulting to PhysX")
-                return PhysxScene(path)
+                return PhysxScene(path).prim
         except RuntimeError as e:
             carb.log_warn(f"Failed to create physics scene at '{path}': {e}")
             return None
@@ -532,12 +555,22 @@ class SimulationManager:
 
         # Then cleanup Python-side cache
         stale_paths = []
-        for path, scene in cls._physics_scenes.items():
+        for path, prim in cls._physics_scenes.items():
             try:
-                if not scene.prim or not scene.prim.IsValid():
+                if not prim or not prim.IsValid():
                     stale_paths.append(path)
-                elif isinstance(scene, PhysxScene) and not scene.prim.HasAPI(PhysxSchema.PhysxSceneAPI):
-                    stale_paths.append(path)
+                elif cls._engine == "physx":
+                    if not prim.HasAPI(PhysxSchema.PhysxSceneAPI):
+                        stale_paths.append(path)
+                elif cls._engine == "newton":
+                    valid = False
+                    from isaacsim.physics.newton import newton_solver_to_api_schema as newton_solver_to_api_schema
+
+                    for api in newton_solver_to_api_schema.values():
+                        if prim.HasAPI(api):
+                            valid = True
+                    if not valid:
+                        stale_paths.append(path)
             except Exception:
                 stale_paths.append(path)
 
@@ -651,6 +684,30 @@ class SimulationManager:
     """
 
     @classmethod
+    def get_physics_scene_object(cls, prim: Usd.Prim | None) -> PhysicsScene | None:
+        if not prim:
+            return None
+        # Check if the prim's API, if it matches one of the PhysicsScene API, return the correct Python object API wrapper
+        if cls._engine == "physx":
+            if prim.HasAPI(PhysxSchema.PhysxSceneAPI):
+                return PhysxScene(prim)
+            return None
+        if cls._engine == "newton":
+            from isaacsim.physics.newton import (
+                get_newton_solver_to_physics_scene_object as get_newton_solver_to_physics_scene_object,
+            )
+            from isaacsim.physics.newton import newton_solver_to_api_schema as newton_solver_to_api_schema
+
+            newton_solver_to_physics_scene_object = get_newton_solver_to_physics_scene_object()
+            for newton_solver in newton_solver_to_physics_scene_object:
+                if prim.HasAPI(newton_solver_to_api_schema[newton_solver]):
+                    return newton_solver_to_physics_scene_object[newton_solver](prim)
+        if cls._engine == "remotesim":
+            # return the light weight generic physics scene
+            return PhysicsScene(prim)
+        return None
+
+    @classmethod
     def initialize_physics(cls) -> None:
         """Initialize Physics.
 
@@ -668,7 +725,7 @@ class SimulationManager:
             return
         # create physics scene (if not exists)
         if not cls._physics_scenes:
-            physics_scene = cls._create_physics_scene()
+            physics_scene = cls._ensure_physics_scene_prim()
             if physics_scene is None:
                 carb.log_warn("Cannot initialize physics: failed to create physics scene")
                 return
@@ -682,25 +739,24 @@ class SimulationManager:
                 newton_stage = isaacsim.physics.newton.acquire_stage()
                 if newton_stage is None:
                     raise Exception("newton stage not available - isaacsim.physics.newton extension may not be loaded")
-
                 # Update newton device to match requested device
                 requested_device = cls.get_physics_sim_device()
                 requested_device_str = requested_device if isinstance(requested_device, str) else str(requested_device)
-
-                if not newton_stage.initialized or newton_stage.device_str != requested_device_str:
-                    if newton_stage.device_str != requested_device_str:
-                        carb.log_warn(
-                            f"newton device mismatch: initialized on {newton_stage.device_str}, requested {requested_device_str}. Reinitializing..."
-                        )
-                    newton_stage.initialize_newton(requested_device_str)
-
-                newton_stage.device_str = requested_device_str
-                newton_stage.device = wp.get_device(newton_stage.device_str)
+                # initialize_newton checks device and solver and only re-initialize itself if one of them changes
+                newton_stage.initialize_newton(requested_device_str)
+                if not newton_stage.initialized:
+                    cls._warmup_needed = False
+                    # If newton stage has not been initialized, it might be issues such as no physics scene
+                    # We treat it as a warning, as it is possible to proceed
+                    carb.log_warn(f"Failed to initialize Newton.")
+                    return
             except Exception as e:
+                # exceptions are unexpected, they are errors
+                cls._warmup_needed = False
                 carb.log_error(f"Failed to initialize Newton: {e}")
+                return
 
         cls._physics_stage_update_interface.start_simulation()
-
         cls._physics_sim_interface.simulate(cls.get_physics_dt(), 0.0)
         # create simulation view
         stage_id = stage_utils.get_stage_id(stage_utils.get_current_stage(backend="usd"))
@@ -786,11 +842,13 @@ class SimulationManager:
         """
         # create physics scene (if not exists)
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         # apply given parameters
         if dt is not None:
             for physics_scene in cls._physics_scenes.values():
-                physics_scene.set_dt(dt)
+                physics_scene_obj = cls.get_physics_scene_object(physics_scene)
+                if physics_scene_obj:
+                    physics_scene_obj.set_dt(dt)
         if device is not None:
             cls.set_device(device)
 
@@ -810,7 +868,11 @@ class SimulationManager:
             >>> SimulationManager.get_physics_scenes()
             [<isaacsim.core.simulation_manager.impl.physx_scene.PhysxScene object at 0x...>]
         """
-        return list(cls._physics_scenes.values())
+        return [
+            obj
+            for physics_scene in cls._physics_scenes.values()
+            if (obj := cls.get_physics_scene_object(physics_scene))
+        ]
 
     @classmethod
     def get_physics_simulation_view(cls) -> Any | None:
@@ -985,7 +1047,8 @@ class SimulationManager:
             cls._carb_settings.set_int(_SETTING_PHYSICS_CUDA_DEVICE, device.ordinal)
             cls._carb_settings.set_bool(_SETTING_PHYSICS_SUPPRESS_READBACK, True)
             cls.enable_fabric(enable=True)
-            for physics_scene in cls._physics_scenes.values():
+            for physics_scene_prim in cls._physics_scenes.values():
+                physics_scene = cls.get_physics_scene_object(physics_scene_prim)
                 if isinstance(physics_scene, PhysxScene):
                     physics_scene.set_broadphase_type("GPU")
                     physics_scene.set_enabled_gpu_dynamics(True)
@@ -993,7 +1056,8 @@ class SimulationManager:
         elif device.is_cpu:
             # cls._carb_settings.set_int(_SETTING_PHYSICS_CUDA_DEVICE, -1)
             cls._carb_settings.set_bool(_SETTING_PHYSICS_SUPPRESS_READBACK, False)
-            for physics_scene in cls._physics_scenes.values():
+            for physics_scene_prim in cls._physics_scenes.values():
+                physics_scene = cls.get_physics_scene_object(physics_scene_prim)
                 if isinstance(physics_scene, PhysxScene):
                     physics_scene.set_broadphase_type("MBP")
                     physics_scene.set_enabled_gpu_dynamics(False)
@@ -1032,7 +1096,7 @@ class SimulationManager:
         if supress_readback:
             is_gpu_scene = False
             if cls._physics_scenes:
-                first_scene = next(iter(cls._physics_scenes.values()))
+                first_scene = cls.get_physics_scene_object(next(iter(cls._physics_scenes.values())))
                 if isinstance(first_scene, PhysxScene):
                     is_gpu_scene = first_scene.get_broadphase_type() == "GPU" and first_scene.get_enabled_gpu_dynamics()
             if not cls._physics_scenes or is_gpu_scene:
@@ -1040,6 +1104,7 @@ class SimulationManager:
                 if ordinal < 0:
                     cls._carb_settings.set_int(_SETTING_PHYSICS_CUDA_DEVICE, 0)
                     carb.log_warn("No CUDA device configured under '/physics/cudaDevice'. Using 'cuda:0'")
+                    ordinal = 0
                 return ops_utils.parse_device(f"cuda:{ordinal}", raise_on_invalid=True)
         return ops_utils.parse_device("cpu", raise_on_invalid=True)
 
@@ -1467,9 +1532,16 @@ class SimulationManager:
                 f"Provided backend is not supported: {SimulationManager.get_backend()}. Supported: torch, numpy, warp."
             )
 
+    """
+    Deprecated methods.
+    """
+
+    # TODO: remove this and other PhysX exclusive API
     @classmethod
     def _get_physics_scene_api(cls, physics_scene: str | None = None) -> Any:
         """Get the PhysX scene API for the specified physics scene.
+
+        .. deprecated:: 1.8.0
 
         Args:
             physics_scene: Path to the physics scene prim.
@@ -1479,7 +1551,7 @@ class SimulationManager:
         """
         if physics_scene:
             if physics_scene in cls._physics_scenes:
-                return prim_utils.ensure_api(cls._physics_scenes[physics_scene].prim, PhysxSchema.PhysxSceneAPI)
+                return prim_utils.ensure_api(cls._physics_scenes[physics_scene], PhysxSchema.PhysxSceneAPI)
             carb.log_warn(f"The physics scene at path '{physics_scene}' doesn't exist")
             return None
 
@@ -1493,13 +1565,9 @@ class SimulationManager:
                         f"Invalid default physics scene path: {cls._default_physics_scene_path}. "
                         f"Using first physics scene found in stage: {_physics_scene.path}"
                     )
-            return prim_utils.ensure_api(_physics_scene.prim, PhysxSchema.PhysxSceneAPI)
+            return prim_utils.ensure_api(_physics_scene, PhysxSchema.PhysxSceneAPI)
         carb.log_warn("No physics scene is found in stage")
         return None
-
-    """
-    Deprecated methods.
-    """
 
     @classmethod
     def enable_post_warm_start_callback(cls, enable: bool = True) -> None:
@@ -1633,7 +1701,7 @@ class SimulationManager:
         elif prim_utils.get_prim_at_path(physics_scene_prim_path).IsValid():
             prim = prim_utils.get_prim_at_path(physics_scene_prim_path)
             if prim.GetTypeName() == "PhysicsScene":
-                cls._physics_scenes[physics_scene_prim_path] = cls._create_physics_scene(physics_scene_prim_path)
+                cls._physics_scenes[physics_scene_prim_path] = cls._ensure_physics_scene_prim(physics_scene_prim_path)
                 cls._default_physics_scene_path = physics_scene_prim_path
         else:
             raise Exception(f"Physics scene at path '{physics_scene_prim_path}' doesn't exist")
@@ -1691,7 +1759,6 @@ class SimulationManager:
             raise Exception(f"Unknown device: {device}")
 
     @classmethod
-    @classmethod
     def set_physics_dt(cls, dt: float = 1.0 / 60.0, physics_scene: str = None) -> None:
         """Set the physics dt on the physics scene provided.
 
@@ -1713,10 +1780,12 @@ class SimulationManager:
         if app_utils.is_playing():
             raise RuntimeError("The physics dt cannot be set while the simulation is running/playing")
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         physics_scenes = [item] if (item := cls._physics_scenes.get(physics_scene)) else cls._physics_scenes.values()
         for _physics_scene in physics_scenes:
-            _physics_scene.set_dt(dt)
+            physics_scene_obj = cls.get_physics_scene_object(_physics_scene)
+            if physics_scene_obj:
+                physics_scene_obj.set_dt(dt)
 
     @classmethod
     def get_physics_dt(cls, physics_scene: str | None = None) -> float:
@@ -1738,7 +1807,7 @@ class SimulationManager:
             Physics dt.
         """
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         # Get the specific physics scene or the first one available
         _physics_scene = cls._physics_scenes.get(physics_scene) if physics_scene else None
         if _physics_scene is None and cls._physics_scenes:
@@ -1746,7 +1815,11 @@ class SimulationManager:
         if _physics_scene is None:
             return 1.0 / 60.0
         # Use the physics scene's get_dt() method which handles engine-specific attributes
-        return _physics_scene.get_dt()
+        physics_scene_obj = cls.get_physics_scene_object(_physics_scene)
+        if physics_scene_obj:
+            return physics_scene_obj.get_dt()
+        else:
+            return 1.0 / 60.0
 
     @classmethod
     def get_broadphase_type(cls, physics_scene: str | None = None) -> str:
@@ -1767,7 +1840,7 @@ class SimulationManager:
             Broadphase algorithm used.
         """
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         physics_scene_api = cls._get_physics_scene_api(physics_scene=physics_scene)
         return physics_scene_api.GetBroadphaseTypeAttr().Get()
 
@@ -1788,11 +1861,12 @@ class SimulationManager:
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
         """
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         physics_scenes = [item] if (item := cls._physics_scenes.get(physics_scene)) else cls._physics_scenes.values()
-        for _physics_scene in physics_scenes:
-            if isinstance(_physics_scene, PhysxScene):
-                _physics_scene.set_broadphase_type(val)
+        for physics_scene in physics_scenes:
+            physics_scene_obj = cls.get_physics_scene_object(physics_scene)
+            if isinstance(physics_scene_obj, PhysxScene):
+                physics_scene_obj.set_broadphase_type(val)
 
     @classmethod
     def enable_ccd(cls, flag: bool, physics_scene: str | None = None) -> None:
@@ -1814,11 +1888,12 @@ class SimulationManager:
             carb.log_warn("CCD is not supported on GPU, ignoring request to enable it")
             return
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         physics_scenes = [item] if (item := cls._physics_scenes.get(physics_scene)) else cls._physics_scenes.values()
-        for _physics_scene in physics_scenes:
-            if isinstance(_physics_scene, PhysxScene):
-                _physics_scene.set_enabled_ccd(flag)
+        for physics_scene in physics_scenes:
+            physics_scene_obj = cls.get_physics_scene_object(physics_scene)
+            if isinstance(physics_scene_obj, PhysxScene):
+                physics_scene_obj.set_enabled_ccd(flag)
 
     @classmethod
     def is_ccd_enabled(cls, physics_scene: str | None = None) -> bool:
@@ -1839,7 +1914,7 @@ class SimulationManager:
             True if CCD is enabled, otherwise False.
         """
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         physx_scene_api = cls._get_physics_scene_api(physics_scene=physics_scene)
         return physx_scene_api.GetEnableCCDAttr().Get()
 
@@ -1860,11 +1935,12 @@ class SimulationManager:
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
         """
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         physics_scenes = [item] if (item := cls._physics_scenes.get(physics_scene)) else cls._physics_scenes.values()
-        for _physics_scene in physics_scenes:
-            if isinstance(_physics_scene, PhysxScene):
-                _physics_scene.set_enabled_gpu_dynamics(flag)
+        for physics_scene in physics_scenes:
+            physics_scene_obj = cls.get_physics_scene_object(physics_scene)
+            if isinstance(physics_scene_obj, PhysxScene):
+                physics_scene_obj.set_enabled_gpu_dynamics(flag)
 
     @classmethod
     def is_gpu_dynamics_enabled(cls, physics_scene: str | None = None) -> bool:
@@ -1885,7 +1961,7 @@ class SimulationManager:
             True if Gpu Dynamics is enabled, otherwise False.
         """
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         physx_scene_api = cls._get_physics_scene_api(physics_scene=physics_scene)
         return physx_scene_api.GetEnableGPUDynamicsAttr().Get()
 
@@ -1906,11 +1982,12 @@ class SimulationManager:
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
         """
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         physics_scenes = [item] if (item := cls._physics_scenes.get(physics_scene)) else cls._physics_scenes.values()
-        for _physics_scene in physics_scenes:
-            if isinstance(_physics_scene, PhysxScene):
-                _physics_scene.set_solver_type(solver_type)
+        for physics_scene in physics_scenes:
+            physics_scene_obj = cls.get_physics_scene_object(physics_scene)
+            if isinstance(physics_scene_obj, PhysxScene):
+                physics_scene_obj.set_solver_type(solver_type)
 
     @classmethod
     def get_solver_type(cls, physics_scene: str | None = None) -> str:
@@ -1931,7 +2008,7 @@ class SimulationManager:
             Solver used for simulation.
         """
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         physx_scene_api = cls._get_physics_scene_api(physics_scene=physics_scene)
         return physx_scene_api.GetSolverTypeAttr().Get()
 
@@ -1952,11 +2029,12 @@ class SimulationManager:
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
         """
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         physics_scenes = [item] if (item := cls._physics_scenes.get(physics_scene)) else cls._physics_scenes.values()
-        for _physics_scene in physics_scenes:
-            if isinstance(_physics_scene, PhysxScene):
-                _physics_scene.set_enabled_stabilization(flag)
+        for physics_scene in physics_scenes:
+            physics_scene_obj = cls.get_physics_scene_object(physics_scene)
+            if isinstance(physics_scene_obj, PhysxScene):
+                physics_scene_obj.set_enabled_stabilization(flag)
 
     @classmethod
     def is_stablization_enabled(cls, physics_scene: str = None) -> bool:
@@ -1977,6 +2055,6 @@ class SimulationManager:
             True if stabilization is enabled, otherwise False.
         """
         if not cls._physics_scenes:
-            cls._create_physics_scene()
+            cls._ensure_physics_scene_prim()
         physx_scene_api = cls._get_physics_scene_api(physics_scene=physics_scene)
         return physx_scene_api.GetEnableStabilizationAttr().Get()

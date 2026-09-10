@@ -23,8 +23,9 @@ from isaacsim.core.prims import SingleArticulation as Articulation
 from isaacsim.core.prims import SingleXFormPrim as XFormPrim
 from isaacsim.core.utils.numpy.rotations import euler_angles_to_quats
 from isaacsim.core.utils.stage import add_reference_to_stage
-from isaacsim.robot_motion.motion_generation import ArticulationMotionPolicy, RmpFlow
-from isaacsim.robot_motion.motion_generation.interface_config_loader import (
+from isaacsim.robot_motion.motion_generation import (
+    ArticulationMotionPolicy,
+    RmpFlow,
     get_supported_robot_policy_pairs,
     load_supported_motion_policy_config,
 )

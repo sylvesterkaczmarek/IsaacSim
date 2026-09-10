@@ -86,7 +86,7 @@ class TestRobotAssembler(omni.kit.test.AsyncTestCase):
         await self._create_light()
         assets_root_path = await get_assets_root_path_async()
         stage_utils.add_reference_to_stage(
-            assets_root_path + "/Isaac/Robots/UniversalRobots/ur10e/ur10e.usd", "/World/ur10e"
+            assets_root_path + "/Isaac/Robots_Multiphysics/UniversalRobots/ur10e/ur10e.usda", "/World/ur10e"
         )
         stage_utils.add_reference_to_stage(
             assets_root_path + "/Isaac/Robots/WonikRobotics/AllegroHand/allegro_hand_instanceable.usd",

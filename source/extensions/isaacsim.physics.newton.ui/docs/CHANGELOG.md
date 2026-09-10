@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.6.1] - 2026-08-25
+### Fixed
+- Match the registered Newton simulator name when testing simulation capabilities.
+
+## [1.6.0] - 2026-08-21
+### Added
+- Add a type-filtered **Physics > Mujoco** menu for applying MuJoCo API schemas and their required Newton API dependencies.
+- Add a **Create > Physics > Mujoco** menu to instantiate the concrete MuJoCo typed prims (`MjcActuator`, `MjcKeyframe`, `MjcTendon`) that are standalone prim types rather than applied API schemas.
+- Add a pop-up array editor for MuJoCo numeric array attributes (keyframe/actuator/tendon vectors) that lists every entry by index, shows the attribute name and a scrollable description, supports per-row remove and a single append control, and commits edits to USD as one undoable change only on **OK** (**Cancel** discards them).
+- Enforce MuJoCo's fixed vector lengths (e.g. `mjc:gear` = 6, `mjc:gainPrm`/`mjc:biasPrm`/`mjc:dynPrm` = 10, solver `solref`/`solimp` families) in the array editor: the append control disables at the limit and **OK** pads any removed trailing entries with the attribute's MuJoCo per-index defaults so the written array stays a valid length.
+- Route every MuJoCo numeric array attribute through the pop-up editor, including joint/tendon solver arrays, scene contact overrides, collision/equality `solimp`/`solref`, and `mjc:springlength`.
+
+### Changed
+- Direct Newton setup documentation to the physics schema menus instead of the generic **Edit API Schema** dialog.
+
+### Fixed
+- Render the pop-up array editor for MuJoCo arrays on applied API schemas (`MjcJointAPI`, `MjcSceneAPI`, `MjcCollisionAPI`, `MjcEquality*API`), which the custom Apply widgets own and therefore never resolved through the physics property-builder database; they previously fell back to a read-only text field.
+- Preserve resolver-aware property builders, property ordering, and private ownership for schemas rendered by custom Apply widgets.
+- Reject invalid unsigned-array values safely and restore unauthored array state on undo.
+- Declare direct dependencies on `omni.usd.schema.mujoco` and `omni.usd.schema.newton` so schema discovery no longer relies on a transitive load order.
+- Add remove-schema controls to Newton Scene, Joint, XPBD, and Kamino property frames.
+
+## [1.5.0] - 2026-08-20
+### Added
+- Add MuJoCo and XPBD solver selection to the Newton scene UI.
+
+### Changed
+- Hide the MJCF angle conversion setting from USD scene properties.
+
+## [1.4.1] - 2026-07-29
+### Changed
+- Stop PhysX UI from displaying newton's ui schema
+
+## [1.4.0] - 2026-07-21
+### Changed
+- Compatible with isaacsim.physics.newton 0.11.0 (Newton 1.4.0)
+
+## [1.3.2] - 2026-06-30
+- Adding UI menu to apply Newton API schemas
+
 ## [1.3.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

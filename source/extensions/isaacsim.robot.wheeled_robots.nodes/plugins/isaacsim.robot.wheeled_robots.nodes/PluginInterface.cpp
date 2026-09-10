@@ -20,7 +20,7 @@
 #include <carb/PluginUtils.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/robot/wheeled_robots/nodes/IWheeledRobotsNodes.h>
+#include <isaacsim/robot/wheeled_robots/nodes/IWheeledRobotsNodes.hpp>
 #include <omni/fabric/IToken.h>
 #include <omni/graph/core/NodeTypeRegistrar.h>
 #include <omni/graph/core/iComputeGraph.h>

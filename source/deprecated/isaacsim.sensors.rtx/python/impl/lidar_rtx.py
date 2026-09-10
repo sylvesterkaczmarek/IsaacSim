@@ -52,21 +52,20 @@ class LidarRtx(BaseSensor):
         **kwargs: Additional keyword arguments for sensor configuration.
 
     Raises:
-        Exception: If the prim at prim_path is not an OmniLidar or doesn't have the required API.
+        Exception: If the prim at prim_path is not an OmniLidar or does not have the required API.
     """
 
     @staticmethod
     def make_add_remove_deprecated_attr(deprecated_attr: str) -> list[Callable]:
         """Create deprecated add/remove attribute methods.
 
-        This is an internal helper method for creating deprecated methods that log
-        warnings when called.
+        This internal helper creates deprecated methods that log warnings when called.
 
         Args:
             deprecated_attr: Name of the deprecated attribute to create methods for.
 
         Returns:
-            List of method functions for adding and removing the deprecated attribute.
+            Method functions for adding and removing the deprecated attribute.
         """
         methods = []
         for fun_name in [f"add_{deprecated_attr}_to_frame", f"remove_{deprecated_attr}_from_frame"]:
@@ -182,12 +181,11 @@ class LidarRtx(BaseSensor):
             Path to the render product, or None if not initialized.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> from isaacsim.sensors.rtx import LidarRtx
-            >>> lidar = LidarRtx(prim_path="/World/Lidar")
-            >>> render_product_path = lidar.get_render_product_path()
+                >>> from isaacsim.sensors.rtx import LidarRtx
+                >>> lidar = LidarRtx(prim_path="/World/Lidar")
+                >>> render_product_path = lidar.get_render_product_path()
         """
         return self._render_product_path
 
@@ -199,14 +197,13 @@ class LidarRtx(BaseSensor):
             frame number, and any attached annotator data.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> from isaacsim.sensors.rtx import LidarRtx
-            >>> lidar = LidarRtx(prim_path="/World/Lidar")
-            >>> lidar.initialize()
-            >>> frame_data = lidar.get_current_frame()
-            >>> print(frame_data["rendering_time"])
+                >>> from isaacsim.sensors.rtx import LidarRtx
+                >>> lidar = LidarRtx(prim_path="/World/Lidar")
+                >>> lidar.initialize()
+                >>> frame_data = lidar.get_current_frame()
+                >>> print(frame_data["rendering_time"])
         """
         return self._current_frame
 
@@ -217,14 +214,13 @@ class LidarRtx(BaseSensor):
             Dictionary mapping annotator names to their instances.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> from isaacsim.sensors.rtx import LidarRtx
-            >>> lidar = LidarRtx(prim_path="/World/Lidar")
-            >>> lidar.attach_annotator("IsaacComputeRTXLidarFlatScan")
-            >>> annotators = lidar.get_annotators()
-            >>> print(list(annotators.keys()))
+                >>> from isaacsim.sensors.rtx import LidarRtx
+                >>> lidar = LidarRtx(prim_path="/World/Lidar")
+                >>> lidar.attach_annotator("IsaacComputeRTXLidarFlatScan")
+                >>> annotators = lidar.get_annotators()
+                >>> print(list(annotators.keys()))
         """
         return self._annotators
 
@@ -248,13 +244,12 @@ class LidarRtx(BaseSensor):
             **kwargs: Additional arguments to pass to the annotator on initialization.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> from isaacsim.sensors.rtx import LidarRtx
-            >>> lidar = LidarRtx(prim_path="/World/Lidar")
-            >>> lidar.attach_annotator("IsaacComputeRTXLidarFlatScan")
-            >>> lidar.attach_annotator("IsaacCreateRTXLidarScanBuffer")
+                >>> from isaacsim.sensors.rtx import LidarRtx
+                >>> lidar = LidarRtx(prim_path="/World/Lidar")
+                >>> lidar.attach_annotator("IsaacComputeRTXLidarFlatScan")
+                >>> lidar.attach_annotator("IsaacCreateRTXLidarScanBuffer")
         """
         if annotator_name in self._annotators:
             carb.log_warn(f"Annotator {annotator_name} already attached to {self._render_product_path}")
@@ -273,13 +268,12 @@ class LidarRtx(BaseSensor):
             annotator_name: Name of the annotator to detach.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> from isaacsim.sensors.rtx import LidarRtx
-            >>> lidar = LidarRtx(prim_path="/World/Lidar")
-            >>> lidar.attach_annotator("IsaacComputeRTXLidarFlatScan")
-            >>> lidar.detach_annotator("IsaacComputeRTXLidarFlatScan")
+                >>> from isaacsim.sensors.rtx import LidarRtx
+                >>> lidar = LidarRtx(prim_path="/World/Lidar")
+                >>> lidar.attach_annotator("IsaacComputeRTXLidarFlatScan")
+                >>> lidar.detach_annotator("IsaacComputeRTXLidarFlatScan")
         """
         if annotator_name in self._annotators:
             annotator = self._annotators.pop(annotator_name)
@@ -292,14 +286,13 @@ class LidarRtx(BaseSensor):
         """Detach all annotators from the Lidar sensor.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> from isaacsim.sensors.rtx import LidarRtx
-            >>> lidar = LidarRtx(prim_path="/World/Lidar")
-            >>> lidar.attach_annotator("IsaacComputeRTXLidarFlatScan")
-            >>> lidar.attach_annotator("IsaacCreateRTXLidarScanBuffer")
-            >>> lidar.detach_all_annotators()
+                >>> from isaacsim.sensors.rtx import LidarRtx
+                >>> lidar = LidarRtx(prim_path="/World/Lidar")
+                >>> lidar.attach_annotator("IsaacComputeRTXLidarFlatScan")
+                >>> lidar.attach_annotator("IsaacCreateRTXLidarScanBuffer")
+                >>> lidar.detach_all_annotators()
         """
         for annotator in self._annotators.values():
             annotator.detach()
@@ -313,14 +306,13 @@ class LidarRtx(BaseSensor):
             Dictionary mapping writer names to their instances.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> from isaacsim.sensors.rtx import LidarRtx
-            >>> lidar = LidarRtx(prim_path="/World/Lidar")
-            >>> lidar.attach_writer("RtxLidarDebugDrawPointCloud")
-            >>> writers = lidar.get_writers()
-            >>> print(list(writers.keys()))
+                >>> from isaacsim.sensors.rtx import LidarRtx
+                >>> lidar = LidarRtx(prim_path="/World/Lidar")
+                >>> lidar.attach_writer("RtxLidarDebugDrawPointCloud")
+                >>> writers = lidar.get_writers()
+                >>> print(list(writers.keys()))
         """
         return self._writers
 
@@ -332,12 +324,11 @@ class LidarRtx(BaseSensor):
             **kwargs: Additional arguments to pass to the writer on initialization.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> from isaacsim.sensors.rtx import LidarRtx
-            >>> lidar = LidarRtx(prim_path="/World/Lidar")
-            >>> lidar.attach_writer("RtxLidarDebugDrawPointCloud")
+                >>> from isaacsim.sensors.rtx import LidarRtx
+                >>> lidar = LidarRtx(prim_path="/World/Lidar")
+                >>> lidar.attach_writer("RtxLidarDebugDrawPointCloud")
         """
         if writer_name in self._writers:
             carb.log_warn(f"Writer {writer_name} already attached to {self._render_product_path}")
@@ -389,7 +380,8 @@ class LidarRtx(BaseSensor):
     def _create_point_cloud_graph_node(self) -> None:
         """Create a point cloud graph node for the Lidar sensor.
 
-        This method is deprecated as of Isaac Sim 5.0. Use attach_annotator('IsaacExtractRTXSensorPointCloudNoAccumulator') instead.
+        This method is deprecated as of Isaac Sim 5.0. Use
+        attach_annotator('IsaacExtractRTXSensorPointCloudNoAccumulator') instead.
         """
         carb.log_warn(
             "LidarRtx._create_point_cloud_graph_node is deprecated as of Isaac Sim 5.0 and will be removed in a future release. Use attach_annotator instead."
@@ -407,10 +399,10 @@ class LidarRtx(BaseSensor):
         self.attach_annotator("IsaacComputeRTXLidarFlatScan")  # type: ignore[arg-type]
 
     def initialize(self, physics_sim_view: Any = None) -> None:
-        """Initialize the Lidar sensor.
+        """Initialize the Lidar sensor and register update, stage, and timeline callbacks.
 
         Args:
-            physics_sim_view: Optional physics simulation view.
+            physics_sim_view: Physics simulation view.
         """
         BaseSensor.initialize(self, physics_sim_view=physics_sim_view)
         self._acquisition_callback = carb.eventdispatcher.get_eventdispatcher().observe_event(
@@ -440,7 +432,7 @@ class LidarRtx(BaseSensor):
         )
 
     def _stage_open_callback_fn(self, event: carb.eventdispatcher.Event) -> None:
-        """Handle stage open event by cleaning up callbacks.
+        """Handle stage open event by cleaning up Lidar sensor callbacks.
 
         Args:
             event: The stage open event.
@@ -452,7 +444,7 @@ class LidarRtx(BaseSensor):
         self._timer_reset_callback_play = None
 
     def _timeline_pause_callback_fn(self, event: carb.eventdispatcher.Event) -> None:
-        """Handle timeline pause event.
+        """Handle timeline pause event by pausing data acquisition.
 
         Args:
             event: The timeline pause event.
@@ -460,7 +452,7 @@ class LidarRtx(BaseSensor):
         self.pause()
 
     def _timeline_stop_callback_fn(self, event: carb.eventdispatcher.Event) -> None:
-        """Handle timeline stop event.
+        """Handle timeline stop event by pausing data acquisition.
 
         Args:
             event: The timeline stop event.
@@ -468,7 +460,7 @@ class LidarRtx(BaseSensor):
         self.pause()
 
     def _timeline_play_callback_fn(self, event: carb.eventdispatcher.Event) -> None:
-        """Handle timeline play event.
+        """Handle timeline play event by resuming data acquisition.
 
         Args:
             event: The timeline play event.
@@ -539,8 +531,10 @@ class LidarRtx(BaseSensor):
     def _data_acquisition_callback(self, event: carb.events.IEvent) -> None:
         """Handle data acquisition callback for the Lidar sensor.
 
+        Updates current frame data for rendering time, rendering frame, and attached annotators.
+
         Args:
-            event: The event that triggered the callback.
+            event: Event that triggered the callback.
         """
         if self._annotators or self._writers:
             self._current_frame["rendering_frame"] = (
@@ -660,7 +654,7 @@ class LidarRtx(BaseSensor):
         in the current frame instead.
 
         Returns:
-            Tuple of (min_depth, max_depth) if available, None otherwise.
+            The (min_depth, max_depth) depth range if available, None otherwise.
         """
         carb.log_warn(
             "LidarRtx.get_depth_range is deprecated as of Isaac Sim 5.0 and will be removed in a future release. Use the depth_range attribute in the current frame instead."
@@ -676,7 +670,7 @@ class LidarRtx(BaseSensor):
         in the current frame instead.
 
         Returns:
-            Tuple of (min_azimuth, max_azimuth) if available, None otherwise.
+            Azimuth range as (min_azimuth, max_azimuth) if available, None otherwise.
         """
         carb.log_warn(
             "LidarRtx.get_azimuth_range is deprecated as of Isaac Sim 5.0 and will be removed in a future release. Use the azimuth_range attribute in the current frame instead."
@@ -870,13 +864,10 @@ class LidarRtx(BaseSensor):
 
     @staticmethod
     def decode_stable_id_mapping(stable_id_mapping_raw: bytes) -> dict:
-        """Decode the StableIdMap buffer into a dictionary of stable IDs to labels.
+        """Decode the StableIdMap buffer into stable IDs mapped to labels.
 
-        The buffer is a sequence of 6-byte entries, each containing:
-        - 4 bytes for the stable ID (uint32)
-        - 1 byte for the label length (uint8)
-        - 1 byte for the label offset (uint8)
-        The label is a UTF-8 string of the specified length, starting at the offset.
+        The buffer ends with a 4-byte entry count. Each entry contains six little-endian uint32 values. The
+        label is a UTF-8 string read from the label offset with the specified label length.
 
         Args:
             stable_id_mapping_raw: The raw StableIdMap buffer bytes.
@@ -913,15 +904,13 @@ class LidarRtx(BaseSensor):
     def get_object_ids(obj_ids: np.ndarray) -> list[int]:
         """Get Object IDs from the GenericModelOutput object ID buffer.
 
-        The buffer is an array that must be converted to a list of dtype uint128
-        (stride 16 bytes). Each uint128 is a unique stable ID for a prim in the
-        scene, which can be used to look up the prim path in the map provided by
-        the StableIdMap annotator (see above).
+        The buffer is converted to a list of dtype uint128 with stride 16 bytes. Each uint128 is a unique stable
+        ID for a prim in the scene, which can be used to look up the prim path in the map provided by the
+        StableIdMap annotator.
 
         Args:
-            obj_ids: The object ID buffer. Can be either a uint8 array with stride 16
-                (from GenericModelOutput) or a uint32 array with stride 4
-                (from IsaacCreateRTXLidarScanBuffer).
+            obj_ids: The object ID buffer. Can be a uint8 array with stride 16, a uint32 array with stride 4,
+                or a uint64 array with stride 2.
 
         Returns:
             The object IDs as a list of uint128.

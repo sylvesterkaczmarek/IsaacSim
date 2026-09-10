@@ -4,11 +4,12 @@ The isaacsim.ros2.ui extension provides pre-configured OmniGraph templates for p
 
 ## Functionality
 
-The extension offers seven graph template classes that create OmniGraph networks for different ROS 2 publishing scenarios:
+The extension offers eight graph template classes that create OmniGraph networks for different ROS 2 publishing scenarios:
 
 **Sensor Publishers**
 - {class}`Ros2CameraGraph <isaacsim.ros2.ui.Ros2CameraGraph>`: Creates a graph for publishing camera image data to ROS 2 topics
 - {class}`Ros2RtxLidarGraph <isaacsim.ros2.ui.Ros2RtxLidarGraph>`: Creates a graph for publishing RTX lidar point cloud data to ROS 2 topics
+- {class}`Ros2RtxRadarGraph <isaacsim.ros2.ui.Ros2RtxRadarGraph>`: Creates a graph for publishing RTX radar point cloud data to ROS 2 topics
 
 **Robot State Publishers**
 - {class}`Ros2JointStatesGraph <isaacsim.ros2.ui.Ros2JointStatesGraph>`: Creates a graph for publishing robot joint states
@@ -21,8 +22,10 @@ The extension offers seven graph template classes that create OmniGraph networks
 
 Each graph class encapsulates the OmniGraph node configuration and connections required for its specific publishing task, eliminating the need to manually construct these graphs through the OmniGraph editor.
 
+The same graph builders are available as public Python helper functions with dataclass configuration objects. Camera, RTX lidar, and RTX radar helpers accept an optional existing render product prim. When provided, the helper uses `IsaacAttachHydraTexture` to produce the render product path while leaving the render product's authored camera, resolution, and RenderVar relationships unchanged.
+
 ## Integration
 
 The extension adds a shortcuts menu to Isaac Sim that provides quick access to ROS 2 graph creation functionality. This menu integration uses **omni.kit.menu.utils** to register menu items that instantiate the graph templates, allowing users to add ROS 2 publishing capabilities to their scenes without writing code.
 
-The graph templates depend on isaacsim.ros2.nodes, which provides the underlying OmniGraph nodes used within each template. The templates act as a convenience layer that assembles these nodes into functional publishing pipelines. The extension uses **isaacsim.core.experimental.utils** for stage path generation and **isaacsim.core.rendering_manager** for viewport camera control.
+The graph templates depend on isaacsim.ros2.nodes and isaacsim.core.nodes, which provide the underlying OmniGraph nodes used within each template. The templates act as a convenience layer that assembles these nodes into functional publishing pipelines. The extension uses **isaacsim.core.rendering_manager** for viewport camera control.

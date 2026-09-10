@@ -13,14 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Execute any registered omni.kit.commands command by name.
+"""Dispatch a named, already-registered omni.kit.commands entry.
 
-Isaac Sim has 370+ registered commands for creating physics joints, materials,
-meshes, references, and more. This script provides access to all of them.
+Lists the Kit command registry or runs one registered name with JSON kwargs.
+Intended for live stage iteration through the localhost python_server control
+plane (see SKILL.md Security). Names must match the registry; unknown names
+raise ValueError before any execute call.
 
 Injected globals (via isaacsim_send.py --arg):
     action: str — "run" (default) or "list".
-    command_name: str — Command name for "run" (e.g. "CreateMeshPrimWithDefaultXform").
+    command_name: str — Registered command name for "run" (e.g. "CreateMeshPrimWithDefaultXform").
     kwargs: str — JSON string of keyword arguments (e.g. '{"prim_type":"Cube"}').
     filter: str — Filter string for "list" action (case-insensitive substring match).
     undo_last: str — If "true", undo the last command instead of running one.
@@ -37,7 +39,25 @@ if "filter" not in dir():
 if "undo_last" not in dir():
     undo_last = "false"
 
+import re
+
 import omni.kit.commands
+
+_COMMAND_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _resolve_registered_command(name: str) -> str:
+    """Return a registered command key matching ``name``, or raise ValueError."""
+    if not isinstance(name, str) or not _COMMAND_NAME_RE.match(name):
+        raise ValueError(f"invalid command_name {name!r}; expected a registered Kit command identifier")
+    registered = omni.kit.commands.get_commands()
+    if name in registered:
+        return name
+    with_suffix = f"{name}Command"
+    if with_suffix in registered:
+        return with_suffix
+    raise ValueError(f"command_name {name!r} is not in the registered omni.kit.commands set")
+
 
 if action == "list":
     cmds = sorted(omni.kit.commands.get_commands().keys())
@@ -53,6 +73,8 @@ elif action == "run":
     if not command_name:
         raise ValueError("command_name required (e.g. --arg command_name=CreateMeshPrimWithDefaultXform)")
 
+    resolved_name = _resolve_registered_command(command_name)
+
     cmd_kwargs = {}
     if kwargs:
         if isinstance(kwargs, dict):
@@ -64,10 +86,11 @@ elif action == "run":
 
     import isaacsim.core.experimental.utils.app as app_utils
 
-    result = omni.kit.commands.execute(command_name, **cmd_kwargs)
+    print(f"Dispatching registered command: {resolved_name} args={cmd_kwargs}")
+    result = omni.kit.commands.execute(resolved_name, **cmd_kwargs)
     app_utils.update_app(steps=5)
 
-    print(f"Executed: {command_name}")
+    print(f"Executed: {resolved_name}")
     if cmd_kwargs:
         print(f"Args: {cmd_kwargs}")
     if result is not None:

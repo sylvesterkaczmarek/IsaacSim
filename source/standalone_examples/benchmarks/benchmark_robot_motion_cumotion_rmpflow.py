@@ -81,7 +81,15 @@ class _PhysicsStepTimingRecorder:
 def _make_physics_pre_step(
     scenario: FrankaRmpFlowExample, recorder: _PhysicsStepTimingRecorder
 ) -> Callable[[float, object], None]:
-    """Build callback for SimulationManager.register_callback(PHYSICS_PRE_STEP)."""
+    """Build callback for SimulationManager.register_callback(PHYSICS_PRE_STEP).
+
+    Args:
+        scenario: cuMotion scenario to update before each physics step.
+        recorder: Timing buffer in which to store measured scenario-update durations.
+
+    Returns:
+        Physics pre-step callback that updates the scenario and records its duration.
+    """
 
     def on_physics_pre_step(step_dt: float, context: object) -> None:
         if scenario._articulation is not None and not scenario._articulation.is_physics_tensor_entity_valid():
@@ -96,7 +104,12 @@ def _make_physics_pre_step(
 
 
 def _store_physics_step_timing_custom_measurements(phase_name: str, samples: np.ndarray) -> None:
-    """Emit SingleMeasurement rows so the Summary Report includes them (DictMeasurement is not rendered)."""
+    """Emit SingleMeasurement rows so the Summary Report includes them (DictMeasurement is not rendered).
+
+    Args:
+        phase_name: Benchmark phase to associate with the measurements.
+        samples: Scenario-update durations in milliseconds.
+    """
     prefix = "physics_pre_step scenario_update"
     if samples.size == 0:
         benchmark.store_custom_measurement(

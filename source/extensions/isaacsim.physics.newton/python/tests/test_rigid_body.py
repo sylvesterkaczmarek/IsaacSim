@@ -32,6 +32,7 @@ import warp as wp
 from isaacsim.asset.importer.mjcf import MJCFImporter, MJCFImporterConfig
 from isaacsim.asset.importer.urdf import URDFImporter, URDFImporterConfig
 from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.physics.newton.impl.usd import _get_world_scale
 from pxr import Gf, Sdf, UsdGeom, UsdPhysics
 
 
@@ -222,6 +223,16 @@ class TestNewtonRigidBodyView(omni.kit.test.AsyncTestCase):
                 places=4,
                 msg=f"Body {i} z should be {expected_z}, got {updated_transforms[i, 2]}",
             )
+
+    async def test_world_scale_includes_ancestor_scale(self) -> None:
+        """Test body world scale includes scale inherited from an ancestor."""
+        parent = UsdGeom.Xform.Define(self.stage, "/ScaledParent")
+        parent.AddScaleOp().Set(Gf.Vec3f(0.01, 0.01, 0.01))
+        body = UsdGeom.Xform.Define(self.stage, "/ScaledParent/Body")
+
+        scale = _get_world_scale(body.GetPrim(), UsdGeom.XformCache())
+
+        np.testing.assert_allclose(scale, (0.01, 0.01, 0.01), rtol=0.0, atol=1.0e-6)
 
     async def test_velocities(self) -> None:
         """Test velocities format and verify set values are applied."""

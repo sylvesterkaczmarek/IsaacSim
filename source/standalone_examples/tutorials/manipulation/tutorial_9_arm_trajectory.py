@@ -55,7 +55,11 @@ _HOME: np.ndarray = np.array([0.00, -1.57, 1.57, -1.57, -1.57, 0.00], dtype=np.f
 
 
 async def setup_scene() -> Articulation:
-    """Create the UR10e stage and return the articulation."""
+    """Create the UR10e stage and return the articulation.
+
+    Returns:
+        Articulation wrapper for the UR10e prim at ``/World/ur``.
+    """
     assets_root_path = await get_assets_root_path_async()
     stage_utils.add_reference_to_stage(
         usd_path=assets_root_path + "/Isaac/Samples/Rigging/Manipulator/configure_manipulator/ur10e/ur/ur_gripper.usd",
@@ -73,7 +77,15 @@ async def setup_scene() -> Articulation:
 
 
 def get_estimated_state(robot: Articulation, joint_space: list[str]) -> mg.RobotState:
-    """Get the current joint state for trajectory control."""
+    """Get the current joint state for trajectory control.
+
+    Args:
+        robot: Articulation from which to read DOF positions, velocities, and efforts.
+        joint_space: Ordered joint names used to label the returned values.
+
+    Returns:
+        Robot state containing the articulation's current position, velocity, and effort for every named joint.
+    """
     return mg.RobotState(
         joints=mg.JointState.from_name(
             robot_joint_space=joint_space,
@@ -85,7 +97,12 @@ def get_estimated_state(robot: Articulation, joint_space: list[str]) -> mg.Robot
 
 
 def apply_desired_state(robot: Articulation, desired_state: mg.RobotState) -> None:
-    """Apply a desired joint state to the articulation."""
+    """Apply a desired joint state to the articulation.
+
+    Args:
+        robot: Articulation that receives the available joint commands.
+        desired_state: Controller output containing optional position, velocity, and effort commands and their indices.
+    """
     if desired_state.joints is None:
         return
     joint_state = desired_state.joints
@@ -101,7 +118,12 @@ def apply_desired_state(robot: Articulation, desired_state: mg.RobotState) -> No
 
 
 def main(args: argparse.Namespace, app: SimulationApp) -> None:
-    """Run the arm trajectory tutorial."""
+    """Run the arm trajectory tutorial.
+
+    Args:
+        args: Parsed options controlling headless operation and the bounded test run.
+        app: Running simulation application used for stage setup and frame updates.
+    """
     SimulationManager.setup_simulation(dt=1.0 / 60.0)
 
     robot = app.run_coroutine(setup_scene())
@@ -147,23 +169,22 @@ def main(args: argparse.Namespace, app: SimulationApp) -> None:
 
     follower = mg.TrajectoryFollower()
     follower.set_trajectory(trajectory)
-
-    simulation_time = 0.0
-    if not follower.reset(get_estimated_state(robot, robot_joint_space), None, simulation_time):
-        raise RuntimeError("Failed to reset TrajectoryFollower")
     # <end-arm-trajectory-setup-snippet>
 
     # <start-arm-trajectory-loop-snippet>
     dt = SimulationManager.get_physics_dt()
     max_steps = int((trajectory.duration + 1.0) / dt)
     frame_count = 0
+    simulation_time = 0.0
 
     while app.is_running():
         app.update()
-        if not (app_utils.is_playing() and SimulationManager.is_simulating()):
+        # if the app isn't playing or we have no trajectory, skip the loop.
+        if not (app_utils.is_playing() and SimulationManager.is_simulating()) or not follower.has_trajectory():
             continue
         simulation_time = 0.0
-        follower.reset(get_estimated_state(robot, robot_joint_space), None, simulation_time)
+        if not follower.reset(get_estimated_state(robot, robot_joint_space), None, simulation_time):
+            raise RuntimeError("Failed to reset TrajectoryFollower")
         for _ in range(max_steps):
             app.update()
             if not (app_utils.is_playing() and SimulationManager.is_simulating()):

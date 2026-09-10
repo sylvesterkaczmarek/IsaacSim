@@ -43,7 +43,11 @@ callback_called = False
 
 
 def data_acquisition_callback(event: Any) -> None:
-    """Callback function triggered on rendering events."""
+    """Mark the viewport ready when a new-frame rendering event arrives.
+
+    Args:
+        event: Stage-rendering event used to report the received event name.
+    """
     global callback_called
     print(f"Received render event: {event.event_name}")
     callback_called = True

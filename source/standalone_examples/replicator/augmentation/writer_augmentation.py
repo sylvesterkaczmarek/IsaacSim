@@ -52,8 +52,19 @@ SEED = 42
 carb.settings.get_settings().set_bool("/app/omni.graph.scriptnode/opt_in", True)
 
 
-def gaussian_noise_rgb_np(data_in, sigma, seed):
-    """Add Gaussian noise to RGB data using NumPy (CPU)."""
+def gaussian_noise_rgb_np(data_in: np.ndarray, sigma: float, seed: int) -> np.ndarray:
+    """Add Gaussian noise to RGB data using NumPy.
+
+    Calling this function resets NumPy's global random state before sampling.
+
+    Args:
+        data_in: RGB image to augment.
+        sigma: Standard deviation of the Gaussian noise.
+        seed: Seed passed to ``np.random.seed``. A value of ``None`` reseeds from system entropy.
+
+    Returns:
+        Noisy RGB image with channel values clipped to the valid byte range.
+    """
     np.random.seed(seed)
     # Convert to float32 space
     data_in = data_in.astype(np.float32)
@@ -69,8 +80,15 @@ def gaussian_noise_rgb_np(data_in, sigma, seed):
 @wp.kernel
 def gaussian_noise_rgb_wp(
     data_in: wp.array3d(dtype=wp.uint8), data_out: wp.array3d(dtype=wp.uint8), sigma: float, seed: int
-):
-    """Add Gaussian noise to RGB data using Warp (GPU)."""
+) -> None:
+    """Add Gaussian noise to RGB data using Warp (GPU).
+
+    Args:
+        data_in: Source RGBA image in device memory.
+        data_out: Destination image to receive the noisy RGB channels and original alpha channel.
+        sigma: Standard deviation of the Gaussian RGB noise.
+        seed: Base random seed used to derive independent pixel and channel streams.
+    """
     # Get thread coordinates and image dimensions to calculate unique pixel ID for random generation
     i, j = wp.tid()
     dim_i = data_in.shape[0]
@@ -94,8 +112,19 @@ def gaussian_noise_rgb_wp(
     data_out[i, j, 3] = data_in[i, j, 3]
 
 
-def gaussian_noise_depth_np(data_in, sigma, seed):
-    """Add Gaussian noise to depth values using NumPy (CPU)."""
+def gaussian_noise_depth_np(data_in: np.ndarray, sigma: float, seed: int) -> np.ndarray:
+    """Add Gaussian noise to depth values using NumPy.
+
+    Calling this function resets NumPy's global random state before sampling.
+
+    Args:
+        data_in: Depth image to augment.
+        sigma: Standard deviation of the Gaussian noise.
+        seed: Seed passed to ``np.random.seed``. A value of ``None`` reseeds from system entropy.
+
+    Returns:
+        The augmented depth image.
+    """
     np.random.seed(seed)
     result = data_in.astype(np.float32) + np.random.randn(*data_in.shape) * sigma
     return np.clip(result, 0, None).astype(data_in.dtype)
@@ -109,8 +138,15 @@ rep.AnnotatorRegistry.register_augmentation(
 @wp.kernel
 def gaussian_noise_depth_wp(
     data_in: wp.array2d(dtype=wp.float32), data_out: wp.array2d(dtype=wp.float32), sigma: float, seed: int
-):
-    """Add Gaussian noise to depth values using Warp (GPU)."""
+) -> None:
+    """Add Gaussian noise to depth values using Warp (GPU).
+
+    Args:
+        data_in: Source depth image in device memory.
+        data_out: Destination image to receive noisy depth values.
+        sigma: Standard deviation of the Gaussian depth noise.
+        seed: Base random seed used to derive a stream for each pixel.
+    """
     i, j = wp.tid()
     # Unique ID for random seed per pixel
     scalar_pixel_id = i * data_in.shape[1] + j
@@ -124,7 +160,17 @@ rep.AnnotatorRegistry.register_augmentation(
 
 
 def run_example(num_frames: int, resolution: tuple[int, int], use_warp: bool, env_url: str | None = None) -> float:
-    """Run the capture pipeline using step() to trigger a randomization and data capture."""
+    """Run the capture pipeline using step() to trigger a randomization and data capture.
+
+    Args:
+        num_frames: Number of randomized frames to capture and write.
+        resolution: Width and height of the render product in pixels.
+        use_warp: Whether to execute the augmentations with Warp instead of NumPy.
+        env_url: Optional environment USD path relative to the Isaac asset root.
+
+    Returns:
+        Elapsed wall-clock time for capture and queued writer output, in seconds.
+    """
     print(f"Running example with num_frames: {num_frames}, resolution: {resolution}, use_warp: {use_warp}")
 
     if env_url is not None and env_url != "":

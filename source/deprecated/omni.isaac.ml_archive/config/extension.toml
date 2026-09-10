@@ -4,7 +4,7 @@ order = -1000
 reloadable = false
 
 [package]
-version = "3.3.0"
+version = "3.4.0"
 category = "Internal"
 title = "Isaac Sim ML Pip Archive"
 description = "Pip packages needed by isaac sim extensions"
@@ -21,6 +21,9 @@ writeTarget.python = true
 warning = "Extension deprecated since Isaac Sim 6.0.0. No replacement is provided."
 
 [dependencies]
+# NVIDIA CUDA runtime libraries required by torch (Linux only; Windows torch does not need them)
+"filter:platform"."linux-x86_64"."isaacsim.pip.nv" = {}
+"filter:platform"."linux-aarch64"."isaacsim.pip.nv" = {}
 "omni.isaac.core_archive" = {} # pull in the main isaac sim pip archive
 "omni.kit.pip_archive" = {} # import the base kit python archive
 

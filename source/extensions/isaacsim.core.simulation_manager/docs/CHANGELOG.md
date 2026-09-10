@@ -1,4 +1,39 @@
 # Changelog
+
+## [1.17.1] - 2026-08-25
+### Fixed
+- Use the supported Carb warning logger when Newton initialization fails.
+
+## [1.17.0] - 2026-08-20
+### Added
+- Add Newton solver-specific physics scene wrappers and scene-object resolution.
+
+## [1.16.1] - 2026-08-07
+### Fixed
+- `PhysicsScene.get_gravity`: report the effective default gravity for unauthored USD gravity attributes.
+- `PhysicsScene.get_gravity`: normalize manually authored gravity directions before computing the gravity vector.
+- `SimulationManager.get_device`: use `cuda:0` after recovering from an unset CUDA-device setting.
+
+## [1.16.0] - 2026-07-28
+### Added
+- Add the `enable_default_callbacks` setting to disable default timeline and stage lifecycle callbacks at startup.
+
+## [1.15.10] - 2026-07-23
+### Fixed
+- Avoid repeated errors after Newton initialization fails.
+
+## [1.15.9] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [1.15.8] - 2026-07-15
+### Changed
+- `onPhysicsStep`: cache the physics steps-per-second value in a single slot keyed by (scene, simulation) instead of querying the physics backend every step. Some backends resolve the query by walking stage prims, which dominated per-step time on large stages; the cache is invalidated on play-state, simulation-registry, and stage attach/detach changes. Interleaved stepping of several (scene, simulation) pairs falls back to the per-step query (the previous behavior).
+
+## [1.15.7] - 2026-06-29
+### Changed
+- Define the supported package-root Python API explicitly and remove the Kit lifecycle class from the public API inventory.
+
 ## [1.15.6] - 2026-06-12
 ### Changed
 - Reduce warning to an info level message when USD context or stage is not available.
@@ -65,7 +100,7 @@
 
 ## [1.14.1] - 2026-04-03
 ### Changed
-- Use local `BindingsPythonUtils.h` from `isaacsim.core.includes` instead of `carb/BindingsPythonUtils.h`
+- Use local `BindingsPythonUtils.hpp` from `isaacsim.core.includes` instead of `carb/BindingsPythonUtils.h`
 - Refactored stage event subscription to be lazily initialized with null-safety checks for USD context and stage
 
 ## [1.14.0] - 2026-04-01

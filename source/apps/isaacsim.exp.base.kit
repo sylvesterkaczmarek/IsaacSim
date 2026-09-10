@@ -1,13 +1,14 @@
 [package]
 description = "Base Isaac Sim App"
 title = "Isaac Sim Base"
-version = "6.0.1"
+version = "6.1.0"
 keywords = ["experience", "app", "usd"] # That makes it browsable in UI with "experience" filter
 
 
 [dependencies]
 # Isaac Sim extensions
 "isaacsim.app.about" = {}
+"isaacsim.common" = { order = -100 }
 "isaacsim.core.api" = {}
 "isaacsim.core.cloner" = {}
 "isaacsim.core.deprecation_manager" = { order = -100 }
@@ -32,10 +33,11 @@ keywords = ["experience", "app", "usd"] # That makes it browsable in UI with "ex
 "isaacsim.replicator.domain_randomization" = {}
 "isaacsim.replicator.experimental.domain_randomization" = {}
 "isaacsim.replicator.writers" = {}
+"isaacsim.robot_motion.controllers" = {}
+"isaacsim.robot_motion.cumotion" = {}
+"isaacsim.robot_motion.experimental.motion_generation" = {}
 "isaacsim.robot_motion.lula" = {}
 "isaacsim.robot_motion.motion_generation" = {}
-"isaacsim.robot_motion.experimental.motion_generation" = {}
-"isaacsim.robot_motion.cumotion" = {}
 "isaacsim.robot_motion.schema" = {}
 "isaacsim.robot.manipulators" = {}
 "isaacsim.robot.policy.examples" = {}
@@ -124,6 +126,7 @@ keywords = ["experience", "app", "usd"] # That makes it browsable in UI with "ex
 "omni.physics.physx" = {}
 "omni.physics.stageupdate" = {}
 "omni.rtx.settings.core" = {}
+"omni.rtx.spg" = {}
 "omni.uiaudio" = {}
 "omni.usd.metrics.assembler.ui" = {}
 "omni.usd.schema.flow" = {}
@@ -138,24 +141,25 @@ exts."omni.kit.material.library".ui_show_list = [
     "USD Preview Surface",
 ]
 exts."omni.kit.renderer.core".present.enabled = false # Fixes MGPU stability issue
+exts."omni.kit.test".includeTests = ["*isaac*"] # Add isaac tests to test runner
 exts."omni.kit.viewport.window".windowMenu.entryCount = 2 # Allow user to create two viewports by default
 exts."omni.kit.viewport.window".windowMenu.label = "" # Put Viewport menuitem under Window menu
-exts."omni.rtx.window.settings".window_menu = "Window" # Where to put the render settings menuitem
-exts."omni.usd".locking.onClose = false # reduce time it takes to close/create stage
-exts."omni.ui".raster.default_rasterpolicy_enabled = true # Improve UI rendering performance
 exts."omni.kit.widget.graph".raster_nodes = true # Improve UI rendering performance
+exts."omni.rtx.window.settings".window_menu = "Window" # Where to put the render settings menuitem
+exts."omni.ui".raster.default_rasterpolicy_enabled = true # Improve UI rendering performance
+exts."omni.usd".locking.onClose = false # reduce time it takes to close/create stage
+exts."semantics_schema_editor".hideWindowOnStartup = true
+foundation.verifyOsVersion.enabled = false
+omni.replicator.asyncRendering = false # Async rendering must be disabled for SDG
+physics.autoPopupSimulationOutputWindow = false
 renderer.asyncInit = true # Don't block while renderer inits
 renderer.gpuEnumeration.glInterop.enabled = false # Improves startup speed.
 rtx-transient.dlssg.enabled = false # DLSSG frame generation is not compatible with synthetic data generation
 rtx.hydra.mdlMaterialWarmup = true # start loading the MDL shaders needed before any delegate is actually created.
 rtx.hydra.supportMultiTickRate = true # enable multi-tick rendering so each sensor can render at its own tick rate
-rtx.rendering.perSensorTickTlas = true # per-sensor TLAS updates for multi-tick rendering
 rtx.post.dlss.execMode = 0 # Set the DLSS model can be 0 (Performance), 1 (Balanced), 2 (Quality), or 3 (Auto)
-omni.replicator.asyncRendering = false # Async rendering must be disabled for SDG
-exts."omni.kit.test".includeTests = ["*isaac*"] # Add isaac tests to test runner
-foundation.verifyOsVersion.enabled = false
-physics.autoPopupSimulationOutputWindow = false
-exts."semantics_schema_editor".hideWindowOnStartup = true
+rtx.rendering.perSensorTickTlas = true # per-sensor TLAS updates for multi-tick rendering
+rtx.spg.enabled = true # Enable RTX Sensor Processing Graphs feature
 
 # Disable for base application
 [settings."filter:platform"."windows-x86_64"]
@@ -185,7 +189,7 @@ show_menu_titles = true
 
 [settings.app]
 name = "Isaac-Sim Base"
-version = "6.0.1"
+version = "6.1.0"
 versionFile = "${app}/../VERSION"
 content.emptyStageOnStart = true
 fastShutdown = true

@@ -20,9 +20,9 @@ from __future__ import annotations
 import asyncio
 import gc
 import os
-from typing import Optional
 
 import carb
+import isaacsim.core.experimental.utils.physics as physics_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
 import omni
 import omni.ext
@@ -30,9 +30,9 @@ import omni.kit.actions.core
 import omni.kit.app
 import omni.kit.usd.layers
 import omni.ui as ui
+from isaacsim.asset.gen.omap import compute_coordinates, generate_image, update_location
 from isaacsim.asset.gen.omap.bindings import _omap
-from isaacsim.asset.gen.omap.utils import compute_coordinates, generate_image, update_location
-from isaacsim.gui.components.ui_utils import (
+from isaacsim.gui.components import (
     btn_builder,
     cb_builder,
     color_picker_builder,
@@ -48,7 +48,6 @@ from omni.kit.menu.utils import (
     add_menu_items,
     remove_menu_items,
 )
-from omni.physx.scripts import utils
 from PIL import Image
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 
@@ -216,16 +215,16 @@ class OccupancyMapWindow(MenuHelperWindow):
         self._timeline = omni.timeline.get_timeline_interface()
         self._om = _omap.acquire_omap_interface()
         self._layers = omni.kit.usd.layers.get_layers()
-        self._filepicker: Optional[object] = None
-        self._yaml_filepicker: Optional[object] = None
-        self._ros_yaml_text: Optional[str] = None
-        self._map_bottom_left: Optional[object] = None
-        self._map_scale: Optional[float] = None
-        self._map_scale_to_meters: Optional[float] = None
+        self._filepicker: object | None = None
+        self._yaml_filepicker: object | None = None
+        self._ros_yaml_text: str | None = None
+        self._map_bottom_left: object | None = None
+        self._map_scale: float | None = None
+        self._map_scale_to_meters: float | None = None
         self._models = {}
-        self._stage_open_callback: Optional[object] = None
-        self._image: Optional[list[int]] = None
-        self._im: Optional[object] = None
+        self._stage_open_callback: object | None = None
+        self._image: list[int] | None = None
+        self._im: object | None = None
 
         self.prev_origin: list[float] = [0.0, 0.0]
         self.lower_bound: list[float] = list(DEFAULT_LOWER_BOUND)
@@ -531,19 +530,26 @@ class OccupancyMapWindow(MenuHelperWindow):
         self.on_update_location(0)
         self.on_update_cell_size(0)
 
-        async def generate_task() -> None:
-            self._timeline.stop()
+        asyncio.ensure_future(self._generate_map_async())
+
+    async def _generate_map_async(self) -> None:
+        """Runs the asynchronous occupancy map generation task."""
+        session = None
+        layer_identifier = None
+        self._timeline.stop()
+        try:
             await omni.kit.app.get_app().next_update_async()
             if not self._models["physx_geom"].get_value_as_bool():
                 layer = Sdf.Layer.CreateAnonymous("anon_occupancy_map")
+                layer_identifier = layer.identifier
                 stage = omni.usd.get_context().get_stage()
                 session = stage.GetSessionLayer()
-                session.subLayerPaths.append(layer.identifier)
+                session.subLayerPaths.append(layer_identifier)
                 with Usd.EditContext(stage, layer):
                     with Sdf.ChangeBlock():
                         for prim in stage.Traverse():
                             if prim.HasAPI(UsdPhysics.CollisionAPI) and prim.HasAPI(UsdPhysics.RigidBodyAPI):
-                                utils.removePhysics(prim)
+                                physics_utils.remove_rigid_body(prim)
                     await omni.kit.app.get_app().next_update_async()
                     with Sdf.ChangeBlock():
                         for prim in stage.Traverse():
@@ -570,10 +576,14 @@ class OccupancyMapWindow(MenuHelperWindow):
                                         UsdPhysics.CollisionAPI.Apply(prim)
                                         UsdPhysics.MeshCollisionAPI.Apply(prim)
                                     else:
-                                        # Skip if we have errors here
+                                        # The collider already exists, so switch its approximation to
+                                        # triangle mesh ("none") for accurate occupancy mapping. Author
+                                        # the MeshCollisionAPI approximation directly: apply_collision is
+                                        # a no-op once CollisionAPI is applied. Skip on any error.
                                         try:
-                                            utils.setCollider(prim, "none")
-                                        except Exception as e:
+                                            mesh_collision_api = UsdPhysics.MeshCollisionAPI.Apply(prim)
+                                            mesh_collision_api.CreateApproximationAttr().Set(UsdPhysics.Tokens.none)
+                                        except Exception:
                                             continue
                             elif prim.IsA(UsdGeom.Xformable) and prim.IsInstanceable():
                                 UsdPhysics.CollisionAPI.Apply(prim)
@@ -582,21 +592,16 @@ class OccupancyMapWindow(MenuHelperWindow):
                                 UsdPhysics.CollisionAPI.Apply(prim)
                                 UsdPhysics.MeshCollisionAPI.Apply(prim)
 
-                self._timeline.play()
-                await omni.kit.app.get_app().next_update_async()
-                self._om.generate()
-                await omni.kit.app.get_app().next_update_async()
-                self._timeline.stop()
-                session.subLayerPaths.remove(layer.identifier)
-                layer = None
-            else:
-                self._timeline.play()
-                await omni.kit.app.get_app().next_update_async()
-                self._om.generate()
-                await omni.kit.app.get_app().next_update_async()
-                self._timeline.stop()
-
-        asyncio.ensure_future(generate_task())
+            self._timeline.play()
+            await omni.kit.app.get_app().next_update_async()
+            self._om.generate()
+            await omni.kit.app.get_app().next_update_async()
+        except Exception as exc:
+            carb.log_warn(f"Failed to generate occupancy map: {exc}")
+        finally:
+            self._timeline.stop()
+            if session is not None and layer_identifier in session.subLayerPaths:
+                session.subLayerPaths.remove(layer_identifier)
 
     def _fill_image(self) -> None:
         """Generates a colored image from the occupancy map buffer.
@@ -606,6 +611,13 @@ class OccupancyMapWindow(MenuHelperWindow):
         coordinate systems. Updates the image visualization in the UI.
         """
         dims = self._om.get_dimensions()
+        if dims.x <= 0 or dims.y <= 0:
+            # Drop the previous result so a stale image or ROS config cannot be saved.
+            carb.log_warn("Occupancy map is empty. Run CALCULATE on the current stage before generating an image.")
+            self._image = None
+            self._ros_yaml_text = None
+            return
+
         scale = self._models["cell_size"].get_value_as_float()
         if scale <= 0:
             carb.log_warn(

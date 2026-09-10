@@ -1,0 +1,56 @@
+---
+description: C coding style and ABI conventions for Isaac Sim
+globs:
+  - "**/*.c"
+  - "**/*.h"
+---
+
+# C development rules
+
+## Language and formatting
+
+- Write portable C11. Do not use compiler extensions unless they are isolated behind a documented platform boundary.
+- Use the repository `.clang-format`; C and C++ share Allman braces, four-space indentation, and a 120-column limit.
+- Put opening braces for functions, structures, unions, enums, and control statements on the following line. Braced
+  initializer expressions remain formatter-controlled.
+- Use `.c` for C implementation files and `.h` for C headers. C++ headers use `.hpp`.
+- Include a source file's own header first. Public headers must include everything required to compile independently.
+- Use C standard-library headers in C interfaces, such as `<stddef.h>` and `<stdint.h>`.
+- A public C header must compile as both C11 and C++17 and must wrap declarations in an `extern "C"` guard.
+- Use `#pragma once` for header guards. It is the repository-approved portability exception to strict C11 syntax.
+
+## Naming
+
+- Name C headers `PascalCase.h` and C implementation files `PascalCase.c`, matching the C++ file-stem convention.
+- Use the same identifier casing as C++: `PascalCase` for types and `camelCase` for functions, structure fields,
+  parameters, and local variables.
+- Prefix exported functions and types with the owning library or API name. Flatten a dotted API name without
+  separators: `isaacsim.common.logging` becomes the `isaacsimCommonLogging` function prefix and the
+  `IsaacSimCommonLogging` type prefix.
+- Do not suffix public typedef names with `_t`.
+- Use uppercase, module-prefixed names for macros and enum constants. C enumerators are unscoped, so this prefixing
+  prevents collisions. Keep this convention when a C header is included from C++; a C++ wrapper may expose a scoped
+  `enum class` with `eCamelCase` values.
+- Do not use identifiers reserved by C or C++, including leading double underscores and leading underscore-capital
+  names.
+
+## API and ABI
+
+- Do not expose C++ types, exceptions, overloads, references, templates, namespaces, or standard-library containers.
+- Use fixed-width integers for ABI-visible numeric fields when their width is part of the contract. Use `size_t` for
+  object and buffer sizes.
+- State ownership and lifetime for every pointer crossing the API. Do not retain caller memory unless documented.
+- Pair buffers with explicit sizes. State whether character data is null terminated.
+- Use explicit result values for recoverable failures. Never allow a C++ exception to cross a C boundary.
+- Reserve zero values for useful defaults or sentinels when practical so zero-initialized structures are valid.
+- Use a `structSize` or equivalent version field for public structures that may grow while preserving ABI.
+- Keep implementation symbols hidden and export only the declared C ABI.
+
+## Implementation
+
+- Prefer small functions and explicit control flow over macros. Use macros only for constants, portability, or
+  call-site metadata that a function cannot capture.
+- Validate public inputs before dereferencing them.
+- Use `const` for borrowed read-only data.
+- Avoid global mutable state. When it is unavoidable, document initialization, shutdown, and synchronization.
+- Document and test thread-safety and reentrancy guarantees.

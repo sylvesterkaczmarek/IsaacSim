@@ -32,15 +32,11 @@ class UIBuilder:
         ext_name: Extension name used for action registration.
         menu_name: Name of the menu where the item will be added.
         menu_item_name: Display name for the menu item.
-        host: Host address for the Python server.
-        port: Port number for the Python server.
     """
 
-    def __init__(self, ext_name: str, menu_name: str, menu_item_name: str, host: str, port: int) -> None:
+    def __init__(self, ext_name: str, menu_name: str, menu_item_name: str) -> None:
         self._menu_items: list = []
         self._ext_name = ext_name
-        self._host = host
-        self._port = port
         self._menu_name = menu_name
         self._menu_item_name = menu_item_name
 
@@ -131,12 +127,28 @@ class UIBuilder:
         command = [code_executable, "-n", self._app_folder]
         carb.log_info(f"Launching VS Code: {command}")
         result = subprocess.run(command, close_fds=True)
-        # check process execution
-        notification = f"Serving at {self._host}:{self._port}"
+        notification, server_warning = self._get_server_notification()
         if result.returncode:
             notification += f"\n\nUnable to launch VS Code (error code: {result.returncode})"
             if result.returncode in (1, 127):
                 notification += ".\nMake sure VS Code is installed and accessible on the system via the command 'code'"
             carb.log_warn(notification)
 
-        self._post_notification(notification, warning=bool(result.returncode), hide_after_timeout=not result.returncode)
+        warning = bool(result.returncode) or server_warning
+        self._post_notification(notification, warning=warning, hide_after_timeout=not warning)
+
+    def _get_server_notification(self) -> tuple[str, bool]:
+        """Resolve Python server state when the VS Code action is executed."""
+        try:
+            from isaacsim.code_editor.python_server import ServerState, get_server_status
+
+            status = get_server_status()
+        except ImportError:
+            status = None
+        if status is None:
+            return "Python server status unavailable", True
+        if status.state == ServerState.RUNNING and status.bound_endpoints:
+            endpoint = status.bound_endpoints[0]
+            return f"Serving at {endpoint.host}:{endpoint.port}", False
+        detail = f": {status.last_error}" if status.last_error else ""
+        return f"Python server is {status.state.value}{detail}", True

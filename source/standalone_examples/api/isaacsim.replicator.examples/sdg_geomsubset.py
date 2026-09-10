@@ -22,8 +22,9 @@ import argparse
 import sys
 
 import carb.settings
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.replicator.core as rep
-import omni.usd
 import pxr
 
 parser = argparse.ArgumentParser()
@@ -59,9 +60,13 @@ _EXPECTED_CLASSES_PER_SUBSET_FALSE = frozenset(
 
 
 def run_example(run_test: bool) -> None:
-    """Run per-subset semantic segmentation capture and optional validation."""
-    omni.usd.get_context().new_stage()
-    stage = omni.usd.get_context().get_stage()
+    """Run per-subset semantic segmentation capture and optional validation.
+
+    Args:
+        run_test: Whether to assert that captured semantic classes match the active per-subset setting.
+    """
+    stage = stage_utils.create_new_stage()
+    app_utils.update_app()
     carb_settings = carb.settings.get_settings()
     per_subset = carb_settings.get_as_bool("/syntheticdata/sensors/perSubsetSegmentation")
     rep.functional.create.xform(name="World")
@@ -129,7 +134,6 @@ def run_example(run_test: bool) -> None:
                 f"Expected: {sorted(expected)}\nActual: {sorted(classes)}",
                 file=sys.stderr,
             )
-            simulation_app.close()
             sys.exit(1)
         return
 

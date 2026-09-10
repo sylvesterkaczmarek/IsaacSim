@@ -208,7 +208,7 @@ def cache_body_com(
         tensor: Input COM data (count, 7).
         tensor_idx: Indices into tensor.
         tenor_idx_mask: Optional mask for indices.
-        body_idx: Body indices.
+        body_idx: Model body indices used to exclude unmapped bodies.
         com_cache: Output COM cache.
     """
     tid = wp.tid()
@@ -219,10 +219,10 @@ def cache_body_com(
     else:
         apply_data = True
 
-    if apply_data:
+    if apply_data and wid >= 0:
         # Cache all 7 elements: position (3) + orientation (4)
         for i in range(7):
-            com_cache[wid, i] = tensor[body_id, i]
+            com_cache[body_id, i] = tensor[body_id, i]
 
 
 wp.overload(cache_body_com, {"tensor_idx": wp.array(dtype=wp.int32)})

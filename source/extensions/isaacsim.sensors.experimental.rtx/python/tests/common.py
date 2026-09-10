@@ -15,9 +15,47 @@
 
 """Common utilities for RTX sensor tests."""
 
+from typing import Any
+
 import numpy as np
 from isaacsim.core.experimental.materials import NonVisualMaterial
 from isaacsim.core.experimental.objects import Cube
+
+
+class FakeAnnotator:
+    """Minimal annotator stub returning a fixed payload, for ``get_data`` warm-up tests.
+
+    Accepts the positional and keyword call styles the sensor runtimes use to request a device.
+
+    Args:
+        data: Payload returned by :meth:`get_data`.
+    """
+
+    def __init__(self, data: Any) -> None:
+        self._data = data
+
+    def get_data(self, *_: Any, **__: Any) -> Any:
+        """Return the fixed payload.
+
+        Returns:
+            The payload the stub was constructed with.
+        """
+        return self._data
+
+
+def normalize_semantics(semantics: dict[str, str]) -> dict[str, str]:
+    """Normalize comma-separated class labels for order-independent comparison.
+
+    Args:
+        semantics: Semantic labels to normalize.
+
+    Returns:
+        Copy of the semantic labels with sorted class labels.
+    """
+    normalized = semantics.copy()
+    if "class" in normalized:
+        normalized["class"] = ",".join(sorted(normalized["class"].split(",")))
+    return normalized
 
 
 def create_sarcophagus(apply_nonvisual_material: bool = True) -> dict:

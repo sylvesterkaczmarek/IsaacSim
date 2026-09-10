@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "TensorOps.h"
+#include "TensorOps.hpp"
 
-#include "WarpCompat.h"
-#include "gpu/CudaKernels.h"
+#include "WarpCompat.hpp"
+#include "gpu/CudaKernels.hpp"
 
 #include <carb/logging/Log.h>
 
@@ -340,7 +340,9 @@ void cpuContactData(const int* contactCount,
 
         float nx = normal[tid * 3], ny = normal[tid * 3 + 1], nz = normal[tid * 3 + 2];
         float fx = contactForce[tid * 3], fy = contactForce[tid * 3 + 1], fz = contactForce[tid * 3 + 2];
-        float forceMag = sqrtf(fx * fx + fy * fy + fz * fz) * dtScale;
+        const float normalForce = (fx * nx + fy * ny + fz * nz) * dtScale;
+        const float forceMag = std::abs(normalForce);
+        const float normalSign = normalForce < 0.0f ? -1.0f : 1.0f;
         float nArr[3] = { nx, ny, nz };
         float p0[3] = { point0[tid * 3], point0[tid * 3 + 1], point0[tid * 3 + 2] };
         float p1[3] = { point1[tid * 3], point1[tid * 3 + 1], point1[tid * 3 + 2] };
@@ -361,13 +363,13 @@ void cpuContactData(const int* contactCount,
                 int wi = (int)startIndices[senA * filterCount + fi] + (int)localIdx;
                 if (wi < maxContactDataCount)
                 {
-                    outForces[wi] = -forceMag;
+                    outForces[wi] = forceMag;
                     outPoints[wi * 3] = cpx;
                     outPoints[wi * 3 + 1] = cpy;
                     outPoints[wi * 3 + 2] = cpz;
-                    outNormals[wi * 3] = -nx;
-                    outNormals[wi * 3 + 1] = -ny;
-                    outNormals[wi * 3 + 2] = -nz;
+                    outNormals[wi * 3] = normalSign * nx;
+                    outNormals[wi * 3 + 1] = normalSign * ny;
+                    outNormals[wi * 3 + 2] = normalSign * nz;
                     outSeparations[wi] = -d;
                 }
             }
@@ -385,13 +387,96 @@ void cpuContactData(const int* contactCount,
                     outPoints[wi * 3] = cpx;
                     outPoints[wi * 3 + 1] = cpy;
                     outPoints[wi * 3 + 2] = cpz;
-                    outNormals[wi * 3] = nx;
-                    outNormals[wi * 3 + 1] = ny;
-                    outNormals[wi * 3 + 2] = nz;
+                    outNormals[wi * 3] = -normalSign * nx;
+                    outNormals[wi * 3 + 1] = -normalSign * ny;
+                    outNormals[wi * 3 + 2] = -normalSign * nz;
                     outSeparations[wi] = d;
                 }
             }
         }
+    }
+}
+
+void cpuFrictionData(const int* contactCount,
+                     const int* shape0,
+                     const int* shape1,
+                     const float* point0,
+                     const float* point1,
+                     const float* normal,
+                     const float* contactForce,
+                     const float* thickness0,
+                     const float* thickness1,
+                     const int* shapeBody,
+                     const float* bodyQ,
+                     const int* bodySensorMap,
+                     int bodySensorMapSize,
+                     const int* bodyFilterMap,
+                     int numBodies,
+                     int filterCount,
+                     int worldBodyIdx,
+                     float dtScale,
+                     int maxContactDataCount,
+                     float* outForces,
+                     float* outPoints,
+                     uint32_t* outCounts,
+                     const uint32_t* maxCounts,
+                     const uint32_t* startIndices,
+                     int rigidContactMax,
+                     bool pointsInWorldSpace)
+{
+    int count = contactCount[0];
+    int limit = (count < rigidContactMax) ? count : rigidContactMax;
+    for (int tid = 0; tid < limit; ++tid)
+    {
+        int sA = shape0[tid], sB = shape1[tid];
+        if (sA == sB || sA < 0 || sB < 0)
+            continue;
+        int rawA, rawB, mA, mB, senA, senB;
+        cpuResolveContact(
+            sA, sB, shapeBody, bodySensorMap, bodySensorMapSize, worldBodyIdx, rawA, rawB, mA, mB, senA, senB);
+        if (senA < 0 && senB < 0)
+            continue;
+
+        float nx = normal[tid * 3], ny = normal[tid * 3 + 1], nz = normal[tid * 3 + 2];
+        float fx = contactForce[tid * 3], fy = contactForce[tid * 3 + 1], fz = contactForce[tid * 3 + 2];
+        float normalForce = fx * nx + fy * ny + fz * nz;
+        float tfx = (fx - normalForce * nx) * dtScale;
+        float tfy = (fy - normalForce * ny) * dtScale;
+        float tfz = (fz - normalForce * nz) * dtScale;
+
+        float nArr[3] = { nx, ny, nz };
+        float p0[3] = { point0[tid * 3], point0[tid * 3 + 1], point0[tid * 3 + 2] };
+        float p1[3] = { point1[tid * 3], point1[tid * 3 + 1], point1[tid * 3 + 2] };
+        int bodyA = pointsInWorldSpace ? -1 : rawA;
+        int bodyB = pointsInWorldSpace ? -1 : rawB;
+        float wax, way, waz, wbx, wby, wbz;
+        cpuTransformPoint(p0, bodyQ, bodyA, thickness0[tid], nArr, -1.0f, wax, way, waz);
+        cpuTransformPoint(p1, bodyQ, bodyB, thickness1[tid], nArr, 1.0f, wbx, wby, wbz);
+        float cpx = (wax + wbx) * 0.5f, cpy = (way + wby) * 0.5f, cpz = (waz + wbz) * 0.5f;
+
+        auto writeContact = [&](int sensor, int filter, float sign)
+        {
+            if (sensor < 0 || filter < 0 || filter >= filterCount)
+                return;
+            int pairIdx = sensor * filterCount + filter;
+            if (outCounts[pairIdx] >= maxCounts[pairIdx])
+                return;
+            uint32_t localIdx = outCounts[pairIdx]++;
+            int wi = static_cast<int>(startIndices[pairIdx]) + static_cast<int>(localIdx);
+            if (wi >= maxContactDataCount)
+                return;
+            outForces[wi * 3] = sign * tfx;
+            outForces[wi * 3 + 1] = sign * tfy;
+            outForces[wi * 3 + 2] = sign * tfz;
+            outPoints[wi * 3] = cpx;
+            outPoints[wi * 3 + 1] = cpy;
+            outPoints[wi * 3 + 2] = cpz;
+        };
+
+        if (senA >= 0 && mB >= 0 && mB < numBodies)
+            writeContact(senA, bodyFilterMap[senA * numBodies + mB], 1.0f);
+        if (senB >= 0 && mA >= 0 && mA < numBodies)
+            writeContact(senB, bodyFilterMap[senB * numBodies + mA], -1.0f);
     }
 }
 
@@ -463,7 +548,9 @@ void cpuRawContactData(const int* contactCount,
 
         float nx = normal[tid * 3], ny = normal[tid * 3 + 1], nz = normal[tid * 3 + 2];
         float fx = contactForce[tid * 3], fy = contactForce[tid * 3 + 1], fz = contactForce[tid * 3 + 2];
-        float forceMag = sqrtf(fx * fx + fy * fy + fz * fz) * dtScale;
+        const float normalForce = (fx * nx + fy * ny + fz * nz) * dtScale;
+        const float forceMag = std::abs(normalForce);
+        const float normalSign = normalForce < 0.0f ? -1.0f : 1.0f;
         float nArr[3] = { nx, ny, nz };
         float p0[3] = { point0[tid * 3], point0[tid * 3 + 1], point0[tid * 3 + 2] };
         float p1[3] = { point1[tid * 3], point1[tid * 3 + 1], point1[tid * 3 + 2] };
@@ -481,15 +568,15 @@ void cpuRawContactData(const int* contactCount,
             int wi = (int)startIndices[senA] + (int)localIdx;
             if (wi < maxContactDataCount)
             {
-                outForces[wi] = -forceMag;
+                outForces[wi] = forceMag;
                 outPoints[wi * 3] = cpx;
                 outPoints[wi * 3 + 1] = cpy;
                 outPoints[wi * 3 + 2] = cpz;
-                outNormals[wi * 3] = -nx;
-                outNormals[wi * 3 + 1] = -ny;
-                outNormals[wi * 3 + 2] = -nz;
+                outNormals[wi * 3] = normalSign * nx;
+                outNormals[wi * 3 + 1] = normalSign * ny;
+                outNormals[wi * 3 + 2] = normalSign * nz;
                 outSeparations[wi] = -d;
-                otherActorIds[wi] = (uint64_t)mB;
+                otherActorIds[wi] = rawB < 0 ? static_cast<uint64_t>(worldBodyIdx + 1 + sB) : static_cast<uint64_t>(mB);
             }
         }
         if (senB >= 0)
@@ -502,11 +589,11 @@ void cpuRawContactData(const int* contactCount,
                 outPoints[wi * 3] = cpx;
                 outPoints[wi * 3 + 1] = cpy;
                 outPoints[wi * 3 + 2] = cpz;
-                outNormals[wi * 3] = nx;
-                outNormals[wi * 3 + 1] = ny;
-                outNormals[wi * 3 + 2] = nz;
+                outNormals[wi * 3] = -normalSign * nx;
+                outNormals[wi * 3 + 1] = -normalSign * ny;
+                outNormals[wi * 3 + 2] = -normalSign * nz;
                 outSeparations[wi] = d;
-                otherActorIds[wi] = (uint64_t)mA;
+                otherActorIds[wi] = rawA < 0 ? static_cast<uint64_t>(worldBodyIdx + 1 + sA) : static_cast<uint64_t>(mA);
             }
         }
     }

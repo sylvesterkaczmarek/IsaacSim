@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.6.5] - 2026-08-20
+### Fixed
+- Skip image generation when the occupancy map is empty, so a stale image or ROS config cannot be saved.
+
+## [2.6.4] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [2.6.3] - 2026-06-23
+### Changed
+- Replace `omni.physx.scripts.utils` (`setCollider`/`removePhysics`) usage with `isaacsim.core.experimental.utils.physics` helpers
+
+## [2.6.2] - 2026-06-12
+### Changed
+- Occupancy map generation now always stops the timeline and cleans temporary layers when generation fails.
+
 ## [2.6.1] - 2026-04-14
 ### Changed
 - UI improvements: unified filename field, auto-updating YAML, window docks to Property panel

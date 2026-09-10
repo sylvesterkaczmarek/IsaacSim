@@ -26,7 +26,7 @@ import omni.ui as ui
 from isaacsim.core.experimental.utils import stage as stage_utils
 from isaacsim.core.rendering_manager import ViewportManager
 from isaacsim.core.simulation_manager import SimulationManager
-from isaacsim.gui.components.element_wrappers import Button, CollapsableFrame, FloatField, StateButton
+from isaacsim.gui.components import Button, CollapsableFrame, FloatField, StateButton
 from isaacsim.gui.components.style import get_style
 from isaacsim.storage.native import get_assets_root_path_async
 from pxr import UsdPhysics
@@ -50,24 +50,14 @@ class UIBuilder:
         self._timeline = omni.timeline.get_timeline_interface()
         self._on_init()
 
-    def on_menu_callback(self) -> None:
-        """Handle menu callback when the UI is opened."""
-
     def on_timeline_event(self, event: Any) -> None:
-        """Handle timeline events.
+        """Handle timeline stop events.
 
         Args:
             event: Timeline event.
         """
         self._scenario_state_btn.reset()
         self._scenario_state_btn.enabled = False
-
-    def on_physics_step(self, step: float) -> None:
-        """Handle physics step callbacks.
-
-        Args:
-            step: Size of physics step.
-        """
 
     def on_stage_event(self, event: Any) -> None:
         """Handle stage events.

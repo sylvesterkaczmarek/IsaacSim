@@ -30,7 +30,7 @@ from isaacsim.robot.schema.ui import utils as ui_utils
 from isaacsim.robot.schema.ui.extension import SchemaUIExtension
 from isaacsim.test.utils import MenuUITestCase
 from omni.ui.tests.test_base import OmniUiTest
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
+from pxr import Gf, Sdf, Tf, Usd, UsdGeom, UsdPhysics
 from usd.schema.isaac import robot_schema
 
 
@@ -86,6 +86,41 @@ class TestSchemaUI(OmniUiTest):
         self.assertIsNotNone(path_map.get_hierarchy_path(link_prim.GetPath()))
         self.assertEqual(len(joint_connections), 1)
         self.assertEqual(joint_connections[0].joint_prim_path, joint_prim.GetPath())
+
+    async def test_hierarchy_generation_emits_no_global_usd_notices(self) -> None:
+        """Building the hierarchy must not emit USD notices for live-stage paths.
+
+        The hierarchy mirrors live-stage paths(``/World/Robot/...``). Authoring them
+        on a ``Usd.Stage`` emitted global ``ObjectsChanged`` notices carrying those
+        paths; listeners that do not filter by sender stage -- notably the PhysX
+        Physics Inspector -- read them as structural edits to the real stage and
+        dropped their authoring state, which produced an endless "Re-enable authoring" loop.
+        """
+        robot_prim, _, _ = self._build_simple_robot()
+        await omni.kit.app.get_app().next_update_async()
+
+        foreign_live_path_notices = []
+
+        def _on_objects_changed(notice, sender) -> None:
+            if sender == self._stage:
+                return
+            for path in notice.GetResyncedPaths():
+                text = str(path)
+                if text == "/World" or text.startswith("/World/"):
+                    foreign_live_path_notices.append(text)
+
+        key = Tf.Notice.RegisterGlobally(Usd.Notice.ObjectsChanged, _on_objects_changed)
+        try:
+            hierarchy_stage, _, _ = ui_utils.generate_robot_hierarchy_stage(robot_prim.GetPath())
+        finally:
+            key.Revoke()
+
+        self.assertIsNotNone(hierarchy_stage)
+        self.assertEqual(
+            foreign_live_path_notices,
+            [],
+            f"hierarchy generation leaked USD notices for live-stage paths: {foreign_live_path_notices}",
+        )
 
 
 class TestSchemaUiUtils(omni.kit.test.AsyncTestCase):

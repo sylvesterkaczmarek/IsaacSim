@@ -110,12 +110,24 @@ class CustomWriter(Writer):
         self.annotators.append(AnnotatorRegistry.get_annotator("bounding_box_2d_tight"))
 
     def write(self, data: dict[str, Any]) -> None:
-        """Cache annotator data without writing to disk."""
+        """Cache annotator data without writing to disk.
+
+        Args:
+            data: Frame data from the configured RGB, semantic-segmentation, and bounding-box annotators.
+        """
         # The base Writer class caches 'data' automatically, accessible via self.get_data()
 
 
 def get_data(sensor: Camera | Writer) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Get RGB, semantic segmentation and BBox from Camera or Writer (according to `USE_REPLICATOR_WRITER`)."""
+    """Read and normalize image annotations from the configured capture interface.
+
+    Args:
+        sensor: Camera or Replicator writer selected by ``USE_REPLICATOR_WRITER``.
+
+    Returns:
+        Three-channel RGB image, three-channel semantic-segmentation visualization, and the first tight 2D
+        bounding-box record.
+    """
     if USE_REPLICATOR_WRITER:
         rgb = sensor.get_data()["rgb"]
         semantic_segmentation = sensor.get_data()["semantic_segmentation"]["data"]
@@ -190,7 +202,17 @@ def validate_bbox(detected_bbox: dict, expected_bbox: dict, tolerance_pixels: fl
 
 
 def draw_data(frame: np.ndarray, position: np.ndarray, bbox: dict[str, int], label: str) -> np.ndarray:
-    """Draw position and bounding box annotations onto an image frame."""
+    """Draw position and bounding box annotations onto an image frame.
+
+    Args:
+        frame: Image on which to draw annotations.
+        position: Cube center in world coordinates.
+        bbox: Detected bounding-box pixel coordinates keyed by ``x_min``, ``y_min``, ``x_max``, and ``y_max``.
+        label: Frame label to render in the diagnostic overlay.
+
+    Returns:
+        Annotated image after applying a BGR-to-RGB channel swap.
+    """
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     frame = cv2.rectangle(
         img=frame,
@@ -248,7 +270,15 @@ def draw_data(frame: np.ndarray, position: np.ndarray, bbox: dict[str, int], lab
 
 
 def generate_result(data: list[dict[str, Any]], banner: list[str] | None = None) -> np.ndarray:
-    """Generate a composite result image from collected frame data."""
+    """Generate a composite result image from collected frame data.
+
+    Args:
+        data: Per-frame records containing RGB and segmentation images, cube positions, boxes, and labels.
+        banner: Diagnostic messages to place above the image, or ``None`` or an empty list to omit the banner.
+
+    Returns:
+        Composite image with RGB frames in the top row and segmentation frames in the bottom row.
+    """
     if banner is None:
         banner = []
     rgb_frames = []
@@ -339,35 +369,79 @@ sim_manager_iface = SimulationManager._simulation_manager_interface
 
 
 def rational_to_tuple(value: Any) -> tuple[int, int]:
-    """Return (numerator, denominator) for a RationalTime-like object."""
+    """Return (numerator, denominator) for a RationalTime-like object.
+
+    Args:
+        value: Rational-time object exposing numerator and denominator attributes.
+
+    Returns:
+        Numerator and denominator as a pair.
+    """
     return int(value.numerator), int(value.denominator)
 
 
 def rational_to_float(value: tuple[int, int]) -> float:
-    """Convert a rational tuple to a floating-point value."""
+    """Convert a rational tuple to a floating-point value.
+
+    Args:
+        value: Numerator and denominator of the rational time.
+
+    Returns:
+        Rational time in seconds.
+    """
     numerator, denominator = value
     return numerator / denominator
 
 
 def rational_before(lhs: tuple[int, int], rhs: tuple[int, int], tolerance_s: float = 0.0) -> bool:
-    """Return whether lhs is earlier than rhs by more than tolerance_s."""
+    """Return whether lhs is earlier than rhs by more than tolerance_s.
+
+    Args:
+        lhs: Rational time to test as the earlier value.
+        rhs: Rational time to test as the later value.
+        tolerance_s: Minimum separation in seconds required to consider ``lhs`` earlier.
+
+    Returns:
+        Whether ``lhs`` precedes ``rhs`` by more than the tolerance.
+    """
     return rational_to_float(lhs) < rational_to_float(rhs) - tolerance_s
 
 
 def format_rational(value: tuple[int, int]) -> str:
-    """Format a rational tuple for diagnostic output."""
+    """Format a rational tuple for diagnostic output.
+
+    Args:
+        value: Numerator and denominator to format.
+
+    Returns:
+        Parenthesized ``(numerator, denominator)`` representation.
+    """
     numerator, denominator = value
     return f"({numerator}, {denominator})"
 
 
 def close_and_exit(exit_code: int) -> None:
-    """Close SimulationApp and preserve the validation status."""
+    """Close SimulationApp and preserve the validation status.
+
+    Args:
+        exit_code: Status to pass to both ``SimulationApp.close`` and ``sys.exit``.
+
+    Raises:
+        SystemExit: Always, after the application closes.
+    """
     simulation_app.close(exit_code=exit_code)
     sys.exit(exit_code)
 
 
 def get_lookup_status(reference_time: tuple[int, int]) -> tuple[bool, str]:
-    """Return whether reference_time is covered by TimeSampleStorage and a diagnostic string."""
+    """Check whether TimeSampleStorage covers a renderer reference time.
+
+    Args:
+        reference_time: Renderer timestamp expressed as numerator and denominator.
+
+    Returns:
+        Coverage flag and a diagnostic describing the available sample range or the reason lookup is invalid.
+    """
     sample_count = sim_manager_iface.get_sample_count()
     if sample_count == 0:
         return False, "TimeSampleStorage has no samples"
@@ -397,18 +471,15 @@ def get_lookup_status(reference_time: tuple[int, int]) -> tuple[bool, str]:
 
 
 def get_frame_timestamp() -> tuple[float, float, tuple[int, int], bool, str]:
-    """Return (sim_time_now, sim_time_at_frame, reference_time, lookup_valid, lookup_status).
+    """Resolve the most recent rendered frame's timestamp against simulation time.
 
-    - sim_time_now: live simulation time, as the action graph would publish for TF/state.
-    - sim_time_at_frame: simulation time recovered from the renderer's rational time
-      via TimeSampleStorage. With multitick on this is the rational time itself.
-      With multitick off this is the result of an exact-match / interpolation lookup
-      against per-frame samples authored by simulation_manager.
-    - reference_time: the renderer's rational time for this frame (i.e. what
-      rpFabricTime carries to the post-render synthdata graph).
-    - lookup_valid/status: whether TimeSampleStorage contains samples covering
-      reference_time. This catches false passes from get_simulation_time_at_time()
-      falling back to current sim time when no lookup sample exists.
+    The lookup-valid flag detects when ``get_simulation_time_at_time`` falls back to current simulation time
+    because TimeSampleStorage has no sample covering the renderer's reference time.
+
+    Returns:
+        Five-item result ordered as current simulation time in seconds, resolved frame simulation time in
+        seconds, one ``(numerator, denominator)`` renderer reference-time pair, lookup-valid flag, and lookup
+        diagnostic.
     """
     fabric_time_data = reference_time_annotator.get_data()
     numerator = int(fabric_time_data["referenceTimeNumerator"])
@@ -432,9 +503,15 @@ timestamp_errors = []
 def record_timestamps(label: str) -> tuple[float, float, tuple[int, int], bool, str]:
     """Capture sim/frame timestamps for the most recent render and validate alignment.
 
-    Logs the result, appends a timestamp error entry if the gap exceeds
-    TIMESTAMP_TOLERANCE_S, and returns the raw values so callers can store them
-    on the per-frame data dict.
+    Logs the result, appends a timestamp error entry if the lookup is invalid or the gap exceeds
+    ``TIMESTAMP_TOLERANCE_S``, and returns the raw values so callers can store them on the per-frame data dict.
+
+    Args:
+        label: Human-readable frame label used in logs and validation errors.
+
+    Returns:
+        Five-item result ordered as current simulation time in seconds, frame simulation time in seconds, one
+        ``(numerator, denominator)`` renderer reference-time pair, lookup-valid flag, and lookup diagnostic.
     """
     sim_time_now, sim_time_at_frame, (num, denom), lookup_valid, lookup_status = get_frame_timestamp()
     delta_s = sim_time_now - sim_time_at_frame

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# NOTE: Import here your extension examples to be propagated to ISAAC SIM Extensions startup
+"""Shipped interactive robot example UIs; the generic runner lives in ``..runtime``."""
 
 from .franka.franka_example import FrankaExample as FrankaExample
 from .franka.franka_example_extension import FrankaExampleExtension as FrankaExampleExtension

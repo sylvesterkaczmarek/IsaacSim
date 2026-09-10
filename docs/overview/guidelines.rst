@@ -1,620 +1,370 @@
-Coding Style Guidelines
-#######################
+..
+   Copyright (c) 2022-2026, NVIDIA CORPORATION. All rights reserved.
+   NVIDIA CORPORATION and its licensors retain all intellectual property
+   and proprietary rights in and to this software, related documentation
+   and any modifications thereto. Any use, reproduction, disclosure or
+   distribution of this software and related documentation without an express
+   license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-C/C++
------
+.. _coding_style_guidelines:
 
-This guideline is a short adaptation of the `Coding Style Guidelines <https://docs.omniverse.nvidia.com/kit/docs/carbonite/latest/CODING.html>`_
-for Omniverse Carbonite SDK, the foundational software layer for Omniverse applications,microservices, tools, plugins, Connectors, and SDKs.
+=======================
+Coding style guidelines
+=======================
 
-- Visit the Carbonite `C++17 and Beyond Recommendations <https://docs.omniverse.nvidia.com/kit/docs/carbonite/latest/CODING.html#c-17-and-beyond-recommendations>`_
-  section for using C++17 features.
-- Visit the Carbonite `Higher-level Concepts <https://docs.omniverse.nvidia.com/kit/docs/carbonite/latest/CODING.html#higher-level-concepts>`_
-  section for using Carbonite for `thread-safety <https://docs.omniverse.nvidia.com/kit/docs/carbonite/latest/CODING.html#thread-safety>`_,
-  `assertions <https://docs.omniverse.nvidia.com/kit/docs/carbonite/latest/CODING.html#assertions>`_,
-  `callbacks <https://docs.omniverse.nvidia.com/kit/docs/carbonite/latest/CODING.html#callbacks>`_,
-  `exceptions <https://docs.omniverse.nvidia.com/kit/docs/carbonite/latest/CODING.html#exceptions>`_,
-  `logging <https://docs.omniverse.nvidia.com/kit/docs/carbonite/latest/CODING.html#logging>`_, and other topics.
+Use these conventions when you contribute C, C++, or Python code to Isaac Sim. C and C++ use the same casing for
+types, functions, fields, parameters, and local variables, while Python follows PEP 8. Enumeration values retain
+language-specific conventions because C enumerators are unscoped and C++ ``enum class`` values are scoped. The
+repository formatters control mechanical layout; the rules on this page control naming, API design, ownership, error
+handling, and documentation.
+
+.. _coding_style_common:
+
+Common conventions
+==================
+
+Use US English and descriptive, complete words for identifiers. Common technical abbreviations such as ``id``,
+``url``, and ``GPU`` are acceptable, but apply the casing of the surrounding identifier. For example, use
+``gpuBuffer``, ``HtmlPage``, and ``getUserId``.
+
+Avoid redundant names and begin function names with verbs. Use ``get`` and ``set`` for inexpensive attribute access,
+and use verbs such as ``compute``, ``read``, and ``write`` when an operation performs significant work. Give Boolean
+variables stateful names, such as ``enabled`` or ``isInitialized``.
+
+Do not use identifiers reserved by C or C++. In particular, avoid names that contain a double underscore, begin with
+an underscore followed by an uppercase letter, or begin with an underscore at global scope.
+
+Source files use the following extensions and names:
+
+.. list-table:: Language and file naming
+   :header-rows: 1
+
+   * - Language
+     - Headers or modules
+     - Sources
+   * - C
+     - ``PascalCase.h``
+     - ``PascalCase.c``
+   * - C++
+     - ``PascalCase.hpp``
+     - ``PascalCase.cpp``
+   * - Python
+     - ``snake_case.py`` modules and ``snake_case`` packages
+     - Not applicable.
+
+End text files with a newline. Native source files include their own header first after the license banner. Public
+headers include everything required to compile independently.
+
+Formatting
+----------
+
+C and C++ use the repository ``.clang-format`` configuration: four-space indentation, a 120-character line limit,
+and Allman braces. Put opening braces for namespaces, types, functions, and control statements on the following line.
+Braced initializer expressions remain formatter-controlled.
+
+Python uses four-space indentation, a 120-character line limit, Black, and isort with the Black profile. Use
+parentheses instead of backslashes for line continuation. Do not manually override layout controlled by a formatter.
+
+Run ``format_code.sh`` on Linux or ``format_code.bat`` on Windows before submitting a change.
+
+.. _coding_style_c:
+
+C
+=
+
+Language and API boundaries
+---------------------------
+
+Write portable C11 and isolate any required compiler extension behind a documented platform boundary. Use ``.c`` for
+implementations and ``.h`` for C-compatible headers. Reserve ``.hpp`` for C++ headers.
+
+A public C header must compile as both C11 and C++17. Include C standard-library headers such as ``<stddef.h>`` and
+``<stdint.h>`` in the public interface, use ``#pragma once``, and wrap declarations in an ``extern "C"`` guard:
+
+.. code-block:: c
+
+   #pragma once
+
+   #include <stddef.h>
+
+   #ifdef __cplusplus
+   extern "C"
+   {
+   #endif
+
+   /* Public C declarations. */
+
+   #ifdef __cplusplus
+   }
+   #endif
+
+Do not expose C++ types, exceptions, overloads, references, templates, namespaces, or standard-library containers
+through a C API. Never allow a C++ exception to cross a C boundary.
 
 Naming
-^^^^^^
-
-Prefixing and Casing
-""""""""""""""""""""
-
-The following tables outline the naming prefixing and casing used:
-
-============== ==================
-Files          Prefixing / Casing
-============== ==================
-namespaces     snake_case
-headers (.h)   PascalCase.h
-sources (.cpp) PascalCase.cpp
-============== ==================
-
-================================================= ==================
-Construct                                         Prefixing / Casing
-================================================= ==================
-class, struct, enum class and typedef             PascalCase
-constants                                         kCamelCase
-enum class values                                 eCamelCase
-functions                                         camelCase
-private/protected functions                       _camelCase
-public member variables                           camelCase
-private/protected member variables                m_camelCase
-private/protected static member variables         s_camelCase
-global - static variable at file or project scope g_camelCase
-local variables                                   camelCase
-preprocessor macros                               MACRO_CASE
-================================================= ==================
-
-When a name includes an abbreviation or acronym that is commonly written entirely in uppercase,
-you must still follow the casing rules laid out above. For instance:
-
-.. code-block:: cpp
-
-    void* gpuBuffer; // not GPUBuffer
-    struct HtmlPage; // not HTMLPage
-    struct UiElement; // not UIElement
-
-Naming Guidelines
-"""""""""""""""""
-
-* All names must be written in *US English*.
+------
+
+C uses the same identifier casing as C++ for equivalent constructs:
+
+.. list-table:: C naming
+   :header-rows: 1
+
+   * - Construct
+     - Convention
+   * - Headers and sources
+     - ``PascalCase.h`` and ``PascalCase.c``
+   * - Structures, unions, enumerations, and typedefs
+     - ``PascalCase``
+   * - Exported and internal functions
+     - ``camelCase``
+   * - Structure fields, parameters, and local variables
+     - ``camelCase``
+   * - Macros and unscoped enumeration constants
+     - Module-prefixed ``SCREAMING_SNAKE_CASE``
+
+C enumerators enter the surrounding scope, so module-prefixed names prevent collisions. Keep these names when a C
+header is included from C++. A C++ wrapper may map them to a scoped ``enum class`` with ``eCamelCase`` values.
+
+Do not add a ``_t`` suffix to public typedefs. Prefix every exported function and type with the owning library or API
+name because C has no namespaces. Flatten a dotted API name without separators. For example,
+``isaacsim.common.logging`` uses ``isaacsimCommonLogging`` for function prefixes and
+``IsaacSimCommonLogging`` for type prefixes.
+
+.. code-block:: c
+
+   typedef enum IsaacSimExampleResult
+   {
+       ISAACSIM_EXAMPLE_RESULT_SUCCESS = 0,
+       ISAACSIM_EXAMPLE_RESULT_INVALID_ARGUMENT = 1,
+   } IsaacSimExampleResult;
+
+   typedef struct IsaacSimExampleCopyOptions
+   {
+       size_t structSize;
+       size_t byteCount;
+   } IsaacSimExampleCopyOptions;
+
+   IsaacSimExampleResult isaacsimExampleCopy(
+       const void* source, void* destination, const IsaacSimExampleCopyOptions* options);
+
+API and ABI design
+------------------
+
+Use fixed-width integers when width is part of the ABI contract and ``size_t`` for object and buffer sizes. Put a
+buffer pointer before its size. Document whether strings are null terminated and whether pointers may be ``NULL``.
+
+State ownership and lifetime for every pointer that crosses the API. Use ``const`` for borrowed, read-only data, and
+do not retain caller memory unless the contract says that you do.
+
+Return explicit result values for recoverable failures. Prefer useful zero values so zero-initialized structures are
+valid. Give extensible public structures a ``structSize`` or equivalent version field, and document how the callee
+handles older and newer structure sizes.
+
+Keep implementation symbols hidden and export only the declared C ABI. Avoid global mutable state. If global state is
+unavoidable, document initialization, shutdown, synchronization, thread safety, and reentrancy.
+
+Documentation
+-------------
+
+Use Doxygen comments for every exported function, typedef, structure, field, enumeration, enumeration value,
+callback, constant, and public macro. Begin with ``@brief`` and document every parameter with ``@param[in]``,
+``@param[out]``, or ``@param[in,out]``. Use ``@return`` to explain result categories.
+
+Document pointer nullability, ownership, lifetime, buffer capacity, string termination, numeric units, valid ranges,
+thread safety, callback behavior, and ABI initialization. Describe the caller-visible contract, not implementation
+history. Do not use C++-specific concepts such as exceptions, namespaces, ``@class``, ``@tparam``, or ``@throws``.
+
+.. _coding_style_cpp:
+
+C++
+===
+
+Language and structure
+----------------------
+
+Write C++17. Do not use C++20 or newer features. Use ``.hpp`` for C++ headers and ``.cpp`` for implementations;
+reserve ``.h`` for headers that expose a C-compatible interface.
+
+Use ``#pragma once`` in headers. Derive namespaces from the owning API name, such as
+``isaacsim.foo.bar`` to ``isaacsim::foo::bar``. Namespace names are lowercase, code inside namespaces is not
+indented, and each namespace has a separate declaration rather than C++17 nested-namespace syntax. Use a ``details``
+namespace for public-header implementation details and an anonymous namespace for translation-unit internals.
+
+Naming
+------
+
+.. list-table:: C++ naming
+   :header-rows: 1
+
+   * - Construct
+     - Convention
+   * - Headers and sources
+     - ``PascalCase.hpp`` and ``PascalCase.cpp``
+   * - Classes, structures, enumerations, and typedefs
+     - ``PascalCase``
+   * - Constants
+     - ``kCamelCase``
+   * - Scoped enumeration values
+     - ``eCamelCase``
+   * - Public functions and members
+     - ``camelCase``
+   * - Private or protected functions
+     - ``_camelCase``
+   * - Private or protected members
+     - ``m_camelCase``
+   * - Private or protected static members
+     - ``s_camelCase``
+   * - File-scope static or constant variables
+     - ``g_camelCase``
+   * - Local variables
+     - ``camelCase``
+   * - Macros
+     - ``SCREAMING_SNAKE_CASE``
+
+Use ``eCamelCase`` only for scoped C++ enumeration values. Preserve module-prefixed ``SCREAMING_SNAKE_CASE``
+enumerators from C-compatible headers rather than giving the same C declaration a second spelling in C++.
+
+Class and type design
+---------------------
+
+List class access sections once each in ``public``, ``protected``, and ``private`` order. Put public data members
+first and private or protected data members last. Put constructors and destructors before other functions in their
+access section. Use ``override`` for overridden virtual functions.
+
+Use structures for data-only types and do not add member functions to them. Prefer ``enum class`` for strongly typed
+enumerations. Represent combinable bit flags with appropriately typed ``constexpr`` constants rather than an
+enumeration that implies mutually exclusive values.
+
+Use RAII for resource management. Prefer ``std::unique_ptr`` and ``std::shared_ptr`` for ownership; raw pointers and
+references may express non-owning access when their lifetime is clear. Prefer ``std::string_view`` for borrowed text,
+``std::optional`` for optional values, and standard containers over raw arrays.
 
-* Use full English names. Don't cut the words and avoid using colloquial names.
+Use ``constexpr`` or a function instead of a macro when possible. Avoid C-style casts, maintain const-correctness, and
+use west-const style, such as ``const int``. Validate inputs at API boundaries and avoid unnecessary allocation.
 
-  .. code-block:: cpp
-    
-      float robotVelocity; // not robotVel, or robotVelo
-      struct Odometry; // not Odom
+Error handling and documentation
+--------------------------------
 
-* The following names cannot be used according to the
-  `C++ standard <https://en.cppreference.com/w/cpp/language/identifiers>`_:
+Follow the owning API's documented error model. Use exceptions only when the public contract permits them, and use
+explicit results for no-throw or C-compatible boundaries. Do not introduce a logging dependency for a single message.
 
-  * Names with a double underscore anywhere are reserved (e.g.: ``__buffer``, ``object__status``).
-  
-  * Names that begin with an underscore followed by an uppercase letter are reserved (e.g.: ``_Buffer``).
-  
-  * Names that begin with an underscore are reserved in the global namespace.
+Use Doxygen for public C++ types, functions, members, enumeration values, and template parameters. Describe the
+current caller-visible contract, including ownership, lifetime, units, side effects, thread behavior, return values,
+and exceptions that can actually be thrown. Use ``@brief``, directional ``@param`` tags, ``@tparam``, ``@return``, and
+``@throws`` as applicable. Keep implementation details and change history out of API comments.
 
-* Method names must always begin with a verb (avoid confusion about what a method actually does).
+.. _coding_style_python:
 
-  .. hint::
- 
-      Consult the `antonym list <https://gist.github.com/maxtruxa/b2ca551e42d3aead2b3d>`_ when naming symmetric functions.
- 
-  .. code-block:: cpp
- 
-      myVector.getLength();
-      myObject.applyForce(x, y, z);
-      myObject.isDynamic();
-      texture.getFormat();
+Python
+======
 
-* The terms get/set or is/set (*bool*) should be used where an attribute is accessed directly
-  (there is no significant computation overhead).
+Language and naming
+-------------------
 
-  .. code-block:: cpp
+Write idiomatic Python 3.10 or newer and follow PEP 8. A component may require a newer Python version. Use the
+following naming conventions:
 
-      employee.getName();
-      employee.setName("Jensen Huang");
-      light.isEnabled();
-      light.setEnabled(true);
+.. list-table:: Python naming
+   :header-rows: 1
 
-* Function names must indicate when a method does significant work
-  (e.g.: ``computeXxxx()``, ``readXxxx()``, ``writeXxxx()``).
+   * - Construct
+     - Convention
+   * - Modules and packages
+     - ``snake_case``
+   * - Classes and type variables
+     - ``PascalCase``
+   * - Exceptions
+     - ``PascalCase`` ending in ``Error`` or ``Exception``
+   * - Constants and enumeration members
+     - ``SCREAMING_SNAKE_CASE``
+   * - Public functions, methods, attributes, parameters, and local variables
+     - ``snake_case``
+   * - Private functions, methods, and attributes
+     - ``_snake_case``
 
-  .. code-block:: cpp
-  
-      float waveHeight = wave.computeHeight();  // NOT: wave.getHeight();
+Use descriptive verbs for functions. Avoid trivial getter and setter methods; use direct access or a property when
+appropriate. Use stateful Boolean names such as ``enabled`` and ``is_initialized``.
 
-* Use stateful names for boolean variables (e.g.: ``enabled``, ``m_initialized``, ``g_cached``) and leave
-  questions for methods (e.g.: ``isXxxx()`` and ``hasXxxx()``).
+Type annotations
+----------------
 
-  .. code-block:: cpp
-  
-      bool isEnabled() const;
-      void setEnabled(bool enabled);
-      
-      void doSomething()
-      {
-          bool initialized = m_coolSystem.isInitialized();
-          ...
-      }
+Annotate every function signature, return type, and class attribute. Include ``-> None`` when a function returns
+nothing. Use modern built-in and PEP 604 syntax:
 
-* Avoid redundancy in naming methods (the name of the object is implicit) and functions.
+.. code-block:: python
 
-  .. code-block:: cpp
-  
-      line.getLength();  // NOT: line.getLineLength();
+   from __future__ import annotations
 
-* Avoid public method, arguments and member names that are likely to have been defined in the preprocessor
-  (when in doubt, use another name or prefix it).
+   def find_prim(paths: list[str], index: int | None = None) -> Usd.Prim | None:
+       """Return the selected prim when it exists."""
 
-    .. code-block:: cpp
-  
-        size_t bufferMalloc;  // NOT: size_t malloc;
-        int boundsMin, boundsMax;  // NOT: int min, max; 
-        void* iface; // NOT: void* interface; (Windows.h defines `interface` as a class)
+Do not quote type names. Import ``annotations`` from ``__future__`` when postponed evaluation is required. Use
+``X | None`` only when ``None`` is a valid value. Prefer ``list[T]``, ``dict[K, V]``, ``set[T]``, and
+``tuple[T, ...]`` over their legacy ``typing`` equivalents.
 
-* Avoid conjunctions and sentences in names as much as possible.
-  E.g.: Use ``Count`` at the end of a name for the number of items.
+Organization and error handling
+-------------------------------
 
-  .. code-block:: cpp
-  
-      size_t shaderCount;  // NOT: size_t numberOfShaders;
-      VkBool32 skipCachedData;  // NOT: VkBool32 skipIfDataIsCached;
+Put the module docstring after the license header, followed by standard-library, third-party, and project imports in
+separate groups. Sort imports alphabetically within each group, prefer absolute imports, keep ``__init__.py`` files
+minimal, and declare public module APIs with ``__all__``.
 
-Coding Rules
-^^^^^^^^^^^^
+Prefer dataclasses or named tuples for data-only classes, context managers for resource ownership, ``pathlib.Path``
+for paths, and comprehensions when they improve readability. Use ``None`` instead of a mutable default value.
 
-Files
-"""""
+Raise specific exception types, validate inputs at function boundaries, and use ``raise ... from ...`` to preserve
+exception context. Never use a bare ``except`` clause. Use assertions only for debugging, not runtime validation.
+Use the logging facility selected by the component; reserve ``print`` for intentional command-line or result output.
 
-* All files must end in blank line.
+Documentation
+-------------
 
-* Header files should have the extension ``.h``.
+Use Google-style docstrings for every public module, class, function, and method. Write the summary in imperative
+mood, end sentences with periods, and describe the public contract rather than implementation history. Put types in
+annotations, not docstrings, and do not repeat default values in parameter descriptions.
 
-* Source files should have the extension ``.cpp`` (``.cc`` is typically used for UNIX *only* and not recommended).
+Document constructor arguments and raised exceptions in the class docstring, not in ``__init__``. Document class
+attributes immediately below each attribute with Sphinx ``#:`` comments rather than an ``Attributes`` section.
 
-* Header files must include the preprocessor directive to only include a header file once.
+Use ``Args``, ``Returns``, and ``Raises`` sections as applicable. Explain when an optional return is ``None``. Avoid an
+unescaped colon in a ``Returns`` description because Sphinx can interpret the preceding text as a type. Include an
+``Example`` section for public functions, methods, and properties unless the API is deprecated.
 
-  .. code-block:: cpp
+.. code-block:: python
 
-      #pragma once
+   def get_depth_range(self) -> tuple[float, float]:
+       """Get the sensor depth range.
 
-* Source files should include the associated header in the first line of code after the commented license banner.
+       Returns:
+           Minimum and maximum depth values in meters.
 
-* Header and source files should be named with **PascalCase** and placed in their appropriate namespaced
-   folder paths, which are in **lowercase**.
+       Example:
 
-Include Statements
-""""""""""""""""""
+           .. code-block:: python
 
-* Do not include ``Windows.h`` in header files as it is monolithic and pollutes the global environment for Windows.
-  Instead, a much slimmer `CarbWindows.h <https://docs.omniverse.nvidia.com/kit/docs/carbonite/latest/api/file_carb_CarbWindows.h.html>`_
-  exists to declare only what is needed by Carbonite. Refer to the
-  `example <https://docs.omniverse.nvidia.com/kit/docs/carbonite/latest/CODING.html#include>`_ to see how to include it.
+               minimum_depth, maximum_depth = sensor.get_depth_range()
+       """
 
-* Local includes use the path-relative include format.
+Native bindings
+---------------
 
-* Includes of files that are not local to the code (or are pulled in via package) use the search path format.
-  Isaac Sim source files (under ``plugins/`` and ``source/``) may also use search-path format
-  for public headers (under ``include/``).
+Python-facing documentation strings in native binding sources follow the Python rules, including Python names and
+generated signatures. The surrounding binding implementation follows the C++ style and Doxygen rules. Document
+ownership, lifetime, mutability, thread behavior, and Global Interpreter Lock behavior when Python callers can
+observe them.
 
-* If you need to associate a comment with an include put the comment on the same line as the include statement,
-  otherwise clang-format will not move the chunk of code. Like this:
+.. _coding_style_testing:
 
-  .. code-block:: cpp
+Testing conventions
+===================
 
-      #include <stdlib.h>  // this is needed for size_t on Linux
+Use the test framework selected by the owning component. Native unit tests use doctest where the component provides
+it; group related tests with ``TEST_SUITE`` and name individual cases with ``TEST_CASE``. Python tests use descriptive
+names such as ``test_<function_name>_<scenario>`` and remain isolated from external state.
 
-* If include order is important for some files just put ``// clang-format off``
-  and ``// clang-format on`` around those lines.
+Test API boundaries, invalid inputs, ownership behavior, and critical code paths. A public C header must have coverage
+that compiles it with both a C11 compiler and a C++17 compiler.
 
-Namespaces
-""""""""""
-
-* Namespaces are all lowercase.
-
-* The C++ namespace should be project and/or team based and easily associated with the project
-  (e.g.: The **Isaac Sim** project namespace is ``isaacsim::`` and is managed by the Isaac Sim team).
-
-  .. code-block:: cpp
-
-      namespace isaacsim
-      {
-
-* We don't add indentation for code inside namespaces (this conserves maximum space for indentation inside code).
-
-  .. code-block:: cpp
-
-      namespace isaacsim
-      {
-      namespace ros2
-      {
-
-      struct Ros2Bridge
-      {
-
-* We don't add comments for documenting closing of structs or definitions, but it's OK for namespaces because
-  they often span many pages and there is no indentation to help:
-
-  .. code-block:: cpp
-
-      }; // end of Ros2Bridge struct    <- DON'T
-      
-      } // namespace ros2       <- OK
-      } // namespace isaacsim   <- OK
-
-Internal code
-"""""""""""""
-
-* For public header files, a ``details`` (internal) namespace should be used to declare implementation
-  as private and subject to change, as well as signal to external users that the functions,
-  types, etc. in the ``details`` namespace should not be called.
-
-  .. code-block:: cpp
-
-      namespace details
-      {
-      } // namespace details
-
-* Within a translation unit (``.cpp`` file), use an anonymous namespace to prevent external linkage or naming
-  conflicts within a module:
-
-  .. code-block:: cpp
-
-      namespace
-      {
-      } // namespace
-
-* In general, prefer anonymous namespaces over ``static``.
-
-Classes
-"""""""
-
-* Classes that should not be inherited from should be declared as ``final``.
-
-* Each access modifier appears no more than once in a class, in the order: ``public``, ``protected``, ``private``.
-
-* All ``public`` member variables live at the start of the class.
-
-  * They have no prefix.
-
-  * If they are accessed in a member function that access must be prefixed with ``this->``
-    for improved readability and reduced head-scratching.
-
-* All ``protected`` / ``private`` member variables live at the end of the class.
-
-  * They are prefixed with ``m_``.
-
-  * They should be accessed directly in member functions. Adding ``this->`` to access them is unnecessary.
-
-* Constructors and destructor are first methods in a class after ``public`` member variables unless private scoped
-  in which case they are first ``private`` methods.
-
-* The implementations in ``.cpp`` should appears in the order which they are declared in the class.
-
-* Avoid ``inline`` implementations unless trivial and needed for optimization.
-
-* Use the ``override`` specifier on all overridden virtual methods. Also, every member function should have at most
-  one of these specifiers: ``virtual``, ``override``, or ``final``.
-
-* Do not override pure-virtual method with another pure-virtual method.
-
-Structs
-"""""""
-
-* We make a clear distinction between structs and classes.
-
-* We do not permit any member functions on structs. Those we make classes.
-
-* If you must initialize a member of the struct then use C++14 static initializers for this, but don't do this for
-  basic types like a Float3 struct because default construction/initialization is not free.
-
-* No additional scoping is needed on struct variables.
-
-* Not everything needs to be a class object with logic.
-
-  * Sometimes it's better to separate the data type from the functionality and structs are a great vehicle for this.
-
-  .. code-block:: cpp
-
-      struct Float3
-      {
-          float x;
-          float y;
-          float z;
-      };
-  
-      // check this out (structs are awesome):
-      Float3 pointA = {0};
-      Float3 pointB = {1, 0, 0};
-
-Functions
-"""""""""
-
-* When declaring a function that accepts a pointer to a memory area and a counter or size for the area we should place
-  them in a fixed order: the address first, followed by the counter. Additionally, ``size_t`` must be used as the type
-  for the counter.
-
-  .. code-block:: cpp
-
-      void readData(const char* buffer, size_t bufferSize);
-      void setNames(const char* names, size_t nameCount);
-      void updateTag(const char* tag, size_t tagLength);
-
-
-Enum Classes and Bit Flags
-""""""""""""""""""""""""""
-
-* We use ``enum class`` over ``enum`` to support namespaced values that do not collide.
-
-* The values are accessed like this: ``EnumName::eSomeValue``.
-
-* If you have an enum class as a subclass, then it should be declared inside the class directly before the constructor
-  and destructor.
-
-  .. code-block:: cpp
-
-      class Camera
-      {
-      public:
-  
-          enum class Projection
-          {
-              ePerspective,
-              eOrthographic
-          };
-  
-          Camera();
-  
-          ~Camera();
-
-* Note that any sequential or non-sequential enumeration is acceptable - the only rule is that the type should never
-  be able to hold the value of more than one enumeration literal at any time. An example of a type that violates this
-  rule is a bit mask. Those should not be represented by an enum. Instead use constant integers (``constexpr``) and group
-  them by a prefix.  Also, in a ``.cpp`` file you want them to also be ``static``.  Below we show an example of a bit mask
-  and bit flags:
-
-  .. code-block:: cpp
-
-      namespace isaacsim
-      {
-      namespace graphics
-      {
-    
-      constexpr uint32_t kColorMaskRed    = 0x00000001; // static constexpr in .cpp
-      constexpr uint32_t kColorMaskGreen  = 0x00000002;
-      constexpr uint32_t kColorMaskBlue   = 0x00000004;
-      constexpr uint32_t kColorMaskAlpha  = 0x00000008;
-  
-      } // namespace graphics
-  
-      namespace input
-      {
-  
-      /**
-       * Type used as an identifier for all subscriptions
-      */
-      typedef uint32_t SubscriptionId;
-  
-      /**
-       * Defines possible press states
-      */
-      typedef uint32_t ButtonFlags;
-      constexpr uint32_t kButtonFlagNone = 0;
-      constexpr uint32_t kButtonFlagTransitionUp = 1;
-      constexpr uint32_t kButtonFlagStateUp = (1 << 1);
-      constexpr uint32_t kButtonFlagTransitionDown = (1 << 2);
-      constexpr uint32_t kButtonFlagStateDown = (1 << 3);
-  
-      } // namespace input
-      } // namespace isaacsim
-
-Pre-processors and Macros
-"""""""""""""""""""""""""
-
-* It's recommended to place preprocessor definitions in the source files instead of makefiles/compiler/project files.
-
-* Try to reduce the use of ``#define`` (e.g. for constants and small macro functions), and prefer ``constexpr`` values
-  or functions when possible.
-
-* Definitions in the public global namespace must be prefixed with the namespace in uppercase:
-
-  .. code-block:: cpp
-
-    #define ISAACSIM_API
-
-* All ``#define`` macros should be set to 0, 1 or some other value.
-
-* All checks for macros should use ``#if`` and not ``#ifdef`` or ``#if defined()``.
-
-* When adding ``#if`` pre-processor blocks to support multiple platforms, the block must end with an ``#else`` clause
-  containing the ``CARB_UNSUPPORTED_PLATFORM()`` macro. An exception to this is when the ``#else`` block
-  uses entirely C++ standard code; this sometimes happens in the case of platform-specific optimizations.
-  You may not make assumptions about what features future platforms may have, aside from what's in the C++ standard;
-  all platform-specific code must have the associated platform specifically stated.
-
-  .. code-block:: cpp
-
-      #if CARB_PLATFORM_WINDOWS
-          // code
-      #elif CARB_PLATFORM_LINUX
-          // code
-      #elif CARB_PLATFORM_MACOS
-          // code
-      #else
-          CARB_UNSUPPORTED_PLATFORM();
-      #endif
-
-  .. code-block:: cpp
-
-      #if CARB_PLATFORM_WINDOWS
-          // Windows-specific code
-      #else
-          // C++ standard code
-      #endif
-
-* Macros that do not have universal appeal (i.e. are only intended to be used within a single header file) shall be
-  prefixed with ``ISAACSIMLOCAL_`` and ``#undef``'d at the end of the file.
-
-Commenting and documenting
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-License
-"""""""
-
-* The following must be included at the start (the first thing) of every header and source file:
-
-  .. code-block:: cpp
-
-    // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-    // SPDX-License-Identifier: Apache-2.0
-    //
-    // Licensed under the Apache License, Version 2.0 (the "License");
-    // you may not use this file except in compliance with the License.
-    // You may obtain a copy of the License at
-    //
-    // http://www.apache.org/licenses/LICENSE-2.0
-    //
-    // Unless required by applicable law or agreed to in writing, software
-    // distributed under the License is distributed on an "AS IS" BASIS,
-    // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    // See the License for the specific language governing permissions and
-    // limitations under the License.
-
-Header Files
-""""""""""""
-
-* Assume customers will read comments.
-
-* Avoid spelling and grammatical errors.
-
-* Header comments use *doxygen* format. We are not too sticky on *doxygen* formatting policy.
-
-* All public **functions** and **variables** must be documented.
-
-* The level of detail for the comment is based on the complexity for the API.
-
-* Most important is that comments are simple and have clarity on how to use the API.
-
-  * ``@brief`` can be dropped and automatic assumed on first line of code. Easier to read too.
-  
-  * ``@details`` is dropped and automatic assumed proceeding the brief line.
-  
-  * ``@param`` and ``@return`` are followed with a space after summary brief or details.
-
-  .. code-block:: cpp
-
-      /**
-       * Tests whether this bounding box intersects the specified bounding box (see \ref BoundingBox class).
-       *
-       * You would add any specific details that may be needed here. This is
-       * only necessary if there is complexity to the user of the function.
-       *
-       * @param box The bounding box to test intersection with.
-       * @returns true if the specified bounding box intersects this bounding box, false otherwise.
-       */
-      bool intersects(const BoundingBox& box) const;
-    
-  * Overridden functions can simply refer to the base class comments.
-
-  .. code-block:: cpp
-
-      class Bar: public Foo
-      {
-      protected:
-
-        /**
-         * @see Foo::render
-        */
-        void render(float elapsedTime) override;
-
-Source Files
-""""""""""""
-
-* Clean simple code is the best form of commenting.
-
-* Do not add comments above function definitions in .cpp if they are already in header.
-
-* Comment necessary non-obvious implementation details not the API.
-
-* Only use ``//`` line comments on the line above the code you plan to comment.
-
-* Avoid ``/* */``  block comments inside implementation code (.cpp). This prevents others from easily doing their own
-  block comments when testing, debugging, etc.
-
-* Avoid explicitly referring to identifiers in comments, since that's an easy way to make your comment outdated when
-  an identifier is renamed.
-
-Formatting Code
-^^^^^^^^^^^^^^^
-
-.. note::
-  
-    Format is enforced by `format_code.sh/format_code.bat` scripts (via `repo_format` tool)
-    so there is no need to memorize them.
-
-* We use a ``.clang-format`` file with clang-format to keep our code auto-formatted.
-    
-  * In some rare cases where code is manually formatted in a pleasing fashion,
-    auto-formatting can be suspended with a comment block:
-
-  .. code-block:: cpp
-
-      // clang-format off
-      ... Manually formatted code
-      // clang-format on
-
-Blocks of Code and Indentations
-"""""""""""""""""""""""""""""""
-
-* Never leave conditional code statements on same line as condition test.
-
-  .. code-block:: cpp
-
-      if (box.isEmpty()) return;  // DON'T
-
-* Use braces ``{ }`` even with only one statement.
-
-  .. code-block:: cpp
-
-      if (box.isEmpty()) // OK
-      {
-          return;
-      }
-
-      for (size_t i = 0; i < count; ++i)
-      {
-          if (distance(sphere, points[i]) > sphere.radius)
-          {
-              return false;
-          }
-      }
-
-Line Spacing
-""""""""""""
-
-* One line of space between function declarations in source and header.
-
-* One line after each class scope section in header.
-
-* Function call spacing:
-
-  * No space before bracket or just inside brackets.
-
-  * One space after each comma separating parameters.
-
-  .. code-block:: cpp
-
-      serializer->writeFloat("range", range, kLightRange);
-
-* Conditional statement spacing:
-
-  * One space after conditional keywords.
-
-  * No space just inside the brackets.
-
-  * One space separating commas, colons and condition comparison operators.
-
-  .. code-block:: cpp
-
-      if (enumName.compare("isaacsim::Robot::Type") == 0)
-      {
-          switch (static_cast<Robot::Type>(value))
-          {
-              case Robot::Type::eManipulator:
-                  return "eManipulator";
-              ...
-
-* Don't align blocks of variables or trailing comments to match spacing causing unnecessary code changes when new
-  variables are introduced:
-
-  .. code-block:: cpp
-
-      bool     m_very;       // Formatting  // DON'T
-      float3   m_annoying;   // generates  // DON'T
-      ray      m_nooNoo;     // spurious  // DON'T
-      uint32_t m_dirtyBits;  // diffs.  // DON'T
+For additional Carbonite-specific C++ guidance, see the `Carbonite coding style guide
+<https://docs.omniverse.nvidia.com/kit/docs/carbonite/latest/CODING.html>`_. Isaac Sim conventions on this page take
+precedence when the guidance differs.

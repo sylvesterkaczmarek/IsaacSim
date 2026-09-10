@@ -1,5 +1,5 @@
 [package]
-version = "1.0.3"
+version = "1.1.0"
 category = "Simulation"
 title = "Holoscan Sensor Bridge Nodes"
 description = "OmniGraph nodes for the Holoscan Sensor Bridge (HSB) extension, providing HSBSend and RGBToVB1940 nodes for high-performance, low-latency sensor data transfer between Isaac Sim and external applications."
@@ -12,6 +12,8 @@ writeTarget.kit = true
 writeTarget.platform = true
 
 [dependencies]
+"isaacsim.core.experimental.objects" = {}
+"isaacsim.core.experimental.utils" = {}
 "isaacsim.core.nodes" = {}
 "isaacsim.hsb.core" = {}
 "omni.graph" = {}
@@ -48,6 +50,7 @@ timeout = 300
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
     "*omni.replicator.nv*",
     "*SyntheticData extension needs*",
@@ -70,6 +73,7 @@ args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
     "--no-window",
 ]
+
 stdoutFailPatterns.exclude = [
     "*omni.replicator.nv*",
     "*SyntheticData extension needs*",
@@ -135,6 +139,7 @@ args = [
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
 ]
+
 stdoutFailPatterns.exclude = [
     "*omni.replicator.nv*",
     "*Width 0 or height 0 is not valid*",

@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nvidia.com/isaac/schemas/sysid_analysis_report.schema.json",
+  "title": "SysID Analysis Report",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "analysis_schema_version",
+    "baseline",
+    "sensitivity",
+    "recommendations",
+    "artifacts",
+    "telemetry_quality",
+    "resampling_diagnostics",
+    "schema_issues"
+  ],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "analysis_schema_version": { "const": 1 },
+    "mode": { "enum": ["baseline", "sensitivity", "all"] },
+    "backend": { "type": "string" },
+    "robot_prim_path": { "type": "string" },
+    "parameters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/parameter_row" }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "theta": {
+          "type": "array",
+          "items": { "type": "number" }
+        },
+        "train": { "$ref": "#/$defs/metric_group" },
+        "validation": { "$ref": "#/$defs/metric_group" }
+      }
+    },
+    "sensitivity": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sensitivity_row" }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "artifacts": { "type": "object", "additionalProperties": true },
+    "telemetry_quality": { "type": "object", "additionalProperties": true },
+    "resampling_diagnostics": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "schema_issues": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    }
+  },
+  "$defs": {
+    "parameter_row": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["index", "name", "param_type", "initial", "min", "max"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string" },
+        "param_type": { "type": "string" },
+        "initial": { "type": "number" },
+        "min": { "type": "number" },
+        "max": { "type": "number" }
+      }
+    },
+    "metric_group": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "metrics": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "summary": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "perturbation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["index", "name", "initial", "min", "max", "step", "scheme", "bound_limited"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string" },
+        "initial": { "type": "number" },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "minus": { "type": ["number", "null"] },
+        "plus": { "type": ["number", "null"] },
+        "step": { "type": "number", "minimum": 0 },
+        "scheme": { "enum": ["centered", "one_sided", "unavailable"] },
+        "bound_limited": { "type": "boolean" }
+      }
+    },
+    "gradient": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "normalized_cost": { "type": ["number", "null"] },
+        "position_rmse": { "type": ["number", "null"] },
+        "velocity_rmse": { "type": ["number", "null"] },
+        "torque_rmse": { "type": ["number", "null"] }
+      }
+    },
+    "sensitivity_row": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "parameter",
+        "train_gradient",
+        "validation_gradient",
+        "train_validation_gradient_agreement",
+        "chunk_sensitivities",
+        "dominant_chunk",
+        "low_sensitivity",
+        "bound_limited"
+      ],
+      "properties": {
+        "parameter": { "$ref": "#/$defs/perturbation" },
+        "train_gradient": { "$ref": "#/$defs/gradient" },
+        "validation_gradient": { "$ref": "#/$defs/gradient" },
+        "train_minus_delta": { "$ref": "#/$defs/gradient" },
+        "train_plus_delta": { "$ref": "#/$defs/gradient" },
+        "validation_minus_delta": { "$ref": "#/$defs/gradient" },
+        "validation_plus_delta": { "$ref": "#/$defs/gradient" },
+        "train_validation_gradient_agreement": {
+          "enum": ["same_sign", "opposite_sign", "weak", "unavailable"]
+        },
+        "chunk_sensitivities": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "dominant_chunk": { "type": "object", "additionalProperties": true },
+        "low_sensitivity": { "type": "boolean" },
+        "bound_limited": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -13,13 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Provides validation rules and utilities for Isaac Sim assets including drives, joints, materials, physics, and robots."""
+"""Isaac Sim asset validation.
 
-from .drive_rules import *  # noqa: F403
+The concrete validation rules that used to live in this extension (physics,
+joints, drives, robot schema, and materials) have been migrated to the SimReady
+foundation validation tiers (``simready-foundation-tier-core`` and
+``simready-foundation-tier-isaac``) and are executed via the ``simready-validate``
+framework. Those packages are declared as pip dependencies in this extension's
+``config/extension.toml`` so they are importable inside Isaac Sim, where the
+tier validators discover themselves through ``usd_validation_nvidia`` entry
+points.
+
+This extension also provides the RGB sensor USD validation rule.
+"""
+
 from .extension import IsaacSimAssetValidationExtension  # noqa: F401
-from .joint_rules import *  # noqa: F403
-from .material_rules import *  # noqa: F403
-from .physics_rules import *  # noqa: F403
-from .robot_rules import *  # noqa: F403
+from .sensor_rules import RGBSensorUsdRule as RGBSensorUsdRule
 
-__all__ = []
+__all__ = ["IsaacSimAssetValidationExtension", "RGBSensorUsdRule"]

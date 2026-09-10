@@ -23,10 +23,9 @@ import os
 import random
 
 import carb.settings
-import omni.kit.app
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.replicator.core as rep
-import omni.timeline
-import omni.usd
 from isaacsim.core.experimental.materials import VolumeDeformableMaterial
 from isaacsim.core.experimental.prims import DeformablePrim
 from isaacsim.core.simulation_manager import SimulationManager
@@ -43,14 +42,18 @@ CRATE_USD = "/Isaac/Props/PackingTable/props/SM_Crate_A08_Blue_01/SM_Crate_A08_B
 
 # (label, count, usd_path, youngs_modulus_Pa [higher=stiffer], poissons_ratio [0=compressible, 0.5=incompressible])
 ASSETS_CONFIG = [
-    ("banana", 6, "/Isaac/Props/YCB/Axis_Aligned/011_banana.usd", 500_000, 0.45),
-    ("large_marker", 5, "/Isaac/Props/YCB/Axis_Aligned/040_large_marker.usd", 9_000_000, 0.5),
+    ("banana", 2, "/Isaac/Props/YCB/Axis_Aligned/011_banana.usd", 500_000, 0.45),
+    ("large_marker", 2, "/Isaac/Props/YCB/Axis_Aligned/040_large_marker.usd", 9_000_000, 0.5),
 ]
 
 
 def run_example(assets_config: list[tuple[str, int, str, float, float]]) -> None:
-    """Run deformable drop simulation and capture frames on trigger height."""
-    omni.usd.get_context().new_stage()
+    """Run deformable drop simulation and capture frames on trigger height.
+
+    Args:
+        assets_config: Asset label, instance count, USD path, Young's modulus, and Poisson ratio for each object type.
+    """
+    stage_utils.create_new_stage()
     assets_root_path = get_assets_root_path()
     rng = random.Random(RNG_SEED)
 
@@ -152,8 +155,7 @@ def run_example(assets_config: list[tuple[str, int, str, float, float]]) -> None
 
     # Start the simulation
     print(f"[SDG] Starting simulation")
-    timeline = omni.timeline.get_timeline_interface()
-    timeline.play()
+    app_utils.play()
 
     # Wrap deformables for tensor API access (requires active simulation, no re-cooking)
     deformables = []
@@ -162,7 +164,7 @@ def run_example(assets_config: list[tuple[str, int, str, float, float]]) -> None
 
     for _ in range(MAX_STEPS):
         # Advance the app which will advance the timeline (and implicitly the simulation)
-        simulation_app.update()
+        app_utils.update_app()
 
         # Detect assets whose lowest vertex crossed the trigger height
         newly_triggered = []
@@ -201,7 +203,7 @@ def run_example(assets_config: list[tuple[str, int, str, float, float]]) -> None
 
     # Pause the simulation and clean up resources
     print(f"[SDG] Simulation complete. {len(triggered)} frames saved to {output_dir}")
-    timeline.pause()
+    app_utils.pause()
     rep.orchestrator.wait_until_complete()
     writer.detach()
     render_product.destroy()
@@ -211,35 +213,75 @@ run_example(ASSETS_CONFIG)
 
 # <start-sdg-deformables-test>
 import argparse
-import sys
 
-from isaacsim.core.utils.extensions import enable_extension
-
-enable_extension("isaacsim.test.utils")
-from isaacsim.test.utils.file_validation import validate_folder_contents
-
-parser = argparse.ArgumentParser()
-parser.add_argument(
+test_parser = argparse.ArgumentParser()
+test_parser.add_argument(
     "--test",
     action="store_true",
-    help="Validate captured output files against expected counts and exit.",
+    help="Validate captured output files against golden data and exit.",
 )
-args, _ = parser.parse_known_args()
+test_args, _ = test_parser.parse_known_args()
 
-if args.test:
-    # BasicWriter with rgb + colorized semantic_segmentation writes 2 png + 1 json per capture.
-    # One capture is triggered per asset in ASSETS_CONFIG (sum of counts).
-    num_captures = sum(count for _, count, _, _, _ in ASSETS_CONFIG)
+if test_args.test:
+    import sys
+
+    import omni.kit.app
+    from isaacsim.core.utils.extensions import enable_extension
+
+    enable_extension("isaacsim.test.utils")
+    enable_extension("isaacsim.replicator.examples")
+    from isaacsim.test.utils.file_validation import get_folder_file_summary, validate_folder_contents
+    from isaacsim.test.utils.image_comparison import compare_images_in_directories
+
     out_dir = os.path.join(os.getcwd(), "_out_deformable_drop")
+    rgb_mean_diff_tolerance = 5
+    replicator_examples_ext_path = (
+        omni.kit.app.get_app().get_extension_manager().get_extension_path_by_module("isaacsim.replicator.examples")
+    )
+    golden_dir = os.path.join(
+        replicator_examples_ext_path,
+        "isaacsim",
+        "replicator",
+        "examples",
+        "tests",
+        "data",
+        "golden",
+        "_out_deformable_drop",
+    )
+    num_assets = sum(count for _, count, _, _, _ in ASSETS_CONFIG)
+    expected_pngs = num_assets * 2  # rgb + colorized semantic segmentation per capture
+    expected_json = num_assets  # semantic segmentation label json per capture
     ok = validate_folder_contents(
         path=out_dir,
         recursive=True,
-        expected_counts={"png": num_captures * 2, "json": num_captures},
-        fail_on_empty_files=True,
+        expected_counts={"png": expected_pngs, "json": expected_json},
+        fail_on_empty_extensions={"png", "json"},
     )
     if not ok:
-        print(f"[SDG][Test][FAIL] Output validation failed for {out_dir}")
+        summary = get_folder_file_summary(out_dir, recursive=True)
+        print(
+            f"[SDG][Test][FAIL] Output validation failed for {out_dir}: "
+            f"expected png={expected_pngs}, json={expected_json}, found {summary}"
+        )
         sys.exit(1)
+
+    # Semantic segmentation colors are not persistent, so compare only RGB images against golden data.
+    rgb_result = compare_images_in_directories(
+        golden_dir=golden_dir,
+        test_dir=out_dir,
+        path_pattern=r"^rgb_.*\.png$",
+        allclose_rtol=None,
+        allclose_atol=None,
+        mean_tolerance=rgb_mean_diff_tolerance,
+        print_all_stats=False,
+    )
+    if not rgb_result["all_passed"]:
+        print(
+            f"[SDG][Test][FAIL] RGB image comparison failed (tol={rgb_mean_diff_tolerance}). "
+            f"Golden dir: {golden_dir}, output dir: {out_dir}"
+        )
+        sys.exit(1)
+
     print(f"[SDG][Test][PASS] Output validation succeeded for {out_dir}")
 # <end-sdg-deformables-test>
 

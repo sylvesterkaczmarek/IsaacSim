@@ -22,6 +22,8 @@ import omni.kit.test
 import warp as wp
 from omni.kit.app import get_app
 
+from ..impl.kit_cumotion_debug_visualizer import KitCumotionDebugVisualizer
+
 
 class TestCumotionWorldInterface(omni.kit.test.AsyncTestCase):
     """Test suite for CumotionWorldInterface."""
@@ -45,17 +47,34 @@ class TestCumotionWorldInterface(omni.kit.test.AsyncTestCase):
         self.assertIsNotNone(world_interface)
         self.assertIsNotNone(world_interface.world_view)
         self.assertEqual(len(world_interface._prim_path_to_collision_data), 0)
+        self.assertIsNone(world_interface._debug_visualizer)
 
     async def test_world_interface_with_debug_visualization(self) -> None:
         """Test initialization with debug visualization enabled."""
+        debug_visualizer = KitCumotionDebugVisualizer(
+            enabled_rgb=[1.0, 0.0, 0.0],
+            disabled_rgb=[0.0, 1.0, 0.0],
+            alpha=0.5,
+        )
         world_interface = cu_mg.CumotionWorldInterface(
-            visualize_debug_prims=True,
-            visual_debug_enabled_prim_rgb=[1.0, 0.0, 0.0],
-            visual_debug_disabled_prim_rgb=[0.0, 1.0, 0.0],
-            visual_debug_prim_alpha=0.5,
+            debug_visualizer=debug_visualizer,
         )
 
         self.assertIsNotNone(world_interface)
+        self.assertIs(world_interface._debug_visualizer, debug_visualizer)
+        world_interface.add_spheres(
+            prim_paths=["/World/DebugSphere"],
+            radii=wp.array([[0.1]], dtype=wp.float32),
+            scales=wp.array([[1.0, 1.0, 1.0]], dtype=wp.float32),
+            safety_tolerances=wp.array([[0.0]], dtype=wp.float32),
+            poses=(
+                wp.array([[0.0, 0.0, 0.0]], dtype=wp.float32),
+                wp.array([[1.0, 0.0, 0.0, 0.0]], dtype=wp.float32),
+            ),
+            enabled_array=wp.array([True], dtype=bool),
+        )
+        stage = stage_utils.get_current_stage()
+        self.assertTrue(stage.GetPrimAtPath("/CumotionDebug/World/DebugSphere/Part0").IsValid())
 
     async def test_world_interface_with_robot_base_transform(self) -> None:
         """Test initialization with robot base transform."""
@@ -1151,8 +1170,7 @@ class TestCumotionWorldInterface(omni.kit.test.AsyncTestCase):
         """The CPU dispatch branch must work when debug visualization is enabled."""
         world_interface = cu_mg.CumotionWorldInterface(
             device="cpu",
-            visualize_debug_prims=True,
-            visual_debug_enabled_prim_rgb=[1.0, 0.0, 0.0],
+            debug_visualizer=KitCumotionDebugVisualizer(enabled_rgb=[1.0, 0.0, 0.0]),
         )
         prim_paths = self._add_three_spheres(world_interface)
 
@@ -1172,8 +1190,7 @@ class TestCumotionWorldInterface(omni.kit.test.AsyncTestCase):
 
         world_interface = cu_mg.CumotionWorldInterface(
             device="cuda",
-            visualize_debug_prims=True,
-            visual_debug_enabled_prim_rgb=[1.0, 0.0, 0.0],
+            debug_visualizer=KitCumotionDebugVisualizer(enabled_rgb=[1.0, 0.0, 0.0]),
         )
         prim_paths = self._add_three_spheres(world_interface)
 

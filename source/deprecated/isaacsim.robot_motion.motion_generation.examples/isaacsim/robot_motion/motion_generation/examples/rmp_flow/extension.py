@@ -44,10 +44,10 @@ class Extension(omni.ext.IExt):
     integrates with Isaac Sim's timeline and stage events to provide interactive tutorials on robot motion generation
     concepts.
 
-    The extension automatically handles window management, event subscriptions for timeline and stage changes, and
-    physics step callbacks. It delegates the actual UI construction and tutorial logic to a UIBuilder instance,
-    following a separation of concerns pattern where this class handles the extension infrastructure and UIBuilder
-    handles the tutorial-specific functionality.
+    The extension handles window management, event subscriptions for timeline and stage changes, and physics step
+    callbacks. It delegates the actual UI construction and tutorial logic to a UIBuilder instance, following a separation
+    of concerns pattern where this class handles the extension infrastructure and UIBuilder handles the tutorial-specific
+    functionality.
 
     Key features include:
     - Automatic window docking to the left side of the viewport
@@ -57,15 +57,13 @@ class Extension(omni.ext.IExt):
     - Menu integration for easy access to the extension
 
     The extension window is hidden by default and becomes visible when accessed through the Isaac Sim menu system.
-    When visible, it subscribes to relevant events and builds the tutorial UI. When hidden, it cleans up event
-    subscriptions to optimize performance.
     """
 
     def on_startup(self, ext_id: str) -> None:
-        """Initialize extension and UI elements.
+        """Initialize the extension window, menu action, UIBuilder, timeline, USD context, and physics simulation interface.
 
         Args:
-            ext_id: The extension identifier.
+            ext_id: The extension identifier used to register the menu action.
         """
         self.ext_id = ext_id
         self._usd_context = omni.usd.get_context()
@@ -99,7 +97,7 @@ class Extension(omni.ext.IExt):
         self._timeline = omni.timeline.get_timeline_interface()
 
     def on_shutdown(self) -> None:
-        """Clean up extension resources and remove UI elements."""
+        """Clean up extension resources, remove menu items, deregister the action, and release the window."""
         self._models = {}
         remove_menu_items(self._menu_items, MENU_PARENT_NAME)
 
@@ -112,7 +110,7 @@ class Extension(omni.ext.IExt):
         gc.collect()
 
     def _on_window(self, visible: bool) -> None:
-        """Handle window visibility changes and manage event subscriptions.
+        """Handle window visibility changes by subscribing to events when shown and cleaning up when hidden.
 
         Args:
             visible: Whether the window is visible.
@@ -151,7 +149,7 @@ class Extension(omni.ext.IExt):
             self.ui_builder.cleanup()
 
     def _build_ui(self) -> None:
-        """Create the extension UI layout and dock the window."""
+        """Create the extension UI layout and schedule the window to dock beside the Viewport."""
         with self._window.frame:
             with ui.VStack(spacing=5, height=0):
                 self._build_extension_ui()
@@ -176,12 +174,12 @@ class Extension(omni.ext.IExt):
     #################################################################
 
     def _menu_callback(self) -> None:
-        """Toggle window visibility and notify the UI builder when menu item is selected."""
+        """Toggle window visibility and notify the UIBuilder when the menu item is selected."""
         self._window.visible = not self._window.visible
         self.ui_builder.on_menu_callback()
 
     def _on_timeline_play(self, event: object) -> None:
-        """Timeline play event callback.
+        """Subscribe to physics step events when timeline playback starts.
 
         Args:
             event: The timeline play event.
@@ -192,7 +190,7 @@ class Extension(omni.ext.IExt):
             )
 
     def _on_timeline_stop(self, event: object) -> None:
-        """Timeline stop event callback.
+        """Clear the physics step subscription and forward the timeline stop event to the UIBuilder.
 
         Args:
             event: The timeline stop event.
@@ -201,7 +199,7 @@ class Extension(omni.ext.IExt):
         self.ui_builder.on_timeline_event(event)
 
     def _on_physics_step(self, step: float, context: object) -> None:
-        """Forward physics step events to the UI builder.
+        """Forward physics step updates to the UIBuilder.
 
         Args:
             step: The physics step information.
@@ -210,7 +208,7 @@ class Extension(omni.ext.IExt):
         self.ui_builder.on_physics_step(step)
 
     def _on_stage_opened(self, event: object) -> None:
-        """Stage opened event callback.
+        """Clear simulation state, clean up the UIBuilder, and forward the stage opened event.
 
         Args:
             event: The stage opened event.
@@ -220,7 +218,7 @@ class Extension(omni.ext.IExt):
         self.ui_builder.on_stage_event(event)
 
     def _on_stage_closed(self, event: object) -> None:
-        """Stage closed event callback.
+        """Clear simulation state and clean up the UIBuilder when the stage closes.
 
         Args:
             event: The stage closed event.

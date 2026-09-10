@@ -1,5 +1,5 @@
 [package]
-version = "1.9.3"
+version = "1.11.0"
 category = "Simulation"
 title = "Isaac Sim Native Storage"
 description = "Provides utilities for accessing Isaac Sim assets from Nucleus servers or S3 buckets, including path resolution, asset downloading, and version verification."
@@ -22,13 +22,36 @@ name = "isaacsim.storage.native.tests"
 
 [settings]
 # Default asset root path for Isaac Sim.
-persistent.isaac.asset_root.default = "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0"
+persistent.isaac.asset_root.default = "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.1"
 # Timeout in seconds for resolving the asset root path.
 persistent.isaac.asset_root.timeout = 5.0
 # Number of retries for transient asset root connectivity checks.
 persistent.isaac.asset_root.retry_attempts = 3
 # Initial retry delay in seconds using exponential backoff.
 persistent.isaac.asset_root.retry_base_delay = 0.5
+
+# Asset region profiles, selected at startup by the `ISAACSIM_ASSET_REGION_PROFILE`
+# environment variable. The extension's default asset root is used when no profile is selected.
+# Default asset root for the primary profile.
+exts."isaacsim.storage.native".asset_region_profiles.us.asset_root = "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.1"
+
+# S3-compatible endpoint hostname for the regional storage profile.
+exts."isaacsim.storage.native".asset_region_profiles.china.endpoint = "simready-cn.s3.oss-cn-shanghai.aliyuncs.com"
+# Bucket containing the regional profile's Isaac Sim assets.
+exts."isaacsim.storage.native".asset_region_profiles.china.bucket = "simready-cn"
+# Object storage region for the regional profile.
+exts."isaacsim.storage.native".asset_region_profiles.china.region = "oss-cn-shanghai"
+# Reads are served by the regional CDN while list and stat go direct to the bucket.
+# Alibaba Cloud OSS ignores a Range extending past EOF and returns the whole object where
+# S3 clamps to EOF, which breaks multipart reads above 4 MB; the CDN supplies the header
+# that restores standard behavior, so the client does not send it.
+exts."isaacsim.storage.native".asset_region_profiles.china.cdn_url = "https://assets.simready.cn/"
+# Use the bucket endpoint rather than the CDN for object listings.
+exts."isaacsim.storage.native".asset_region_profiles.china.cdn_for_list = false
+# Default Isaac Sim asset root for the regional profile.
+exts."isaacsim.storage.native".asset_region_profiles.china.asset_root = "https://simready-cn.s3.oss-cn-shanghai.aliyuncs.com/Assets/Isaac/6.1"
+# USD asset search service for the regional profile.
+exts."isaacsim.storage.native".asset_region_profiles.china.usd_search_endpoint = "https://search.simready.cn/"
 
 [[test]]
 timeout = 900
@@ -82,6 +105,10 @@ args = [
     "--/rtx/newDenoiser/enabled=1",
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [documentation]

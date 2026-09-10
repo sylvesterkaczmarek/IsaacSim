@@ -316,7 +316,7 @@ class TestAckermannController(omni.kit.test.AsyncTestCase):
                 self.assertAlmostEqual(joint_velocities[2], expected_joint_values[4], delta=0.01)
                 self.assertAlmostEqual(joint_velocities[3], expected_joint_values[5], delta=0.01)
 
-    async def test_invert_steering_symmetry(self):
+    async def test_invert_steering_symmetry(self) -> None:
         """With invert_steering=True, outputs mirror forward steering (rear axle steers)."""
         wheel_base = 1.65
         track_width = 1.25
@@ -350,7 +350,7 @@ class TestAckermannController(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(inv_bl, fwd_fl, delta=1e-5)
         self.assertAlmostEqual(inv_br, fwd_fr, delta=1e-5)
 
-    async def test_invert_steering_with_steering_velocity_and_acceleration(self):
+    async def test_invert_steering_with_steering_velocity_and_acceleration(self) -> None:
         """invert_steering symmetry holds while steering angle and speed ramp up."""
         wheel_base = 1.65
         track_width = 1.25

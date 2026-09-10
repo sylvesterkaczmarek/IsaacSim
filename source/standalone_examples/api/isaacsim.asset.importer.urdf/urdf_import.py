@@ -170,6 +170,12 @@ def _collect_urdf_files(path: str) -> list[str]:
 
     If *path* is a single file it is returned as-is.  If it is a directory the
     directory tree is walked and every file ending with ``.urdf`` is collected.
+
+    Args:
+        path: URDF file or directory tree to search.
+
+    Returns:
+        Sorted URDF file paths discovered beneath the input path.
     """
     if os.path.isfile(path):
         return [path]
@@ -193,6 +199,14 @@ def _resolve_usd_paths(
 
     For a single-file import or when *base_usd_path* is ``None`` the returned
     value for every file is simply *base_usd_path*.
+
+    Args:
+        source_files: URDF source files being imported.
+        base_usd_path: Base directory for generated USD files, or None to defer path selection.
+        input_dir: Root source directory whose relative layout should be preserved, or None for a flat import.
+
+    Returns:
+        Mapping from each URDF source path to its output USD directory.
     """
     if base_usd_path is None or input_dir is None or len(source_files) <= 1:
         return dict.fromkeys(source_files, base_usd_path)
@@ -205,7 +219,12 @@ def _resolve_usd_paths(
 
 
 def _apply_cli_overrides(import_config: URDFImporterConfig, usd_path_override: str | None = None) -> None:
-    """Apply CLI flag overrides onto *import_config* (mutates in-place)."""
+    """Apply command-line overrides to an importer configuration in place.
+
+    Args:
+        import_config: Importer configuration to update.
+        usd_path_override: Output USD path to use instead of the command-line path, or None to use the CLI value.
+    """
     usd_path = usd_path_override if usd_path_override is not None else args.usd_path
     if usd_path is not None:
         import_config.usd_path = os.path.abspath(usd_path)

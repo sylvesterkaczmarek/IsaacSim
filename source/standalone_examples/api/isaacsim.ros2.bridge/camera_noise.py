@@ -86,8 +86,15 @@ ViewportManager.set_camera(CAMERA_STAGE_PATH)
 @wp.kernel
 def image_gaussian_noise_warp(
     data_in: wp.array3d(dtype=wp.uint8), data_out: wp.array3d(dtype=wp.uint8), seed: int, sigma: float = 0.5
-):
-    """Apply Gaussian noise to an image using warp."""
+) -> None:
+    """Apply Gaussian noise to an image using warp.
+
+    Args:
+        data_in: Source RGBA image.
+        data_out: Destination RGB image receiving the noisy color channels.
+        seed: Base seed used to initialize independent per-pixel random states.
+        sigma: Noise standard deviation expressed as a fraction of the channel range.
+    """
     i, j = wp.tid()
     dim_i = data_out.shape[0]
     dim_j = data_out.shape[1]

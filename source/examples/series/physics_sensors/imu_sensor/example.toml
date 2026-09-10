@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id = "physics_sensors.imu_sensor"
+title = "IMU Sensor"
+summary = "Read the position, orientation, velocity, and acceleration of a prim as an IMU would."
+owners = [
+    "isaacsim.foundation.objects",
+    "isaacsim.foundation.prims",
+    "isaacsim.physics.manager",
+    "isaacsim.physics.registration",
+    "isaacsim.physics_engines.ovphysx",
+]
+topics = ["physics", "python", "sensors", "usd"]
+
+[build]
+adapter = "none"
+
+[run]
+adapter = "python"
+path = "main.py"
+
+[requirements]
+system = ["python"]
+
+[[requirements.modules]]
+name = "isaacsim_foundation"
+surfaces = ["python"]
+
+[[requirements.modules]]
+name = "isaacsim_physics"
+surfaces = ["python"]
+
+[[requirements.modules]]
+name = "isaacsim_physics_engines"
+surfaces = ["python"]
+
+[[test]]
+name = "default"
+stdout_contains = [
+    "Reporting specific force, the proper acceleration.",
+    "Airborne finite-difference acceleration matches gravity.",
+    "Readings are stamped with the time their newest sample was taken.",
+    "Free-fall proper acceleration is near zero.",
+    "Free-fall angular velocity is read on the sensor Z axis.",
+    "Free-fall velocity is read on the sensor -Z axis.",
+    "Resting accelerometer reads one gravity along world up.",
+    "Resting sensor sits one mount offset above the body center.",
+]
+
+
+[[test]]
+name = "self_test"
+arguments = ["--self-test"]
+stdout_contains = [
+    "Self-test: all ",
+]

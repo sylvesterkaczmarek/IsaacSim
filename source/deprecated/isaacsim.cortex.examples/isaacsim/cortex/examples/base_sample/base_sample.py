@@ -42,14 +42,14 @@ class BaseSample(object):
 
     The class automatically manages world settings including physics timestep, stage units, and rendering timestep.
     It provides async methods for world operations and integrates with the Isaac Sim task system for physics callbacks.
-    Subclasses need to implement scene setup, post-load initialization, pre/post reset handling, and cleanup logic.
+    Subclasses must implement scene setup, post-load initialization, pre-reset and post-reset handling, and cleanup logic.
 
     Key lifecycle methods that subclasses must implement:
-    - setup_scene(): Configure the world with assets and tasks
-    - setup_post_load(): Initialize variables after first world reset
-    - setup_pre_reset(): Prepare for world reset (remove callbacks, reset controllers)
-    - setup_post_reset(): Handle post-reset operations
-    - setup_post_clear(): Clean up after clearing the world
+    - setup_scene(): Configure the world with assets and tasks.
+    - setup_post_load(): Initialize variables after first world reset.
+    - setup_pre_reset(): Prepare for world reset by removing callbacks or resetting controllers.
+    - setup_post_reset(): Handle post-reset operations.
+    - setup_post_clear(): Clean up after clearing the world.
 
     The class handles camera positioning, physics callback management, and ensures proper cleanup during extension
     hot reloading scenarios.
@@ -95,7 +95,7 @@ class BaseSample(object):
         return
 
     async def load_world_async(self) -> None:
-        """Function called when clicking load buttton."""
+        """Called when clicking the load button."""
         await create_new_stage_async()
         self._world = World(**self._world_settings)
         await self._world.initialize_simulation_context_async()
@@ -110,7 +110,7 @@ class BaseSample(object):
         return
 
     async def reset_async(self) -> None:
-        """Function called when clicking reset buttton."""
+        """Called when clicking the reset button."""
         if self._world.is_tasks_scene_built() and len(self._current_tasks) > 0:
             if self._world.physics_callback_exists("tasks_step"):
                 self._world.remove_physics_callback("tasks_step")
@@ -126,7 +126,7 @@ class BaseSample(object):
 
     @abstractmethod
     def setup_scene(self, scene: Scene) -> None:
-        """Used to setup anything in the world, adding tasks happen here for instance.
+        """Used to set up anything in the world, adding tasks happen here for instance.
 
         Args:
             scene: The scene to set up with sample assets.
@@ -135,22 +135,22 @@ class BaseSample(object):
 
     @abstractmethod
     async def setup_post_load(self) -> None:
-        """Called after first reset of the world when pressing load, intializing provate variables happen here."""
+        """Called after the first world reset when pressing load, initializing private variables happen here."""
         return
 
     @abstractmethod
     async def setup_pre_reset(self) -> None:
-        """Called in reset button before resetting the world to remove a physics callback for instance or a controller reset."""
+        """Called in the reset button before resetting the world to remove a physics callback or reset a controller."""
         return
 
     @abstractmethod
     async def setup_post_reset(self) -> None:
-        """Called in reset button after resetting the world which includes one step with rendering."""
+        """Called in the reset button after resetting the world, which includes one step with rendering."""
         return
 
     @abstractmethod
     async def setup_post_clear(self) -> None:
-        """Called after clicking clear button or after creating a new stage and clearing the instance of the world with its callbacks."""
+        """Called after clicking the clear button or creating a new stage and clearing the World instance with its callbacks."""
         return
 
     # def log_info(self, info):
@@ -158,7 +158,7 @@ class BaseSample(object):
     #     return
 
     def _world_cleanup(self) -> None:
-        """Cleans up the world instance by stopping simulation and clearing callbacks."""
+        """Cleans up the World instance by stopping simulation and clearing callbacks."""
         if self._world is not None:
             self._world.stop()
             self._world.clear_all_callbacks()
@@ -167,11 +167,14 @@ class BaseSample(object):
         return
 
     def world_cleanup(self) -> None:
-        """Function called when extension shutdowns and starts again, (hot reloading feature)."""
+        """Called when the extension shuts down and starts again for hot reloading."""
         return
 
     async def clear_async(self) -> None:
-        """Function called when clicking clear button."""
+        """Called when clicking the clear button.
+
+        Clears the current World, creates a fresh stage, and runs post-clear setup.
+        """
         if self._world is not None:
             # Ensure the simulation is fully stopped and the app processes at least one update
             # before we start tearing down callbacks and/or closing the stage.

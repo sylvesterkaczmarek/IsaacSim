@@ -14,14 +14,14 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include "GenericModelOutput.h"
-#include "LidarConfigHelper.h"
-#include "isaacsim/core/includes/BaseResetNode.h"
-#include "isaacsim/core/includes/Buffer.h"
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "LidarConfigHelper.hpp"
+#include "isaacsim/core/includes/BaseResetNode.hpp"
+#include "isaacsim/core/includes/Buffer.hpp"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 
 #include <carb/tasking/ITasking.h>
 #include <carb/tasking/TaskingUtils.h>

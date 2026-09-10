@@ -15,6 +15,7 @@
 
 """Demonstrate SDG with custom and graph-based randomizers."""
 
+import argparse
 import os
 import random
 from typing import Any
@@ -24,20 +25,34 @@ from isaacsim import SimulationApp
 simulation_app = SimulationApp(launch_config={"headless": False})
 
 import carb.settings
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.replicator.core as rep
-import omni.usd
+
+NUM_CAPTURES = 3
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--num-captures", type=int, default=NUM_CAPTURES, help="Number of capture steps to run.")
+args, _ = parser.parse_known_args()
 
 
 def randomize_location(prim: Any) -> None:
-    """Randomize the position of a prim using the USD functional API."""
+    """Randomize the position of a prim using the USD functional API.
+
+    Args:
+        prim: USD prim to move within a unit cube centered at the origin.
+    """
     random_pos = (random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(-1, 1))
     rep.functional.modify.position(prim, random_pos)
 
 
-def run_example() -> None:
-    """Run SDG with combined USD API and graph-based randomization."""
+def run_example(num_captures: int) -> None:
+    """Run SDG with combined USD API and graph-based randomization.
+
+    Args:
+        num_captures: Number of randomized frames to capture.
+    """
     # Create a new stage and disable capture on play
-    omni.usd.get_context().new_stage()
+    stage_utils.create_new_stage()
     rep.orchestrator.set_capture_on_play(False)
     random.seed(42)
     rep.set_global_seed(42)
@@ -68,7 +83,7 @@ def run_example() -> None:
     writer.attach(rp)
 
     # Trigger a data capture request (data will be written to disk by the writer)
-    for i in range(3):
+    for i in range(num_captures):
         print(f"Step {i}")
         # Trigger the custom graph-based event randomizer every second step
         if i % 2 == 1:
@@ -86,34 +101,31 @@ def run_example() -> None:
     rp.destroy()
 
 
-# Run the example
-run_example()
+run_example(num_captures=args.num_captures)
 
 # <start-sdg-getting-started-03-test>
-import argparse
-import sys
-
-from isaacsim.core.utils.extensions import enable_extension
-
-enable_extension("isaacsim.test.utils")
-from isaacsim.test.utils.file_validation import validate_folder_contents
-
-parser = argparse.ArgumentParser()
-parser.add_argument(
+test_parser = argparse.ArgumentParser()
+test_parser.add_argument(
     "--test",
     action="store_true",
     help="Validate captured output files against expected counts and exit.",
 )
-args, _ = parser.parse_known_args()
+test_args, _ = test_parser.parse_known_args()
 
-if args.test:
+if test_args.test:
+    import sys
+
+    from isaacsim.core.utils.extensions import enable_extension
+
+    enable_extension("isaacsim.test.utils")
+    from isaacsim.test.utils.file_validation import validate_folder_contents
+
     # BasicWriter with rgb + colorized semantic_segmentation writes 2 png + 1 json per capture.
-    num_captures = 3
     out_dir = os.path.join(os.getcwd(), "_out_basic_writer_rand")
     ok = validate_folder_contents(
         path=out_dir,
         recursive=True,
-        expected_counts={"png": num_captures * 2, "json": num_captures},
+        expected_counts={"png": args.num_captures * 2, "json": args.num_captures},
         fail_on_empty_files=True,
     )
     if not ok:

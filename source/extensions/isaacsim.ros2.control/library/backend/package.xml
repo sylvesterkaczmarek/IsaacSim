@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>isaacsim_ros2_control</name>
+  <version>0.0.1</version>
+  <description>Isaac Sim ros2_control hardware-interface plugin.</description>
+  <maintainer email="isaac-sim-maintainers@nvidia.com">Isaac Sim</maintainer>
+  <license>Apache-2.0</license>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

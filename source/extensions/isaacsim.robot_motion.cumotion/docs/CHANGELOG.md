@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.4.0] - 2026-08-21
+### Changed
+- Route cuMotion warnings through `isaacsim.common.logging`.
+- `CumotionWorldInterface`: replace debug-visualization constructor settings with an injected visualizer.
+
+## [1.3.4] - 2026-08-17
+### Fixed
+- `TrajectoryGenerator`: return `None` when task-space path conversion fails.
+
+## [1.3.3] - 2026-07-24
+### Changed
+- Add `panda_hand` as a supported Franka tool frame.
+
+## [1.3.2] - 2026-07-03
+### Changed
+- Emit `carb.log_warn` on `RmpFlowController` error paths when `forward()` returns `None` or `reset()` fails.
+
 ## [1.3.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

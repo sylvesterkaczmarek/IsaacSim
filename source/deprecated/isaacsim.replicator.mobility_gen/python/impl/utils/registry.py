@@ -64,6 +64,9 @@ class Registry(Generic[T]):
 
         Returns:
             The registered item.
+
+        Raises:
+            KeyError: If no registered item exists for the name.
         """
         return self.items[name]
 
@@ -75,5 +78,8 @@ class Registry(Generic[T]):
 
         Returns:
             The registered item at the specified index.
+
+        Raises:
+            IndexError: If the index is outside the registered item range.
         """
         return list(self.items.values())[index]

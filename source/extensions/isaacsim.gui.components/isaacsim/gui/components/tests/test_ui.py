@@ -19,11 +19,13 @@
 #   omni.kit.test - std python's unittest module with additional wrapping to add suport for async/await tests
 #   For most things refer to unittest docs: https://docs.python.org/3/library/unittest.html
 import omni.kit.test
+import omni.ui as ui
 from isaacsim.gui.components.callbacks import (
     on_docs_link_clicked,
     on_open_IDE_clicked,
 )
 from isaacsim.gui.components.ui_utils import SearchListItemModel
+from isaacsim.gui.components.widgets import ParamWidget
 
 
 # Having a test class dervived from omni.kit.test.AsyncTestCase declared on the root of module will make it auto-discoverable by omni.kit.test
@@ -76,3 +78,15 @@ class TestUI(omni.kit.test.AsyncTestCase):
                 model.filter_text(search_text)
 
                 self.assertEqual([item.name() for item in model.get_item_children(None)], ["find this item"])
+
+    async def test_param_widget_set_value(self) -> None:
+        """Test programmatic ParamWidget field updates."""
+        window = ui.Window("ParamWidget_Set_Value_Test", width=400, height=120)
+        with window.frame:
+            widget = ParamWidget(ParamWidget.FieldDef("topic", "Topic", ui.StringField, "/rgb", "", False))
+
+        widget.set_value("/rgb/compressed")
+
+        self.assertEqual(widget.get_value(), "/rgb/compressed")
+        widget.destroy()
+        window.destroy()

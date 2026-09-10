@@ -60,6 +60,8 @@ class TestPrimDataReaderInterface(omni.kit.test.AsyncTestCase):
         """
         await stage_utils.create_new_stage_async()
         stage = omni.usd.get_context().get_stage()
+        # create a physics scene
+        stage_utils.define_prim(f"/World/PhysicsScene", "PhysicsScene")
         self._stage_id = UsdUtils.StageCache.Get().GetId(stage).ToLongInt()
         self.reader.initialize(self._stage_id, -1)
         return stage
@@ -464,9 +466,15 @@ class TestPrimDataReaderInterface(omni.kit.test.AsyncTestCase):
 
         link0 = UsdGeom.Xform.Define(stage, "/World/Robot/Link0").GetPrim()
         UsdPhysics.RigidBodyAPI.Apply(link0)
+        # Set mass for MuJoCo solver
+        UsdPhysics.MassAPI.Apply(link0)
+        UsdPhysics.MassAPI(link0).GetMassAttr().Set(1)
 
         link1 = UsdGeom.Xform.Define(stage, "/World/Robot/Link0/Link1").GetPrim()
         UsdPhysics.RigidBodyAPI.Apply(link1)
+        # Set mass for MuJoCo solver
+        UsdPhysics.MassAPI.Apply(link1)
+        UsdPhysics.MassAPI(link1).GetMassAttr().Set(1)
 
         view = self.reader.create_articulation_view("v_artlinks2", ["/World/Robot"], "physx")
         links = view.get_articulation_links("/World/Robot")
@@ -671,6 +679,35 @@ class TestPrimDataReaderPhysxTransforms(omni.kit.test.AsyncTestCase):
 
         self.assertAlmostEqual(abs(ori[0]), abs(qw), delta=0.05, msg="qw component")
         self.assertAlmostEqual(abs(ori[3]), abs(qz), delta=0.05, msg="qz component (90-deg Z rotation)")
+
+    async def test_zero_dof_articulation_exposes_root_fields(self) -> None:
+        """A fixed, zero-DOF articulation still exposes root transforms and velocities."""
+        from isaacsim.core.simulation_manager import SimulationManager
+
+        stage = await self._setup_physics_stage()
+        root = UsdGeom.Cube.Define(stage, "/World/FixedArticulation").GetPrim()
+        UsdPhysics.ArticulationRootAPI.Apply(root)
+        UsdPhysics.RigidBodyAPI.Apply(root)
+        UsdPhysics.CollisionAPI.Apply(root)
+        UsdPhysics.MassAPI.Apply(root).CreateMassAttr(1.0)
+
+        await self._start_simulation()
+
+        engine = SimulationManager.get_active_physics_engine()
+        view = self.reader.create_articulation_view("zero_dof", ["/World/FixedArticulation"], engine)
+        self.assertTrue(view.update())
+
+        root_transform_ptr, root_transform_count = view.get_root_transforms_host()
+        self.assertNotEqual(root_transform_ptr, 0)
+        self.assertEqual(root_transform_count, 7)
+
+        root_velocity_ptr, root_velocity_count = view.get_root_velocities_host()
+        self.assertNotEqual(root_velocity_ptr, 0)
+        self.assertEqual(root_velocity_count, 6)
+
+        dof_ptr, dof_count = view.get_dof_positions_host()
+        self.assertEqual(dof_ptr, 0)
+        self.assertEqual(dof_count, 0)
 
     # -- Hybrid path: mix of physics and non-physics prims --
 

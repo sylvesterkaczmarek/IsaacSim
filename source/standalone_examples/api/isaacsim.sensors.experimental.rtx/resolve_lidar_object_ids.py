@@ -146,7 +146,11 @@ class GmoObjectIdWriter(Writer):
         self.stable_id_map = None
 
     def write(self, data: dict[str, object]) -> None:
-        """Collect GenericModelOutput and StableIdMap payloads."""
+        """Collect GenericModelOutput and StableIdMap payloads.
+
+        Args:
+            data: Writer payload containing lidar and stable-ID data grouped by render product.
+        """
         if "renderProducts" not in data:
             return
         for _rp_name, rp_data in data["renderProducts"].items():

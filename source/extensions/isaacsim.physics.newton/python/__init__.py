@@ -23,29 +23,48 @@ Submodules:
     - tensors: Tensor-based interface for Newton physics (see isaacsim.physics.newton.tensors)
 """
 
+from .impl.collision_config import CollisionConfig, HydroelasticConfig
 from .impl.extension import NewtonSimExtension as NewtonSimExtension
 from .impl.extension import (
     acquire_physics_interface,
     acquire_stage,
+    configure_newton,
     get_active_physics_engine,
     get_available_physics_engines,
+    get_newton_config,
 )
 from .impl.newton_config import NewtonConfig
 from .impl.newton_stage import NewtonStage
 from .impl.solver_config import (
     MuJoCoSolverConfig,
+    VBDSolverConfig,
     XPBDSolverConfig,
+)
+from .impl.utils import (
+    get_newton_solver,
+    get_newton_solver_to_physics_scene_object,
+    newton_solver_to_api_schema,
+    switch_newton_solver,
 )
 
 __all__ = [
     # Public API
     "acquire_physics_interface",
     "acquire_stage",
+    "configure_newton",
+    "get_newton_config",
     "get_active_physics_engine",
     "get_available_physics_engines",
     # Configuration classes
     "NewtonConfig",
+    "CollisionConfig",
+    "HydroelasticConfig",
     "NewtonStage",
     "XPBDSolverConfig",
     "MuJoCoSolverConfig",
+    # utilities
+    "newton_solver_to_api_schema",
+    "get_newton_solver_to_physics_scene_object",
+    "switch_newton_solver",
+    "get_newton_solver",
 ]

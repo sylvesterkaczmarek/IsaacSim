@@ -15,16 +15,15 @@
 
 """CumotionWorldInterface example for obstacle discovery and world synchronization."""
 
-from typing import Literal
-
-import omni.kit.app
 from isaacsim.core.experimental.objects import Cone, Cube, Cylinder, Mesh
 from isaacsim.core.experimental.prims import GeomPrim, RigidPrim
+from isaacsim.core.experimental.utils import app as app_utils
 from isaacsim.core.experimental.utils import prim as prim_utils
 from isaacsim.core.experimental.utils import stage as stage_utils
 from isaacsim.core.rendering_manager import ViewportManager
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.robot_motion.cumotion import CumotionWorldInterface
+from isaacsim.robot_motion.cumotion.impl.kit_cumotion_debug_visualizer import KitCumotionDebugVisualizer
 from isaacsim.robot_motion.experimental.motion_generation import (
     ObstacleConfiguration,
     ObstacleStrategy,
@@ -32,10 +31,6 @@ from isaacsim.robot_motion.experimental.motion_generation import (
     TrackableApi,
     WorldBinding,
 )
-from pxr import UsdPhysics
-
-_UpdateStyle = Literal["synchronize_transforms", "synchronize_properties", "synchronize"]
-_TrackedCollisionApi = Literal["physics", "motion_generation"]
 
 _OBSTACLE_PRIM_PATH = "/World/obstacle"
 _PHYSICS_SCENE_PATH = "/World/PhysicsScene"
@@ -48,38 +43,11 @@ class CumotionWorldInterfaceExample:
       - Set up a CumotionWorldInterface with WorldBinding
       - Discover obstacles using SceneQuery
       - Configure obstacle representations
-      - Synchronize world state with a chosen update style
+      - Synchronize obstacle transforms
     """
 
     def __init__(self) -> None:
         self._world_binding: WorldBinding | None = None
-        self._update_style: _UpdateStyle = "synchronize_transforms"
-        self._tracked_collision_api: _TrackedCollisionApi = "physics"
-
-    # --------------------------------------------------------------- config
-
-    def set_update_style(self, style: _UpdateStyle) -> None:
-        """Set the world-binding update style used by :meth:`update`.
-
-        Args:
-            style: One of ``synchronize_transforms``, ``synchronize_properties``, ``synchronize``.
-        """
-        if style not in ("synchronize_transforms", "synchronize_properties", "synchronize"):
-            raise ValueError(
-                f"Invalid update style: {style}. "
-                "Must be one of: synchronize_transforms, synchronize_properties, synchronize"
-            )
-        self._update_style = style
-
-    def set_tracked_collision_api(self, api: _TrackedCollisionApi) -> None:
-        """Set which collision API is used to discover obstacles.
-
-        Args:
-            api: Either ``physics`` or ``motion_generation``.
-        """
-        if api not in ("physics", "motion_generation"):
-            raise ValueError(f"Invalid collision API: {api}. Must be one of: physics, motion_generation")
-        self._tracked_collision_api = api
 
     # ---------------------------------------------------------------- loading
 
@@ -92,17 +60,14 @@ class CumotionWorldInterfaceExample:
         # Obstacle cube with both collision and dynamics APIs.
         Cube(_OBSTACLE_PRIM_PATH, sizes=0.1, positions=[0.4, 0.0, 0.65])
         GeomPrim(_OBSTACLE_PRIM_PATH, apply_collision_apis=True)
-        RigidPrim(_OBSTACLE_PRIM_PATH, masses=[1.0])
+        RigidPrim(_OBSTACLE_PRIM_PATH, masses=1.0)
 
         ViewportManager.set_camera_view(camera="/OmniverseKit_Persp", eye=[2, 1.5, 2], target=[0, 0, 0])
 
-        # Ensure a physics scene exists; allocate physics tensors without stepping.
-        stage = stage_utils.get_current_stage()
-        if not stage.GetPrimAtPath(_PHYSICS_SCENE_PATH).IsValid():
-            UsdPhysics.Scene.Define(stage, _PHYSICS_SCENE_PATH)
-        await omni.kit.app.get_app().next_update_async()
-        if SimulationManager.get_physics_sim_view() is None:
-            SimulationManager.initialize_physics()
+        # Ensure a physics scene exists at the example's expected path.
+        stage_utils.define_prim(_PHYSICS_SCENE_PATH, type_name="PhysicsScene")
+        await app_utils.update_app_async()
+        SimulationManager.setup_simulation(dt=1.0 / 60.0)
 
         self.setup()
 
@@ -126,12 +91,18 @@ class CumotionWorldInterfaceExample:
         # tolerance to 0.05 / 0.1 / 0.2 to see how cuMotion treats obstacles.
         obstacle_strategy = ObstacleStrategy()
         obstacle_strategy.set_default_safety_tolerance(0.06)
-        obstacle_strategy.set_default_configuration(Mesh, ObstacleConfiguration("obb", 0.01))
-        obstacle_strategy.set_default_configuration(Cone, ObstacleConfiguration("obb", 0.01))
-        obstacle_strategy.set_default_configuration(Cylinder, ObstacleConfiguration("obb", 0.01))
+        obstacle_strategy.set_default_configuration(
+            Mesh, ObstacleConfiguration(representation="obb", safety_tolerance=0.01)
+        )
+        obstacle_strategy.set_default_configuration(
+            Cone, ObstacleConfiguration(representation="obb", safety_tolerance=0.01)
+        )
+        obstacle_strategy.set_default_configuration(
+            Cylinder, ObstacleConfiguration(representation="obb", safety_tolerance=0.01)
+        )
 
         self._world_binding = WorldBinding(
-            world_interface=CumotionWorldInterface(visualize_debug_prims=True),
+            world_interface=CumotionWorldInterface(debug_visualizer=KitCumotionDebugVisualizer()),
             obstacle_strategy=obstacle_strategy,
             tracked_prims=objects,
             tracked_collision_api=TrackableApi.PHYSICS_COLLISION,
@@ -157,7 +128,7 @@ class CumotionWorldInterfaceExample:
         self.update(dt)
 
     def update(self, dt: float) -> None:
-        """Run one synchronization pass using the currently selected update style.
+        """Synchronize obstacle transforms.
 
         Args:
             dt: Physics time step in seconds.
@@ -165,14 +136,7 @@ class CumotionWorldInterfaceExample:
         if self._world_binding is None:
             return
 
-        if self._update_style == "synchronize_transforms":
-            self._world_binding.synchronize_transforms()
-        elif self._update_style == "synchronize_properties":
-            self._world_binding.synchronize_properties()
-        elif self._update_style == "synchronize":
-            self._world_binding.synchronize()
-        else:
-            raise ValueError(f"Invalid update style: {self._update_style}")
+        self._world_binding.synchronize_transforms()
 
     # --------------------------------------------------------------- teardown
 

@@ -29,7 +29,7 @@ from .occupancy_map import OccupancyMap
 class MobilityGenReader:
     """Reads and processes mobility generation recording data from a structured directory.
 
-    This class provides access to various types of recorded data including RGB images, depth maps,
+    This class provides access to various types of recorded data, including RGB images, depth maps,
     segmentation masks, surface normals, configuration settings, and occupancy maps. The recording
     directory contains timestamped data organized by data type and camera/sensor name.
 
@@ -216,7 +216,11 @@ class MobilityGenReader:
             index: Index of the step to read from.
 
         Returns:
-            The common state dictionary loaded from the numpy file.
+            The common state dictionary loaded from the NumPy file.
+
+        Raises:
+            IndexError: If index is outside the recorded steps.
+            OSError: If the common state file cannot be read.
         """
         step = self.steps[index]
         state_dict = np.load(
@@ -232,6 +236,10 @@ class MobilityGenReader:
 
         Returns:
             Complete state dictionary containing common state, RGB, segmentation, depth, and normals data.
+
+        Raises:
+            IndexError: If index is outside the recorded steps.
+            OSError: If a required state file cannot be read.
         """
         state_dict = self.read_state_dict_common(index)
         rgb_dict = self.read_state_dict_rgb(index)
@@ -264,5 +272,9 @@ class MobilityGenReader:
 
         Returns:
             Complete state dictionary for the specified step.
+
+        Raises:
+            IndexError: If index is outside the recorded steps.
+            OSError: If a required state file cannot be read.
         """
         return self.read_state_dict(index)

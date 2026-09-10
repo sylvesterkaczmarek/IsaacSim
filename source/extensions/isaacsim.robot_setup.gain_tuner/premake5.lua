@@ -20,5 +20,4 @@ repo_build.prebuild_link {
     { "docs", ext.target_dir .. "/docs" },
     { "data", ext.target_dir .. "/data" },
     { "isaacsim", ext.target_dir .. "/isaacsim" },
-    { "icons", ext.target_dir .. "/icons" },
 }

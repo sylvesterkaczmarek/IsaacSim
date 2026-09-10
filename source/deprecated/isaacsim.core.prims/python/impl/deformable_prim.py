@@ -31,6 +31,9 @@ class DeformablePrim:
     Args:
         *args: Unused positional arguments.
         **kwargs: Unused keyword arguments.
+
+    Raises:
+        NotImplementedError: Always raised because DeformablePrim is no longer available.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

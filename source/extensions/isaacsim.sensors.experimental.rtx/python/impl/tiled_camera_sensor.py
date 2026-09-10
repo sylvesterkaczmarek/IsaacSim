@@ -20,13 +20,12 @@ from __future__ import annotations
 from typing import Any, Literal, get_args
 
 import carb
-import isaacsim.core.experimental.utils.prim as prim_utils
 import omni.replicator.core as rep
 import warp as wp
 from isaacsim.core.experimental.objects import Camera
-from pxr import UsdRender
 
 from ._camera_common import CAMERA_ANNOTATOR_SPEC as ANNOTATOR_SPEC
+from ._sensor_base import SensorRuntime
 
 ANNOTATOR = Literal[
     "distance_to_camera",
@@ -41,7 +40,7 @@ ANNOTATOR = Literal[
 ]
 
 
-class TiledCameraSensor:
+class TiledCameraSensor(SensorRuntime):
     """High level class for creating/wrapping and operating tiled (batched) camera sensors.
 
     Args:
@@ -49,7 +48,13 @@ class TiledCameraSensor:
             Can include regular expressions for matching multiple prims.
         resolution: Resolution of each individual sensor (following OpenCV/NumPy convention: ``(height, width)``).
         annotators: Annotator/sensor types to configure.
-        render_vars: Render variables to pass to the render product.
+        annotator_init_params: Per-annotator initialization parameters forwarded to Replicator annotators.
+            Semantic filtering is the exception: ``semanticTypes``/``semanticFilter`` applies to the whole
+            render product, so bounding box and segmentation annotators sharing one render product cannot
+            be filtered independently.
+        writers: Writer types to attach.
+        render_vars: Reserved for API compatibility. Tiled render products do not support additional render variables,
+            so this argument is ignored and a warning is logged when it is set.
 
     Raises:
         ValueError: If no prims are found matching the specified paths.
@@ -74,33 +79,32 @@ class TiledCameraSensor:
         >>> app_utils.play(commit=True)
     """
 
+    _AUTHORING_CLASS = Camera
+    _AUTHORING_ATTR = "_camera"
+    _ALLOW_MULTIPLE_AUTHORING_OBJECTS = True
+
     def __init__(
         self,
         paths: str | list[str] | Camera,
         *,
-        # TiledCameraSensor
         resolution: tuple[int, int],
         annotators: ANNOTATOR | list[ANNOTATOR],
+        annotator_init_params: dict[str, dict[str, Any]] | None = None,
+        writers: str | list[str] | None = None,
         render_vars: list[str] | None = None,
     ) -> None:
-        # define properties
         self._resolution = resolution
         self._tiled_resolution = None
-        self._hydra_texture = None
-        self._annotators = {}
+        # set the camera-specific annotator spec before `super().__init__` validates annotators
         if not hasattr(self, "_annotators_spec"):
             self._annotators_spec = {annotator: ANNOTATOR_SPEC[annotator] for annotator in get_args(ANNOTATOR)}
-        # check for supported annotators
-        self._validate_annotators(annotators)
-        # get or create camera object
-        self._camera = paths if isinstance(paths, Camera) else Camera(paths)
-        self._camera.enforce_square_pixels(self._resolution, modes="horizontal")
-        # initialize instance from arguments
-        self._initialize_sensor(annotators, render_vars=render_vars)
-
-    def __del__(self) -> None:
-        """Clean up instance."""
-        self._invalidate_sensor()
+        super().__init__(
+            paths,
+            annotators=annotators,
+            annotator_init_params=annotator_init_params,
+            writers=writers,
+            render_vars=render_vars,
+        )
 
     def __len__(self) -> int:
         """Get the number of cameras encapsulated by the sensor.
@@ -120,22 +124,6 @@ class TiledCameraSensor:
     """
     Properties.
     """
-
-    @property
-    def annotators(self) -> list[str]:
-        """Annotators.
-
-        Returns:
-            Sorted list of registered annotators.
-
-        Example:
-
-        .. code-block:: python
-
-            >>> tiled_camera_sensor.annotators
-            ['distance_to_image_plane', 'rgb']
-        """
-        return sorted(self._annotators.keys())
 
     @property
     def camera(self) -> Camera:
@@ -185,97 +173,9 @@ class TiledCameraSensor:
         """
         return self._tiled_resolution
 
-    @property
-    def render_product(self) -> UsdRender.Product:
-        """Render product.
-
-        Returns:
-            Render product of the tiled camera sensor.
-
-        Example:
-
-        .. code-block:: python
-
-            >>> tiled_camera_sensor.render_product
-            UsdRender.Product(Usd.Prim(</Render/OmniverseKit/HydraTextures/tiled_camera_sensor_...>))
-        """
-        prim = prim_utils.get_prim_at_path(self._hydra_texture.path)
-        if prim.IsValid() and prim.IsA(UsdRender.Product):
-            return UsdRender.Product(prim)
-        raise RuntimeError(f"Invalid render product at path '{self._hydra_texture.path}'")
-
     """
     Methods.
     """
-
-    def attach_annotators(self, annotators: str | list[str]) -> dict[str, Any]:
-        """Attach annotators to the sensor.
-
-        Args:
-            annotators: Annotator/sensor types to attach.
-
-        Returns:
-            Mapping from annotator name to attached annotator instance.
-
-        Raises:
-            ValueError: If the specified annotator is not supported.
-
-        Example:
-
-        .. code-block:: python
-
-            >>> tiled_camera_sensor.annotators
-            ['distance_to_image_plane', 'rgb']
-            >>> tiled_camera_sensor.attach_annotators("normals")
-            >>> tiled_camera_sensor.annotators
-            ['distance_to_image_plane', 'normals', 'rgb']
-        """
-        annotators = [annotators] if isinstance(annotators, str) else annotators
-        self._validate_annotators(annotators)
-        # define annotator instances
-        for annotator in annotators:
-            spec = self._get_annotator_spec(annotator)
-            device = "cuda"
-            if annotator in ["bounding_box_2d_tight", "bounding_box_2d_loose", "bounding_box_3d"]:
-                device = "cpu"
-            self._annotators[annotator] = rep.AnnotatorRegistry.get_annotator(
-                spec["name"], device=device, do_array_copy=False
-            )
-        # attach annotator instances to the hydra texture
-        for annotator in annotators:
-            self._annotators[annotator].attach(self._hydra_texture.path)
-
-        return {annotator: self._annotators[annotator] for annotator in annotators}
-
-    def detach_annotators(self, annotators: str | list[str]) -> None:
-        """Detach annotators from the sensor.
-
-        Args:
-            annotators: Annotator/sensor types to detach. If the annotator is not attached,
-                or it has already been detached, a warning is logged and the method does nothing.
-
-        Raises:
-            ValueError: If the specified annotator is not supported.
-
-        Example:
-
-        .. code-block:: python
-
-            >>> tiled_camera_sensor.annotators
-            ['distance_to_image_plane', 'normals', 'rgb']
-            >>> tiled_camera_sensor.detach_annotators(["distance_to_image_plane", "normals"])
-            >>> tiled_camera_sensor.annotators
-            ['rgb']
-        """
-        annotators = [annotators] if isinstance(annotators, str) else annotators
-        self._validate_annotators(annotators)
-        # detach annotator instances from the hydra texture
-        for annotator in annotators:
-            if annotator not in self._annotators:
-                carb.log_warn(f"Unable to detach annotator '{annotator}'. It might have been already detached")
-                continue
-            self._annotators[annotator].detach([self._hydra_texture.path])
-            del self._annotators[annotator]
 
     def get_data(
         self, annotator: str, *, tiled: bool = False, out: wp.array | None = None
@@ -289,8 +189,10 @@ class TiledCameraSensor:
 
         Returns:
             Two-elements tuple. 1) Array containing the fetched data. If ``out`` is defined, such instance is returned
-            filled with the data. If no data is available at the moment of calling the method, ``None`` is returned.
-            2) Dictionary containing additional information according to the requested annotator/sensor.
+            filled with the data. If no data is available at the moment of calling the method, ``None`` is returned
+            (annotator warm-up); use :meth:`has_data` to bound the wait. 2) Dictionary containing additional
+            information according to the requested annotator/sensor. Any information reported alongside an empty
+            warm-up payload is preserved.
 
         Raises:
             ValueError: If the specified annotator is not supported.
@@ -316,9 +218,8 @@ class TiledCameraSensor:
             data = data["data"]
         else:
             info = {}
-        # - check if there is no data available
-        if data is None or not data.shape[0]:
-            return None, {}
+        if not self._record_fetched_annotator_data(data):
+            return None, info
         # process data
         spec = self._get_annotator_spec(annotator)
         input_channels = spec["channels"]
@@ -362,23 +263,26 @@ class TiledCameraSensor:
     Internal methods.
     """
 
-    def _invalidate_sensor(self) -> None:
-        """Invalidate sensor by detaching annotators and destroying the hydra texture."""
-        # detach annotators and destroy the hydra texture
-        if self._hydra_texture is not None:
-            self.detach_annotators(list(self._annotators.keys()))
-            self._hydra_texture.destroy()
-        # reset properties
-        self._annotators = {}
-        self._hydra_texture = None
+    def _initialize_sensor(
+        self,
+        annotators: str | list[str],
+        *,
+        render_vars: list[str] | None = None,
+        annotator_init_params: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
+        """Initialize sensor by creating the tiled hydra texture and attaching annotators.
 
-    def _initialize_sensor(self, annotators: str | list[str], *, render_vars: list[str] | None = None) -> None:
-        """Initialize sensor by creating the hydra texture and attaching annotators.
+        A tiled render product is always created for the batched cameras, so this deliberately
+        bypasses the pre-authored render product discovery performed by the base class.
 
         Args:
             annotators: Annotator/sensor types to configure.
             render_vars: Additional render variables (not supported by tiled render products; ignored).
+            annotator_init_params: Per-annotator initialization parameters forwarded to Replicator annotators.
         """
+        if render_vars:
+            carb.log_warn(f"Tiled render products do not support additional render variables. Ignoring {render_vars}.")
+        self._camera.enforce_square_pixels(self._resolution, modes="horizontal")
         # compute tiled resolution
         num_rows = round(len(self._camera) ** 0.5)
         num_columns = (len(self._camera) + num_rows - 1) // num_rows
@@ -390,36 +294,7 @@ class TiledCameraSensor:
             name=f"tiled_camera_sensor_{hash(self)}",
         )
         # attach annotators
-        self.attach_annotators(annotators)
-
-    def _get_annotator_spec(self, annotator: str) -> dict[str, Any]:
-        """Get the specification of the given annotator.
-
-        Args:
-            annotator: Name of the annotator.
-
-        Returns:
-            Dictionary containing the annotator specification.
-        """
-        try:
-            return self._annotators_spec[annotator]
-        except KeyError:
-            raise ValueError(
-                f"Unsupported annotator '{annotator}'. Supported annotator are {list(self._annotators_spec.keys())}"
-            )
-
-    def _validate_annotators(self, annotators: str | list[str]) -> None:
-        """Validate the given annotators.
-
-        Args:
-            annotators: Annotator/sensor types to validate.
-        """
-        annotators = [annotators] if isinstance(annotators, str) else annotators
-        for annotator in annotators:
-            if annotator not in self._annotators_spec:
-                raise ValueError(
-                    f"Unsupported annotator '{annotator}'. Supported annotator are {list(self._annotators_spec.keys())}"
-                )
+        self.attach_annotators(annotators, annotator_init_params=annotator_init_params)
 
 
 """

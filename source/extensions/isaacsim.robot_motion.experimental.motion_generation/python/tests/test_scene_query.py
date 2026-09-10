@@ -17,8 +17,8 @@
 
 The tests cover box and plane intersection checks, rotated plane bounds,
 physics rigid-body versus collision API filtering, motion-generation collision
-API filtering, robot discovery, include/exclude path filters, and invalid AABB
-input handling.
+API filtering, prototype filtering, robot discovery, include/exclude path
+filters, and invalid AABB input handling.
 """
 
 import isaacsim.core.experimental.utils.stage as stage_utils
@@ -161,6 +161,48 @@ class TestSceneQuery(omni.kit.test.AsyncTestCase):
             tracked_api=TrackableApi.PHYSICS_COLLISION,
         )
         self.assertTrue(cube_path in prim_list)
+
+    async def test_scene_query_filters_prototype_prims(self) -> None:
+        """Test scene query filtering of collision prims in USD prototypes."""
+        source_path = "/World/PrototypeSource"
+        source_cube_path = f"{source_path}/Cube"
+        instance_path = "/World/Instance"
+        instance_cube_path = f"{instance_path}/Cube"
+
+        # Add a cube with the collision API to use as the instance source:
+        stage = stage_utils.get_current_stage(backend="usd")
+        stage_utils.define_prim(source_path)
+        Cube(paths=source_cube_path, sizes=1.0)
+        GeomPrim(paths=source_cube_path, apply_collision_apis=True)
+
+        # Add an instanceable internal reference so USD generates a prototype:
+        instance_prim = stage_utils.define_prim(instance_path)
+        instance_prim.GetReferences().AddInternalReference(source_path)
+        instance_prim.SetInstanceable(True)
+        await get_app().next_update_async()
+
+        # Confirm that the generated prototype contains the collision prim:
+        prototypes = stage.GetPrototypes()
+        self.assertGreater(len(prototypes), 0)
+        self.assertTrue(
+            any(
+                prim.IsInPrototype() and str(TrackableApi.PHYSICS_COLLISION) in prim.GetAppliedSchemas()
+                for prototype in prototypes
+                for prim in prototype.GetAllChildren()
+            )
+        )
+
+        # Search for collision prims in a box containing the source and instance:
+        collision_prims = SceneQuery().get_prims_in_aabb(
+            search_box_origin=[0.0, 0.0, 0.0],
+            search_box_minimum=[-1.0, -1.0, -1.0],
+            search_box_maximum=[1.0, 1.0, 1.0],
+            tracked_api=TrackableApi.PHYSICS_COLLISION,
+        )
+
+        # The visible instance should be returned, but internal prototype paths should not:
+        self.assertIn(instance_cube_path, collision_prims)
+        self.assertFalse(any(path.startswith("/__Prototype") for path in collision_prims))
 
     async def test_scene_query_with_unrotated_plane_prim(self) -> None:
         """Test scene query detection of an unrotated plane prim."""

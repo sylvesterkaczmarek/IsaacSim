@@ -48,7 +48,7 @@ class PropAssetPropertyDelegate(BrowserPropertyDelegate):
             items: List of file detail items to build widgets for.
         """
         item = items[0]
-        self._container = ui.VStack(height=0, spacing=5)
+        self._container = ui.VStack(height=ui.Fraction(1), spacing=5)
         with self._container:
             if item.thumbnail:
                 self._build_thumbnail(item)

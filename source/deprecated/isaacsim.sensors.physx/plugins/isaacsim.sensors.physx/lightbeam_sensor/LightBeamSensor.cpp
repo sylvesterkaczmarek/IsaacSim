@@ -21,18 +21,18 @@
 #define CARB_EXPORTS
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "LightBeamSensor.h"
+#include "LightBeamSensor.hpp"
 
-#include "isaacsim/core/includes/Pose.h"
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "isaacsim/core/includes/Pose.hpp"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 
 #include <carb/Framework.h>
 
-#include <isaacsim/core/includes/Conversions.h>
-#include <isaacsim/sensors/physx/IPhysxSensorInterface.h>
+#include <isaacsim/core/includes/Conversions.hpp>
+#include <isaacsim/sensors/physx/IPhysxSensorInterface.hpp>
 #include <omni/physx/IPhysx.h>
 #include <omni/physx/IPhysxSceneQuery.h>
 

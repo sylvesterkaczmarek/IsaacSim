@@ -17,7 +17,7 @@
 #include <carb/logging/Log.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/ros2/nodes/PublisherBase.h>
+#include <isaacsim/ros2/nodes/PublisherBase.hpp>
 
 using namespace isaacsim::ros2::core;
 

@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import re
 import time
 
@@ -30,9 +31,12 @@ import numpy as np
 import omni.kit.viewport.utility
 import omni.kit.viewport.window
 import warp as wp
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdRender
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdRender, Vt
 
 from .rendering_manager import RenderingManager
+
+_SETTING_CURRENT_GPU_COUNT = "/renderer/multiGpu/currentGpuCount"
+_VIEWPORT_RENDER_PRODUCT_NAME = "omni_kit_widget_viewport"
 
 
 class ViewportManager:
@@ -407,6 +411,138 @@ class ViewportManager:
         raise ValueError(
             f"Unable to get resolution: unknown render product or viewport '{render_product_or_viewport}' ({type(render_product_or_viewport)})"
         )
+
+    @classmethod
+    def optimize_render_products(
+        cls,
+        root: str | Usd.Prim | UsdRender.Product = "/Render/OmniverseKit/HydraTextures",
+    ) -> dict[str, list[int]]:
+        """Balance camera render products across the GPUs used by the renderer.
+
+        This opt-in operation estimates camera render product load from resolution and greedily assigns each camera
+        render product to one GPU. It can be called again after render products are added or their resolutions change.
+        The assignments are authored as ``uint[] deviceIds`` attributes in the USD session layer.
+
+        Viewport and non-camera render products, including legacy camera-prim RTX lidar and radar sensors, are left
+        unchanged because moving RTX sensor render products can be unsafe. Their load is included when they already
+        have valid ``deviceIds`` assignments. When fewer camera render products than GPUs are available, no assignments
+        are made so that the renderer can retain its default multi-GPU behavior.
+
+        Args:
+            root: Root prim whose subtree is searched for render products.
+
+        Returns:
+            Mapping from reassigned camera render product paths to their one-element GPU index lists. An empty mapping
+            is returned when fewer than two GPUs are active or when fewer camera render products than GPUs are found.
+
+        Raises:
+            ValueError: The root is not a valid USD prim.
+
+        Example:
+
+        .. code-block:: python
+
+            >>> from isaacsim.core.rendering_manager import ViewportManager
+            >>>
+            >>> ViewportManager.optimize_render_products()
+            {}
+        """
+        root_prim = prim_utils.get_prim_at_path(root)
+        if not root_prim.IsValid():
+            raise ValueError(f"The root ({prim_utils.get_prim_path(root)}) is not a valid USD prim")
+
+        gpu_count = cls._get_gpu_count()
+        if gpu_count <= 1:
+            return {}
+
+        render_product_prims = prim_utils.get_all_matching_child_prims(
+            root_prim,
+            predicate=lambda prim, _: prim.IsA(UsdRender.Product),
+            include_self=True,
+        )
+        render_products = [UsdRender.Product(prim) for prim in render_product_prims]
+
+        viewport_render_product_paths = {
+            str(window.viewport_api.render_product_path)
+            for window in cls.get_viewport_windows()
+            if window.viewport_api is not None
+        }
+        gpu_loads = [0] * gpu_count
+        camera_products: list[tuple[str, UsdRender.Product, int]] = []
+
+        for render_product in render_products:
+            path = prim_utils.get_prim_path(render_product)
+            try:
+                resolution = cls.get_resolution(render_product)
+                load = math.prod(max(int(axis), 0) for axis in resolution)
+            except (TypeError, ValueError):
+                load = 0
+
+            try:
+                camera = cls.get_camera(render_product)
+            except ValueError:
+                camera = None
+            camera_prim = camera.GetPrim() if camera is not None else None
+            camera_sensor_type = None
+            if camera_prim is not None and camera_prim.IsValid():
+                camera_sensor_type_attribute = camera_prim.GetAttribute("cameraSensorType")
+                if camera_sensor_type_attribute.IsValid():
+                    camera_sensor_type = camera_sensor_type_attribute.Get()
+            is_camera_product = (
+                camera_prim is not None
+                and camera_prim.IsValid()
+                and camera_prim.IsA(UsdGeom.Camera)
+                and (camera_sensor_type is None or str(camera_sensor_type) == "camera")
+            )
+            is_viewport_product = path in viewport_render_product_paths or _VIEWPORT_RENDER_PRODUCT_NAME in path
+            if is_camera_product and not is_viewport_product:
+                camera_products.append((path, render_product, load))
+                continue
+
+            for device_id in set(cls._get_render_product_device_ids(render_product)):
+                if 0 <= device_id < gpu_count:
+                    gpu_loads[device_id] += load
+
+        if gpu_count > len(camera_products):
+            carb.log_info(
+                f"Skipping render product GPU optimization: {gpu_count} GPUs are active, "
+                f"but only {len(camera_products)} camera render products are eligible"
+            )
+            return {}
+
+        assignments: dict[str, list[int]] = {}
+        stage = stage_utils.get_current_stage(backend="usd")
+        with Usd.EditContext(stage, stage.GetSessionLayer()):
+            for path, render_product, load in sorted(camera_products, key=lambda item: (-item[2], item[0])):
+                device_id = min(range(gpu_count), key=lambda index: (gpu_loads[index], index))
+                gpu_loads[device_id] += load
+                device_ids = [device_id]
+                cls._set_render_product_device_ids(render_product, device_ids)
+                assignments[path] = device_ids
+        return assignments
+
+    @staticmethod
+    def _get_gpu_count() -> int:
+        gpu_count = carb.settings.get_settings().get(_SETTING_CURRENT_GPU_COUNT)
+        try:
+            return max(int(gpu_count), 1)
+        except (TypeError, ValueError):
+            return 1
+
+    @staticmethod
+    def _get_render_product_device_ids(render_product: UsdRender.Product) -> list[int]:
+        attribute = render_product.GetPrim().GetAttribute("deviceIds")
+        if not attribute.IsValid():
+            return []
+        device_ids = attribute.Get()
+        return [] if device_ids is None else [int(device_id) for device_id in device_ids]
+
+    @staticmethod
+    def _set_render_product_device_ids(render_product: UsdRender.Product, device_ids: list[int]) -> None:
+        attribute = render_product.GetPrim().GetAttribute("deviceIds")
+        if not attribute.IsValid():
+            attribute = render_product.GetPrim().CreateAttribute("deviceIds", Sdf.ValueTypeNames.UIntArray)
+        attribute.Set(Vt.UIntArray(device_ids))
 
     @classmethod
     def set_resolution(

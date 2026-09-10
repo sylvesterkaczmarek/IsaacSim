@@ -22,4 +22,19 @@ from pxr import Plug
 pluginsRoot = os.path.join(os.path.dirname(__file__), "../../../plugins")
 
 mujocoSchemaPath = pluginsRoot
-Plug.Registry().RegisterPlugins(mujocoSchemaPath)
+registry = Plug.Registry()
+registry.RegisterPlugins(mujocoSchemaPath)
+
+# Surface a clear failure when the mjcPhysics plugin is not found. Registration
+# may return an empty list when the plugin was already registered by another
+# provider, so query the global registry after attempting registration.
+if registry.GetPluginWithName("mjcPhysics") is None:
+    try:
+        import carb
+
+        carb.log_error(
+            f"Failed to register the 'mjcPhysics' USD schema plugin from '{mujocoSchemaPath}'. "
+            "Mujoco schemas will be unavailable."
+        )
+    except ImportError:
+        pass

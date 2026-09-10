@@ -13,10 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Provides UI utilities and graph builders for ROS 2 integration in Isaac Sim."""
+"""Provides UI utilities for ROS 2 integration in Isaac Sim."""
 
-from .extension import *  # noqa: F403
-from .og_rtx_sensors import *  # noqa: F403
-from .og_utils import *  # noqa: F403
+from .extension import Extension as Extension
 
-__all__ = []
+__all__ = ["Extension"]

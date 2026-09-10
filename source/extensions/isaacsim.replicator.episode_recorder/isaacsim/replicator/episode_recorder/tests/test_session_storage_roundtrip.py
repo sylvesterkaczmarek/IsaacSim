@@ -33,6 +33,7 @@ from isaacsim.replicator.episode_recorder import (
     SessionReader,
     SessionStorage,
     build_manifest,
+    get_registered,
     register_recordable,
     registered_types,
     rehydrate,
@@ -143,6 +144,23 @@ class SessionStorageRoundtripTests(omni.kit.test.AsyncTestCase):
         """Run the registry rejects unknown type test."""
         with self.assertRaises(KeyError):
             rehydrate({"type": "__nonexistent__", "group": "x"})
+
+    async def test_registry_replaces_reloaded_class_definition(self) -> None:
+        """The registry replaces a stale class when Kit reloads its defining module."""
+        type_id = "_test_reloaded_recordable"
+        class_attributes = {
+            "TYPE_ID": type_id,
+            "__module__": "test_extension.recordables",
+        }
+        original_class = type("ReloadableRecordable", (Recordable,), class_attributes)
+        reloaded_class = type("ReloadableRecordable", (Recordable,), class_attributes)
+
+        try:
+            register_recordable(original_class)
+            register_recordable(reloaded_class)
+            self.assertIs(get_registered(type_id), reloaded_class)
+        finally:
+            unregister_recordable(type_id)
 
     async def test_append_frame_rejects_missing_channels(self) -> None:
         """Run the append frame rejects missing channels test."""

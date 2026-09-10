@@ -13,11 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "GpuArticulationView.h"
+#include "GpuArticulationView.hpp"
 
-#include "CudaCommon.h"
-#include "CudaKernels.h"
-#include "GpuGatherHelper.h"
+#include "CudaCommon.hpp"
+#include "CudaKernels.hpp"
+#include "GpuGatherHelper.hpp"
 
 #include <carb/logging/Log.h>
 
@@ -729,30 +729,36 @@ bool GpuArticulationView::applyForcesAndTorquesAtPosition(const TensorDesc* srcF
     if (hasTorque &&
         !validateFloat32TensorAnyDevice(srcTorqueTensor, size_t(m_count) * m_maxLinks * 3u, "torque", __FUNCTION__))
         return false;
+    if (srcPositionTensor && srcPositionTensor->data &&
+        !validateFloat32TensorAnyDevice(srcPositionTensor, size_t(m_count) * m_maxLinks * 3u, "position", __FUNCTION__))
+        return false;
     if (!validateOptionalIndexTensorAnyDevice(indexTensor, __FUNCTION__))
         return false;
 
-    if (hasForce)
+    const bool hasPosition = srcPositionTensor && srcPositionTensor->data;
+    const size_t inputFloats = size_t(m_count) * m_maxLinks * 3u;
+    size_t stagingOffset = 0;
+    auto prepareInput = [&](const TensorDesc* tensor, bool present) -> const float*
     {
-        auto idx = _resolveGpuIndices(indexTensor, m_deviceIndexScratch);
-        const float* src = ensureGpuSrc(srcForceTensor, m_stagingBuffer, m_stagingMaxFloats);
-        if (!src)
-            return false;
-        if (!launchFusedLinkAdd(src, m_cachedBodyF, idx.ptr, m_deviceLinkFlatIndices, idx.count, m_maxLinks, 3, 6, 0, 3))
-            return false;
-    }
+        if (!present)
+            return nullptr;
+        const float* source = ensureGpuSrc(tensor, m_stagingBuffer, m_stagingMaxFloats, stagingOffset);
+        if (source && tensor->device < 0)
+            stagingOffset += inputFloats;
+        return source;
+    };
 
-    if (hasTorque)
-    {
-        auto idx = _resolveGpuIndices(indexTensor, m_deviceIndexScratch);
-        const float* src = ensureGpuSrc(srcTorqueTensor, m_stagingBuffer, m_stagingMaxFloats);
-        if (!src)
-            return false;
-        if (!launchFusedLinkAdd(src, m_cachedBodyF, idx.ptr, m_deviceLinkFlatIndices, idx.count, m_maxLinks, 3, 6, 3, 3))
-            return false;
-    }
+    const float* force = prepareInput(srcForceTensor, hasForce);
+    const float* torque = prepareInput(srcTorqueTensor, hasTorque);
+    const float* position = prepareInput(srcPositionTensor, hasPosition);
+    if ((hasForce && !force) || (hasTorque && !torque) || (hasPosition && !position))
+        return false;
 
-    return true;
+    auto indices = _resolveGpuIndices(indexTensor, m_deviceIndexScratch);
+    return launchFusedLinkWrenchAdd(force, torque, position, m_cachedBodyF, indices.ptr, m_deviceLinkFlatIndices,
+                                    reinterpret_cast<const wp::transform*>(m_cachedBodyQ),
+                                    reinterpret_cast<const wp::vec3*>(m_cachedBodyCenterOfMass), indices.count,
+                                    m_maxLinks, isGlobal, hasForce, hasTorque, hasPosition);
 }
 
 } // namespace tensors

@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.9] - 2026-08-17
+### Fixed
+- Waypoint follower: preserve waypoint orientation when creating Nav2 goals.
+
+## [1.2.8] - 2026-08-04
+### Fixed
+- Updated MoveIt sample with Franka to use new gripper variant.
+
+## [1.2.7] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [1.2.6] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [1.2.5] - 2026-06-29
+### Changed
+- Classify ROS 2 example modules as lifecycle-only; do not publish their Kit extension classes or UI helpers.
+
 ## [1.2.4] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

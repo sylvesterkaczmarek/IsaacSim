@@ -89,7 +89,7 @@ def get_local_from_world(parent_transforms: object, positions: object, orientati
         device: Target device for the returned data.
 
     Returns:
-        Tuple of (local_positions, local_orientations) in parent coordinate space.
+        A tuple of (local_positions, local_orientations) in parent coordinate space.
     """
     # TODO: warp kernels not working on cpu
     ret_device = device
@@ -141,7 +141,7 @@ def get_world_from_local(
         device: Target device for computation and returned data.
 
     Returns:
-        Tuple of (world_translations, world_orientations) as Warp arrays.
+        A tuple of (world_translations, world_orientations) as Warp arrays.
     """
     calculated_translations = torch.zeros(size=(translations.shape[0], 3), dtype=torch.float32, device=device)
     calculated_orientations = torch.zeros(size=(translations.shape[0], 4), dtype=torch.float32, device=device)
@@ -325,7 +325,7 @@ def assign_pose(
     """Assigns pose data by combining current poses with selective updates.
 
     First populates the pose array with current position and orientation data, then selectively
-    updates specific indices with new pose values. Handles device management for CPU/CUDA operations.
+    updates specific indices with new pose values. Handles device management for CPU and CUDA operations.
 
     Args:
         current_positions: Current position data for all poses.
@@ -333,7 +333,7 @@ def assign_pose(
         positions: New position data to assign at specific indices.
         orientations: New orientation data to assign at specific indices.
         indices: Target indices for applying new pose data.
-        device: Target device for computation ("cpu" or "cuda:0").
+        device: Target device for computation.
         pose: Pose array to populate and update.
 
     Returns:

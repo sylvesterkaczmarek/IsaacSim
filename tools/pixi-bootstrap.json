@@ -1,0 +1,17 @@
+{
+  "version": "0.77.1",
+  "platforms": {
+    "linux-aarch64": {
+      "url": "https://github.com/prefix-dev/pixi/releases/download/v0.77.1/pixi-aarch64-unknown-linux-musl",
+      "sha256": "9cbe6ad1c23422c8cad840b577bcfc3051f193a21961316986f553f7a6cfba87"
+    },
+    "linux-x86_64": {
+      "url": "https://github.com/prefix-dev/pixi/releases/download/v0.77.1/pixi-x86_64-unknown-linux-musl",
+      "sha256": "5115a89a9189a2e4e7e8d2f04236a7be586d8f6091dfc9ea869fb3c4a52b6935"
+    },
+    "windows-x86_64": {
+      "url": "https://github.com/prefix-dev/pixi/releases/download/v0.77.1/pixi-x86_64-pc-windows-msvc.exe",
+      "sha256": "b39685cf2470c58f49f5ce7c200184a6bca5e92e8d425015b5a1cf9a813864ac"
+    }
+  }
+}

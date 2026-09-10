@@ -24,10 +24,10 @@ from isaacsim.core.utils.types import ArticulationAction
 
 
 class Gripper(SingleRigidPrim):
-    """Provides high level functions to set/ get properties and actions of a gripper.
+    """Provides high level functions to set/get properties and actions of a gripper.
 
     Args:
-        end_effector_prim_path: Prim path of the Prim that corresponds to the gripper root/ end effector.
+        end_effector_prim_path: Prim path of the Prim that corresponds to the gripper root/end effector.
     """
 
     def __init__(self, end_effector_prim_path: str) -> None:
@@ -37,25 +37,33 @@ class Gripper(SingleRigidPrim):
         return
 
     def initialize(self, physics_sim_view: omni.physics.tensors.SimulationView = None) -> None:
-        """Create a physics simulation view if not passed and creates a rigid prim view using physX tensor api.
+        """Creates a physics simulation view if not passed and creates a rigid prim view using PhysX tensor API.
 
         This needs to be called after each hard reset (i.e stop + play on the timeline) before interacting with any
         of the functions of this class.
 
         Args:
-            physics_sim_view: current physics simulation view.
+            physics_sim_view: Current physics simulation view.
         """
         SingleRigidPrim.initialize(self, physics_sim_view=physics_sim_view)
         return
 
     @abstractmethod
     def open(self) -> None:
-        """Applies actions to the articulation that opens the gripper (ex: to release an object held)."""
+        """Applies actions to the articulation that opens the gripper (ex: to release an object held).
+
+        Raises:
+            NotImplementedError: This abstract method must be implemented by a subclass.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def close(self) -> None:
-        """Applies actions to the articulation that closes the gripper (ex: to hold an object)."""
+        """Applies actions to the articulation that closes the gripper (ex: to hold an object).
+
+        Raises:
+            NotImplementedError: This abstract method must be implemented by a subclass.
+        """
         raise NotImplementedError
 
     @abstractmethod
@@ -65,6 +73,9 @@ class Gripper(SingleRigidPrim):
         Args:
             *args: Variable length argument list.
             **kwargs: Additional keyword arguments.
+
+        Raises:
+            NotImplementedError: This abstract method must be implemented by a subclass.
         """
         raise NotImplementedError
 
@@ -78,21 +89,25 @@ class Gripper(SingleRigidPrim):
 
         Returns:
             The default state of the gripper.
+
+        Raises:
+            NotImplementedError: This abstract method must be implemented by a subclass.
         """
         raise NotImplementedError
 
     @abstractmethod
     def forward(self, *args: Any, **kwargs: Any) -> ArticulationAction:
-        """Calculates the ArticulationAction for all of the articulation joints that corresponds to a specific action.
-
-        such as "open" for an example.
+        """Calculates the ArticulationAction for all of the articulation joints that corresponds to a specific action, such as "open".
 
         Args:
             *args: Variable length argument list.
             **kwargs: Additional keyword arguments.
 
         Returns:
-            articulation action to be passed to the articulation itself
+            Articulation action to be passed to the articulation itself
             (includes all joints of the articulation).
+
+        Raises:
+            NotImplementedError: This abstract method must be implemented by a subclass.
         """
         raise NotImplementedError

@@ -15,7 +15,7 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/hsb/core/IHsbCore.h>
+#include <isaacsim/hsb/core/IHsbCore.hpp>
 
 CARB_BINDINGS("isaacsim.hsb.core.python")
 

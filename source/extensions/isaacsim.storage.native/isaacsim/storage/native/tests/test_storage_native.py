@@ -16,6 +16,8 @@
 """Test suite for Isaac Sim storage native extension functionality."""
 
 import asyncio
+import os
+from unittest.mock import AsyncMock, Mock, call, patch
 
 import carb
 import omni.kit.commands
@@ -23,14 +25,24 @@ import omni.kit.test
 
 # import omni.kit.usd
 from isaacsim.storage.native import (
+    Version,
     find_filtered_files_async,
     get_assets_root_path,
     get_assets_root_path_async,
     is_local_path,
     path_join,
     resolve_asset_path,
+    verify_asset_root_path,
+)
+from isaacsim.storage.native.impl.extension import (
+    ASSET_REGION_PROFILE_ENV_VAR,
+    ASSET_REGION_PROFILES_SETTING,
+    ASSET_ROOT_ENV_VAR,
+    ASSET_ROOT_SETTING,
+    Extension,
 )
 from isaacsim.storage.native.impl.file_utils import _URL_SCHEMES
+from pxr import UsdUtils
 
 
 class TestPathJoin(omni.kit.test.AsyncTestCase):
@@ -96,6 +108,340 @@ class TestIsLocalPath(omni.kit.test.AsyncTestCase):
         self.assertTrue(is_local_path(""))
 
 
+class TestAssetRegionProfile(omni.kit.test.AsyncTestCase):
+    """Tests for selecting and applying asset region profiles."""
+
+    def test_startup_reads_asset_region_profile_environment(self) -> None:
+        """Startup applies the profile selected by the public environment variable."""
+        extension = Extension()
+        environment = {ASSET_REGION_PROFILE_ENV_VAR: "china"}
+
+        with (
+            patch("isaacsim.storage.native.impl.extension.os.getenv", side_effect=environment.get),
+            patch.object(extension, "_apply_asset_region_profile") as apply_mock,
+        ):
+            extension.on_startup("isaacsim.storage.native")
+
+        apply_mock.assert_called_once_with("china")
+
+    def test_default_profile_sets_asset_root_without_s3_configuration(self) -> None:
+        """The default profile restores the default root without changing S3 routing."""
+        asset_root = "https://example.com/Assets/Isaac/6.1"
+        settings = Mock()
+        settings.get.return_value = {"asset_root": asset_root}
+        extension = Extension()
+        extension._profile_headers = []
+
+        with (
+            patch("isaacsim.storage.native.impl.extension.carb.settings.get_settings", return_value=settings),
+            patch.object(omni.client, "set_s3_configuration") as configure_mock,
+        ):
+            extension._apply_asset_region_profile("us")
+
+        settings.get.assert_called_once_with(f"{ASSET_REGION_PROFILES_SETTING}/us")
+        settings.set_string.assert_called_once_with("/persistent/isaac/asset_root/default", asset_root)
+        configure_mock.assert_not_called()
+
+    def test_regional_profile_applies_storage_routing_and_roots(self) -> None:
+        """A regional profile configures storage routing, headers, and resolved roots."""
+        profile = {
+            "endpoint": "storage.example.com",
+            "bucket": "assets",
+            "region": "example-region",
+            "cdn_url": "https://cdn.example.com/",
+            "cdn_for_list": False,
+            "http_headers": {"x-example": "value"},
+            "asset_root": "https://storage.example.com/Assets/Isaac/6.1/",
+            "usd_search_endpoint": "https://search.example.com/",
+        }
+        settings = Mock()
+        settings.get.return_value = profile
+        extension = Extension()
+        extension._profile_headers = []
+
+        with (
+            patch("isaacsim.storage.native.impl.extension.carb.settings.get_settings", return_value=settings),
+            patch.object(omni.client, "set_s3_configuration", return_value=omni.client.Result.OK) as configure_mock,
+            patch.object(omni.client, "set_http_header") as header_mock,
+        ):
+            extension._apply_asset_region_profile("china")
+
+        settings.get.assert_called_once_with(f"{ASSET_REGION_PROFILES_SETTING}/china")
+        configure_mock.assert_called_once_with(
+            url="storage.example.com",
+            bucket="assets",
+            region="example-region",
+            cloudfrontUrl="https://cdn.example.com/",
+            cloudfrontForList=False,
+            writeConfig=False,
+        )
+        header_mock.assert_called_once_with("x-example", "value")
+        self.assertEqual(extension._profile_headers, ["x-example"])
+        self.assertEqual(
+            settings.set_string.call_args_list,
+            [
+                call(ASSET_ROOT_SETTING, "https://storage.example.com/Assets/Isaac/6.1"),
+                call("/exts/omni.simready.content.browser/usd_search_endpoint", "https://search.example.com/"),
+            ],
+        )
+
+    def test_asset_root_environment_overrides_selected_profile(self) -> None:
+        """An explicit asset root wins after the selected profile is applied."""
+        profile_root = "https://example.com/Assets/Isaac/6.1"
+        environment_root = "https://override.example.com/assets/"
+        settings = Mock()
+        settings.get.return_value = {"asset_root": profile_root}
+        extension = Extension()
+        environment = {
+            ASSET_REGION_PROFILE_ENV_VAR: "us",
+            ASSET_ROOT_ENV_VAR: environment_root,
+        }
+
+        with (
+            patch("isaacsim.storage.native.impl.extension.os.getenv", side_effect=environment.get),
+            patch("isaacsim.storage.native.impl.extension.carb.settings.get_settings", return_value=settings),
+        ):
+            extension.on_startup("isaacsim.storage.native")
+
+        self.assertEqual(
+            settings.set_string.call_args_list,
+            [
+                call(ASSET_ROOT_SETTING, profile_root),
+                call(ASSET_ROOT_SETTING, environment_root.rstrip("/")),
+            ],
+        )
+
+
+class TestAssetRegionProfileAvailability(omni.kit.test.AsyncTestCase):
+    """Live checks for assets required from a selected region profile."""
+
+    _REQUIRED_ASSETS = (
+        "Isaac/Environments/Hospital/Props/Cube.usd",
+        "Isaac/Environments/Simple_Room/simple_room.usd",
+        "Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
+        "Isaac/Robots/NVIDIA/NovaCarter/nova_carter.usd",
+        "NVIDIA/Materials/Base/Wood/Oak/Oak_BaseColor.png",
+    )
+    _DEPENDENCY_CANARY = "Isaac/Environments/Hospital/Props/Cube.usd"
+    _MIN_DEPENDENCY_LAYERS = 1
+    _MIN_DEPENDENCY_ASSETS = 1
+
+    async def test_selected_profile_required_assets_are_available(self) -> None:
+        """Resolve stable asset entry points and one dependency closure through the selected profile."""
+        profile_name = os.getenv(ASSET_REGION_PROFILE_ENV_VAR)
+        if not profile_name:
+            self.skipTest(f"Set {ASSET_REGION_PROFILE_ENV_VAR} to run the live profile check")
+
+        settings = carb.settings.get_settings()
+        profile = settings.get(f"{ASSET_REGION_PROFILES_SETTING}/{profile_name}")
+        self.assertTrue(profile, f"Unknown asset region profile: {profile_name}")
+
+        profile_root = str(profile.get("asset_root") or "").rstrip("/")
+        self.assertTrue(profile_root, f"Asset region profile '{profile_name}' has no asset root")
+        self.assertEqual(await get_assets_root_path_async(), profile_root)
+
+        failures: list[str] = []
+        for relative_path in self._REQUIRED_ASSETS:
+            result, _, content = await omni.client.read_file_async(path_join(profile_root, relative_path))
+            if result != omni.client.Result.OK:
+                failures.append(f"Required asset could not be read: {relative_path}: {result}")
+            elif not content:
+                failures.append(f"Required asset is empty: {relative_path}")
+
+        canary_path = path_join(profile_root, self._DEPENDENCY_CANARY)
+        layers, assets, unresolved = await asyncio.get_running_loop().run_in_executor(
+            None, UsdUtils.ComputeAllDependencies, canary_path
+        )
+        if len(layers) < self._MIN_DEPENDENCY_LAYERS:
+            failures.append(
+                f"Expected at least {self._MIN_DEPENDENCY_LAYERS} USD layer for {self._DEPENDENCY_CANARY}, "
+                f"resolved {len(layers)}"
+            )
+        if len(assets) < self._MIN_DEPENDENCY_ASSETS:
+            failures.append(
+                f"Expected at least {self._MIN_DEPENDENCY_ASSETS} USD asset for {self._DEPENDENCY_CANARY}, "
+                f"resolved {len(assets)}"
+            )
+        if unresolved:
+            failures.append(
+                f"Unresolved dependencies for {self._DEPENDENCY_CANARY}: {[str(path) for path in unresolved]}"
+            )
+
+        self.assertFalse(failures, "\n".join(failures))
+
+
+class TestVerifyAssetRootPath(omni.kit.test.AsyncTestCase):
+    """Tests for asset-root version verification across storage providers."""
+
+    def _verify_with_mocks(
+        self,
+        path: str,
+        read_result: omni.client.Result,
+        file_content: bytes = b"",
+        stat_results: list[tuple[omni.client.Result, None]] | None = None,
+    ) -> tuple[omni.client.Result, Version | str, Mock]:
+        """Run version verification with deterministic application and storage responses."""
+        if stat_results is None:
+            stat_results = []
+        with (
+            patch(
+                "isaacsim.storage.native.nucleus.get_version",
+                return_value=("6.1.0", "", "", "", "", "", "", ""),
+            ),
+            patch.object(omni.client, "set_hang_detection_time_ms"),
+            patch.object(omni.client, "push_base_url"),
+            patch.object(omni.client, "combine_with_base_url", return_value=f"{path}/version.txt"),
+            patch.object(omni.client, "read_file", return_value=(read_result, None, file_content)),
+            patch.object(omni.client, "stat", side_effect=stat_results) as stat_mock,
+        ):
+            result, version = verify_asset_root_path(path)
+        return result, version, stat_mock
+
+    def test_version_file_remains_preferred(self) -> None:
+        """A readable version file is used without probing asset directories."""
+        result, version, stat_mock = self._verify_with_mocks(
+            "https://example.com/Assets/Isaac/6.1",
+            omni.client.Result.OK,
+            b"6.1.0",
+        )
+
+        self.assertEqual(result, omni.client.Result.OK)
+        self.assertEqual(version, Version("6.1.0"))
+        stat_mock.assert_not_called()
+
+    def test_missing_version_file_accepts_isaac_only_http_root(self) -> None:
+        """A versioned HTTP root with only Isaac assets is accepted when version.txt is absent."""
+        result, version, stat_mock = self._verify_with_mocks(
+            "https://example.com/Assets/Isaac/6.1",
+            omni.client.Result.ERROR_NOT_FOUND,
+            stat_results=[(omni.client.Result.OK, None)],
+        )
+
+        self.assertEqual(result, omni.client.Result.OK)
+        self.assertEqual(version, Version("6.1.0"))
+        stat_mock.assert_called_once_with("https://example.com/Assets/Isaac/6.1/Isaac")
+
+    def test_missing_version_file_uses_three_component_http_root(self) -> None:
+        """A three-component version in an HTTP root is preserved."""
+        result, version, stat_mock = self._verify_with_mocks(
+            "https://example.com/Assets/Isaac/6.1.2",
+            omni.client.Result.ERROR_NOT_FOUND,
+            stat_results=[(omni.client.Result.OK, None)],
+        )
+
+        self.assertEqual(result, omni.client.Result.OK)
+        self.assertEqual(version, Version("6.1.2"))
+        self.assertEqual(stat_mock.call_count, 1)
+
+    def test_missing_version_file_accepts_nvidia_only_http_root(self) -> None:
+        """A versioned HTTP root with only NVIDIA assets is accepted when version.txt is absent."""
+        result, version, stat_mock = self._verify_with_mocks(
+            "https://example.com/Assets/Isaac/6.1",
+            omni.client.Result.ERROR_NOT_FOUND,
+            stat_results=[(omni.client.Result.ERROR_NOT_FOUND, None), (omni.client.Result.OK, None)],
+        )
+
+        self.assertEqual(result, omni.client.Result.OK)
+        self.assertEqual(version, Version("6.1.0"))
+        self.assertEqual(stat_mock.call_count, 2)
+
+    def test_missing_version_file_rejects_root_without_asset_directories(self) -> None:
+        """A root without either recognized asset directory remains unverified."""
+        result, version, stat_mock = self._verify_with_mocks(
+            "https://example.com/Assets/Isaac/6.1",
+            omni.client.Result.ERROR_NOT_FOUND,
+            stat_results=[
+                (omni.client.Result.ERROR_NOT_FOUND, None),
+                (omni.client.Result.ERROR_NOT_FOUND, None),
+            ],
+        )
+
+        self.assertEqual(result, omni.client.Result.ERROR_NOT_FOUND)
+        self.assertEqual(version, "")
+        self.assertEqual(
+            [call.args[0] for call in stat_mock.call_args_list],
+            [
+                "https://example.com/Assets/Isaac/6.1/Isaac",
+                "https://example.com/Assets/Isaac/6.1/NVIDIA",
+            ],
+        )
+
+    def test_missing_version_file_rejects_unsupported_directory_metadata(self) -> None:
+        """Unsupported directory metadata does not verify an HTTP asset root."""
+        result, version, stat_mock = self._verify_with_mocks(
+            "https://example.com/Assets/Isaac/6.1",
+            omni.client.Result.ERROR_NOT_FOUND,
+            stat_results=[
+                (omni.client.Result.ERROR_NOT_SUPPORTED, None),
+                (omni.client.Result.ERROR_NOT_SUPPORTED, None),
+            ],
+        )
+
+        self.assertEqual(result, omni.client.Result.ERROR_NOT_FOUND)
+        self.assertEqual(version, "")
+        self.assertEqual(stat_mock.call_count, 2)
+
+    def test_missing_version_file_rejects_unversioned_root(self) -> None:
+        """An HTTP root without a semantic version path remains unverified."""
+        result, version, stat_mock = self._verify_with_mocks(
+            "https://example.com/Assets/Isaac/latest",
+            omni.client.Result.ERROR_NOT_FOUND,
+        )
+
+        self.assertEqual(result, omni.client.Result.ERROR_NOT_FOUND)
+        self.assertEqual(version, "")
+        stat_mock.assert_not_called()
+
+    def test_missing_version_file_rejects_nonnumeric_version_without_parse_error(self) -> None:
+        """A nonnumeric root version is rejected without blaming version.txt content."""
+        with patch.object(carb, "log_info") as log_mock:
+            result, version, stat_mock = self._verify_with_mocks(
+                "https://example.com/Assets/Isaac/6.invalid",
+                omni.client.Result.ERROR_NOT_FOUND,
+            )
+
+        self.assertEqual(result, omni.client.Result.ERROR_NOT_FOUND)
+        self.assertEqual(version, "")
+        stat_mock.assert_not_called()
+        self.assertFalse(
+            any("Unable to parse version file" in call.args[0] for call in log_mock.call_args_list if call.args)
+        )
+
+    def test_missing_version_file_preserves_version_mismatch(self) -> None:
+        """A valid root for a different Isaac Sim minor version is rejected."""
+        result, version, _ = self._verify_with_mocks(
+            "https://example.com/Assets/Isaac/6.0",
+            omni.client.Result.ERROR_NOT_FOUND,
+            stat_results=[(omni.client.Result.OK, None)],
+        )
+
+        self.assertEqual(result, omni.client.Result.ERROR_BAD_VERSION)
+        self.assertEqual(version, Version("6.0.0"))
+
+    def test_non_not_found_version_error_does_not_fallback(self) -> None:
+        """Access and transport errors do not trust the root path version."""
+        result, version, stat_mock = self._verify_with_mocks(
+            "https://example.com/Assets/Isaac/6.1",
+            omni.client.Result.ERROR_ACCESS_DENIED,
+        )
+
+        self.assertEqual(result, omni.client.Result.ERROR_NOT_FOUND)
+        self.assertEqual(version, "")
+        stat_mock.assert_not_called()
+
+    def test_malformed_version_file_does_not_fallback(self) -> None:
+        """Malformed version-file content is not replaced with the root path version."""
+        result, version, stat_mock = self._verify_with_mocks(
+            "https://example.com/Assets/Isaac/6.1",
+            omni.client.Result.OK,
+            b"invalid",
+        )
+
+        self.assertEqual(result, omni.client.Result.ERROR_NOT_FOUND)
+        self.assertEqual(version, "")
+        stat_mock.assert_not_called()
+
+
 class TestStorageNative(omni.kit.test.AsyncTestCase):
     """Test suite for Isaac Sim storage native extension functionality.
 
@@ -150,6 +496,95 @@ class TestStorageNative(omni.kit.test.AsyncTestCase):
 
         # reset settings
         carb.settings.get_settings().set("/persistent/isaac/asset_root/default", default_assets_url)
+
+    async def test_get_assets_root_path_accepts_isaac_only_profile_root(self) -> None:
+        """Accept an asset-region-profile root when its mirrored subset contains only Isaac assets."""
+        settings = carb.settings.get_settings()
+        default_assets_url = settings.get("/persistent/isaac/asset_root/default")
+        profile_assets_url = settings.get("/exts/isaacsim.storage.native/asset_region_profiles/china/asset_root")
+
+        def stat_asset_directory(url: str) -> tuple[omni.client.Result, None]:
+            result = omni.client.Result.OK if url.endswith("/Isaac") else omni.client.Result.ERROR_NOT_FOUND
+            return result, None
+
+        settings.set("/persistent/isaac/asset_root/default", profile_assets_url)
+        try:
+            with (
+                patch.object(omni.client, "stat", side_effect=stat_asset_directory),
+                patch.object(omni.client, "stat_async", new=AsyncMock(side_effect=stat_asset_directory)),
+            ):
+                self.assertEqual(get_assets_root_path(), profile_assets_url)
+                self.assertEqual(await get_assets_root_path_async(), profile_assets_url)
+        finally:
+            settings.set("/persistent/isaac/asset_root/default", default_assets_url)
+
+    async def test_get_assets_root_path_accepts_unsupported_metadata(self) -> None:
+        """Configured asset roots remain usable when the provider cannot stat directories."""
+        settings = carb.settings.get_settings()
+        default_assets_url = settings.get("/persistent/isaac/asset_root/default")
+        storage_assets_url = "omniverse://storage.example.com"
+        settings.set("/persistent/isaac/asset_root/default", storage_assets_url)
+
+        try:
+            with (
+                patch.object(
+                    omni.client, "stat", return_value=(omni.client.Result.ERROR_NOT_SUPPORTED, None)
+                ) as stat_mock,
+                patch.object(
+                    omni.client,
+                    "stat_async",
+                    new=AsyncMock(return_value=(omni.client.Result.ERROR_NOT_SUPPORTED, None)),
+                ) as stat_async_mock,
+            ):
+                self.assertEqual(get_assets_root_path(), storage_assets_url)
+                self.assertEqual(await get_assets_root_path_async(), storage_assets_url)
+
+            self.assertEqual(stat_mock.call_count, 1)
+            self.assertEqual(stat_async_mock.await_count, 1)
+        finally:
+            settings.set("/persistent/isaac/asset_root/default", default_assets_url)
+
+    async def test_get_assets_root_path_rejects_access_denied_metadata(self) -> None:
+        """Permission failures are not mistaken for unsupported directory metadata."""
+        settings = carb.settings.get_settings()
+        default_assets_url = settings.get("/persistent/isaac/asset_root/default")
+        storage_assets_url = "omniverse://storage.example.com"
+        settings.set("/persistent/isaac/asset_root/default", storage_assets_url)
+
+        try:
+            with patch.object(omni.client, "stat", return_value=(omni.client.Result.ERROR_ACCESS_DENIED, None)):
+                with self.assertRaises(RuntimeError):
+                    get_assets_root_path()
+            with patch.object(
+                omni.client,
+                "stat_async",
+                new=AsyncMock(return_value=(omni.client.Result.ERROR_ACCESS_DENIED, None)),
+            ):
+                with self.assertRaises(RuntimeError):
+                    await get_assets_root_path_async()
+        finally:
+            settings.set("/persistent/isaac/asset_root/default", default_assets_url)
+
+    async def test_get_assets_root_path_can_require_supported_metadata(self) -> None:
+        """Strict callers can reject providers that cannot stat asset directories."""
+        settings = carb.settings.get_settings()
+        default_assets_url = settings.get("/persistent/isaac/asset_root/default")
+        storage_assets_url = "omniverse://storage.example.com"
+        settings.set("/persistent/isaac/asset_root/default", storage_assets_url)
+
+        try:
+            with patch.object(omni.client, "stat", return_value=(omni.client.Result.ERROR_NOT_SUPPORTED, None)):
+                with self.assertRaises(RuntimeError):
+                    get_assets_root_path(accept_unsupported=False)
+            with patch.object(
+                omni.client,
+                "stat_async",
+                new=AsyncMock(return_value=(omni.client.Result.ERROR_NOT_SUPPORTED, None)),
+            ):
+                with self.assertRaises(RuntimeError):
+                    await get_assets_root_path_async(accept_unsupported=False)
+        finally:
+            settings.set("/persistent/isaac/asset_root/default", default_assets_url)
 
     async def test_find_filtered_files_async_basic_discovery(self) -> None:
         """Test basic USD file discovery without filters.

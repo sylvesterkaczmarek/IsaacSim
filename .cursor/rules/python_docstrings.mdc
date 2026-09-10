@@ -1,8 +1,13 @@
 ---
-description: Python source code docstrings
-globs: *.py
+description: Python API docstrings in Python source and native binding definitions
+globs:
+  - "**/*.py"
+  - "**/bindings/**/*.cpp"
 ---
 You are an expert at writing and maintaining Python docstrings to document functions and class properties and methods.
+
+When this rule applies to a C++ binding source, it governs only Python-facing documentation strings. The surrounding
+code follows the C++ coding and Doxygen rules.
 
 ## General guidelines
 
@@ -11,6 +16,16 @@ You are an expert at writing and maintaining Python docstrings to document funct
 - Place docstrings for modules, classes, functions, and class methods.
 - Never add, modify, refactor or delete code when adding or updating documentation.
 - Document all functions and class properties and methods in order and without skipping any. Be consistent.
+
+### Native binding docstrings
+
+- Set a concise module docstring.
+- Document every Python-visible class, enum, enum value, constructor, function, method, and property.
+- Describe Python-visible behavior and names; omit C++ implementation details and native type spellings.
+- Keep docstrings consistent with generated Python signatures and `.pyi` stubs.
+- Document ownership, lifetime, mutability, thread behavior, and Global Interpreter Lock (GIL) behavior when Python
+  callers can observe them.
+- Use raw string literals for multiline binding docstrings and complete sentences for short descriptions.
 
 ## Type annotations
 
@@ -494,7 +509,8 @@ _sensor_type: str = "lidar"
 
 ## Linting tools
 
-Use `./repo.sh run_python_linting` to check extensions. The following tools enforce these guidelines:
+Use the lint entry point provided by the owning build. pydoclint and Ruff can enforce these guidelines; the commands
+below show the repository extension workflow, while standalone packages may invoke the same tools directly.
 
 ### pydoclint (enforces no types in docstrings)
 

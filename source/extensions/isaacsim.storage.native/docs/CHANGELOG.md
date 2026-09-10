@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.11.0] - 2026-09-01
+### Changed
+- Use Asset Region Profile naming for regional asset routing and add an explicit default profile.
+
+## [1.10.4] - 2026-09-01
+### Fixed
+- Asset-root validation accepts roots containing either the Isaac or NVIDIA asset tree.
+
+## [1.10.3] - 2026-08-31
+### Changed
+- Update the regional asset profile to the Isaac Sim 6.1 asset root.
+
+## [1.10.2] - 2026-08-26
+### Fixed
+- `verify_asset_root_path`: validate versioned HTTP asset roots when `version.txt` is unavailable.
+
+## [1.10.1] - 2026-08-24
+### Changed
+- Update the default Isaac Sim asset root to the production 6.1 URL.
+
+## [1.10.0] - 2026-07-28
+### Added
+- Support selecting an asset region profile via the `ISAACSIM_ASSET_REGION_PROFILE` environment variable.
+- Ship a regional profile that serves reads from a regional CDN while list and stat go direct to object storage, and that sets the asset root and USD Search endpoint.
+
+## [1.9.4] - 2026-07-21
+### Fixed
+- Accept configured asset roots when the Storage provider does not support directory metadata checks.
+
 ## [1.9.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

@@ -1,5 +1,5 @@
 [package]
-version = "5.2.13"
+version = "5.3.2"
 category = "Simulation"
 title = "Isaac Sim Core"
 description = "The Core extension provides a set of APIs to control the Simulation State as well as the physics scene. It also provides wrappers for USD objects, physics and visual materials."
@@ -39,10 +39,6 @@ name = "isaacsim.core.api"
 [[python.module]]
 name = "isaacsim.core.api.tests"
 
-[[native.plugin]]
-path = "bin/*.plugin"
-recursive = false
-
 [[test]]
 name = "startup"
 dependencies = [
@@ -50,6 +46,10 @@ dependencies = [
 ]
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [[test]]
@@ -61,6 +61,8 @@ dependencies = [
 ]
 
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*Invalid articulation pointer for*", # Per node tests won't have valid bundles
     '*[Error] [carb] [Plugin: omni.sensors.nv.lidar.ext.plugin] Dependency: [omni::sensors::lidar::IGenericModelOutputIOFactory v0.1] failed to be resolved.*', # feature not included in Windows
 ]

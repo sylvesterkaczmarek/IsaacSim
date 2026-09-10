@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import xml.dom.minidom
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 
 from .geometry_reader import GeometryData
 from .inertia_utils import InertiaData
@@ -34,6 +35,7 @@ def write_urdf(
     materials: list[MaterialData],
     output_path: str,
     loop_joints: list[LoopJointData] | None = None,
+    postprocess: Callable[[ET.Element], None] | None = None,
 ) -> None:
     """Write a complete URDF XML file.
 
@@ -44,6 +46,8 @@ def write_urdf(
         materials: All material data (for global definitions).
         output_path: File path to write.
         loop_joints: Optional loop joint data for closed kinematic chains.
+        postprocess: Function that modifies the completed ``<robot>`` element
+            before it is written.
 
     """
     robot = ET.Element("robot", name=robot_name)
@@ -67,6 +71,9 @@ def write_urdf(
     if loop_joints:
         for lj in loop_joints:
             _write_loop_joint(robot, lj)
+
+    if postprocess is not None:
+        postprocess(robot)
 
     rough_xml = ET.tostring(robot, encoding="unicode", xml_declaration=False)
     dom = xml.dom.minidom.parseString(rough_xml)
@@ -124,17 +131,17 @@ def _write_inertial(parent: ET.Element, inertial: InertiaData) -> None:
     if not is_origin_identity(inertial.origin_xyz, inertial.origin_rpy):
         _write_origin(inertial_elem, inertial.origin_xyz, inertial.origin_rpy)
 
-    ET.SubElement(inertial_elem, "mass", value=_fmt(inertial.mass))
+    ET.SubElement(inertial_elem, "mass", value=_fmt_mass_inertia(inertial.mass))
 
     ET.SubElement(
         inertial_elem,
         "inertia",
-        ixx=_fmt(inertial.ixx),
-        ixy=_fmt(inertial.ixy),
-        ixz=_fmt(inertial.ixz),
-        iyy=_fmt(inertial.iyy),
-        iyz=_fmt(inertial.iyz),
-        izz=_fmt(inertial.izz),
+        ixx=_fmt_mass_inertia(inertial.ixx),
+        ixy=_fmt_mass_inertia(inertial.ixy),
+        ixz=_fmt_mass_inertia(inertial.ixz),
+        iyy=_fmt_mass_inertia(inertial.iyy),
+        iyz=_fmt_mass_inertia(inertial.iyz),
+        izz=_fmt_mass_inertia(inertial.izz),
     )
 
 
@@ -278,12 +285,13 @@ def _write_joint(parent: ET.Element, joint: JointData) -> None:
         axis_str = " ".join(_fmt(v) for v in joint.axis)
         ET.SubElement(joint_elem, "axis", xyz=axis_str)
 
-    if joint.joint_type in ("revolute", "prismatic"):
+    if joint.joint_type in ("revolute", "continuous", "prismatic"):
         limit_attrs = {}
-        if joint.limit_lower is not None:
-            limit_attrs["lower"] = _fmt(joint.limit_lower)
-        if joint.limit_upper is not None:
-            limit_attrs["upper"] = _fmt(joint.limit_upper)
+        if joint.joint_type != "continuous":
+            if joint.limit_lower is not None:
+                limit_attrs["lower"] = _fmt(joint.limit_lower)
+            if joint.limit_upper is not None:
+                limit_attrs["upper"] = _fmt(joint.limit_upper)
         if joint.limit_effort is not None:
             limit_attrs["effort"] = _fmt(joint.limit_effort)
         if joint.limit_velocity is not None:
@@ -407,8 +415,12 @@ def _write_loop_joint(parent: ET.Element, lj: LoopJointData) -> None:
     ET.SubElement(lj_elem, "link2", **link2_attrs)
 
 
-def _fmt(value: float) -> str:
-    """Format a float for URDF output, trimming trailing zeros.
+def _fmt(value: float | None) -> str:
+    """Format a float for URDF output, clamping floating-point noise to zero.
+
+    Magnitudes below 1e-10 are emitted as ``0``. Inertia and mass values, which
+    can be legitimately tiny, use :func:`_fmt_mass_inertia` so they are never
+    clamped.
 
     Args:
         value: Value to format.
@@ -420,7 +432,21 @@ def _fmt(value: float) -> str:
         return "0"
     if abs(value) < 1e-10:
         return "0"
-    s = f"{value:.8f}"
-    if "." in s:
-        s = s.rstrip("0").rstrip(".")
-    return s
+    return f"{value:.9g}"
+
+
+def _fmt_mass_inertia(value: float | None) -> str:
+    """Format a mass or inertia value without clamping small magnitudes.
+
+    Inertia tensor entries can legitimately be ~1e-10 or smaller; clamping them
+    to zero (as :func:`_fmt` does) would yield a physically invalid inertia.
+
+    Args:
+        value: Value to format.
+
+    Returns:
+        Formatted value string.
+    """
+    if value is None:
+        return "0"
+    return f"{value:.9g}"

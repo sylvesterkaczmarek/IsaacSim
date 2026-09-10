@@ -24,7 +24,10 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 import omni.kit.test
-from isaacsim.asset.importer.urdf.impl.urdf_utils import merge_fixed_joints
+from isaacsim.asset.importer.urdf.impl.urdf_utils import (
+    _rewrite_relative_mesh_paths_to_absolute,
+    merge_fixed_joints,
+)
 
 
 def _write_urdf(content: str, tmp_dir: str, name: str = "input.urdf") -> str:
@@ -36,6 +39,15 @@ def _write_urdf(content: str, tmp_dir: str, name: str = "input.urdf") -> str:
 
 def _parse_output(output_path: str) -> ET.Element:
     return ET.parse(output_path).getroot()
+
+
+def _parse_output_with_comments(output_path: str) -> ET.Element:
+    parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    return ET.parse(output_path, parser=parser).getroot()
+
+
+def _comment_texts(elem: ET.Element) -> list[str]:
+    return [(node.text or "").strip() for node in elem.iter() if node.tag is ET.Comment]
 
 
 def _link_names(root: ET.Element) -> list[str]:
@@ -87,9 +99,17 @@ class TestUrdfUtils(omni.kit.test.AsyncTestCase):
             >>> import tempfile
             >>> tempfile.mkdtemp()  # doctest: +SKIP
         """
+        ext_manager = omni.kit.app.get_app().get_extension_manager()
+        ext_id = ext_manager.get_enabled_extension_id("isaacsim.asset.importer.urdf")
+        extension_path = ext_manager.get_extension_path(ext_id)
+        self._comment_fixtures_dir = os.path.join(extension_path, "data", "urdf", "tests", "comment_preservation")
         self._tmpdir = tempfile.mkdtemp(prefix="urdf_utils_test_")
         self._output_path = os.path.join(self._tmpdir, "output.urdf")
         self._success = False
+
+    def _comment_fixture(self, name: str) -> str:
+        """Return the path to a comment-preservation URDF fixture."""
+        return os.path.join(self._comment_fixtures_dir, name)
 
     async def tearDown(self) -> None:
         """Clean up temporary files.
@@ -128,6 +148,139 @@ class TestUrdfUtils(omni.kit.test.AsyncTestCase):
 
         self.assertEqual(_link_names(root), ["base", "link1"])
         self.assertEqual(_joint_names(root), ["j1"])
+        self._success = True
+
+    async def test_no_fixed_joints_preserves_xml_comments(self) -> None:
+        """A no-op merge should preserve arbitrary comments and all breadcrumb types."""
+        inp = self._comment_fixture("no_fixed_joints.urdf")
+        merge_fixed_joints(inp, self._output_path)
+        root = _parse_output_with_comments(self._output_path)
+
+        comments = _comment_texts(root)
+        self.assertEqual(len(comments), 4)
+        self.assertIn("arbitrary robot comment", comments)
+        self.assertTrue(any("isaac:source_geometry" in text for text in comments))
+        self.assertTrue(any("isaac:source_joint" in text for text in comments))
+        self.assertTrue(any("isaac:source_drive" in text for text in comments))
+        self._success = True
+
+    async def test_relative_mesh_rewrite_preserves_xml_comments(self) -> None:
+        """Rewriting a relative mesh path should not discard XML comments."""
+        inp = os.path.join(self._tmpdir, "relative_mesh.urdf")
+        shutil.copyfile(self._comment_fixture("relative_mesh.urdf"), inp)
+        _rewrite_relative_mesh_paths_to_absolute(inp, self._tmpdir)
+        root = _parse_output_with_comments(inp)
+
+        mesh = root.find("link/visual/geometry/mesh")
+        self.assertIsNotNone(mesh)
+        self.assertEqual(mesh.get("filename"), os.path.join(self._tmpdir, "meshes", "body.obj"))
+        comments = _comment_texts(root)
+        self.assertEqual(len(comments), 2)
+        self.assertIn("arbitrary robot comment", comments)
+        self.assertTrue(any("isaac:source_geometry" in text for text in comments))
+        self._success = True
+
+    async def test_package_mesh_rewrite_after_relocation(self) -> None:
+        """Relocated URDFs should resolve package meshes from their source package."""
+        package_root = os.path.join(self._tmpdir, "test_package")
+        source_urdf_dir = os.path.join(package_root, "urdf")
+        mesh_dir = os.path.join(package_root, "meshes")
+        os.makedirs(source_urdf_dir)
+        os.makedirs(mesh_dir)
+        mesh_path = os.path.join(mesh_dir, "body.obj")
+        with open(mesh_path, "w") as f:
+            f.write("o body\n")
+
+        source_urdf = _write_urdf(
+            textwrap.dedent("""\
+                <robot name="test">
+                  <link name="base"/>
+                  <link name="child">
+                    <visual>
+                      <geometry><mesh filename="package://test_package/meshes/body.obj"/></geometry>
+                    </visual>
+                  </link>
+                  <joint name="fixed" type="fixed">
+                    <parent link="base"/><child link="child"/>
+                  </joint>
+                </robot>
+            """),
+            source_urdf_dir,
+            "robot.urdf",
+        )
+        relocated_urdf = os.path.join(self._tmpdir, "scratch", "robot_merged.urdf")
+        os.makedirs(os.path.dirname(relocated_urdf))
+        merge_fixed_joints(source_urdf, relocated_urdf)
+
+        _rewrite_relative_mesh_paths_to_absolute(relocated_urdf, source_urdf_dir)
+
+        mesh = _parse_output(relocated_urdf).find("link/visual/geometry/mesh")
+        self.assertIsNotNone(mesh)
+        self.assertEqual(mesh.get("filename"), mesh_path)
+        self._success = True
+
+    async def test_package_mesh_rewrite_falls_back_from_invalid_mapping(self) -> None:
+        """Invalid ROS package mappings should fall back to the source package."""
+        package_root = os.path.join(self._tmpdir, "test_package")
+        source_urdf_dir = os.path.join(package_root, "urdf")
+        mesh_dir = os.path.join(package_root, "meshes")
+        os.makedirs(source_urdf_dir)
+        os.makedirs(mesh_dir)
+        mesh_path = os.path.join(mesh_dir, "body.obj")
+        with open(mesh_path, "w") as f:
+            f.write("o body\n")
+
+        relocated_urdf = _write_urdf(
+            (
+                '<robot name="test"><link name="base"><visual><geometry>'
+                '<mesh filename="package://test_package/meshes/body.obj"/>'
+                "</geometry></visual></link></robot>"
+            ),
+            self._tmpdir,
+            "relocated.urdf",
+        )
+        invalid_package_root = os.path.join(self._tmpdir, "invalid_package")
+        os.makedirs(invalid_package_root)
+        _rewrite_relative_mesh_paths_to_absolute(
+            relocated_urdf,
+            source_urdf_dir,
+            [{"name": "test_package", "path": invalid_package_root}],
+        )
+
+        mesh = _parse_output(relocated_urdf).find("link/visual/geometry/mesh")
+        self.assertIsNotNone(mesh)
+        self.assertEqual(mesh.get("filename"), mesh_path)
+        self._success = True
+
+    async def test_package_mesh_rewrite_prefers_explicit_mapping(self) -> None:
+        """Explicit ROS package mappings should override source-directory discovery."""
+        source_urdf_dir = os.path.join(self._tmpdir, "source", "urdf")
+        mapped_package_root = os.path.join(self._tmpdir, "mapped_package")
+        mesh_dir = os.path.join(mapped_package_root, "meshes")
+        os.makedirs(source_urdf_dir)
+        os.makedirs(mesh_dir)
+        mesh_path = os.path.join(mesh_dir, "body.obj")
+        with open(mesh_path, "w") as f:
+            f.write("o body\n")
+
+        relocated_urdf = _write_urdf(
+            (
+                '<robot name="test"><link name="base"><visual><geometry>'
+                '<mesh filename="package://test_package/meshes/body.obj"/>'
+                "</geometry></visual></link></robot>"
+            ),
+            self._tmpdir,
+            "relocated.urdf",
+        )
+        _rewrite_relative_mesh_paths_to_absolute(
+            relocated_urdf,
+            source_urdf_dir,
+            [{"name": "test_package", "path": mapped_package_root}],
+        )
+
+        mesh = _parse_output(relocated_urdf).find("link/visual/geometry/mesh")
+        self.assertIsNotNone(mesh)
+        self.assertEqual(mesh.get("filename"), mesh_path)
         self._success = True
 
     async def test_empty_robot(self) -> None:
@@ -197,6 +350,30 @@ class TestUrdfUtils(omni.kit.test.AsyncTestCase):
         base = _find_link(root, "base")
         visuals = base.findall("visual")
         self.assertEqual(len(visuals), 2)
+        self._success = True
+
+    async def test_fixed_joint_merge_preserves_breadcrumb_comments(self) -> None:
+        """Moved geometry and reparented joints should retain their breadcrumbs."""
+        inp = self._comment_fixture("fixed_joint_merge.urdf")
+        with self.assertNoLogs("isaacsim.asset.importer.urdf.impl.urdf_utils", level="WARNING"):
+            merge_fixed_joints(inp, self._output_path)
+        root = _parse_output_with_comments(self._output_path)
+
+        base = _find_link(root, "base")
+        self.assertIsNotNone(base)
+        visuals = base.findall("visual")
+        self.assertEqual(len(visuals), 1)
+        self.assertTrue(any("isaac:source_geometry" in text for text in _comment_texts(visuals[0])))
+
+        collisions = base.findall("collision")
+        self.assertEqual(len(collisions), 1)
+        self.assertTrue(any("isaac:source_geometry" in text for text in _comment_texts(collisions[0])))
+
+        moving_joint = next(joint for joint in root.findall("joint") if joint.get("name") == "moving_j")
+        self.assertEqual(moving_joint.find("parent").get("link"), "base")
+        joint_comments = _comment_texts(moving_joint)
+        self.assertTrue(any("isaac:source_joint" in text for text in joint_comments))
+        self.assertTrue(any("isaac:source_drive" in text for text in joint_comments))
         self._success = True
 
     async def test_collision_transferred_to_parent(self) -> None:

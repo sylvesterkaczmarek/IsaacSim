@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.7] - 2026-08-13
+### Changed
+- Update `ant_colored` asset path to `isaacsim/Assets/Ant/ant_colored.usd`.
+
+## [1.2.6] - 2026-07-23
+### Changed
+- Use a compatible ant asset in the contact and IMU sensor examples.
+- Keep contact reporting active after the ant settles.
+
+## [1.2.5] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [1.2.4] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

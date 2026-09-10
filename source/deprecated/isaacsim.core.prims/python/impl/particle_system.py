@@ -40,15 +40,15 @@ torch = import_module("torch")
 
 
 class ParticleSystem:
-    """Provides high level functions to deal with particle systems (1 or more particle systems) as well as its attributes/ properties.
+    """Provides high-level functions to deal with particle systems (1 or more particle systems) as well as their attributes/properties.
 
-    This object wraps all matching particle systems found at the regex provided at the prim_paths_expr.
-    Note: not all the attributes of the PhysxSchema.PhysxParticleSystem is currently controlled with this view class
+    This object wraps all matching particle systems found by the regex provided at prim_paths_expr.
+    Note: not all the attributes of PhysxSchema.PhysxParticleSystem are currently controlled with this view class.
     Tensor API support will be added in the future to extend the functionality of this class to applications beyond cloth.
 
     Args:
         prim_paths_expr: Prim paths regex to encapsulate all prims that match it.
-        name: Shortname to be used as a key by Scene class.
+        name: Short name to be used as a key by Scene class.
         particle_systems_enabled: Whether to enable or disable the particle system.
         simulation_owners: Single PhysicsScene that simulates this particle system.
         contact_offsets: Contact offset used for collisions with non-particle objects such as rigid or deformable
@@ -70,6 +70,9 @@ class ParticleSystem:
         global_self_collisions_enabled: If True, self collisions follow particle-object-specific settings.
             If False, all particle self collisions are disabled, regardless of any other settings.
             Improves performance if self collisions are not needed.
+
+    Raises:
+        Exception: If prim_paths_expr does not match any existing prim.
     """
 
     def __init__(
@@ -200,12 +203,12 @@ class ParticleSystem:
         """Checks whether the physics handle of the view is valid.
 
         Returns:
-            True if the physics handle of the view is valid (i.e physics is initialized for the view). Otherwise False.
+            True if the physics handle of the view is valid, i.e., physics is initialized for the view. Otherwise False.
         """
         return self._physics_view is not None
 
     def initialize(self, physics_sim_view: omni.physics.tensors.SimulationView = None) -> None:
-        """Create a physics simulation view if not passed and creates a Particle System View.
+        """Creates a physics simulation view if not passed and creates a Particle System View.
 
         Args:
             physics_sim_view: Current physics simulation view.
@@ -271,7 +274,7 @@ class ParticleSystem:
                 Where M <= size of the encapsulated prims in the view.
 
         Raises:
-            Exception: length of physics materials != length of prims indexed
+            Exception: Length of particle materials != length of prims indexed.
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         if isinstance(particle_materials, list):
@@ -293,7 +296,7 @@ class ParticleSystem:
         """Gets the applied particle material to prims in the view.
 
         Args:
-            indices: indices to specify which prims to query. Shape (M,).
+            indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
@@ -327,13 +330,14 @@ class ParticleSystem:
     def set_particle_contact_offsets(
         self, values: np.ndarray | torch.Tensor, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> None:
-        """Set the contact offset used for interactions between particles.
+        """Sets the contact offset used for interactions between particles.
 
-        Note: Must be larger than solid and fluid rest offsets.
+        Note:
+            Must be larger than solid and fluid rest offsets.
 
         Args:
             values: The contact offset.
-            indices: indices to specify which prims to manipulate. Shape (M,).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
@@ -358,13 +362,14 @@ class ParticleSystem:
     def set_solid_rest_offsets(
         self, values: np.ndarray | torch.Tensor, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> None:
-        """Set the rest offset used for solid-solid or solid-fluid particle interactions.
+        """Sets the rest offset used for solid-solid or solid-fluid particle interactions.
 
-        Note: Must be smaller than particle contact offset.
+        Note:
+            Must be smaller than particle contact offset.
 
         Args:
-            values: solid rest offset to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims to manipulate. Shape (M,).
+            values: Solid rest offset to set particle systems to. shape is (M, ).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
@@ -387,13 +392,14 @@ class ParticleSystem:
     def set_fluid_rest_offsets(
         self, values: np.ndarray | torch.Tensor, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> None:
-        """Set the rest offset used for fluid-fluid particle interactions.
+        """Sets the rest offset used for fluid-fluid particle interactions.
 
-        Note: Must be smaller than particle contact offset.
+        Note:
+            Must be smaller than particle contact offset.
 
         Args:
-            values: fluid rest offset to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims to manipulate. Shape (M,).
+            values: Fluid rest offset to set particle systems to. shape is (M, ).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
@@ -416,11 +422,11 @@ class ParticleSystem:
     def set_winds(
         self, values: np.ndarray | torch.Tensor, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> None:
-        """Set the winds velocities applied to the current particle system.
+        """Sets the winds velocities applied to the current particle system.
 
         Args:
             values: The wind applied to the current particle system. shape is (M, 3).
-            indices: indices to specify which prims to manipulate. Shape (M,).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
@@ -441,11 +447,11 @@ class ParticleSystem:
     def set_max_velocities(
         self, values: np.ndarray | torch.Tensor, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> None:
-        """Set the maximum particle velocity for particle systems.
+        """Sets the maximum particle velocity for particle systems.
 
         Args:
-            values: maximum particle velocity tensor to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims to manipulate. Shape (M,).
+            values: Maximum particle velocity tensor to set particle systems to. shape is (M, ).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
@@ -461,11 +467,11 @@ class ParticleSystem:
     def set_max_depenetration_velocities(
         self, values: np.ndarray | torch.Tensor, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> None:
-        """Set the maximum velocity permitted to be introduced by the solver to depenetrate intersecting particles for particle systems.
+        """Sets the maximum velocity permitted to be introduced by the solver to depenetrate intersecting particles for particle systems.
 
         Args:
-            values: maximum particle velocity tensor to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims to manipulate. Shape (M,).
+            values: Maximum particle velocity tensor to set particle systems to. shape is (M, ).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
@@ -483,11 +489,11 @@ class ParticleSystem:
     def set_rest_offsets(
         self, values: np.ndarray | torch.Tensor, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> None:
-        """Set the rest offset used for collisions with non-particle objects such as rigid or deformable bodies for particle systems.
+        """Sets the rest offset used for collisions with non-particle objects such as rigid or deformable bodies for particle systems.
 
         Args:
-            values: rest offset tensor to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims to manipulate. Shape (M,).
+            values: Rest offset tensor to set particle systems to. shape is (M, ).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
@@ -503,11 +509,11 @@ class ParticleSystem:
     def set_contact_offsets(
         self, values: np.ndarray | torch.Tensor, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> None:
-        """Set the contact offset used for collisions with non-particle objects such as rigid or deformable bodies for particle systems.
+        """Sets the contact offset used for collisions with non-particle objects such as rigid or deformable bodies for particle systems.
 
         Args:
-            values: contact offset tensor to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims to manipulate. Shape (M,).
+            values: Contact offset tensor to set particle systems to. shape is (M, ).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
@@ -523,11 +529,11 @@ class ParticleSystem:
     def set_solver_position_iteration_counts(
         self, values: np.ndarray | torch.Tensor, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> None:
-        """Set the number of solver iterations for position for particle systems.
+        """Sets the number of solver iterations for position for particle systems.
 
         Args:
-            values: solver position iteration count tensor to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims to manipulate. Shape (M,).
+            values: Solver position iteration count tensor to set particle systems to. shape is (M, ).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
@@ -549,10 +555,8 @@ class ParticleSystem:
 
         Args:
             values: Particle neighborhood size tensor to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims
-                to manipulate. Shape (M,).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         idx_count = 0
@@ -571,10 +575,8 @@ class ParticleSystem:
 
         Args:
             values: Whether to enable global self collisions tensor to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims
-                to manipulate. Shape (M,).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         idx_count = 0
@@ -593,10 +595,8 @@ class ParticleSystem:
 
         Args:
             values: Whether to enable continuous collision detection tensor to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims
-                to manipulate. Shape (M,).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         idx_count = 0
@@ -613,10 +613,8 @@ class ParticleSystem:
 
         Args:
             values: Whether to enable particle system tensor to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims
-                to manipulate. Shape (M,).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         idx_count = 0
@@ -635,10 +633,8 @@ class ParticleSystem:
 
         Args:
             values: PhysicsScene list to set particle systems to. shape is (M, ).
-            indices: indices to specify which prims
-                to manipulate. Shape (M,).
+            indices: Indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         idx_count = 0
@@ -658,10 +654,8 @@ class ParticleSystem:
         """The contact offset used for interactions between particles in the view concatenated.
 
         Args:
-            indices: indices to specify which prims
-                to query. Shape (M,).
+            indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view)
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
@@ -688,10 +682,8 @@ class ParticleSystem:
         """The rest offset used for solid-solid or solid-fluid particle interactions.
 
         Args:
-            indices: indices to specify which prims
-                to query. Shape (M,).
+            indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view)
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
@@ -718,10 +710,8 @@ class ParticleSystem:
         """The rest offset used for fluid-fluid particle interactions.
 
         Args:
-            indices: indices to specify which prims
-                to query. Shape (M,).
+            indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view)
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
@@ -748,10 +738,8 @@ class ParticleSystem:
         """The winds applied to the current particle system.
 
         Args:
-            indices: indices to specify which prims
-                to query. Shape (M,).
+            indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view)
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
@@ -781,10 +769,8 @@ class ParticleSystem:
         """The maximum particle velocities for each particle system.
 
         Args:
-            indices: indices to specify which prims
-                to query. Shape (M,).
+            indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view)
 
         Returns:
             The maximum particle velocities for each particle system. shape is (M, ).
@@ -800,15 +786,15 @@ class ParticleSystem:
     def get_max_depenetration_velocities(
         self, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> np.ndarray | torch.Tensor:
-        """The maximum velocity permitted to be introduced by the solver to depenetrate intersecting particles for particle systems for each particle system.
+        """The maximum velocity permitted by the solver to depenetrate intersecting particles for each particle system.
 
         Args:
             indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            The maximum velocity permitted to be introduced by the solver to
-            depenetrate intersecting particles for particle systems for each particle system. shape is (M, ).
+            The maximum velocity permitted by the solver to depenetrate intersecting particles for each particle system.
+            Shape is (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         results = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -826,7 +812,7 @@ class ParticleSystem:
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            The rest offset used for collisions with non-particle objects for each particle system. shape is (M, ).
+            The rest offset used for collisions with non-particle objects for each particle system. Shape is (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         results = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -844,7 +830,7 @@ class ParticleSystem:
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            The contact offset  used for collisions with non-particle objects for each particle system. shape is (M, ).
+            The contact offset used for collisions with non-particle objects for each particle system. Shape is (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         results = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -864,7 +850,7 @@ class ParticleSystem:
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            The number of solver iterations for positions for each particle system. shape is (M, ).
+            The number of solver iterations for positions for each particle system. Shape is (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         results = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="int32", device=self._device)
@@ -884,7 +870,7 @@ class ParticleSystem:
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            The particle neighborhood size for each particle system. shape is (M, ).
+            The particle neighborhood size for each particle system. Shape is (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         results = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="int32", device=self._device)
@@ -897,15 +883,14 @@ class ParticleSystem:
     def get_global_self_collisions_enabled(
         self, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> np.ndarray | torch.Tensor:
-        """Whether self collisions to follow particle-object-specific settings is enabled or disabled for each particle system.
+        """Whether self collisions follow particle-object-specific settings for each particle system.
 
         Args:
             indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            Whether self collisions to follow particle-object-specific settings
-            is enabled or disabled. for each particle system. shape is (M, ).
+            Whether self collisions follow particle-object-specific settings for each particle system. Shape is (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         results = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="bool", device=self._device)
@@ -916,14 +901,14 @@ class ParticleSystem:
         return results
 
     def get_enable_ccds(self, indices: np.ndarray | list | torch.Tensor | None = None) -> np.ndarray | torch.Tensor:
-        """Whether continuous collision detection for particles is enabled or disabled for each particle system.
+        """Whether continuous collision detection for particles is enabled for each particle system.
 
         Args:
             indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            Whether continuous collision detection for particles is enabled or disabled for each particle system. shape is (M, ).
+            Whether continuous collision detection for particles is enabled for each particle system. Shape is (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         results = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="bool", device=self._device)
@@ -936,14 +921,14 @@ class ParticleSystem:
     def get_particle_systems_enabled(
         self, indices: np.ndarray | list | torch.Tensor | None = None
     ) -> np.ndarray | torch.Tensor:
-        """Whether particle system is enabled or not for each particle system.
+        """Whether each particle system is enabled.
 
         Args:
             indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            Whether particle system is enabled or not for each particle system. shape is (M, ).
+            Whether each particle system is enabled. Shape is (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         results = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="bool", device=self._device)
@@ -954,14 +939,14 @@ class ParticleSystem:
         return results
 
     def get_simulation_owners(self, indices: np.ndarray | list | torch.Tensor | None = None) -> Sequence[str]:
-        """The physics scene prim path attached to particle system.
+        """The physics scene prim path attached to each particle system.
 
         Args:
             indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            The physics scene prim path attached to particle system. shape is (M, ).
+            The physics scene prim paths attached to each particle system. Shape is (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         results = []

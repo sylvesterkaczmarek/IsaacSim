@@ -89,7 +89,7 @@ class ColliderModel(TreeViewWithPlacerHolderModel):
 
     This model extends TreeViewWithPlacerHolderModel to provide specialized functionality for handling
     collider configuration items. It manages collider items that define collision mesh approximations
-    for robot parts, supporting operations like adding, editing, and organizing collider configurations
+    for robot parts, supporting operations such as adding, editing, and organizing collider configurations
     in a hierarchical tree structure.
 
     The model integrates with the collider creation workflow, allowing users to define collision
@@ -127,13 +127,13 @@ class ColliderModel(TreeViewWithPlacerHolderModel):
     def get_item_value_model(self, item: object, column_id: int) -> ui.AbstractValueModel:
         """Return value model.
 
-            It's the object that tracks the specific value.
-            In our case we use ui.SimpleStringModel for the first column
-            and SimpleFloatModel for the second column.
+        It's the object that tracks the specific value.
+        In our case we use ui.SimpleStringModel for the first column
+        and ui.SimpleStringModel for the second column.
 
         Args:
             item: The collider item to get the value model from.
-            column_id: The column identifier (1 for name, 2 for approximation).
+            column_id: The column identifier for name or approximation.
 
         Returns:
             The value model for the specified column, or None if not found.
@@ -265,9 +265,6 @@ class AddColliderWindow:
 
         Args:
             model: The string model containing the collider name.
-
-        Returns:
-            None if in edit mode.
         """
         if self._is_edit:
             return
@@ -293,9 +290,6 @@ class AddColliderWindow:
         Args:
             model: The combo box model.
             root_item: The root item of the model.
-
-        Returns:
-            None if in edit mode.
         """
         if self._is_edit:
             return
@@ -331,9 +325,6 @@ class AddColliderWindow:
         """Handle the Save button click in edit mode.
 
         Updates the current collider item with UI values and closes the window.
-
-        Returns:
-            None if no current collider is set.
         """
         if not self._current_collider:
             return
@@ -460,7 +451,7 @@ class AddColliderWindow:
     def select_collider_target(self) -> None:
         """Opens the robot asset picker window for selecting collider targets.
 
-        Creates a new RobotAssetPicker window if it doesn't exist, or shows the existing one.
+        Creates a new RobotAssetPicker window if it does not exist, or shows the existing one.
         Filters for UsdGeom.Xform type prims and uses the select method as callback.
         """
         if not self._select_collider_target_window:
@@ -509,8 +500,7 @@ class AddColliders:
     def destroy(self) -> None:
         """Destroys the AddColliders widget and cleans up resources.
 
-        Cleans up internal components including the add collider window, tree view,
-        collider model, and any active subscriptions.
+        Cleans up the add collider window, tree view, collider model, and active subscriptions.
         """
         self.__subscription = None
         if self._add_collider_window:
@@ -525,8 +515,7 @@ class AddColliders:
     def _build_frame(self) -> None:
         """Builds the main UI frame for the add colliders widget.
 
-        Creates the collapsible frame containing the colliders section with search functionality,
-        tree view for displaying colliders, and the next step button for proceeding to joints and drivers.
+        Creates the collapsible colliders section with search, a collider tree view, and the next step button.
         """
         with ui.CollapsableFrame("Colliders", build_header_fn=custom_header):
             with ui.ScrollingFrame():
@@ -577,7 +566,7 @@ class AddColliders:
                     )
 
     def _filter_by_text(self, filters: object) -> None:
-        """Filters the collider model items by text search.
+        """Filters collider model items by text search.
 
         Args:
             filters: Text filters to apply to the collider model.
@@ -588,7 +577,7 @@ class AddColliders:
     def set_visible(self, visible: bool) -> None:
         """Sets the visibility of the add colliders widget.
 
-        When making the widget visible, preprocesses the page to populate collider data.
+        Preprocesses the page when making the widget visible.
 
         Args:
             visible: Whether the widget should be visible.
@@ -601,11 +590,7 @@ class AddColliders:
     def _preprocess_page(self) -> None:
         """Preprocesses the page by loading colliders from the robot on stage.
 
-        Recursively searches through the /colliders scope prim to find mesh primitives
-        and adds them as collider items to the model.
-
-        Returns:
-            None if the stage or robot is not available.
+        Recursively searches the ``/colliders`` scope prim for mesh primitives and adds them to the collider model.
         """
         # get the colliders from the robot on stage
         self._robot = RobotRegistry().get()
@@ -635,7 +620,7 @@ class AddColliders:
         self._collider_model = updated_collider_model
 
     def _add_colliders(self) -> None:
-        """The actual applying collider part. Get the links from the table and add colliders accordingly."""
+        """Applies configured colliders to the links listed in the collider model."""
         if self._collider_model:
             for item in self._collider_model.get_item_children(None):
                 if isinstance(item, ColliderItem):  ## as oppose to PlaceHolderItem
@@ -646,7 +631,7 @@ class AddColliders:
     def add_colliders(self) -> None:
         """Opens the add collider window for creating new colliders.
 
-        Creates the AddColliderWindow if it doesn't exist, otherwise makes the existing window visible.
+        Creates the AddColliderWindow if it does not exist, otherwise makes the existing window visible.
         """
         if not self._add_collider_window:
             self._add_collider_window = AddColliderWindow("Add Colliders", self._collider_model)
@@ -655,15 +640,11 @@ class AddColliders:
     def _model_changed(self, model: object, item: object) -> None:
         """Handles changes to the collider model.
 
-        Updates the UI state based on the number of items in the model, including enabling/disabling
-        the next step button and showing/hiding the empty page placeholder.
+        Updates the next step button, empty page placeholder, and tree view ID column based on the item count.
 
         Args:
             model: The collider model that changed.
             item: The specific item that was modified.
-
-        Returns:
-            None if item or model is not provided.
         """
         if not item or not model:
             return
@@ -693,8 +674,7 @@ class AddColliders:
     def treeview_empty_page(self) -> None:
         """Creates the empty state page displayed when no colliders exist.
 
-        Shows instructional text guiding users to click the 'Add Colliders' button
-        to begin the collider creation process.
+        Shows instructional text that guides users to click the 'Add Colliders' button.
         """
         self._treeview_empty_page = ui.VStack(visible=True, height=self._treeview_initial_height)
         with self._treeview_empty_page:
@@ -712,8 +692,7 @@ class AddColliders:
     def _build_tree_view(self) -> None:
         """Builds the tree view component for displaying colliders.
 
-        Creates the tree view with headers, delegate, and empty page placeholder.
-        Includes a draggable splitter for resizing the tree view height.
+        Creates the tree view with headers, delegate, empty page placeholder, and a draggable height splitter.
         """
         with ui.ZStack():
             scrolling_frame = ui.ScrollingFrame(name="treeview", height=self._treeview_initial_height)

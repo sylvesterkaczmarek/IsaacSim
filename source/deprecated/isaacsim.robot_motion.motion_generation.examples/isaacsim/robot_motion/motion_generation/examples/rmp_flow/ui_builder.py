@@ -23,11 +23,11 @@ from typing import Any
 import carb
 import omni.timeline
 import omni.ui as ui
-from isaacsim.core.api.world import World
+from isaacsim.core.api import World
 from isaacsim.core.prims import SingleXFormPrim as XFormPrim
 from isaacsim.core.utils.stage import create_new_stage, get_current_stage, update_stage_async
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.gui.components.element_wrappers import Button, CollapsableFrame, StateButton
+from isaacsim.gui.components import Button, CollapsableFrame, StateButton
 from isaacsim.gui.components.style import get_style
 from pxr import Sdf, UsdLux
 
@@ -113,7 +113,7 @@ class UIBuilder:
     def cleanup(self) -> None:
         """Called when the stage is closed or the extension is hot reloaded.
 
-        Perform any necessary cleanup such as removing active callback functions
+        Perform any necessary cleanup such as removing active callback functions.
         Buttons imported from isaacsim.gui.components.element_wrappers implement a cleanup function that should be called.
         """
         for ui_elem in self.wrapped_ui_elements:
@@ -168,9 +168,11 @@ class UIBuilder:
         XFormPrim(str(sphereLight.GetPath())).set_world_pose([6.5, 0, 12])
 
     def _on_load_btn_clicked(self) -> None:
+        """Starts loading the World and scenario from the Load button."""
         asyncio.ensure_future(self._load_world_async())
 
     async def _load_world_async(self) -> None:
+        """Loads a new World, sets up the scene, initializes the simulation context, and sets up the scenario."""
         prev_world = World.instance()
         if prev_world is not None:
             prev_world.clear_all_callbacks()
@@ -185,9 +187,11 @@ class UIBuilder:
         self._setup_scenario()
 
     def _on_reset_btn_clicked(self) -> None:
+        """Starts the World reset task when the Reset Button is clicked."""
         asyncio.ensure_future(self._reset_world_async())
 
     async def _reset_world_async(self) -> None:
+        """Resets the active World, pauses the timeline, and updates scenario state after reset."""
         world = World.instance()
         if world is None:
             carb.log_warn("Reset Button was used when there is no instance of World.")
@@ -264,9 +268,9 @@ class UIBuilder:
         This function was passed in as the on_a_click_fn argument.
         It is called when the StateButton is clicked while saying a_text "RUN".
 
-        This function simply plays the timeline, which means that physics steps will start happening.  After the world is loaded or reset,
-        the timeline is paused, which means that no physics steps will occur until the user makes it play either programmatically or
-        through the left-hand UI toolbar.
+        This function simply plays the timeline, which means that physics steps will start happening. After the world is
+        loaded or reset, the timeline is paused, which means that no physics steps will occur until the user makes it play
+        either programmatically or through the left-hand UI toolbar.
         """
         self._timeline.play()
 
@@ -279,8 +283,8 @@ class UIBuilder:
         Pausing the timeline on b_text is not strictly necessary for this example to run.
         Clicking "STOP" will cancel the physics subscription that updates the scenario, which means that
         the robot will stop getting new commands and the cube will stop updating without needing to
-        pause at all.  The reason that the timeline is paused here is to prevent the robot being carried
-        forward by momentum for a few frames after the physics subscription is canceled.  Pausing here makes
+        pause at all. The reason that the timeline is paused here is to prevent the robot being carried
+        forward by momentum for a few frames after the physics subscription is canceled. Pausing here makes
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()

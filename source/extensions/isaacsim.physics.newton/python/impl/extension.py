@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import carb
 import omni.ext
 from isaacsim.core.simulation_manager import SimulationManager
@@ -50,6 +52,32 @@ def acquire_stage() -> NewtonStage | None:
         The simulation stage object, or None if not initialized.
     """
     return _newton_stage
+
+
+def configure_newton(cfg: NewtonConfig) -> None:
+    """Set the Newton runtime configuration.
+
+    Applied on the next play or re-initialization. Call before play from a
+    standalone script or extension.
+
+    Args:
+        cfg: Newton simulation configuration.
+    """
+    if _newton_stage is None:
+        carb.log_warn("configure_newton() called before the Newton stage exists; configuration ignored. ")
+        return
+    _newton_stage.cfg = cfg
+    _newton_stage.initialized = False
+    carb.settings.get_settings().set("/exts/isaacsim.physics.newton/capture_graph_physics_step", cfg.use_cuda_graph)
+
+
+def get_newton_config() -> NewtonConfig | None:
+    """Return the live Newton configuration.
+
+    Returns:
+        The current configuration, or None if the Newton stage has not been created.
+    """
+    return _newton_stage.cfg if _newton_stage is not None else None
 
 
 def get_active_physics_engine() -> str:
@@ -105,6 +133,59 @@ def get_available_physics_engines(verbose: bool = False) -> list[tuple[str, bool
         return []
 
 
+#: Whether Newton loads material textures at all. Off by default: nothing in
+#: Isaac Sim reads them, and loading them dominates stage init.
+_LOAD_TEXTURES_SETTING = "/exts/isaacsim.physics.newton/load_textures"
+
+
+def _install_texture_policy() -> None:
+    """Monkey-patch Newton's texture loader to respect ``load_textures``.
+
+    Textures feed Newton's viewer only; Isaac Sim uses Hydra. Skipping them
+    avoids a significant stage-init cost and suppresses spurious PIL warnings on
+    ``omniverse://`` paths. Remote URLs are resolved through the local cache.
+    """
+    try:
+        import omni.client
+        from newton._src.utils import texture as newton_texture
+    except Exception:
+        return
+
+    if getattr(newton_texture, "_isaac_texture_policy_installed", False):
+        return
+
+    original_loader = newton_texture.load_texture_from_file
+    resolved: dict[str, str] = {}
+    settings = carb.settings.get_settings()
+
+    def load_texture_from_file(texture_path: str) -> Any:
+        if not settings.get(_LOAD_TEXTURES_SETTING):
+            return None
+        if isinstance(texture_path, str) and texture_path:
+            try:
+                is_remote = not omni.client.is_local_url(texture_path)
+            except Exception:
+                is_remote = False
+            if is_remote:
+                local = resolved.get(texture_path)
+                if local is None:
+                    try:
+                        result, candidate = omni.client.get_local_file(texture_path)
+                        local = candidate if result == omni.client.Result.OK and candidate else ""
+                    except Exception:
+                        local = ""
+                    resolved[texture_path] = local
+                if not local:
+                    # Unreachable asset: skip rather than let PIL fail on a URL.
+                    return None
+                texture_path = local
+        return original_loader(texture_path)
+
+    newton_texture.load_texture_from_file = load_texture_from_file
+    newton_texture._isaac_texture_policy_installed = True
+    carb.log_info("[isaacsim.physics.newton] texture policy installed")
+
+
 class NewtonSimExtension(omni.ext.IExt):
     """Newton physics simulation extension for Isaac Sim."""
 
@@ -116,7 +197,8 @@ class NewtonSimExtension(omni.ext.IExt):
         """
         global _newton_stage, _newton_physics_interface
 
-        # Load config based on settings
+        _install_texture_policy()
+
         cfg = NewtonConfig()
         _newton_stage = NewtonStage(cfg=cfg)
         _newton_physics_interface = NewtonPhysicsInterface(_newton_stage)

@@ -102,7 +102,8 @@ class NewtonSimulationFunctions:
 
             # Call pre-step callbacks
             context = PhysicsStepContext()
-            context.scene_path = self.get_attached_stage()
+            # USD's TfToken and hash function are not exposed for python. Returning 0 to force caller search for the correct scene path themselves
+            context.scene_path = 0
             context.simulation_id = self.simulation_id
 
             sorted_callbacks = sorted(

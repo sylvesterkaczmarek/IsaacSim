@@ -62,6 +62,8 @@ for _, ros_distro in ipairs(ros_distributions) do
     add_cuda_dependencies()
     includedirs {
         "%{root}/source/extensions/isaacsim.core.includes/include",
+        "%{root}/_build/target-deps/usd/%{cfg.buildcfg}/include",
+        "%{root}/_build/target-deps/usd/%{cfg.buildcfg}/include/boost",
         "%{root}/_build/target-deps/omni_physics/%{config}/include",
         "%{root}/_build/target-deps/nv_ros2_" .. ros_distro .. "/include",
         "%{root}/_build/target-deps/nlohmann_json/include",
@@ -165,7 +167,7 @@ includedirs {
     extsbuild_dir .. "/omni.syntheticdata/include",
     extsbuild_dir .. "/usdrt.scenegraph/include",
     "%{root}/_build/target-deps/omni_client_library/include",
-    "%{root}/source/extensions/isaacsim.robot.schema/include",
+    "%{root}/_cmake_build/module-carriers/%{config}/isaacsim.robot.schema/sdk/include",
     "%{root}/_build/target-deps/nlohmann_json/include",
     "%{root}/source/extensions/isaacsim.core.nodes/include",
     "%{kit_sdk_bin_dir}/dev/fabric/include/",
@@ -227,6 +229,7 @@ repo_build.prebuild_copy {
 if os.target() == "linux" then
     repo_build.prebuild_copy {
         { "%{root}/_build/target-deps/nv_ros2_humble/lib/lib**", ext.target_dir .. "/humble/lib" },
+        { "%{root}/_build/target-deps/nv_ros2_humble/share", ext.target_dir .. "/humble/share" },
         { "%{root}/_build/target-deps/nv_ros2_humble/lib/python3.12/site-packages", ext.target_dir .. "/humble/rclpy" },
         {
             "%{root}/_build/target-deps/nv_ros2_humble/local/lib/python3.12/dist-packages",
@@ -235,7 +238,14 @@ if os.target() == "linux" then
     }
     repo_build.prebuild_copy {
         { "%{root}/_build/target-deps/nv_ros2_jazzy/lib/lib**", ext.target_dir .. "/jazzy/lib" },
+        { "%{root}/_build/target-deps/nv_ros2_jazzy/share", ext.target_dir .. "/jazzy/share" },
+        { "%{root}/_build/target-deps/nv_ros2_jazzy/opt/console_bridge_vendor/lib/**", ext.target_dir .. "/jazzy/lib" },
+        { "%{root}/_build/target-deps/nv_ros2_jazzy/opt/gz_math_vendor/lib/**", ext.target_dir .. "/jazzy/lib" },
+        { "%{root}/_build/target-deps/nv_ros2_jazzy/opt/gz_tools_vendor/lib/**", ext.target_dir .. "/jazzy/lib" },
+        { "%{root}/_build/target-deps/nv_ros2_jazzy/opt/gz_utils_vendor/lib/**", ext.target_dir .. "/jazzy/lib" },
         { "%{root}/_build/target-deps/nv_ros2_jazzy/opt/libyaml_vendor/lib/**", ext.target_dir .. "/jazzy/lib" },
+        { "%{root}/_build/target-deps/nv_ros2_jazzy/opt/orocos_kdl_vendor/lib/**", ext.target_dir .. "/jazzy/lib" },
+        { "%{root}/_build/target-deps/nv_ros2_jazzy/opt/sdformat_vendor/lib/**", ext.target_dir .. "/jazzy/lib" },
         { "%{root}/_build/target-deps/nv_ros2_jazzy/opt/spdlog_vendor/lib/**", ext.target_dir .. "/jazzy/lib" },
         { "%{root}/_build/target-deps/nv_ros2_jazzy/lib/python3.12/site-packages", ext.target_dir .. "/jazzy/rclpy" },
     }
@@ -244,11 +254,13 @@ end
 if os.target() == "windows" then
     repo_build.prebuild_copy {
         { "%{root}/_build/target-deps/nv_ros2_humble/bin/**.dll", ext.target_dir .. "/humble/lib" },
+        { "%{root}/_build/target-deps/nv_ros2_humble/share", ext.target_dir .. "/humble/share" },
         { "%{root}/_build/target-deps/nv_ros2_humble/Lib/site-packages", ext.target_dir .. "/humble/rclpy" },
         { "%{root}/_build/target-deps/tinyxml2/bin/**.dll", ext.target_dir .. "/humble/lib" },
     }
     repo_build.prebuild_copy {
         { "%{root}/_build/target-deps/nv_ros2_jazzy/bin/**.dll", ext.target_dir .. "/jazzy/lib" },
+        { "%{root}/_build/target-deps/nv_ros2_jazzy/share", ext.target_dir .. "/jazzy/share" },
         { "%{root}/_build/target-deps/nv_ros2_jazzy/Lib/site-packages", ext.target_dir .. "/jazzy/rclpy" },
         { "%{root}/_build/target-deps/nv_ros2_jazzy/opt/libyaml_vendor/bin/**.dll", ext.target_dir .. "/jazzy/lib" },
         { "%{root}/_build/target-deps/nv_ros2_jazzy/opt/spdlog_vendor/bin/**.dll", ext.target_dir .. "/jazzy/lib" },

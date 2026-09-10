@@ -27,7 +27,7 @@ def gf_quat_to_tensor(orientation: Gf.Quatd | Gf.Quatf | Gf.Quaternion, device: 
 
     Args:
         orientation: Input quaternion from USD.
-        device: Device parameter (unused, maintained for compatibility).
+        device: Device parameter, unused and maintained for compatibility.
 
     Returns:
         Quaternion as numpy array in [w, x, y, z] format.
@@ -41,18 +41,18 @@ def gf_quat_to_tensor(orientation: Gf.Quatd | Gf.Quatf | Gf.Quaternion, device: 
 def euler_angles_to_quats(
     euler_angles: np.ndarray, degrees: bool = False, extrinsic: bool = True, device: object = None
 ) -> np.ndarray:
-    """Vectorized version of converting euler angles to quaternion (scalar first).
+    """Vectorized version of converting euler angles to quaternion, scalar first.
 
     Args:
-        euler_angles: euler angles with shape (N, 3) or (3,) representation XYZ in extrinsic coordinates
+        euler_angles: euler angles with shape (N, 3) or (3,) representation XYZ in extrinsic coordinates.
         degrees: True if degrees, False if radians.
         extrinsic: True if the euler angles follows the extrinsic angles
-                   convention (equivalent to ZYX ordering but returned in the reverse) and False if it follows
-                   the intrinsic angles conventions (equivalent to XYZ ordering).
-        device: Device parameter (unused, maintained for compatibility).
+            convention, equivalent to ZYX ordering but returned in the reverse, and False if it follows
+            the intrinsic angles conventions, equivalent to XYZ ordering.
+        device: Device parameter, unused and maintained for compatibility.
 
     Returns:
-        quaternions representation of the angles (N, 4) or (4,) - scalar first.
+        quaternions representation of the angles (N, 4) or (4,), scalar first.
     """
     if extrinsic:
         order = "xyz"
@@ -70,18 +70,19 @@ def euler_angles_to_quats(
 def quats_to_euler_angles(
     quaternions: np.ndarray, degrees: bool = False, extrinsic: bool = True, device: object = None
 ) -> np.ndarray:
-    """Vectorized version of converting quaternions (scalar first) to euler angles.
+    """Vectorized version of converting quaternions, scalar first, to euler angles.
 
     Args:
-        quaternions: quaternions with shape (N, 4) or (4,) - scalar first
+        quaternions: quaternions with shape (N, 4) or (4,), scalar first.
         degrees: Return euler angles in degrees if True, radians if False.
         extrinsic: True if the euler angles follows the extrinsic angles
-                   convention (equivalent to ZYX ordering but returned in the reverse) and False if it follows
-                   the intrinsic angles conventions (equivalent to XYZ ordering).
-        device: Device parameter (unused, maintained for compatibility).
+            convention, equivalent to ZYX ordering but returned in the reverse, and False if it follows
+            the intrinsic angles conventions, equivalent to XYZ ordering.
+        device: Device parameter, unused and maintained for compatibility.
 
     Returns:
-        Euler angles in extrinsic or intrinsic coordinates XYZ order with shape (N, 3) or (3,) corresponding to the quaternion rotations
+        Euler angles in extrinsic or intrinsic coordinates XYZ order with shape (N, 3) or (3,) corresponding to
+        the quaternion rotations.
     """
     if extrinsic:
         order = "xyz"
@@ -100,11 +101,11 @@ def rot_matrices_to_quats(rotation_matrices: np.ndarray, device: object = None) 
     """Vectorized version of converting rotation matrices to quaternions.
 
     Args:
-        rotation_matrices: N Rotation matrices with shape (N, 3, 3) or (3, 3)
-        device: Device parameter (unused, maintained for compatibility).
+        rotation_matrices: N Rotation matrices with shape (N, 3, 3) or (3, 3).
+        device: Device parameter, unused and maintained for compatibility.
 
     Returns:
-        quaternion representation of the rotation matrices (N, 4) or (4,) - scalar first
+        quaternion representation of the rotation matrices (N, 4) or (4,), scalar first.
     """
     rot = Rotation.from_matrix(rotation_matrices)
     result = rot.as_quat()
@@ -119,11 +120,11 @@ def quats_to_rot_matrices(quaternions: np.ndarray, device: object = None) -> np.
     """Vectorized version of converting quaternions to rotation matrices.
 
     Args:
-        quaternions: quaternions with shape (N, 4) or (4,) and scalar first
-        device: Device parameter (unused, maintained for compatibility).
+        quaternions: quaternions with shape (N, 4) or (4,) and scalar first.
+        device: Device parameter, unused and maintained for compatibility.
 
     Returns:
-        N Rotation matrices with shape (N, 3, 3) or (3, 3)
+        N Rotation matrices with shape (N, 3, 3) or (3, 3).
     """
     if len(quaternions.shape) == 1:
         q = quaternions[[1, 2, 3, 0]]
@@ -138,13 +139,14 @@ def rotvecs_to_quats(rotation_vectors: np.ndarray, degrees: bool = False, device
     """Vectorized version of converting rotation vectors to quaternions.
 
     Args:
-        rotation_vectors: N rotation vectors with shape (N, 3) or (3,).  The magnitude of the rotation vector describes the magnitude of the rotation.
+        rotation_vectors: N rotation vectors with shape (N, 3) or (3,). The magnitude of the rotation vector
+            describes the magnitude of the rotation.
             The normalized rotation vector represents the axis of rotation.
         degrees: The magnitude of the rotation vector will be interpreted as degrees if True, and radians if False.
-        device: Device parameter (unused, maintained for compatibility).
+        device: Device parameter, unused and maintained for compatibility.
 
     Returns:
-        quaternion representation of the rotation matrices (N, 4) or (4,) - scalar first
+        quaternion representation of the rotation matrices (N, 4) or (4,), scalar first.
     """
     rot = Rotation.from_rotvec(rotation_vectors, degrees)
     result = rot.as_quat()
@@ -159,12 +161,13 @@ def quats_to_rotvecs(quaternions: np.ndarray, device: object = None) -> np.ndarr
     """Vectorized version of converting quaternions to rotation vectors.
 
     Args:
-        quaternions: quaternions with shape (N, 4) or (4,) and scalar first
-        device: Device parameter (unused, maintained for compatibility).
+        quaternions: quaternions with shape (N, 4) or (4,) and scalar first.
+        device: Device parameter, unused and maintained for compatibility.
 
     Returns:
-        N rotation vectors with shape (N,3) or (3,).  The magnitude of the rotation vector describes the magnitude of the rotation.
-            The normalized rotation vector represents the axis of rotation.
+        N rotation vectors with shape (N,3) or (3,). The magnitude of the rotation vector describes the magnitude
+        of the rotation.
+        The normalized rotation vector represents the axis of rotation.
     """
     if len(quaternions.shape) == 1:
         q = quaternions[[1, 2, 3, 0]]
@@ -180,7 +183,7 @@ def rad2deg(radian_value: np.ndarray, device: object = None) -> np.ndarray:
 
     Args:
         radian_value: Angle values in radians.
-        device: Device parameter (unused, maintained for compatibility).
+        device: Device parameter, unused and maintained for compatibility.
 
     Returns:
         Angle values converted to degrees.
@@ -193,7 +196,7 @@ def deg2rad(degree_value: np.ndarray, device: object = None) -> np.ndarray:
 
     Args:
         degree_value: Angle values in degrees.
-        device: Device parameter (unused, maintained for compatibility).
+        device: Device parameter, unused and maintained for compatibility.
 
     Returns:
         Angle values converted to radians.
@@ -219,7 +222,7 @@ def wxyz2xyzw(q: np.ndarray, ret_torch: bool = False) -> np.ndarray:
 
     Args:
         q: Quaternion in WXYZ order.
-        ret_torch: Return format parameter (unused, maintained for compatibility).
+        ret_torch: Return format parameter, unused and maintained for compatibility.
 
     Returns:
         Quaternion in XYZW order.

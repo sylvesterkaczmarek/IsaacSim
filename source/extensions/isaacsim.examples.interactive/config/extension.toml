@@ -1,8 +1,8 @@
 [package]
-version = "4.16.1"
+version = "4.16.8"
 category = "Simulation"
 title = "Isaac Sim Samples"
-description = "Provides interactive sample extensions demonstrating Isaac Sim features including robot manipulation, path planning, gamepad control, and bin filling."
+description = "Provides interactive sample extensions demonstrating Isaac Sim features including robot manipulation, gamepad control, and bin filling."
 keywords = ["isaac", "samples", "manipulation"]
 changelog = "docs/CHANGELOG.md"
 readme = "docs/Overview.md"
@@ -18,9 +18,10 @@ writeTarget.kit = true
 "isaacsim.examples.base" = {}
 "isaacsim.examples.browser" = {}
 "isaacsim.gui.components" = {}
-"isaacsim.robot.experimental.manipulators.examples" = {}
 "isaacsim.robot.experimental.wheeled_robots" = {}
 "isaacsim.robot.wheeled_robots.nodes" = {}
+"isaacsim.robot_motion.controllers" = {}
+"isaacsim.robot_motion.examples" = {}
 "isaacsim.storage.native" = {}
 "omni.graph.action" = {}
 "omni.graph.core" = {}
@@ -58,6 +59,7 @@ name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [    
     '*The NumPy module was reloaded*',
 ]
@@ -67,6 +69,7 @@ timeout = 900
 dependencies = [
     "isaacsim.test.utils",
 ]
+
 stdoutFailPatterns.exclude = [
     '*[Error] [carb] [Plugin: omni.sensors.nv.lidar.ext.plugin] Dependency: [omni::sensors::lidar::IGenericModelOutputIOFactory v0.1] failed to be resolved.*', # feature not included in Windows
     '*The NumPy module was reloaded*',

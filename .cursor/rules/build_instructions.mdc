@@ -179,7 +179,9 @@ Dependencies are defined in `deps/` directory:
 **Python dependencies** (.toml files):
 - `pip.toml`: Core Python packages
 - `pip_compute.toml`: Compute/GPU packages
-- `pip_ml.toml`: Machine learning packages
+- `pip_ml.toml`: Machine learning packages (PyTorch)
+- `pip_nv.toml`: NVIDIA CUDA runtime libraries (PyTorch dependencies)
+- `pip_onnx.toml`: ONNX packages for policy inference
 - `pip_lula.toml`: Lula motion planning packages
 - `pip_cloud.toml`: Cloud-related packages
 - `pip_ucx.toml`: UCX packages

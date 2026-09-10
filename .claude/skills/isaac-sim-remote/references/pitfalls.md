@@ -57,7 +57,7 @@ ViewportManager.set_camera_view("/OmniverseKit_Persp", eye=[2.5, -2.0, 1.8], tar
 and thumbnails are custom-rendered, not standard named widgets.
 
 **Fix:** Use the model API: `inner.category_selection = [item]` for categories,
-`detail_view.selection = [item]` for examples. See `scripts/browser_helpers.py`.
+`detail_view.selection = [item]` for examples.
 
 ## Two Button Dicts on Templates
 
@@ -122,6 +122,24 @@ Use `await stage_utils.create_new_stage_async()` to bypass the dialog.
 Isaac Sim persists user settings (asset root, window layouts) across sessions.
 If settings seem wrong, launch with `--reset-user` to clear them.
 
+## S3 Asset Root Getter Failures
+
+With Nucleus offline, `get_assets_root_path()` / `get_assets_root_path_async()`
+may fail after setting an S3 fallback because the root-marker health check can
+reject the bucket even when concrete asset URLs under that root resolve.
+
+For concrete assets, read the configured setting if the getter fails:
+
+```python
+import carb.settings
+
+root = carb.settings.get_settings().get("/persistent/isaac/asset_root/default")
+usd_path = root.rstrip("/") + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+```
+
+Use `scripts/verify_asset.py` for this check; it falls back to the configured
+root when the storage getter fails.
+
 ## Renderer Warm-up
 
 After loading a stage or creating objects, call `app_utils.update_app(steps=120)`
@@ -181,7 +199,7 @@ for i in range(20):
 
 ## Example Workflow: LOAD → Play → START
 
-Most interactive examples (Follow Target, Path Planning, etc.) require THREE steps:
+Some interactive examples, such as Follow Target, require THREE steps:
 
 1. **LOAD** — creates World, loads USD, registers physics callbacks
 2. **Play** (timeline) — starts the physics simulation loop

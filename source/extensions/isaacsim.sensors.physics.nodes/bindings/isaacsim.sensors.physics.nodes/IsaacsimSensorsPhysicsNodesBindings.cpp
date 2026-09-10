@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <isaacsim/core/includes/BindingsPythonUtils.h>
-#include <isaacsim/sensors/physics/nodes/IPhysicsSensorNodes.h>
+#include <isaacsim/core/includes/BindingsPythonUtils.hpp>
+#include <isaacsim/sensors/physics/nodes/IPhysicsSensorNodes.hpp>
 
 CARB_BINDINGS("isaacsim.sensors.physics.nodes.python")
 

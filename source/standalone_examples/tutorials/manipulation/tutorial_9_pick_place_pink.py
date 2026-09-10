@@ -69,6 +69,14 @@ class UR10ePickPlace:
         5  Lower      — arm descends to place height
         6  Release    — gripper opens
         7  Retract    — arm lifts away
+
+    Args:
+        urdf_path: Path to the robot description to load, or None to load the supported UR10 model. Tool and
+            end-effector frame names follow the module's CLI ``--urdf`` selection made at import time, so
+            programmatic callers should keep the two selections consistent.
+        cube_position: Initial world-space cube position, or None to use the tutorial's pickup location.
+        target_position: World-space placement position, or None to use the tutorial's drop-off location.
+        events_dt: Maximum frame count for each of the eight phases; an omitted or empty list uses the tutorial limits.
     """
 
     _ROBOT_PRIM_PATH = "/World/ur10e_robot"
@@ -285,7 +293,14 @@ class UR10ePickPlace:
         return self._ee_near_target()
 
     def forward(self) -> bool:
-        """Advance one simulation step. Returns False when the sequence is complete."""
+        """Advance the warmup or active pick-and-place phase by one simulation frame.
+
+        Returns:
+            True when a warmup or phase command was issued, or False if the sequence was already complete.
+
+        Raises:
+            RuntimeError: If the PINK IK controller rejects a phase reset.
+        """
         if self.is_done():
             return False
 
@@ -333,7 +348,11 @@ class UR10ePickPlace:
         return True
 
     def is_done(self) -> bool:
-        """Return whether all pick-and-place phases have completed."""
+        """Return whether all pick-and-place phases have completed.
+
+        Returns:
+            True once the controller has advanced beyond every configured phase, otherwise False.
+        """
         return self._event >= len(self.events_dt)
 
     def reset(self) -> None:
@@ -351,7 +370,12 @@ class UR10ePickPlace:
 
 
 def main(args: argparse.Namespace, app: SimulationApp) -> None:
-    """Run the PINK pick-and-place tutorial."""
+    """Run the PINK pick-and-place tutorial.
+
+    Args:
+        args: Parsed options controlling device, custom URDF, headless mode, and test length.
+        app: Running simulation application used for asynchronous setup and frame updates.
+    """
     SimulationManager.setup_simulation(dt=1.0 / 60.0, device=args.device)
 
     scenario = UR10ePickPlace(urdf_path=args.urdf)

@@ -197,6 +197,7 @@ class ROS2TestCase(TimedAsyncTestCase):
         max_frames: int = 180,
         frames_per_step: int = 1,
         per_frame_callback: object | None = None,
+        failure_message: str | None = None,
     ) -> bool:
         """Simulate until condition is met or maximum frames reached.
 
@@ -208,9 +209,13 @@ class ROS2TestCase(TimedAsyncTestCase):
             max_frames: Maximum number of simulation frames to run.
             frames_per_step: Number of frames to simulate in each step.
             per_frame_callback: Optional callback to execute each frame (e.g., for spinning ROS nodes).
+            failure_message: Optional assertion message. When set, the test fails if the condition times out.
 
         Returns:
-            True if condition was met, False if max frames reached.
+            True if condition was met. False if max frames reached and ``failure_message`` is not set.
+
+        Raises:
+            AssertionError: If max frames are reached and ``failure_message`` is set.
         """
         frames_run = 0
         while frames_run < max_frames:
@@ -220,6 +225,8 @@ class ROS2TestCase(TimedAsyncTestCase):
             frames_run += frames_per_step
             if condition_func():
                 return True
+        if failure_message is not None:
+            self.fail(failure_message)
         return False
 
     async def wait_for_publishers_on_topic(

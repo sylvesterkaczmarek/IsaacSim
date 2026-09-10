@@ -23,6 +23,7 @@ import omni.kit.test
 import warp as wp
 from isaacsim.core.experimental.prims import GeomPrim
 from isaacsim.core.experimental.utils.backend import use_backend
+from pxr import UsdPhysics
 
 from .common import (
     check_allclose,
@@ -51,8 +52,11 @@ async def populate_stage(max_num_prims: int, operation: Literal["wrap", "create"
     stage_utils.define_prim(f"/World", "Xform")
     stage_utils.define_prim(f"/World/PhysicsScene", "PhysicsScene")
     for i in range(max_num_prims):
-        stage_utils.define_prim(f"/World/A_{i}", "Xform")
+        xform_prim = stage_utils.define_prim(f"/World/A_{i}", "Xform")
         stage_utils.define_prim(f"/World/A_{i}/B", "Cube")
+        UsdPhysics.RigidBodyAPI.Apply(xform_prim)
+        mass_api = UsdPhysics.MassAPI.Apply(xform_prim)
+        mass_api.GetMassAttr().Set(1.0)
 
 
 class TestGeomPrim(omni.kit.test.AsyncTestCase):
@@ -141,6 +145,7 @@ class TestGeomPrim(omni.kit.test.AsyncTestCase):
             device: Device under test.
             backend: Backend name under test.
         """
+        await omni.kit.app.get_app().next_update_async()
         choices = [
             "none",
             "convexDecomposition",

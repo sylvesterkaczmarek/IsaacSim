@@ -14,13 +14,13 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 
-#include <isaacsim/ros2/core/Ros2Node.h>
-#include <isaacsim/ros2/nodes/Ros2OgnUtils.h>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
+#include <isaacsim/ros2/nodes/Ros2OgnUtils.hpp>
 #include <omni/fabric/FabricUSD.h>
 
 #include <OgnROS2ServiceServerResponseDatabase.h>
@@ -111,14 +111,21 @@ public:
                 state.m_messageUpdateNeeded = true;
                 state.m_serverHandle = serverHandle;
                 state.m_serviceServer = *reinterpret_cast<std::shared_ptr<Ros2Service>*>(voidPtr);
+                if (!state.m_serviceServer)
+                {
+                    return false;
+                }
             }
         }
 
         // Update message and node attributes
         if (state.m_messageUpdateNeeded)
         {
-            state.updateNodeState<false>(
-                db, nodeObj, state.m_messagePackage, state.m_messageSubfolder, state.m_messageName);
+            if (!state.updateNodeState<false>(
+                    db, nodeObj, state.m_messagePackage, state.m_messageSubfolder, state.m_messageName))
+            {
+                return false;
+            }
             state.m_messageUpdateNeeded = false;
         }
 
@@ -135,14 +142,26 @@ public:
     {
         auto& state = db.perInstanceState<OgnROS2ServiceServerResponse>();
 
+        if (!state.m_serviceServer || !state.m_messageResponse)
+        {
+            return false;
+        }
         // Check if all sub-message size match size of actuators before setting data
         if (!state.m_serviceServer->isValid())
         {
             db.logWarning("service is invalid");
             return false;
         }
+        if (!state.m_messageResponse)
+        {
+            db.logWarning("Response message is invalid");
+            return false;
+        }
         // Write response of the node from the input to the message
-        isaacsim::ros2::omnigraph_utils::writeMessageDataFromNode(db, state.m_messageResponse, "Response:", false);
+        if (!isaacsim::ros2::omnigraph_utils::writeMessageDataFromNode(db, state.m_messageResponse, "Response:", false))
+        {
+            return false;
+        }
         state.m_serviceServer->sendResponse(state.m_messageResponse->getPtr());
 
         // Only if the server received a request
@@ -175,7 +194,7 @@ private:
     std::string m_messageName;
 
     template <bool removeAttributes>
-    void updateNodeState(OgnROS2ServiceServerResponseDatabase& db,
+    bool updateNodeState(OgnROS2ServiceServerResponseDatabase& db,
                          const NodeObj& nodeObj,
                          std::string messagePackage,
                          std::string messageSubfolder,
@@ -189,7 +208,7 @@ private:
             if (!isaacsim::ros2::omnigraph_utils::removeDynamicAttributes<true, true>(nodeObj))
             {
                 db.logError("Unable to remove existing attributes from the node");
-                return;
+                return false;
             }
         }
 
@@ -197,14 +216,19 @@ private:
         {
             db.logWarning("messagePackage [%s] or messageSubfolder [%s] or messageName [%s] empty, skipping compute",
                           messagePackage.c_str(), messageSubfolder.c_str(), messageName.c_str());
-            return;
+            return false;
         }
 
         // Build message attributes
         state.m_messageResponse = state.m_factory->createDynamicMessage(
             messagePackage, messageSubfolder, messageName, BackendMessageType::eResponse);
-        isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceServerResponseDatabase, false, false>(
-            db, nodeObj, messagePackage, messageSubfolder, messageName, state.m_messageResponse, "Response:");
+        if (!isaacsim::ros2::omnigraph_utils::createOgAttributesForMessage<OgnROS2ServiceServerResponseDatabase, false, false>(
+                db, nodeObj, messagePackage, messageSubfolder, messageName, state.m_messageResponse, "Response:"))
+        {
+            state.m_messageResponse.reset();
+            return false;
+        }
+        return true;
     }
 
     static void onPackageChanged(AttributeObj const& attrObj, void const* userData)
@@ -213,10 +237,19 @@ private:
         NodeObj nodeObj = attrObj.iAttribute->getNode(attrObj);
         auto db = OgnROS2ServiceServerResponseDatabase(nodeObj);
         auto& state = db.perInstanceState<OgnROS2ServiceServerResponse>();
+        state.m_messageUpdateNeeded = true;
+        if (!state.isInitialized())
+        {
+            return;
+        }
+
         std::string messagePackage = std::string(db.inputs.messagePackage());
         std::string messageSubfolder = std::string(db.inputs.messageSubfolder());
         std::string messageName = std::string(db.inputs.messageName());
-        state.updateNodeState<true>(db, nodeObj, messagePackage, messageSubfolder, messageName);
+        if (!state.updateNodeState<true>(db, nodeObj, messagePackage, messageSubfolder, messageName))
+        {
+            state.m_messageResponse.reset();
+        }
         state.m_messageUpdateNeeded = true;
     }
 
@@ -227,6 +260,11 @@ private:
         auto db = OgnROS2ServiceServerResponseDatabase(nodeObj);
         auto& state = db.perInstanceState<OgnROS2ServiceServerResponse>();
         uint64_t serverHandle = db.inputs.serverHandle();
+        if (!state.isInitialized())
+        {
+            return;
+        }
+
         if (serverHandle != state.m_serverHandle)
         {
             if (serverHandle)
@@ -242,9 +280,17 @@ private:
                 }
 
                 state.m_serviceServer = *reinterpret_cast<std::shared_ptr<Ros2Service>*>(voidPtr);
+                if (!state.m_serviceServer)
+                {
+                    return;
+                }
                 state.m_serverHandle = serverHandle;
-                state.updateNodeState<true>(
-                    db, nodeObj, state.m_messagePackage, state.m_messageSubfolder, state.m_messageName);
+                if (!state.updateNodeState<true>(
+                        db, nodeObj, state.m_messagePackage, state.m_messageSubfolder, state.m_messageName))
+                {
+                    state.m_messageResponse.reset();
+                    state.m_messageUpdateNeeded = true;
+                }
             }
         }
     }

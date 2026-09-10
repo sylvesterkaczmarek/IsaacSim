@@ -30,17 +30,49 @@ from isaacsim.core.experimental.utils.bounds import (
     get_obb_corners,
 )
 from isaacsim.core.experimental.utils.semantics import add_labels
-from isaacsim.core.experimental.utils.stage import add_reference_to_stage, define_prim
+from isaacsim.core.experimental.utils.stage import add_reference_to_stage, create_new_stage, define_prim, open_stage
 from isaacsim.core.experimental.utils.transform import euler_angles_to_quaternion, quaternion_to_euler_angles
-from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.core.simulation_manager import PhysicsScene, SimulationManager
 from pxr import Gf, Usd, UsdGeom
 
 
+def setup_environment(env_url: str | None, assets_root_path: str) -> bool:
+    """Load a USD environment, or create a minimal plane + dome light when ``env_url`` is None."""
+    if env_url:
+        env_path = env_url if env_url.startswith("omniverse://") else assets_root_path + env_url
+        print(f"[SDG] Loading Stage {env_url}")
+        stage_opened, _ = open_stage(env_path)
+        if not stage_opened:
+            carb.log_error(f"[SDG] Could not open stage {env_url}")
+            return False
+        return True
+
+    print("[SDG] Creating empty environment (plane + dome light)")
+    create_new_stage()
+    rep.functional.create.scope(name="Environment")
+    rep.functional.create.dome_light(intensity=500, parent="/Environment", name="DomeLight")
+    ground = rep.functional.create.plane(parent="/Environment", name="GroundPlane", scale=(100, 100, 1))
+    rep.functional.physics.apply_collider(ground)
+    return True
+
+
 def setup_writer(config: dict) -> rep.Writer | None:
-    """Setup and initialize writer with optional backend support and error handling."""
+    """Set up and initialize a writer with optional backend support.
+
+    Args:
+        config: Writer registry name, initialization options, and optional backend settings.
+
+    Returns:
+        Initialized writer. Return ``None`` when the writer is unavailable, backend lookup fails, or backend or
+        writer initialization rejects its options with ``TypeError``; other initialization errors propagate.
+    """
 
     def normalize_output_dir(params: dict) -> None:
-        """Convert relative output_dir to absolute path."""
+        """Convert relative output_dir to absolute path.
+
+        Args:
+            params: Initialization options to update in place when they contain an output directory.
+        """
         if "output_dir" in params and not os.path.isabs(params["output_dir"]):
             params["output_dir"] = os.path.join(os.getcwd(), params["output_dir"])
 
@@ -101,7 +133,19 @@ def simulate_falling_objects(
     num_boxes: int = 8,
     rng: np.random.Generator | None = None,
 ) -> None:
-    """Run physics simulation to drop boxes on pallet near forklift."""
+    """Run physics simulation to drop boxes on pallet near forklift.
+
+    Set the global simulation physics interval to ``1/90`` seconds and initialize physics, leaving that state in
+    place after the stack settles or the step budget is exhausted.
+
+    Args:
+        forklift_prim: Forklift whose world transform anchors the temporary pallet.
+        assets_root_path: Asset-root prefix for the configured pallet and cardboard-box USD paths.
+        config: Pallet and cardboard-box asset paths and semantic classes.
+        max_sim_steps: Maximum physics steps to run while waiting for the stack to settle.
+        num_boxes: Number of cardboard boxes to drop onto the pallet.
+        rng: Generator for pallet and box pose sampling. When ``None``, create a fresh generator.
+    """
     if rng is None:
         rng = np.random.default_rng()
 
@@ -120,7 +164,8 @@ def simulate_falling_objects(
         orientations=sim_pallet_rotation,
         reset_xform_op_properties=True,
     )
-    sim_pallet_geom = GeomPrim(f"{str(sim_pallet.GetPrimPath())}/.*", apply_collision_apis=True)
+    sim_pallet_geom_paths = [str(p.GetPrimPath()) for p in Usd.PrimRange(sim_pallet) if p.IsA(UsdGeom.Gprim)]
+    sim_pallet_geom = GeomPrim(sim_pallet_geom_paths, apply_collision_apis=True)
     sim_pallet_geom.set_collision_approximations("boundingCube")
 
     bbox_cache = create_bbox_cache()
@@ -141,11 +186,12 @@ def simulate_falling_objects(
         )
         current_height += bbox_cache.ComputeLocalBound(sim_box).GetRange().GetSize()[2] * 1.1
 
-        sim_box_geom = GeomPrim(f"{str(sim_box.GetPrimPath())}/.*", apply_collision_apis=True)
+        sim_box_geom_paths = [str(p.GetPrimPath()) for p in Usd.PrimRange(sim_box) if p.IsA(UsdGeom.Gprim)]
+        sim_box_geom = GeomPrim(sim_box_geom_paths, apply_collision_apis=True)
         sim_box_geom.set_collision_approximations("convexHull")
         sim_box_rigid_prims.append(RigidPrim(str(sim_box.GetPrimPath())))
 
-    SimulationManager.set_physics_dt(1.0 / 90.0)
+    PhysicsScene("/PhysicsScene").set_dt(1.0 / 90.0)
     SimulationManager.initialize_physics()
 
     velocity_threshold = 0.01
@@ -161,7 +207,17 @@ def simulate_falling_objects(
 def setup_camera_bounds(
     pallet_prim: Usd.Prim, forklift_prim: Usd.Prim, pallet_tf: Gf.Matrix4d, forklift_tf: Gf.Matrix4d
 ) -> dict[str, dict[str, tuple[float, float, float]]]:
-    """Calculate camera randomization bounds for pallet, top view, and driver cameras."""
+    """Calculate camera randomization bounds for pallet, top view, and driver cameras.
+
+    Args:
+        pallet_prim: Pallet accepted for interface compatibility and currently ignored.
+        forklift_prim: Forklift accepted for interface compatibility and currently ignored.
+        pallet_tf: Pallet world transform used to center its camera volume.
+        forklift_tf: Forklift world transform used to center top and driver camera volumes.
+
+    Returns:
+        Minimum and maximum world-space positions for pallet, top, and driver cameras.
+    """
     pallet_pos = pallet_tf.ExtractTranslation()
     pallet_cam_bounds = {
         "min": (pallet_pos[0] - 2, pallet_pos[1] - 2, 2),
@@ -190,7 +246,18 @@ def setup_camera_bounds(
 def create_scatter_plane_for_prim(
     prim: Usd.Prim, prim_tf: Gf.Matrix4d, parent_path: str, scale_factor: float = 0.8, visible: bool = False
 ) -> Usd.Prim:
-    """Create scatter plane sized and aligned to prim surface."""
+    """Create scatter plane sized and aligned to prim surface.
+
+    Args:
+        prim: Surface prim whose local bounds determine the plane dimensions.
+        prim_tf: World transform used to align and position the plane.
+        parent_path: Parent path under which to create the plane.
+        scale_factor: Multiplier applied to the surface width and depth.
+        visible: Whether the scatter plane should be rendered.
+
+    Returns:
+        Plane prim aligned above the bounded surface.
+    """
     bb_cache = create_bbox_cache()
     prim_bbox = bb_cache.ComputeLocalBound(prim)
     prim_bbox.Transform(prim_tf)
@@ -218,7 +285,16 @@ def create_scatter_plane_for_prim(
 def setup_cone_placement_corners(
     forklift_prim: Usd.Prim, bb_cache: UsdGeom.BBoxCache | None = None, scale_factor: float = 1.3
 ) -> tuple[list[list[float]], tuple[float, float, float]]:
-    """Calculate forklift OBB corners for cone placement."""
+    """Calculate forklift OBB corners for cone placement.
+
+    Args:
+        forklift_prim: Forklift whose oriented bounds define the placement region.
+        bb_cache: Optional cache to reuse for bounding-box computation.
+        scale_factor: Multiplier applied to the horizontal oriented-box extents.
+
+    Returns:
+        Four alternating horizontal box corners and the forklift orientation in Euler degrees.
+    """
     if bb_cache is None:
         bb_cache = create_bbox_cache()
 
@@ -245,7 +321,13 @@ def setup_cone_placement_corners(
 
 
 def register_lights_graph_randomizer(forklift_prim: Usd.Prim, pallet_prim: Usd.Prim, event_name: str) -> None:
-    """Register graph randomizer for sphere lights."""
+    """Register graph randomizer for sphere lights.
+
+    Args:
+        forklift_prim: Forklift included in the light-placement bounds.
+        pallet_prim: Pallet included in the light-placement bounds.
+        event_name: Custom Replicator event that triggers light randomization.
+    """
     bb_cache = create_bbox_cache()
     combined_bounds = compute_combined_aabb([forklift_prim, pallet_prim], bbox_cache=bb_cache)
     light_pos_min = (combined_bounds[0], combined_bounds[1], 6)
@@ -265,7 +347,13 @@ def register_lights_graph_randomizer(forklift_prim: Usd.Prim, pallet_prim: Usd.P
 def register_cardboxes_materials_graph_randomizer(
     cardboxes: list[Usd.Prim], cardbox_material_urls: list[str], event_name: str
 ) -> None:
-    """Register graph randomizer for cardbox materials."""
+    """Register graph randomizer for cardbox materials.
+
+    Args:
+        cardboxes: Cardboard-box prims whose child meshes receive randomized materials.
+        cardbox_material_urls: Material asset URLs from which to sample.
+        event_name: Custom Replicator event that triggers material randomization.
+    """
     cardbox_mesh_paths = []
     for cardbox in cardboxes:
         meshes = [child for child in cardbox.GetChildren() if child.IsA(UsdGeom.Mesh)]

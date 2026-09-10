@@ -40,6 +40,7 @@ from isaacsim.core.experimental.objects import (
     Shape,
     Sphere,
     SphereLight,
+    Stage,
 )
 from isaacsim.core.simulation_manager import SimulationManager
 
@@ -59,6 +60,12 @@ class TestExtensionDocstrings(isaacsim.test.docstring.AsyncDocTestCase):
     async def tearDown(self) -> None:
         """Finalize the docstring test fixture."""
         super().tearDown()
+
+    # --------------------------------------------------------------------
+
+    async def test_stage_docstrings(self) -> None:
+        """Test stage docstrings."""
+        await self.assertDocTests(Stage)
 
     # --------------------------------------------------------------------
 

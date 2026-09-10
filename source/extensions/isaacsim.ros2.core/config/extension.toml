@@ -1,5 +1,5 @@
 [package]
-version = "1.9.4"
+version = "1.11.0"
 category = "Simulation"
 title = "ROS 2 Core"
 description = "The ROS 2 core extension containing backend libraries required to run the ROS 2 bridge."
@@ -59,6 +59,10 @@ args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 name = "doctest"
 enabled = true
@@ -71,6 +75,7 @@ args = ["--/app/settings/fabricDefaultStageFrameHistoryCount=3",]
 pythonTests.include = []
 pythonTests.exclude = ["*"]
 cppTests.libraries = ["bin/${lib_prefix}isaacsim.ros2.core.backend_tests${lib_ext}"]
+
 stdoutFailPatterns.exclude = [
   "*[Error] Node name * not valid*",
   "*[Error] Namespace name * not valid*",

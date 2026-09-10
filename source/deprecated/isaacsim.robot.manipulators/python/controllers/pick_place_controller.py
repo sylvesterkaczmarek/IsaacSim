@@ -28,32 +28,32 @@ from isaacsim.robot.manipulators.grippers.gripper import Gripper
 class PickPlaceController(BaseController):
     """A simple pick and place state machine for tutorials.
 
-    Each phase runs for 1 second, which is the internal time of the state machine
+    Each phase runs for 1 second, which is the internal time of the state machine.
 
-    Dt of each phase/ event step is defined
+    Dt of each phase/event step is defined.
 
     - Phase 0: Move end_effector above the cube center at the 'end_effector_initial_height'.
-    - Phase 1: Lower end_effector down to encircle the target cube
-    - Phase 2: Wait for Robot's inertia to settle.
-    - Phase 3: close grip.
+    - Phase 1: Lower end_effector down to encircle the target cube.
+    - Phase 2: Wait for the robot inertia to settle.
+    - Phase 3: Close grip.
     - Phase 4: Move end_effector up again, keeping the grip tight (lifting the block).
     - Phase 5: Smoothly move the end_effector toward the goal xy, keeping the height constant.
     - Phase 6: Move end_effector vertically toward goal height at the 'end_effector_initial_height'.
-    - Phase 7: loosen the grip.
-    - Phase 8: Move end_effector vertically up again at the 'end_effector_initial_height'
+    - Phase 7: Loosen the grip.
+    - Phase 8: Move end_effector vertically up again at the 'end_effector_initial_height'.
     - Phase 9: Move end_effector towards the old xy position.
 
     Args:
         name: Name id of the controller.
-        cspace_controller: A cartesian space controller that returns an ArticulationAction type.
-        gripper: A gripper controller for open/ close actions.
-        end_effector_initial_height: End effector initial picking height to start from (more info in phases above).
-            If not defined, set to 0.3 meters.
-        events_dt: Dt of each phase/ event step. 10 phases dt has to be defined.
+        cspace_controller: A Cartesian space controller that returns an ArticulationAction type.
+        gripper: A gripper controller for open/close actions.
+        end_effector_initial_height: End effector initial picking height to start from.
+            See the phases above for usage details.
+        events_dt: Dt of each phase/event step. Dt values for 10 phases have to be defined.
 
     Raises:
-        Exception: events dt need to be list or numpy array
-        Exception: events dt need have length of 10
+        Exception: events_dt needs to be a list or numpy array.
+        Exception: events_dt must have exactly 10 entries.
     """
 
     def __init__(
@@ -110,7 +110,7 @@ class PickPlaceController(BaseController):
         end_effector_offset: typing.Optional[np.ndarray] = None,
         end_effector_orientation: typing.Optional[np.ndarray] = None,
     ) -> ArticulationAction:
-        """Runs the controller one step.
+        """Runs the pick and place state machine for one controller step.
 
         Args:
             picking_position: The object's position to be picked in local frame.
@@ -182,6 +182,9 @@ class PickPlaceController(BaseController):
 
         Returns:
             Alpha value for interpolation.
+
+        Raises:
+            ValueError: If the current event is outside the defined pick and place phases.
         """
         if self._event < 5:
             return 0
@@ -202,6 +205,9 @@ class PickPlaceController(BaseController):
 
         Returns:
             The interpolated target height for the current phase.
+
+        Raises:
+            ValueError: If the current event is outside the defined pick and place phases.
         """
         if self._event == 0:
             h = self._h1
@@ -260,12 +266,11 @@ class PickPlaceController(BaseController):
 
         Args:
             end_effector_initial_height: End effector initial picking height to start from.
-                If not defined, set to 0.3 meters.
             events_dt: Dt of each phase/ event step. 10 phases dt has to be defined.
 
         Raises:
-            Exception: Events dt need to be list or numpy array
-            Exception: Events dt need have length of 10
+            Exception: If events_dt is not a list or numpy array.
+            Exception: If events_dt does not contain 10 entries.
         """
         BaseController.reset(self)
         self._cspace_controller.reset()

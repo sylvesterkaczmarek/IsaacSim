@@ -18,7 +18,7 @@
 import numpy as np
 import omni.graph.core as og
 from isaacsim.core.nodes import BaseResetNode
-from isaacsim.robot.experimental.wheeled_robots.controllers import HolonomicController
+from isaacsim.robot.experimental.wheeled_robots import HolonomicController
 from isaacsim.robot.wheeled_robots.nodes.ogn.OgnHolonomicControllerDatabase import OgnHolonomicControllerDatabase
 
 

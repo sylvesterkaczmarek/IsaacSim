@@ -24,9 +24,12 @@ from __future__ import annotations
 import logging
 import math
 import os
+import xml.etree.ElementTree as ET
+from collections.abc import Callable
 
-from pxr import Usd
+from pxr import Gf, Usd
 
+from .geometry_reader import GeometryData
 from .joint_reader import JointData, read_joints, read_loop_joints
 from .link_reader import CollisionData, LinkData, VisualData, read_link
 from .material_reader import collect_materials, populate_material_colors
@@ -68,6 +71,9 @@ class UsdToUrdfConverter:
             applied before robot discovery, so the chosen composition arcs
             determine which links, joints, and meshes are exported.  Variant
             sets that already have a selection are overridden.
+        export_duplicate_ghost_links: If ``True``, export site ghost links
+            whose names collide with existing links by appending a numeric
+            suffix to the generated link and joint names.
 
     """
 
@@ -79,6 +85,7 @@ class UsdToUrdfConverter:
         mesh_path_prefix: str = "./",
         visualize_collision_meshes: bool = False,
         variant_selections: dict[str, str] | None = None,
+        export_duplicate_ghost_links: bool = False,
     ) -> None:
         if isinstance(stage, (str, os.PathLike)):
             usd_path = str(stage)
@@ -91,8 +98,14 @@ class UsdToUrdfConverter:
         self._mesh_path_prefix = mesh_path_prefix
         self._visualize_collision_meshes = visualize_collision_meshes
         self._variant_selections = variant_selections
+        self._export_duplicate_ghost_links = export_duplicate_ghost_links
 
-    def convert(self, output_path: str | None = None) -> str:
+    def convert(
+        self,
+        output_path: str | None = None,
+        *,
+        postprocess: Callable[[ET.Element], None] | None = None,
+    ) -> str:
         """Convert the USD stage to URDF and write to *output_path*.
 
         When *output_path* is ``None`` the URDF is written next to the source
@@ -103,6 +116,8 @@ class UsdToUrdfConverter:
 
         Args:
             output_path: URDF output file path.
+            postprocess: Function that modifies the completed ``<robot>`` XML
+                element before it is written.
 
         Returns:
             Path to the written URDF file.
@@ -183,15 +198,51 @@ class UsdToUrdfConverter:
         if loop_joints_data:
             _logger.info(f"Read {len(loop_joints_data)} loop joints for URDF export")
 
+        existing_link_names = {ld.name for ld in links_data}
+        added_sites = 0
         for site in desc.sites:
             site_name = get_prim_name(site.prim)
+
             parent_path = str(site.parent_link_prim.GetPath())
             parent_name = link_name_map.get(parent_path, "")
             if not parent_name:
                 continue
 
+            if site_name in existing_link_names:
+                if not self._export_duplicate_ghost_links:
+                    if site_name == parent_name:
+                        _logger.warning(
+                            "Skipping site '%s' under link '%s': name collides with its parent link.",
+                            site_name,
+                            parent_name,
+                        )
+                    else:
+                        _logger.debug(
+                            "Skipping site '%s' at %s: name collides with an existing URDF link",
+                            site_name,
+                            site.prim.GetPath(),
+                        )
+                    continue
+
+                # Rename with a numeric suffix. Parent-name collisions are
+                # included: the fixed joint becomes parent -> renamed child,
+                # not a self-loop.
+                original_site_name = site_name
+                suffix = 1
+                while site_name in existing_link_names:
+                    site_name = f"{original_site_name}_{suffix}"
+                    suffix += 1
+                _logger.debug(
+                    "Renaming site '%s' at %s to '%s': name collides with an existing URDF link",
+                    original_site_name,
+                    site.prim.GetPath(),
+                    site_name,
+                )
+
             site_link = LinkData(name=site_name)
             links_data.append(site_link)
+            existing_link_names.add(site_name)
+            added_sites += 1
 
             origin_xyz, origin_rpy = compute_geom_origin_from_frames(
                 urdf_frames, parent_path, site.prim, desc.root_prim
@@ -207,13 +258,21 @@ class UsdToUrdfConverter:
             )
             joints_data.append(site_joint)
 
-        if desc.sites:
-            _logger.info(f"Added {len(desc.sites)} site frames as ghost links")
+        if added_sites:
+            _logger.info(f"Added {added_sites} site frames as ghost links")
 
         materials = collect_materials(links_data, mesh_dir)
         populate_material_colors(materials, self._stage, mesh_dir)
 
-        write_urdf(desc.name, links_data, joints_data, materials, output_path, loop_joints=loop_joints_data)
+        write_urdf(
+            desc.name,
+            links_data,
+            joints_data,
+            materials,
+            output_path,
+            loop_joints=loop_joints_data,
+            postprocess=postprocess,
+        )
         _logger.info(f"URDF written to {output_path}")
 
         return output_path
@@ -315,6 +374,72 @@ def _split_omniverse_url(url: str) -> tuple[str, str]:
     return "", url
 
 
+def _get_radial_and_axial_scale(scale: tuple[float, float, float], axis: str) -> tuple[float, float]:
+    """Get radial and axial scale factors for an axial primitive.
+
+    Args:
+        scale: Composed XYZ scale.
+        axis: Primitive axis token.
+
+    Returns:
+        Radial and axial scale factors.
+    """
+    scale_abs = tuple(abs(value) for value in scale)
+    axis_index = {"X": 0, "Y": 1, "Z": 2}.get(axis.upper(), 2)
+    radial_indices = [index for index in range(3) if index != axis_index]
+    return max(scale_abs[index] for index in radial_indices), scale_abs[axis_index]
+
+
+def _apply_composed_primitive_scale(geom: GeometryData, scale: tuple[float, float, float]) -> None:
+    """Apply composed geometry-to-link scale to primitive dimensions.
+
+    Args:
+        geom: Geometry data to update.
+        scale: Composed XYZ scale from the geometry prim to its URDF link.
+    """
+    scale_abs = tuple(abs(value) for value in scale)
+
+    if geom.original_type == "Capsule":
+        radial_scale, axial_scale = _get_radial_and_axial_scale(scale_abs, geom.axis)
+        if geom.geom_type == "cylinder":
+            geom.cylinder_radius *= radial_scale
+            geom.cylinder_length *= axial_scale
+        elif geom.geom_type == "sphere":
+            geom.sphere_radius *= radial_scale
+            geom.local_offset_xyz = tuple(geom.local_offset_xyz[index] * scale_abs[index] for index in range(3))
+        geom.original_params["radius"] *= radial_scale
+        geom.original_params["height"] *= axial_scale
+    elif geom.original_type == "Cone":
+        radial_scale, axial_scale = _get_radial_and_axial_scale(scale_abs, geom.axis)
+        geom.original_params["radius"] *= radial_scale
+        geom.original_params["height"] *= axial_scale
+    elif geom.geom_type == "box":
+        geom.box_size = tuple(geom.box_size[index] * scale_abs[index] for index in range(3))
+    elif geom.geom_type == "sphere":
+        geom.sphere_radius *= max(scale_abs)
+    elif geom.geom_type == "cylinder":
+        radial_scale, axial_scale = _get_radial_and_axial_scale(scale_abs, geom.axis)
+        geom.cylinder_radius *= radial_scale
+        geom.cylinder_length *= axial_scale
+
+
+def _get_axis_alignment_matrix(axis: str) -> Gf.Matrix4d:
+    """Get the rotation that maps URDF's Z-axis primitive convention to a USD axis.
+
+    Args:
+        axis: USD primitive axis token.
+
+    Returns:
+        Axis-alignment rotation matrix.
+    """
+    matrix = Gf.Matrix4d(1.0)
+    if axis.upper() == "X":
+        matrix.SetRotateOnly(Gf.Rotation(Gf.Vec3d(0.0, 1.0, 0.0), 90.0))
+    elif axis.upper() == "Y":
+        matrix.SetRotateOnly(Gf.Rotation(Gf.Vec3d(1.0, 0.0, 0.0), -90.0))
+    return matrix
+
+
 def _process_element_geometry(
     element: VisualData | CollisionData,
     link_path: str,
@@ -335,12 +460,21 @@ def _process_element_geometry(
     if geom is None:
         return
 
+    primitive_relative = None
+    if geom.source_prim and (geom.geom_type != "mesh" or geom.original_type == "Cone"):
+        primitive_relative = compute_geom_to_link_transform(urdf_frames, link_path, geom.source_prim, root_prim)
+        _, _, composed_scale = matrix4_to_origin_and_scale(primitive_relative)
+        _apply_composed_primitive_scale(geom, composed_scale)
+
     if geom.geom_type == "mesh" and geom.mesh_prim is not None:
         _export_mesh_geometry(element, link_path, urdf_frames, root_prim, mesh_exporter)
     elif geom.geom_type == "mesh" and geom.mesh_prim is None and geom.original_type == "Cone":
         _export_procedural_cone(element, link_path, urdf_frames, root_prim, mesh_exporter)
     elif geom.source_prim:
-        origin_xyz, origin_rpy = compute_geom_origin_from_frames(urdf_frames, link_path, geom.source_prim, root_prim)
+        relative = primitive_relative
+        if geom.geom_type == "cylinder":
+            relative = _get_axis_alignment_matrix(geom.axis) * relative
+        origin_xyz, origin_rpy, _ = matrix4_to_origin_and_scale(relative)
         if geom.local_offset_xyz != (0.0, 0.0, 0.0):
             origin_xyz = _compose_local_offset(origin_xyz, origin_rpy, geom.local_offset_xyz)
         element.origin_xyz = origin_xyz

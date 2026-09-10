@@ -33,10 +33,7 @@ import omni.ext
 import omni.graph.core as og
 import omni.kit.commands
 import omni.replicator.core as rep
-from isaacsim.core.nodes.scripts.utils import (
-    register_annotator_from_node_with_telemetry,
-    register_node_writer_with_telemetry,
-)
+from isaacsim.core.nodes import register_annotator_from_node_with_telemetry, register_node_writer_with_telemetry
 from isaacsim.core.utils.prims import get_prim_at_path
 from isaacsim.sensors.rtx.bindings._isaacsim_sensors_rtx import acquire_interface as _acquire
 from isaacsim.sensors.rtx.bindings._isaacsim_sensors_rtx import release_interface as _release
@@ -121,7 +118,7 @@ class Extension(omni.ext.IExt):
     ) -> None:
         """Connect upstream nodes when an annotator is attached.
 
-        Callback function for annotator attachment. Will connect ancestral upstream node(s)
+        Callback function for annotator attachment. Connects ancestral upstream node(s)
         to each other and annotator node, if user desires connections beyond immediate
         parent nodes.
 

@@ -14,22 +14,22 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "BufferRegistry.h"
+#include "BufferRegistry.hpp"
 
 #include <carb/PluginUtils.h>
 #include <carb/eventdispatcher/IEventDispatcher.h>
 #include <carb/events/EventsUtils.h>
 
-#include <isaacsim/core/experimental/prims/IPrimDataReader.h>
-#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.h>
-#include <isaacsim/core/experimental/prims/SdfPathToken.h>
-#include <isaacsim/core/includes/PhysicsEngine.h>
-#include <isaacsim/core/includes/Pose.h>
-#include <isaacsim/core/includes/UsdUtilities.h>
-#include <isaacsim/core/simulation_manager/ISimulationManager.h>
+#include <isaacsim/core/experimental/prims/IPrimDataReader.hpp>
+#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.hpp>
+#include <isaacsim/core/experimental/prims/SdfPathToken.hpp>
+#include <isaacsim/core/includes/PhysicsEngine.hpp>
+#include <isaacsim/core/includes/Pose.hpp>
+#include <isaacsim/core/includes/UsdUtilities.hpp>
+#include <isaacsim/core/simulation_manager/ISimulationManager.hpp>
 #include <omni/ext/IExt.h>
 #include <omni/fabric/FabricUSD.h>
 #include <omni/physics/simulation/IPhysics.h>
@@ -41,6 +41,7 @@
 #include <omni/physics/tensors/TensorApi.h>
 #include <omni/physx/IPhysxSimulation.h>
 #include <omni/usd/UsdContext.h>
+#include <omni/usd/UsdManager.h>
 #include <physxSchema/physxContactReportAPI.h>
 #include <physxSchema/physxRigidBodyAPI.h>
 #include <pxr/usd/usdPhysics/articulationRootAPI.h>
@@ -137,6 +138,12 @@ protected:
     ISimulationManager* m_simulationManager = nullptr;
     pxr::UsdStageRefPtr m_usdStage;
     usdrt::UsdStageRefPtr m_usdrtStage;
+    std::function<bool()> m_accessValidator;
+
+    bool _isAccessValid() const
+    {
+        return !m_accessValidator || m_accessValidator();
+    }
 
     /**
      * @brief Look up a field by name, run its callback if stale, and return the device buffer pointer.
@@ -149,6 +156,13 @@ protected:
     template <typename T>
     const T* _fetchFieldImpl(std::unordered_map<std::string, FieldEntry<T>>& fields, const std::string& name, int* outCount)
     {
+        if (!_isAccessValid())
+        {
+            if (outCount)
+                *outCount = 0;
+            return nullptr;
+        }
+
         auto it = fields.find(name);
         if (it == fields.end())
         {
@@ -254,6 +268,9 @@ protected:
      */
     Poses _fetchWorldPosesImpl(bool hostVariant)
     {
+        if (!_isAccessValid())
+            return { nullptr, 0, nullptr, 0 };
+
         auto& fieldsF = m_data->fieldsF;
         auto itPos = fieldsF.find("world_positions");
         auto itOri = fieldsF.find("world_orientations");
@@ -310,6 +327,9 @@ protected:
 
     bool _updateImpl()
     {
+        if (!_isAccessValid())
+            return false;
+
         int64_t step = m_simulationManager ? static_cast<int64_t>(m_simulationManager->getNumPhysicsSteps()) : 0;
         _runFieldCallbacksForStep(m_data->fieldsF, step);
         _runFieldCallbacksForStep(m_data->fieldsU8, step);
@@ -490,12 +510,14 @@ public:
     XformDataView(ViewData* data,
                   ISimulationManager* simulationManager,
                   pxr::UsdStageRefPtr usdStage,
-                  usdrt::UsdStageRefPtr usdrtStage)
+                  usdrt::UsdStageRefPtr usdrtStage,
+                  std::function<bool()> accessValidator = {})
     {
         m_data = data;
         m_simulationManager = simulationManager;
         m_usdStage = std::move(usdStage);
         m_usdrtStage = std::move(usdrtStage);
+        m_accessValidator = std::move(accessValidator);
     }
     IMPL_XFORM_DATA_VIEW
     IMPL_BUFFER_MANAGEMENT
@@ -511,12 +533,14 @@ public:
     RigidBodyDataView(ViewData* data,
                       ISimulationManager* simulationManager,
                       pxr::UsdStageRefPtr usdStage,
-                      usdrt::UsdStageRefPtr usdrtStage)
+                      usdrt::UsdStageRefPtr usdrtStage,
+                      std::function<bool()> accessValidator)
     {
         m_data = data;
         m_simulationManager = simulationManager;
         m_usdStage = std::move(usdStage);
         m_usdrtStage = std::move(usdrtStage);
+        m_accessValidator = std::move(accessValidator);
     }
     IMPL_XFORM_DATA_VIEW
 
@@ -551,12 +575,14 @@ public:
     ArticulationDataView(ViewData* data,
                          ISimulationManager* simulationManager,
                          pxr::UsdStageRefPtr usdStage,
-                         usdrt::UsdStageRefPtr usdrtStage)
+                         usdrt::UsdStageRefPtr usdrtStage,
+                         std::function<bool()> accessValidator)
     {
         m_data = data;
         m_simulationManager = simulationManager;
         m_usdStage = std::move(usdStage);
         m_usdrtStage = std::move(usdrtStage);
+        m_accessValidator = std::move(accessValidator);
     }
     IMPL_XFORM_DATA_VIEW
 
@@ -612,17 +638,51 @@ public:
 
     int getDofIndex(const char* dofPrimPath) override
     {
-        if (!m_data || !m_data->physxArticulationView || !dofPrimPath)
+        if (!m_data || !dofPrimPath || !_isAccessValid())
             return -1;
 
-        auto* articulationView = m_data->physxArticulationView;
-        uint32_t maxDofs = articulationView->getMaxDofs();
         std::string target(dofPrimPath);
+        const size_t targetSlash = target.find_last_of('/');
+        const std::string targetName = (targetSlash != std::string::npos) ? target.substr(targetSlash + 1) : target;
 
-        for (uint32_t i = 0; i < maxDofs; ++i)
+        if (m_data->articulationView)
         {
-            const char* path = articulationView->getUsdDofPath(0, i);
-            if (path && target == path)
+            auto* articulationView = m_data->articulationView;
+            const uint32_t maxDofs = articulationView->getMaxDofs();
+
+            for (uint32_t i = 0; i < maxDofs; ++i)
+            {
+                const char* path = articulationView->getUsdDofPath(0, i);
+                if (path && target == path)
+                    return static_cast<int>(i);
+            }
+            for (uint32_t i = 0; i < maxDofs; ++i)
+            {
+                const char* path = articulationView->getUsdDofPath(0, i);
+                if (!path)
+                    continue;
+                const std::string pathStr(path);
+                const size_t slash = pathStr.find_last_of('/');
+                const std::string name = (slash != std::string::npos) ? pathStr.substr(slash + 1) : pathStr;
+                if (targetName == name)
+                    return static_cast<int>(i);
+            }
+        }
+
+        for (size_t i = 0; i < m_data->dofNames.size(); ++i)
+        {
+            const std::string& path = m_data->dofNames[i];
+            if (!path.empty() && target == path)
+                return static_cast<int>(i);
+        }
+        for (size_t i = 0; i < m_data->dofNames.size(); ++i)
+        {
+            const std::string& path = m_data->dofNames[i];
+            if (path.empty())
+                continue;
+            const size_t slash = path.find_last_of('/');
+            const std::string name = (slash != std::string::npos) ? path.substr(slash + 1) : path;
+            if (targetName == name)
                 return static_cast<int>(i);
         }
         return -1;
@@ -632,7 +692,7 @@ public:
     {
         if (outCount)
             *outCount = 0;
-        if (!m_data || m_data->dofNamePtrs.empty())
+        if (!m_data || !_isAccessValid() || m_data->dofNamePtrs.empty())
             return nullptr;
         if (outCount)
             *outCount = static_cast<int>(m_data->dofNamePtrs.size());
@@ -736,6 +796,8 @@ public:
     void initialize(long stageId, int deviceOrdinal) override
     {
         ++m_generation;
+        _releaseStageResources();
+
         m_stageId = stageId;
         m_deviceOrdinal = deviceOrdinal;
         m_simulationManager = carb::getCachedInterface<ISimulationManager>();
@@ -749,7 +811,7 @@ public:
         // this the strong UsdStageRefPtr lives until shutdown() / next initialize(),
         // which keeps the stage alive past close and produces "Unexpected reference
         // count of 2 for UsdStage" warnings on every stage-close-after-play.
-        _subscribeStageClosingEvent();
+        _subscribeStageClosingEvent(stageId);
 
         if (m_usdStage)
         {
@@ -762,48 +824,12 @@ public:
                 m_usdrtStage = usdrt::UsdStage::Attach(fabricStageId, stageInProgress);
             }
         }
-
-        // Release stale views and simulation view before recreating.
-        // After a timeline stop/play cycle within the same stage, the
-        // PhysX simulation view is invalidated; we must recreate it.
-        for (auto& [id, data] : m_viewData)
-            _releasePhysxHandles(data);
-        m_views.clear();
-        m_viewData.clear();
-
-        if (m_simulationView)
-        {
-            m_simulationView->release(true);
-            m_simulationView = nullptr;
-        }
-
-        const char* activeEngine = isaacsim::core::includes::getActivePhysicsEngineName();
-        if (m_tensorApi && stageId != 0 && activeEngine)
-        {
-            m_simulationView = m_tensorApi->createSimulationView(stageId, activeEngine);
-            if (m_simulationView)
-            {
-                m_deviceOrdinal = m_simulationView->getDeviceOrdinal();
-            }
-        }
     }
 
     void shutdown() override
     {
-        m_stageClosingObserver = {};
-
-        for (auto& [id, data] : m_viewData)
-            _releasePhysxHandles(data);
-        m_views.clear();
-        m_viewData.clear();
-
-        if (m_simulationView)
-        {
-            m_simulationView->release(true);
-            m_simulationView = nullptr;
-        }
-        m_usdrtStage = nullptr;
-        m_usdStage = nullptr;
+        m_stageClosingObserver = nullptr;
+        _releaseStageResources();
         m_tensorApi = nullptr;
         m_simulationManager = nullptr;
     }
@@ -827,10 +853,13 @@ public:
         auto& data = _setupViewData(viewId, paths, numPaths, engineType, ViewType::eRigidBody);
         _setupTransformCallbacks(data);
 
-        if (data.engine == EngineType::ePhysX)
-            _setupPhysxRigidBodyCallbacks(data);
+        if (data.engine == EngineType::ePhysX || data.engine == EngineType::eNewton)
+            _setupRigidBodyCallbacks(data);
 
-        auto view = std::make_unique<RigidBodyDataView>(&data, m_simulationManager, m_usdStage, m_usdrtStage);
+        const uint64_t viewGeneration = m_generation;
+        auto view = std::make_unique<RigidBodyDataView>(&data, m_simulationManager, m_usdStage, m_usdrtStage,
+                                                        [this, dataPtr = &data, viewGeneration]()
+                                                        { return _validateTensorViewAccess(dataPtr, viewGeneration); });
         auto* ptr = view.get();
         m_views[viewId] = std::move(view);
         return ptr;
@@ -844,10 +873,13 @@ public:
         auto& data = _setupViewData(viewId, paths, numPaths, engineType, ViewType::eArticulation);
         _setupTransformCallbacks(data);
 
-        if (data.engine == EngineType::ePhysX)
-            _setupPhysxArticulationCallbacks(data);
+        if (data.engine == EngineType::ePhysX || data.engine == EngineType::eNewton)
+            _setupArticulationCallbacks(data);
 
-        auto view = std::make_unique<ArticulationDataView>(&data, m_simulationManager, m_usdStage, m_usdrtStage);
+        const uint64_t viewGeneration = m_generation;
+        auto view = std::make_unique<ArticulationDataView>(
+            &data, m_simulationManager, m_usdStage, m_usdrtStage,
+            [this, dataPtr = &data, viewGeneration]() { return _validateTensorViewAccess(dataPtr, viewGeneration); });
         auto* ptr = view.get();
         m_views[viewId] = std::move(view);
         return ptr;
@@ -858,7 +890,7 @@ public:
         auto dataIt = m_viewData.find(viewId);
         if (dataIt != m_viewData.end())
         {
-            _releasePhysxHandles(dataIt->second);
+            _releaseTensorHandles(dataIt->second);
         }
         m_views.erase(viewId);
         m_viewData.erase(viewId);
@@ -1047,18 +1079,76 @@ private:
         return data;
     }
 
-    static void _releasePhysxHandles(ViewData& data)
+    static void _releaseTensorHandles(ViewData& data)
     {
-        if (data.physxArticulationView)
+        if (data.articulationView)
         {
-            data.physxArticulationView->release();
-            data.physxArticulationView = nullptr;
+            data.articulationView->release();
+            data.articulationView = nullptr;
         }
-        if (data.physxRigidBodyView)
+        if (data.rigidBodyView)
         {
-            data.physxRigidBodyView->release();
-            data.physxRigidBodyView = nullptr;
+            data.rigidBodyView->release();
+            data.rigidBodyView = nullptr;
         }
+    }
+
+    bool _ensureSimulationView()
+    {
+        if (m_simulationView && !m_simulationView->getValid())
+        {
+            for (auto& [viewId, data] : m_viewData)
+            {
+                (void)viewId;
+                _releaseTensorHandles(data);
+            }
+            m_simulationView->release(true);
+            m_simulationView = nullptr;
+            m_deviceOrdinal = -1;
+            ++m_generation;
+        }
+
+        if (m_simulationView)
+            return true;
+
+        const char* activeEngine = isaacsim::core::includes::getActivePhysicsEngineName();
+        if (!m_tensorApi || m_stageId == 0 || !activeEngine)
+            return false;
+
+        m_simulationView = m_tensorApi->createSimulationView(m_stageId, activeEngine);
+        if (m_simulationView)
+        {
+            m_deviceOrdinal = m_simulationView->getDeviceOrdinal();
+            return true;
+        }
+        return false;
+    }
+
+    bool _validateTensorViewAccess(ViewData* data, uint64_t viewGeneration)
+    {
+        return data && viewGeneration == m_generation;
+    }
+
+    void _releaseStageResources()
+    {
+        for (auto& [id, data] : m_viewData)
+            _releaseTensorHandles(data);
+
+        m_views.clear();
+        m_viewData.clear();
+
+        if (m_simulationView)
+        {
+            m_simulationView->release(true);
+            m_simulationView = nullptr;
+        }
+
+        m_usdrtStage = nullptr;
+        m_usdStage = nullptr;
+        m_contactEvents.clear();
+        m_contactPoints.clear();
+        m_stageId = 0;
+        m_deviceOrdinal = -1;
     }
 
     // ---- Transform callbacks: bulk PhysX tensor read for physics prims, Fabric fallback for the rest ----
@@ -1076,7 +1166,7 @@ private:
         usdrt::UsdStageRefPtr usdrtStage = m_usdrtStage;
         std::vector<std::string> primPaths = data.primPaths;
 
-        if (data.engine == EngineType::ePhysX && m_simulationView)
+        if (data.engine == EngineType::ePhysX && _ensureSimulationView())
         {
             std::vector<std::string> physicsPaths;
             std::vector<size_t> physicsIndices;
@@ -1214,7 +1304,7 @@ private:
      * pointing to the buffer's data pointer.
      */
     template <typename T>
-    static std::function<void()> _makePhysxFieldCallbackT(FieldEntry<T>& field,
+    static std::function<void()> _makeTensorFieldCallback(FieldEntry<T>& field,
                                                           int device,
                                                           std::function<void(TensorDesc*)> tensorGetter)
     {
@@ -1230,66 +1320,81 @@ private:
         };
     }
 
-    void _setupPhysxArticulationCallbacks(ViewData& data)
+    void _setupArticulationCallbacks(ViewData& data)
     {
-        if (!m_simulationView || data.primPaths.empty())
+        if (!_ensureSimulationView() || data.primPaths.empty())
             return;
 
-        data.physxArticulationView = m_simulationView->createArticulationView(data.primPaths);
-        if (!data.physxArticulationView)
+        data.deviceOrdinal = m_deviceOrdinal;
+
+        data.articulationView = m_simulationView->createArticulationView(data.primPaths);
+        if (!data.articulationView)
             return;
 
-        IArticulationView* articulationView = data.physxArticulationView;
+        IArticulationView* articulationView = data.articulationView;
         int device = data.deviceOrdinal;
         uint32_t count = articulationView->getCount();
         uint32_t maxDofs = articulationView->getMaxDofs();
         uint32_t maxLinks = articulationView->getMaxLinks();
 
-        auto& dofPositions = data.getOrCreateField<float>("dof_positions", count * maxDofs, device);
-        dofPositions.callback = _makePhysxFieldCallbackT<float>(
-            dofPositions, device, [articulationView](TensorDesc* d) { articulationView->getDofPositions(d); });
-
-        auto& dofVelocities = data.getOrCreateField<float>("dof_velocities", count * maxDofs, device);
-        dofVelocities.callback = _makePhysxFieldCallbackT<float>(
-            dofVelocities, device, [articulationView](TensorDesc* d) { articulationView->getDofVelocities(d); });
-
-        auto& dofEfforts = data.getOrCreateField<float>("dof_efforts", count * maxDofs, device);
-        dofEfforts.callback = _makePhysxFieldCallbackT<float>(
-            dofEfforts, device, [articulationView](TensorDesc* d) { articulationView->getDofProjectedJointForces(d); });
-
         auto& rootTransforms = data.getOrCreateField<float>("root_transforms", count * 7, device);
-        rootTransforms.callback = _makePhysxFieldCallbackT<float>(
+        rootTransforms.callback = _makeTensorFieldCallback<float>(
             rootTransforms, device, [articulationView](TensorDesc* d) { articulationView->getRootTransforms(d); });
 
         auto& rootVelocities = data.getOrCreateField<float>("root_velocities", count * 6, device);
-        rootVelocities.callback = _makePhysxFieldCallbackT<float>(
+        rootVelocities.callback = _makeTensorFieldCallback<float>(
             rootVelocities, device, [articulationView](TensorDesc* d) { articulationView->getRootVelocities(d); });
 
-        auto& linkMasses = data.getOrCreateField<float>("link_masses", count * maxLinks, device);
-        linkMasses.callback = _makePhysxFieldCallbackT<float>(
-            linkMasses, device, [articulationView](TensorDesc* d) { articulationView->getMasses(d); });
+        auto& linkMasses = data.getOrCreateField<float>("link_masses", count * maxLinks, -1);
+        linkMasses.callback = _makeTensorFieldCallback<float>(
+            linkMasses, -1, [articulationView](TensorDesc* d) { articulationView->getMasses(d); });
 
-        uint32_t jacobianRows = 0;
-        uint32_t jacobianColumns = 0;
-        if (articulationView->getJacobianShape(&jacobianRows, &jacobianColumns))
+        if (maxDofs > 0)
         {
-            auto& jacobians = data.getOrCreateField<float>("jacobians", count * jacobianRows * jacobianColumns, device);
-            jacobians.callback = _makePhysxFieldCallbackT<float>(
-                jacobians, device, [articulationView](TensorDesc* d) { articulationView->getJacobians(d); });
+            uint32_t jacobianRows = 0;
+            uint32_t jacobianColumns = 0;
+            if (articulationView->getJacobianShape(&jacobianRows, &jacobianColumns))
+            {
+                auto& jacobians =
+                    data.getOrCreateField<float>("jacobians", count * jacobianRows * jacobianColumns, device);
+                jacobians.callback = _makeTensorFieldCallback<float>(
+                    jacobians, device, [articulationView](TensorDesc* d) { articulationView->getJacobians(d); });
+            }
+
+            uint32_t massMatrixRows = 0;
+            uint32_t massMatrixColumns = 0;
+            if (articulationView->getGeneralizedMassMatrixShape(&massMatrixRows, &massMatrixColumns))
+            {
+                auto& massMatrices =
+                    data.getOrCreateField<float>("mass_matrices", count * massMatrixRows * massMatrixColumns, device);
+                massMatrices.callback = _makeTensorFieldCallback<float>(
+                    massMatrices, device,
+                    [articulationView](TensorDesc* d) { articulationView->getGeneralizedMassMatrices(d); });
+            }
+
+            auto& dofPositions = data.getOrCreateField<float>("dof_positions", count * maxDofs, device);
+            dofPositions.callback = _makeTensorFieldCallback<float>(
+                dofPositions, device, [articulationView](TensorDesc* d) { articulationView->getDofPositions(d); });
+
+            auto& dofVelocities = data.getOrCreateField<float>("dof_velocities", count * maxDofs, device);
+            dofVelocities.callback = _makeTensorFieldCallback<float>(
+                dofVelocities, device, [articulationView](TensorDesc* d) { articulationView->getDofVelocities(d); });
+
+            if (data.engine == EngineType::eNewton)
+            {
+                CARB_LOG_WARN_ONCE(
+                    "PrimDataReader: DOF effort readings are not available on the Newton backend. "
+                    "The dof_efforts field will be unavailable.");
+            }
+            else
+            {
+                auto& dofEfforts = data.getOrCreateField<float>("dof_efforts", count * maxDofs, device);
+                dofEfforts.callback = _makeTensorFieldCallback<float>(
+                    dofEfforts, device,
+                    [articulationView](TensorDesc* d) { articulationView->getDofProjectedJointForces(d); });
+            }
         }
 
-        uint32_t massMatrixRows = 0;
-        uint32_t massMatrixColumns = 0;
-        if (articulationView->getGeneralizedMassMatrixShape(&massMatrixRows, &massMatrixColumns))
-        {
-            auto& massMatrices =
-                data.getOrCreateField<float>("mass_matrices", count * massMatrixRows * massMatrixColumns, device);
-            massMatrices.callback = _makePhysxFieldCallbackT<float>(
-                massMatrices, device,
-                [articulationView](TensorDesc* d) { articulationView->getGeneralizedMassMatrices(d); });
-        }
-
-        // DOF metadata: names from USD, types via field callback (same pattern as other getters).
         data.dofNames.clear();
         data.dofNamePtrs.clear();
         if (m_usdStage)
@@ -1299,11 +1404,9 @@ private:
                 const char* path = articulationView->getUsdDofPath(0, j);
                 if (path)
                 {
-                    pxr::UsdPrim prim = m_usdStage->GetPrimAtPath(pxr::SdfPath(path));
-                    if (prim.IsValid())
-                        data.dofNames.push_back(prim.GetName());
-                    else
-                        data.dofNames.push_back(std::string());
+                    const std::string pathStr(path);
+                    const size_t slash = pathStr.find_last_of('/');
+                    data.dofNames.push_back(slash != std::string::npos ? pathStr.substr(slash + 1) : pathStr);
                 }
                 else
                 {
@@ -1317,32 +1420,34 @@ private:
         if (maxDofs > 0)
         {
             auto& dofTypesField = data.getOrCreateField<uint8_t>("dof_types", maxDofs, -1);
-            dofTypesField.callback = _makePhysxFieldCallbackT<uint8_t>(
+            dofTypesField.callback = _makeTensorFieldCallback<uint8_t>(
                 dofTypesField, -1, [articulationView](TensorDesc* d) { articulationView->getDofTypes(d); });
         }
     }
 
-    void _setupPhysxRigidBodyCallbacks(ViewData& data)
+    void _setupRigidBodyCallbacks(ViewData& data)
     {
-        if (!m_simulationView)
+        if (!_ensureSimulationView())
             return;
 
-        data.physxRigidBodyView = m_simulationView->createRigidBodyView(data.primPaths);
-        if (!data.physxRigidBodyView)
+        data.deviceOrdinal = m_deviceOrdinal;
+
+        data.rigidBodyView = m_simulationView->createRigidBodyView(data.primPaths);
+        if (!data.rigidBodyView)
             return;
 
-        IRigidBodyView* rigidBody = data.physxRigidBodyView;
+        IRigidBodyView* rigidBody = data.rigidBodyView;
         int device = data.deviceOrdinal;
         uint32_t count = rigidBody->getCount();
 
         // Transforms: float[N][7] -- split into separate velocity fields after fetch
         auto& transforms = data.getOrCreateField<float>("rigid_transforms_raw", count * 7, device);
-        transforms.callback = _makePhysxFieldCallbackT<float>(
+        transforms.callback = _makeTensorFieldCallback<float>(
             transforms, device, [rigidBody](TensorDesc* d) { rigidBody->getTransforms(d); });
 
         // Velocities: float[N][6]
         auto& velocities = data.getOrCreateField<float>("rigid_velocities_raw", count * 6, device);
-        velocities.callback = _makePhysxFieldCallbackT<float>(
+        velocities.callback = _makeTensorFieldCallback<float>(
             velocities, device, [rigidBody](TensorDesc* d) { rigidBody->getVelocities(d); });
 
         // Expose split linear/angular velocity fields by referencing the raw buffer
@@ -1379,14 +1484,16 @@ private:
         angularVelocity.callback = linearVelocity.callback;
     }
 
-    void _subscribeStageClosingEvent()
+    void _subscribeStageClosingEvent(long stageId)
     {
-        // Drop the strong UsdStageRefPtr in m_usdStage before
-        // UsdContext::closeStageInternal runs its refcount sanity check
-        // (NVBug 6169671). Kit fires eClosing synchronously from closeStageTask
-        // and waits for all observers before calling closeStageInternal.
+        m_stageClosingObserver = nullptr;
+
         auto ed = carb::getCachedInterface<carb::eventdispatcher::IEventDispatcher>();
-        omni::usd::UsdContext* usdContext = omni::usd::UsdContext::getContext();
+        omni::usd::UsdContext* usdContext = omni::usd::UsdManager::getContextFromStageId(stageId);
+        if (!usdContext)
+        {
+            usdContext = omni::usd::UsdContext::getContext();
+        }
         if (!ed || !usdContext)
         {
             return;
@@ -1398,13 +1505,8 @@ private:
                                                   usdContext->stageEventName(omni::usd::StageEventType::eClosing),
                                                   [this](const carb::eventdispatcher::Event&)
                                                   {
-                                                      if (m_simulationView)
-                                                      {
-                                                          m_simulationView->release(true);
-                                                          m_simulationView = nullptr;
-                                                      }
-                                                      m_usdrtStage = nullptr;
-                                                      m_usdStage = nullptr;
+                                                      ++m_generation;
+                                                      _releaseStageResources();
                                                   });
     }
 
@@ -1457,8 +1559,9 @@ public:
         if (!m_reader)
             return false;
 
-        const bool needsInit =
-            !m_initialized || m_forceReinitialize || stageId != m_lastStageId || deviceOrdinal != m_lastDeviceOrdinal;
+        const bool readerStageInvalid = m_reader->getStageId() != stageId;
+        const bool needsInit = !m_initialized || m_forceReinitialize || readerStageInvalid ||
+                               stageId != m_lastStageId || deviceOrdinal != m_lastDeviceOrdinal;
         if (needsInit)
         {
             m_reader->initialize(stageId, deviceOrdinal);

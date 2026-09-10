@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.5] - 2026-08-14
+### Fixed
+- Reset cached camera wrappers on New Stage so the live stats callback does not raise.
+- Rebuild the camera list when the selected camera is deleted instead of clearing the dropdown.
+
+## [1.2.4] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [1.2.3] - 2026-06-23
+### Removed
+- Removed the unused `omni.physx` dependency. The extension does not reference any `omni.physx` API.
+
 ## [1.2.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

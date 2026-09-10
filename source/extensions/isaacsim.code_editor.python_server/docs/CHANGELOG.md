@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0] - 2026-06-30
+### Added
+- Add temporary listener stop/start and transactional IPv4 host/port restart with rollback.
+- Add a small immutable runtime status API for companion extensions.
+
+### Changed
+- Keep listener lifecycle ownership in the existing Python server extension.
+
 ## [1.3.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

@@ -31,11 +31,11 @@ from isaacsim.core.experimental.objects import Camera
 from isaacsim.storage.native import get_assets_root_path
 from pxr import UsdGeom
 
-from ._sensor_base import _resolve_config_path, _SensorAuthoring
+from ._sensor_base import SensorAuthoring, _resolve_config_path
 from .rtx_camera_configs import SUPPORTED_CAMERA_CONFIGS
 
 
-class RtxCamera(_SensorAuthoring):
+class RtxCamera(SensorAuthoring):
     """High level class for creating/wrapping USD Camera prims as RTX sensors.
 
     Applies the ``OmniSensorAPI`` schema to the underlying ``UsdGeom.Camera`` prim,
@@ -46,8 +46,10 @@ class RtxCamera(_SensorAuthoring):
 
         This class creates or wraps (one of both) USD Camera prims according to the following rules:
 
-        * If the prim path exists, a wrapper is placed over the USD Camera prim.
-        * If the prim path does not exist, a USD Camera prim is created at the path and a wrapper is placed over it.
+        * If the prim path exists, a wrapper is placed over the USD Camera prim. The
+          ``OmniSensorAPI`` schema is applied to it when not already present.
+        * If the prim path does not exist, a USD Camera prim is created at the path with the
+          ``OmniSensorAPI`` schema applied, and a wrapper is placed over it.
 
     Args:
         path: Single path to existing or non-existing (one of both) USD Camera prim.
@@ -74,6 +76,7 @@ class RtxCamera(_SensorAuthoring):
     Raises:
         ValueError: If no prim is found matching the specified path.
         ValueError: If the input argument refers to more than one prim.
+        ValueError: If the prim at the specified path is not a USD Camera prim.
 
     Example:
 
@@ -157,6 +160,10 @@ class RtxCamera(_SensorAuthoring):
     ) -> "RtxCamera":
         """Create an RtxCamera instance, optionally from a known config or USD file.
 
+        When the loaded asset nests the Camera prim under the reference root, the transform
+        arguments are authored on the reference root instead of the camera prim, so the camera
+        stays attached to the housing geometry and keeps the vendor's mounting offset.
+
         Args:
             path: Single path to existing or non-existing (one of both) USD Camera prim.
             tick_rate: Sensor tick rate in Hz. When ``None`` (the default), the asset's
@@ -198,11 +205,10 @@ class RtxCamera(_SensorAuthoring):
             usd_path = get_assets_root_path() + _resolve_config_path(
                 config, SUPPORTED_CAMERA_CONFIGS, sensor_type="Camera"
             )
-        asset_root_path = path
-        if usd_path is not None:
-            path = RtxCamera._create_from_usd(path=path, usd_path=usd_path, variant=variant)
-        cam = RtxCamera(
+        return RtxCamera._create_from_usd(
             path=path,
+            usd_path=usd_path,
+            variant=variant,
             tick_rate=tick_rate,
             schemas=schemas,
             attributes=attributes,
@@ -212,9 +218,6 @@ class RtxCamera(_SensorAuthoring):
             scales=scales,
             reset_xform_op_properties=reset_xform_op_properties,
         )
-        if usd_path is not None:
-            cam._asset_root_path = asset_root_path
-        return cam
 
     @property
     def camera(self) -> Camera:

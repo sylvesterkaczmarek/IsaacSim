@@ -91,3 +91,25 @@
 - def setup_base_prim(prim: object, schema_type: type, enabled: bool, draw_points: bool, draw_lines: bool, min_range: float, max_range: float)
 - def clear_sensors()
 - def register_sensor(sensor: ProximitySensor)
+
+## Other
+
+- Any: unknown
+- Optional: unknown
+- carb: unknown module
+- omni.isaac.IsaacSensorSchema: public module
+- omni.isaac.RangeSensorSchema: public module
+- omni.kit.commands: unknown module
+- Gf: unknown
+- UsdGeom: unknown
+- omni.ext: unknown module
+- omni.usd: unknown module
+- get_physics_simulation_interface: unknown
+- time: builtin module
+- numpy: unknown module
+- get_physics_scene_query_interface: unknown
+- get_prim_at_path: unknown
+- get_world_transform_matrix: unknown
+- PhysicsSchemaTools: unknown
+- Sdf: unknown
+- Usd: unknown module

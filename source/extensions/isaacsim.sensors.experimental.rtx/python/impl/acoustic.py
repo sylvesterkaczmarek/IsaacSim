@@ -27,18 +27,19 @@ import numpy as np
 import warp as wp
 from isaacsim.storage.native import get_assets_root_path
 
-from ._sensor_base import _resolve_config_path, _SensorAuthoring
+from ._sensor_base import SensorAuthoring, _resolve_config_path
 from .rtx_acoustic_configs import SUPPORTED_ACOUSTIC_CONFIGS
 
 
-class Acoustic(_SensorAuthoring):
+class Acoustic(SensorAuthoring):
     """High level class for creating/wrapping USD OmniAcoustic prims.
 
     .. note::
 
         This class creates or wraps (one of both) USD OmniAcoustic prims according to the following rules:
 
-        * If the prim path exists, a wrapper is placed over the USD OmniAcoustic prim.
+        * If the prim path exists, a wrapper is placed over the USD OmniAcoustic prim. The
+          ``OmniSensorGenericAcousticWpmAPI`` schema is applied to it when not already present.
         * If the prim path does not exist, a USD OmniAcoustic prim is created at the path and a wrapper is placed over it.
 
     Args:
@@ -136,6 +137,10 @@ class Acoustic(_SensorAuthoring):
     ) -> Acoustic:
         """Create an Acoustic instance from a config name or USD file path.
 
+        When the loaded asset nests the OmniAcoustic prim under the reference root, the transform
+        arguments are authored on the reference root instead of the sensor prim, so the sensor
+        stays attached to the housing geometry and keeps the vendor's mounting offset.
+
         Args:
             path: Single path to existing or non-existing (one of both) USD OmniAcoustic prim.
             aux_output_level: Auxiliary data level for GenericModelOutput. Valid values:
@@ -175,10 +180,10 @@ class Acoustic(_SensorAuthoring):
             usd_path = get_assets_root_path() + _resolve_config_path(
                 config, SUPPORTED_ACOUSTIC_CONFIGS, sensor_type="Acoustic"
             )
-        if usd_path is not None:
-            path = Acoustic._create_from_usd(path=path, usd_path=usd_path, variant=variant)
-        return Acoustic(
+        return Acoustic._create_from_usd(
             path=path,
+            usd_path=usd_path,
+            variant=variant,
             aux_output_level=aux_output_level,
             tick_rate=tick_rate,
             attributes=attributes,

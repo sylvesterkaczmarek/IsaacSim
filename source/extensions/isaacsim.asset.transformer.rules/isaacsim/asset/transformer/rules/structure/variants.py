@@ -25,6 +25,8 @@ from pxr import Sdf, UsdUtils
 from .. import utils
 from ..utils import (
     COMPOSITION_SKIP_KEYS,
+    asset_dirname,
+    asset_exists,
     copy_attributes_to_prim_spec,
     copy_file_to_directory,
     copy_prim_metadata,
@@ -32,7 +34,9 @@ from ..utils import (
     copy_stage_metadata,
     find_first_resolvable_arc,
     get_path_string,
+    is_absolute_asset_path,
     is_builtin_mdl,
+    join_asset_path,
     norm_path,
     remap_asset_path,
     resolve_asset_path,
@@ -151,11 +155,11 @@ class VariantRoutingRule(RuleInterface):
 
         """
         fallback_dirs = [
-            os.path.dirname(self.source_stage.GetRootLayer().realPath),
+            asset_dirname(self.source_stage.GetRootLayer().realPath),
         ]
         input_stage_path = self.args.get("input_stage_path", "")
         if input_stage_path:
-            fallback_dirs.append(os.path.dirname(input_stage_path))
+            fallback_dirs.append(asset_dirname(input_stage_path))
 
         return resolve_asset_path(arc_asset_path, base_layer, fallback_dirs)
 
@@ -251,7 +255,7 @@ class VariantRoutingRule(RuleInterface):
 
             """
             abs_path = get_path_string(path_obj)
-            if not abs_path or not os.path.isfile(abs_path):
+            if not abs_path or not asset_exists(abs_path):
                 if is_layer:
                     self.log_operation(f"Skipping non-existent layer: {abs_path}")
                 return
@@ -353,31 +357,36 @@ class VariantRoutingRule(RuleInterface):
 
         Args:
             asset_path: The asset path from a reference/payload arc.
-            source_layer_dir: Directory of the source layer (for resolving relative paths).
+            source_layer_dir: Directory of the source layer (for resolving
+                relative paths). May be a local directory or a remote URL.
             dependencies_dir: Directory to collect dependencies into.
             variant_file_map: Map of variant file paths (to exclude).
             all_collected_deps: Shared dict to update with collected dependencies.
 
         """
-        # Resolve to absolute path
-        if os.path.isabs(asset_path):
+        # Resolve to absolute path or remote URL. ``join_asset_path`` keeps
+        # the ``scheme://`` of remote bases intact and resolves ``./`` /
+        # ``../`` segments without invoking ``os.path.normpath`` (which
+        # would collapse the ``//`` after the scheme).
+        if is_absolute_asset_path(asset_path):
             abs_path = asset_path
         else:
-            abs_path = os.path.normpath(os.path.join(source_layer_dir, asset_path))
+            abs_path = join_asset_path(source_layer_dir, asset_path)
 
         self.log_operation(f"Resolving arc dependency: {asset_path} -> {abs_path}")
 
-        # Try USD extension variations (.usd can resolve to .usda or .usdc)
+        # Try USD extension variations (.usd can resolve to .usda or .usdc).
+        # ``asset_exists`` handles both local files and remote URLs via
+        # omni.client.
         resolved_path = None
-        if os.path.isfile(abs_path):
+        if asset_exists(abs_path):
             resolved_path = abs_path
         else:
-            # Try alternate extensions
             base, ext = os.path.splitext(abs_path)
             if ext.lower() == ".usd":
                 for alt_ext in [".usda", ".usdc"]:
                     alt_path = base + alt_ext
-                    if os.path.isfile(alt_path):
+                    if asset_exists(alt_path):
                         resolved_path = alt_path
                         self.log_operation(f"Resolved with extension: {asset_path} -> {os.path.basename(alt_path)}")
                         break
@@ -388,17 +397,14 @@ class VariantRoutingRule(RuleInterface):
 
         normed = norm_path(resolved_path)
 
-        # Skip if already collected or is a variant file
         if normed in all_collected_deps or normed in variant_file_map:
             return
 
         self.log_operation(f"Collecting variant delta dependency: {asset_path} -> {resolved_path}")
 
-        # Collect this file and all its dependencies
         deps = self._collect_all_dependencies(resolved_path, dependencies_dir, variant_file_map)
         all_collected_deps.update(deps)
 
-        # Also add the file itself if it wasn't included in deps
         if normed not in all_collected_deps:
             dest_path = copy_file_to_directory(resolved_path, dependencies_dir, all_collected_deps)
             if dest_path:
@@ -449,7 +455,7 @@ class VariantRoutingRule(RuleInterface):
             self.log_operation(f"Failed to open destination layer: {dest_layer_path}")
             return None
 
-        source_dir = os.path.dirname(source_layer_path)
+        source_dir = asset_dirname(source_layer_path)
         dest_dir = os.path.dirname(dest_layer_path)
         remapped_count = [0]
 
@@ -468,6 +474,290 @@ class VariantRoutingRule(RuleInterface):
         self.log_operation(f"Remapped {remapped_count[0]} asset paths")
         dest_layer.Save()
         return dest_layer
+
+    # Tolerance for identifying an Xformable opinion as "identity" before
+    # treating it as a copy artifact safe to strip from the variant file.
+    _XFORM_IDENTITY_EPS: float = 1e-6
+
+    def _strip_identity_xformops_from_prim(
+        self,
+        prim_spec: Sdf.PrimSpec,
+        preserve_attrs: set[str] | None = None,
+    ) -> None:
+        """Strip identity-only Xformable opinions from a single prim spec.
+
+        Core of the variant-routing identity-strip logic, factored out so it
+        can run on both the variant file's root prim (with the variant's
+        authored attribute names as ``preserve_attrs``) and on each collected
+        dependency's default prim (with ``preserve_attrs=None``).
+
+        The strip only fires when *every* authored xformOp on the prim is
+        identity. A non-identity op, a time-sampled value, a connection, or a
+        ``!resetXformStack!`` directive in ``xformOpOrder`` leaves the entire
+        stack untouched.
+
+        Args:
+            prim_spec: The prim spec to clean.
+            preserve_attrs: Names of attributes that must be kept regardless
+                of value (typically the names the variant author explicitly
+                listed in their own delta). ``None`` means "preserve nothing
+                special" — use this for dependency files where there is no
+                variant context.
+
+        """
+        preserve = preserve_attrs or set()
+
+        xform_attr_specs: list[Sdf.AttributeSpec] = []
+        for attr_name in list(prim_spec.attributes.keys()):  # noqa: SIM118
+            if attr_name in preserve:
+                continue
+            if attr_name.startswith("xformOp:") or attr_name == "xformOpOrder":
+                xform_attr_specs.append(prim_spec.attributes[attr_name])
+
+        if not xform_attr_specs:
+            return
+
+        for spec in xform_attr_specs:
+            if not self._xform_attr_is_identity(spec):
+                self.log_operation(f"Keeping non-identity xformOps on {prim_spec.path} (because of {spec.name})")
+                return
+
+        stripped_names = [spec.name for spec in xform_attr_specs]
+        # ``del prim_spec.attributes[name]`` is a no-op on the Sdf proxy view;
+        # ``RemoveProperty`` is the supported way to drop an attribute spec.
+        for spec in xform_attr_specs:
+            prim_spec.RemoveProperty(spec)
+        self.log_operation(f"Stripped identity xformOps from {prim_spec.path}: {stripped_names}")
+
+    def _strip_identity_root_xformops_in_collected_files(
+        self,
+        dependencies_dir: str,
+    ) -> None:
+        """Apply the identity-xformop strip to every collected USD dependency.
+
+        When a variant payloads/references a collected dependency (e.g. the
+        variant authors ``over "ee_link" (prepend payload = @dep.usd@)``),
+        the dep file's default-prim xformOps are remapped onto the payload
+        target prim. If those root xformOps are an identity artifact, they
+        nonetheless out-rank the base layer's authoring on the same prim
+        because variant-rooted arcs are stronger than the interface's
+        top-level reference to the base. The result the user sees: switching
+        from "no variant" (correct base pose) to a variant selection snaps
+        the prim back to the dep's identity transform.
+
+        The fix is to strip those identity opinions from each dep file's
+        default prim. Non-identity poses are preserved exactly as before —
+        they encode real authoring intent.
+
+        Args:
+            dependencies_dir: Per-variant-set dependencies directory to walk.
+
+        """
+        if not os.path.isdir(dependencies_dir):
+            return
+
+        usd_extensions = utils.USD_EXTENSIONS
+        for filename in os.listdir(dependencies_dir):
+            if os.path.splitext(filename)[1].lower() not in usd_extensions:
+                continue
+            filepath = os.path.join(dependencies_dir, filename)
+            layer = Sdf.Layer.FindOrOpen(filepath)
+            if not layer:
+                continue
+            default_prim_name = layer.defaultPrim
+            if not default_prim_name:
+                continue
+            prim_spec = layer.GetPrimAtPath(Sdf.Path.absoluteRootPath.AppendChild(default_prim_name))
+            if not prim_spec:
+                continue
+            before = list(prim_spec.attributes.keys())
+            self._strip_identity_xformops_from_prim(prim_spec)
+            after = list(prim_spec.attributes.keys())
+            if before != after:
+                layer.Save()
+
+    def _strip_inherited_root_opinions(
+        self,
+        variant_spec: Sdf.VariantSpec,
+        dest_prim_spec: Sdf.PrimSpec,
+    ) -> None:
+        """Strip identity-only Xformable root-prim attributes inherited from the source.
+
+        A variant file is meant to overlay onto the consuming stage's existing
+        default prim (it is referenced into ``/<default_prim>`` from the
+        interface layer). Source assets routinely author a default pose
+        (``xformOp:translate = (0, 0, 0)``, ``xformOp:scale = (1, 1, 1)``,
+        ...) on their default prim as a structural artifact, and copying the
+        source verbatim turns each of those identity opinions into a STRONG
+        override against whatever pose the consumer's wrapping stage authors
+        on the same prim. The consumer's prim snaps back to identity every
+        time the variant is selected.
+
+        To avoid that surprise while still preserving genuine variant intent
+        the strip is bounded by two conditions, both required:
+
+        * The attribute is Xformable (``xformOp:*`` or ``xformOpOrder``).
+          Non-Xformable opinions are left alone — they may be load-bearing
+          for downstream rules or consumer schemas.
+        * Every authored Xformable opinion on the root encodes the identity
+          transform (translates ~= 0, scales ~= 1, rotations ~= 0, orient is
+          ``(w=1, x=y=z=0)``, ``xformOp:transform`` matches the identity
+          matrix). A non-identity authored opinion is taken as intentional
+          and the entire xform stack is preserved as-is.
+
+        Anything the variant explicitly authored in its own ``primSpec``
+        deltas is preserved regardless of value — the variant author asked
+        for that opinion. Time-sampled and connected Xformable attributes
+        are treated as non-identity (their effective value cannot be
+        verified without examining every sample / resolving the connection).
+        A ``!resetXformStack!`` directive in ``xformOpOrder`` also blocks
+        the strip; it is a semantic operation, not a transform value.
+
+        Children, composition arcs, variantSets, applied API schemas, and
+        non-Xformable attributes are preserved — they carry the actual
+        variant content.
+
+        Args:
+            variant_spec: Variant spec whose own authored deltas must be preserved.
+            dest_prim_spec: Destination root prim spec to strip in place.
+
+        """
+        variant_prim_spec = variant_spec.primSpec
+        delta_attr_names: set[str] = (
+            set(variant_prim_spec.attributes.keys()) if variant_prim_spec is not None else set()
+        )
+        self._strip_identity_xformops_from_prim(dest_prim_spec, delta_attr_names)
+
+    def _xform_attr_is_identity(self, attr_spec: Sdf.AttributeSpec) -> bool:
+        """Return True when an Xformable attribute spec is safe to strip.
+
+        Treats unauthored defaults, empty ``xformOpOrder`` lists, and
+        identity-valued ops as safe. Refuses to classify time-sampled or
+        connected attributes as identity, since the effective value depends
+        on data not visible in the default. ``xformOpOrder`` entries
+        containing ``!resetXformStack!`` are also refused: that directive
+        resets the parent stack and is semantically meaningful even when no
+        ops follow.
+
+        Args:
+            attr_spec: Xformable attribute spec to classify.
+
+        Returns:
+            True when the attribute is safe to strip (identity or unauthored).
+
+        """
+        if attr_spec.HasInfo("timeSamples"):
+            return False
+        if attr_spec.connectionPathList.GetAddedOrExplicitItems():
+            return False
+
+        name = attr_spec.name
+
+        if name == "xformOpOrder":
+            if not attr_spec.HasInfo("default"):
+                return True
+            order = attr_spec.default
+            if not order:
+                return True
+            return all(str(entry) != "!resetXformStack!" for entry in order)
+
+        if not attr_spec.HasInfo("default"):
+            return True
+
+        return self._xform_value_is_identity(name, attr_spec.default)
+
+    @staticmethod
+    def _vector_components(value: object) -> list[float] | None:
+        """Return *value* as a list of float components, or ``None`` if scalar.
+
+        Handles ``Gf.Vec*`` types, which expose ``__len__`` / ``__getitem__``
+        but no ``__iter__`` method — ``hasattr(value, "__iter__")`` is False
+        for those types, so callers cannot rely on it to detect vectors.
+
+        Args:
+            value: Authored attribute value to decompose.
+
+        Returns:
+            List of float components, or ``None`` when *value* is scalar or
+            cannot be decomposed.
+
+        """
+        if isinstance(value, (int, float, bool)):
+            return None
+        if hasattr(value, "__len__") and hasattr(value, "__getitem__"):
+            try:
+                return [float(value[i]) for i in range(len(value))]
+            except Exception:
+                return None
+        try:
+            return [float(c) for c in value]  # generic iterable
+        except TypeError:
+            return None
+
+    def _xform_value_is_identity(self, attr_name: str, value: object) -> bool:
+        """Compare an authored Xformable value against its identity.
+
+        Identity is op-type-specific: translate / rotation -> zero; scale ->
+        one; orient quaternion -> ``(w=1, x=0, y=0, z=0)``; transform matrix
+        -> 4x4 identity. Unknown op names are conservatively reported as
+        non-identity so we never strip something we can't classify.
+
+        Args:
+            attr_name: Full Xformable attribute name (e.g. ``xformOp:translate``).
+            value: Authored value to compare against the op's identity.
+
+        Returns:
+            True when *value* encodes the identity transform for the op.
+
+        """
+        if value is None:
+            return True
+
+        parts = attr_name.split(":")
+        op_name = parts[1] if len(parts) >= 2 else ""
+        eps = self._XFORM_IDENTITY_EPS
+
+        try:
+            if op_name == "translate":
+                components = self._vector_components(value)
+                if components is None:
+                    return False
+                return all(abs(c) < eps for c in components)
+
+            if op_name.startswith("rotate"):
+                components = self._vector_components(value)
+                if components is None:
+                    return abs(float(value)) < eps
+                return all(abs(c) < eps for c in components)
+
+            if op_name == "scale":
+                components = self._vector_components(value)
+                if components is None:
+                    return False
+                return all(abs(c - 1.0) < eps for c in components)
+
+            if op_name == "orient":
+                if hasattr(value, "GetReal") and hasattr(value, "GetImaginary"):
+                    if abs(float(value.GetReal()) - 1.0) >= eps:
+                        return False
+                    imag_components = self._vector_components(value.GetImaginary())
+                    if imag_components is None:
+                        return False
+                    return all(abs(c) < eps for c in imag_components)
+                return False
+
+            if op_name == "transform":
+                for i in range(4):
+                    row = value[i]
+                    for j in range(4):
+                        expected = 1.0 if i == j else 0.0
+                        if abs(float(row[j]) - expected) > eps:
+                            return False
+                return True
+        except Exception:
+            return False
+
+        return False
 
     def _apply_variant_deltas(
         self,
@@ -801,11 +1091,11 @@ class VariantRoutingRule(RuleInterface):
         # composition arcs are relative to the original source location
         original_input_path = self.args.get("input_stage_path", "")
         if original_input_path:
-            source_layer_dir = os.path.dirname(original_input_path)
+            source_layer_dir = asset_dirname(original_input_path)
         else:
             # Fall back to working stage path if original not available
             source_layer_path = source_layer.realPath or source_layer.identifier
-            source_layer_dir = os.path.dirname(source_layer_path) if source_layer_path else ""
+            source_layer_dir = asset_dirname(source_layer_path) if source_layer_path else ""
         self.log_operation(f"Original input path: {original_input_path}, source dir: {source_layer_dir}")
         dependencies_dir = os.path.join(variant_set_output_dir, "dependencies") if collect_dependencies else ""
 
@@ -884,6 +1174,13 @@ class VariantRoutingRule(RuleInterface):
                 dest_prim_spec.referenceList.ClearEdits()
                 self.log_operation(f"Cleared stale reference arc(s) from {dest_prim_path}")
 
+            # Strip root-prim opinions inherited from the copied source asset.
+            # The variant file is meant to overlay the consumer's default prim;
+            # carrying the source's root transforms or apiSchemas creates
+            # strong opinions that conflict with upstream authoring whenever
+            # this variant is selected.
+            self._strip_inherited_root_opinions(variant_spec, dest_prim_spec)
+
         variant_layer.defaultPrim = default_prim_name
         variant_layer.Save()
         self.log_operation(f"Created variant layer: {variant_file_path}")
@@ -943,8 +1240,10 @@ class VariantRoutingRule(RuleInterface):
             original_file_path = new_to_original.get(norm_filepath)
 
             if original_file_path:
-                # Resolve paths relative to the ORIGINAL file location
-                original_dir = os.path.dirname(original_file_path)
+                # Resolve paths relative to the ORIGINAL file location.
+                # ``asset_dirname`` preserves remote URL scheme so deps
+                # downloaded from omniverse:// re-resolve correctly.
+                original_dir = asset_dirname(original_file_path)
             else:
                 # Fallback to new location if not in map
                 original_dir = os.path.dirname(filepath)
@@ -1107,6 +1406,12 @@ class VariantRoutingRule(RuleInterface):
             # Remap paths within collected dependencies for this variant set
             if collect_dependencies:
                 self._remap_collected_dependencies(dependencies_dir, variant_file_map, all_collected_deps)
+                # Strip identity-only root xformOps from each collected dep
+                # file. When the variant payloads/references a dep, the dep's
+                # default-prim transforms become the payload target's
+                # strongest opinion; leaving an identity transform there
+                # snaps the prim back on every variant switch.
+                self._strip_identity_root_xformops_in_collected_files(dependencies_dir)
 
         # Log summary
         excluded_count = len(excluded_variants) if excluded_variants else 0

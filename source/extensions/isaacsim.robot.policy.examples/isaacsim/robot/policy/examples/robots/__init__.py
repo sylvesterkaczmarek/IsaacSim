@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,12 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# RL based robot template classes
+"""Compatibility imports for policy classes removed in extension version 7.0.0."""
 
-"""Provides example robot policies including terrain navigation and manipulation tasks for Anymal, Franka, H1, and Spot robots."""
+from .anymal import AnymalFlatTerrainPolicy as AnymalFlatTerrainPolicy
+from .cartpole import CartpolePolicy as CartpolePolicy
+from .franka import FrankaOpenDrawerPolicy as FrankaOpenDrawerPolicy
+from .go2 import Go2FlatTerrainPolicy as Go2FlatTerrainPolicy
+from .h1 import H1FlatTerrainPolicy as H1FlatTerrainPolicy
+from .spot import SpotFlatTerrainPolicy as SpotFlatTerrainPolicy
 
-from isaacsim.robot.policy.examples.robots.anymal import AnymalFlatTerrainPolicy as AnymalFlatTerrainPolicy
-from isaacsim.robot.policy.examples.robots.franka import FrankaOpenDrawerPolicy as FrankaOpenDrawerPolicy
-from isaacsim.robot.policy.examples.robots.go2 import Go2FlatTerrainPolicy as Go2FlatTerrainPolicy
-from isaacsim.robot.policy.examples.robots.h1 import H1FlatTerrainPolicy as H1FlatTerrainPolicy
-from isaacsim.robot.policy.examples.robots.spot import SpotFlatTerrainPolicy as SpotFlatTerrainPolicy
+__all__ = [
+    "AnymalFlatTerrainPolicy",
+    "CartpolePolicy",
+    "FrankaOpenDrawerPolicy",
+    "Go2FlatTerrainPolicy",
+    "H1FlatTerrainPolicy",
+    "SpotFlatTerrainPolicy",
+]

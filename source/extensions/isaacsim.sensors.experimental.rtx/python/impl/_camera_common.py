@@ -19,27 +19,33 @@ import warp as wp
 
 CAMERA_ANNOTATOR_SPEC = {
     # standard annotators
-    "bounding_box_2d_loose": {"name": "bounding_box_2d_loose_fast"},
-    "bounding_box_2d_tight": {"name": "bounding_box_2d_tight_fast"},
-    "bounding_box_3d": {"name": "bounding_box_3d_fast"},
+    "bounding_box_2d_loose": {"name": "bounding_box_2d_loose_fast", "device": "cpu"},
+    "bounding_box_2d_tight": {"name": "bounding_box_2d_tight_fast", "device": "cpu"},
+    "bounding_box_3d": {"name": "bounding_box_3d_fast", "device": "cpu"},
     "distance_to_camera": {"name": "distance_to_camera", "channels": 1, "dtype": wp.float32},
     "distance_to_image_plane": {"name": "distance_to_image_plane", "channels": 1, "dtype": wp.float32},
     "instance_id_segmentation": {"name": "instance_id_segmentation_fast", "channels": 1, "dtype": wp.uint32},
     "instance_segmentation": {"name": "instance_segmentation_fast", "channels": 1, "dtype": wp.uint32},
     "motion_vectors": {"name": "motion_vectors", "channels": 4, "output_channels": 2, "dtype": wp.float32},
     "normals": {"name": "normals", "channels": 4, "output_channels": 3, "dtype": wp.float32},
-    "pointcloud": {"name": "pointcloud"},
+    "pointcloud": {"name": "pointcloud", "init_params": {"includeUnlabelled": True}},
     "rgb": {"name": "rgb", "channels": 4, "output_channels": 3, "dtype": wp.uint8},
     "rgba": {"name": "rgb", "channels": 4, "dtype": wp.uint8},
     "semantic_segmentation": {"name": "semantic_segmentation", "channels": 1, "dtype": wp.uint32},
     # single view depth sensor annotators
-    "depth_sensor_distance": {"name": "DepthSensorDistance", "channels": 1, "dtype": wp.float32},
-    "depth_sensor_imager": {"name": "DepthSensorImager", "channels": 1, "dtype": wp.float32},
-    "depth_sensor_point_cloud_color": {"name": "DepthSensorPointCloudColor", "channels": 4, "dtype": wp.uint8},
+    "depth_sensor_distance": {"name": "DepthSensorDistance", "channels": 1, "dtype": wp.float32, "device": "cpu"},
+    "depth_sensor_imager": {"name": "DepthSensorImager", "channels": 1, "dtype": wp.float32, "device": "cpu"},
+    "depth_sensor_point_cloud_color": {
+        "name": "DepthSensorPointCloudColor",
+        "channels": 4,
+        "dtype": wp.uint8,
+        "device": "cpu",
+    },
     "depth_sensor_point_cloud_position": {
         "name": "DepthSensorPointCloudPosition",
         "channels": 4,
         "output_channels": 3,
         "dtype": wp.float32,
+        "device": "cpu",
     },
 }

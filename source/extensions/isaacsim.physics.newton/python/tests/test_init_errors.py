@@ -172,9 +172,8 @@ class TestNewtonInitErrors(omni.kit.test.AsyncTestCase):
         joints to floating bodies, leaving joint_count == 0 and triggering the
         MuJoCo conversion error.
 
-        Expected error:
-            The model must have at least one joint to be able to convert
-            it to MuJoCo.
+        Expected error (MuJoCo solver):
+            Newton model has rigid bodies but no joints
         """
         UsdPhysics.Scene.Define(self.stage, "/PhysicsScene")
 
@@ -185,7 +184,7 @@ class TestNewtonInitErrors(omni.kit.test.AsyncTestCase):
 
         SimulationManager.switch_physics_engine("newton")
         msgs = await self._play_and_capture()
-        self._assert_error(msgs, "at least one joint", "at-least-one-joint error")
+        self._assert_error(msgs, "no joints", "mujoco zero-joint error")
 
     async def test_reversed_joints(self) -> None:
         """Three-body chain where the second joint has body0/body1 swapped.

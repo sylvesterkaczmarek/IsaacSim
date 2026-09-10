@@ -24,6 +24,7 @@ import numpy as np
 import omni.kit.app
 import omni.kit.test
 import omni.usd
+from isaacsim.robot.poser.math import Joint, Transform
 from isaacsim.robot.poser.robot_poser import (
     NAMED_POSES_SCOPE,
     PoseResult,
@@ -40,7 +41,6 @@ from isaacsim.robot.poser.robot_poser import (
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 from usd.schema.isaac import robot_schema
 from usd.schema.isaac.robot_schema import utils as robot_utils
-from usd.schema.isaac.robot_schema.math import Joint, Transform
 
 
 def _create_test_robot(stage: Usd.Stage) -> tuple[Usd.Prim, Usd.Prim, Usd.Prim]:

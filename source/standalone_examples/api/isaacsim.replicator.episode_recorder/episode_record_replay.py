@@ -85,7 +85,7 @@ parser.add_argument(
 args, _ = parser.parse_known_args()
 
 
-FRANKA_USD_REL_PATH = "Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+FRANKA_USD_REL_PATH = "Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 
 
 def build_scene() -> None:
@@ -111,6 +111,11 @@ def drive_dofs(articulation: Articulation, num_steps: int, target_amplitude: flo
     target, yielding realistic DOF trajectories the replayer can roundtrip. Driven by a fixed
     number of simulation steps (rather than wall-clock time) so the recording is deterministic
     across hardware.
+
+    Args:
+        articulation: Franka articulation whose DOF targets should be animated.
+        num_steps: Number of deterministic simulation steps to record.
+        target_amplitude: Peak joint-position offset for the sinusoidal targets.
     """
     n_dofs = int(articulation.num_dofs)
     target_freq_hz = 0.5
@@ -123,7 +128,18 @@ def drive_dofs(articulation: Articulation, num_steps: int, target_amplitude: flo
 
 
 def record_one_episode(output_dir: str, record_steps: int) -> str:
-    """Record one episode of a short scripted motion; return the HDF5 session path."""
+    """Record one episode of a short scripted motion; return the HDF5 session path.
+
+    Args:
+        output_dir: Directory in which to create the recorder session.
+        record_steps: Number of scripted-motion simulation steps to record.
+
+    Returns:
+        Path of the recorded HDF5 session.
+
+    Raises:
+        RuntimeError: If no articulation is discovered in the example scene.
+    """
     build_scene()
 
     # Pump updates until the Franka USD reference resolves and exposes its ArticulationRootAPI.
@@ -176,7 +192,12 @@ def record_one_episode(output_dir: str, record_steps: int) -> str:
 
 
 def replay_episode(hdf5_path: str, *, attach_writer: bool) -> None:
-    """Reopen the session, play the recorded trajectory, and optionally render it with a writer."""
+    """Reopen the session, play the recorded trajectory, and optionally render it with a writer.
+
+    Args:
+        hdf5_path: Path of the recorded HDF5 session to replay.
+        attach_writer: Whether to write rendered replay frames to disk.
+    """
     omni.usd.get_context().new_stage()
     build_scene()
     for _ in range(2):
@@ -228,7 +249,12 @@ def replay_episode(hdf5_path: str, *, attach_writer: bool) -> None:
 
 
 def clean_test_output(output_dir: str, *, include_render: bool) -> None:
-    """Remove artifacts this example creates so test validation is repeatable."""
+    """Remove artifacts this example creates so test validation is repeatable.
+
+    Args:
+        output_dir: Directory containing artifacts from this example.
+        include_render: Whether to remove the rendered replay directory in addition to recording files.
+    """
     out_path = Path(output_dir)
     if not out_path.exists():
         return

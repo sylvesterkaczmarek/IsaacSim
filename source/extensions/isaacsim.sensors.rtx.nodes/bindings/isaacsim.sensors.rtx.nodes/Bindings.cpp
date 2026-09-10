@@ -15,7 +15,7 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/sensors/rtx/nodes/ISensorsRtxNodes.h>
+#include <isaacsim/sensors/rtx/nodes/ISensorsRtxNodes.hpp>
 
 CARB_BINDINGS("isaacsim.sensors.rtx.nodes.python")
 

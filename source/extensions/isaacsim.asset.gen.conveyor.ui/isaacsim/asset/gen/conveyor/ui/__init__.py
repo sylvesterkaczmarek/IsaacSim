@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""UI module for the conveyor builder extension providing interactive interfaces for creating and managing conveyor belt systems in Isaac Sim."""
+"""UI module for the conveyor builder extension."""
 
-from .impl import *
+from .impl.extension import Extension as Extension
 
 __all__ = []

@@ -16,7 +16,7 @@
 #define CARB_EXPORTS
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/Framework.h>
@@ -24,7 +24,7 @@
 #include <carb/logging/Log.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/hsb/nodes/IHsbNodes.h>
+#include <isaacsim/hsb/nodes/IHsbNodes.hpp>
 #include <omni/fabric/IToken.h>
 #include <omni/graph/core/NodeTypeRegistrar.h>
 #include <omni/graph/core/iComputeGraph.h>

@@ -87,7 +87,7 @@ class TestAckermannControllerOgn(ogts.OmniGraphTestCase):
         and full circle turns.
         """
         stage_utils.add_reference_to_stage(
-            self._assets_root_path + "/Isaac/Robots/IsaacSim/ForkliftC/forklift_c.usd",
+            self._assets_root_path + "/Isaac/Robots_Multiphysics/IsaacSim/ForkliftC/forklift_c/forklift_c.usda",
             "/World/Forklift",
         )
 
@@ -232,7 +232,7 @@ class TestAckermannControllerOgn(ogts.OmniGraphTestCase):
         velocity is reached.
         """
         stage_utils.add_reference_to_stage(
-            self._assets_root_path + "/Isaac/Robots/IsaacSim/ForkliftC/forklift_c.usd",
+            self._assets_root_path + "/Isaac/Robots_Multiphysics/IsaacSim/ForkliftC/forklift_c/forklift_c.usda",
             "/World/Forklift",
         )
 
@@ -333,7 +333,7 @@ class TestAckermannControllerOgn(ogts.OmniGraphTestCase):
         steering velocities.
         """
         stage_utils.add_reference_to_stage(
-            self._assets_root_path + "/Isaac/Robots/IsaacSim/ForkliftC/forklift_c.usd",
+            self._assets_root_path + "/Isaac/Robots_Multiphysics/IsaacSim/ForkliftC/forklift_c/forklift_c.usda",
             "/World/Forklift",
         )
 

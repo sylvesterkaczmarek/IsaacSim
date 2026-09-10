@@ -63,3 +63,26 @@ class TestMenuAssets(MenuUITestCase):
                 await self._test_menu_option(test_path)
                 # Reset stage for next iteration
                 await self.new_stage()
+
+    async def test_create_menu_uses_usd_defaults_for_dependent_lidar_variants(self) -> None:
+        """Create menu should use USD defaults when dependent lidar variants change."""
+        lms4000_menu_path = f"{SENSOR_ROOT_PATH}/SICK/LMS4000"
+        lms4000_default_product = "LMS4121R"
+        lms4124r_product = "LMS4124R"
+        lms4124r_default_profile = "Profile01_5p5m_0p0833deg"
+
+        await self.new_stage()
+        await self.menu_click_with_retry(lms4000_menu_path)
+        await self.run_timeline_frames(5)
+
+        prim = get_current_stage().GetPrimAtPath("/LMS4000")
+        self.assertTrue(prim.IsValid())
+
+        product_variant_set = prim.GetVariantSet("Product")
+        self.assertEqual(product_variant_set.GetVariantSelection(), lms4000_default_product)
+        product_variant_set.SetVariantSelection(lms4124r_product)
+
+        profile_variant_set = prim.GetVariantSet("Profile")
+
+        self.assertIn(lms4124r_default_profile, profile_variant_set.GetVariantNames())
+        self.assertEqual(profile_variant_set.GetVariantSelection(), lms4124r_default_profile)

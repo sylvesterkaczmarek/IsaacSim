@@ -2,7 +2,7 @@
 description = "Headless Isaac Sim with Livestream using WebRTC"
 execFile = "isaac-sim.streaming"
 title = "Isaac Sim Full Streaming"
-version = "6.0.1"
+version = "6.1.0"
 
 # That makes it browsable in UI with "experience" filter
 keywords = ["experience", "app", "usd"]
@@ -13,10 +13,13 @@ keywords = ["experience", "app", "usd"]
 "omni.kit.widget.cache_indicator" = { optional = true }
 
 [settings]
-app.name = "Isaac-Sim Streaming"
-app.version = "6.0.1"
-app.vulkan = true                        # Explicitly enable Vulkan
-app.enableDeveloperWarnings = false      # disable developer warnings to reduce log noise
+rtx.spg.enabled = true # Enable RTX Sensor Processing Graphs feature
+
+[settings.app]
+name = "Isaac-Sim Streaming"
+version = "6.1.0"
+vulkan = true                        # Explicitly enable Vulkan
+enableDeveloperWarnings = false      # disable developer warnings to reduce log noise
 
 [settings.app.exts.folders]
 '++' = [
@@ -62,8 +65,3 @@ primaryStream.streamType = "webrtc"
 quitOnSessionEnded = true
 resumeTimeoutSeconds = 30
 waitForSessionReadyEvent = false
-
-[settings.exts."omni.kit.registry.nucleus".registries]
-++ = [
-    { name = "isaacsim/prod/6.0", url = "https://ovextensionsprod.blob.core.windows.net/exts/isaacsim/prod/6.0/shared" },
-]

@@ -17,3 +17,5 @@ from isaacsim.robot.policy.examples.interactive.go2.go2_example import Go2Exampl
 from isaacsim.robot.policy.examples.interactive.go2.go2_example_extension import (
     Go2ExampleExtension as Go2ExampleExtension,
 )
+
+__all__ = ["Go2Example"]

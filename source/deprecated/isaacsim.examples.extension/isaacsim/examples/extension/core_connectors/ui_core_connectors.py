@@ -20,7 +20,7 @@ from collections.abc import Callable
 
 import carb
 import omni.ui as ui
-from isaacsim.core.api.world import World
+from isaacsim.core.api import World
 from isaacsim.core.utils.stage import update_stage_async
 from isaacsim.gui.components.element_wrappers.ui_widget_wrappers import *
 
@@ -32,14 +32,16 @@ class LoadButton(UIWidgetWrapper):
     This provides the user with certain guarantees at the time that their callback functions are
     called.
 
-    The setup_scene_fn() is called with the guarantee that a World has been created.  In this function,
-    the user is meant to add the assets they want to the USD stage.  These assets then must also be added to
-    the World. World is a singleton class.  An example setup_scene_fn implementation would include:
+    The setup_scene_fn() is called with the guarantee that a World has been created. In this function,
+    the user is meant to add the assets they want to the USD stage. These assets must also be added to
+    the World. World is a singleton class. An example setup_scene_fn implementation would include:
 
-        - world = World.instance() # Get the unique instance of the World
-        - world.scene.add(usd_object) # Add the user-loaded usd object to the scene
+    .. code-block:: python
 
-    The setup_post_load() function is called with the guarantees that the World has been created, the
+        world = World.instance() # Get the unique instance of the World
+        world.scene.add(usd_object) # Add the user-loaded usd object to the scene
+
+    The setup_post_load_fn() function is called with the guarantees that the World has been created, the
     setup_scene_fn() has already been called, all objects that the user added to the World have been properly
     initialized, and the timeline is paused at timestep 0.
 
@@ -49,11 +51,11 @@ class LoadButton(UIWidgetWrapper):
         tooltip: Text to appear when the mouse hovers over the LoadButton.
         setup_scene_fn: A function that will be called when the LoadButton is clicked.
             The user should use this function to add their assets to the USD stage and to add their assets
-            to the World. This function should take 0 arguments.  The return value will not be used.
+            to the World. This function should take no arguments. The return value will not be used.
         setup_post_load_fn: A function that will be called when the LoadButton is clicked.
             The function is called with the guarantees that the World has been created, the
             setup_scene_fn() has already been called, all objects that the user added to the World have been properly
-            initialized, and the timeline is paused at timestep 0.  This function should take 0 arguments.
+            initialized, and the timeline is paused at timestep 0. This function should take no arguments.
             The return value will not be used.
     """
 
@@ -75,30 +77,38 @@ class LoadButton(UIWidgetWrapper):
 
     @property
     def label(self) -> ui.Label:
-        """Get the UI Label element that contains the descriptive text."""
+        """UI Label element that contains the descriptive text.
+
+        Returns:
+            UI Label element that contains the descriptive text.
+        """
         return self._label
 
     @property
     def button(self) -> ui.Button:
-        """Get the UI Button element."""
+        """UI Button element.
+
+        Returns:
+            UI Button element.
+        """
         return self._button
 
     def set_setup_scene_fn(self, setup_scene_fn: Callable) -> None:
         """Set the setup_scene_fn that will be called when the LoadButton is clicked.
 
-        The setup_scene_fn() is called with the guarantee that a World has been created.  In this function,
-        the user is meant to add the assets they want to the USD stage.  These assets then must also be added to
-        the World. World is a singleton class.  An example setup_scene_fn implementation would include:
+        The setup_scene_fn() is called with the guarantee that a World has been created. In this function,
+        the user is meant to add the assets they want to the USD stage. These assets then must also be added to
+        the World. World is a singleton class. An example setup_scene_fn implementation would include:
 
-        world = World.instance() # Get the unique instance of the World
-        world.scene.add(usd_object) # Add the user-loaded usd object to the scene
+        .. code-block:: python
+
+            world = World.instance() # Get the unique instance of the World
+            world.scene.add(usd_object) # Add the user-loaded usd object to the scene
 
         Args:
             setup_scene_fn: A function that will be called when the LoadButton is clicked.
-                the user should use this function to add their assets to the USD stage and to add their assets
-                to the World. This function should take 0 arguments.  The return value will not be used.
-                Defaults to None.
-
+                The user should use this function to add their assets to the USD stage and to add their assets
+                to the World. This function should take 0 arguments. The return value will not be used.
         """
         self.setup_scene_fn = setup_scene_fn
 
@@ -108,42 +118,42 @@ class LoadButton(UIWidgetWrapper):
         Args:
             setup_post_load_fn: A function that will be called when the LoadButton is clicked.
                 The function is called with the guarantees that the World has been created, the
-                setup_scene_fn() has already been called, all objects that the user added to the World have been properly
-                initialized, and the timeline will be paused at timestep 0.  This function should take 0 arguments.
-                The return value will not be used.  Defaults to None.
+                setup_scene_fn() has already been called, all objects that the user added to the World have been
+                properly initialized, and the timeline will be paused at timestep 0. This function should take
+                0 arguments. The return value will not be used.
         """
         self.setup_post_load_fn = setup_post_load_fn
 
     def set_world_settings(self, **kwargs: object) -> None:
-        """Pressing a Load Button will create a new instance of the isaacsim.core.api.World.
+        """Configure settings used when the Load Button creates a new isaacsim.core.api.World instance.
 
-        The default settings will be used unless the user specifies new settings at runtime before the Load Button is clicked.
+        The default settings will be used unless the user specifies new settings at runtime before the Load Button
+        is clicked.
 
-        The default settings will ensure that the physics and rendering timesteps are fixed at 1/60.0 seconds (see set_defaults argument).
-        It is important to note that this will ensure that code is deterministic, but may not be executed in real time.
-        I.e. physics and render dts will adjust automatically if the simulation is running too fast or slow.
+        The default settings will ensure that the physics and rendering timesteps are fixed at 1/60.0 seconds
+        (see set_defaults argument). It is important to note that this will ensure that code is deterministic,
+        but may not be executed in real time. I.e. physics and render dts will adjust automatically if the
+        simulation is running too fast or slow.
 
         Args:
-            **kwargs: Keyword arguments passed to the World constructor. Supported keys include:
-                physics_dt: dt between physics steps. Defaults to None.
-                rendering_dt: dt between rendering steps. Note: rendering means
-                    rendering a frame of the current application and not
-                    only rendering a frame to the viewports/ cameras. So UI
-                    elements of Isaac Sim will be refreshed with this dt
-                    as well if running non-headless. Defaults to None.
-                stage_units_in_meters: The metric units of assets. This will affect gravity value..etc.
-                    Defaults to None.
-                physics_prim_path: specifies the prim path to create a PhysicsScene at,
-                    only in the case where no PhysicsScene already defined.
-                    Defaults to "/physicsScene".
-                set_defaults: set to True to use the defaults settings. Defaults to True.
-                backend: specifies the backend to be used (numpy or torch). Defaults to numpy.
-                device: specifies the device to be used if running on the gpu with torch backend.
+            **kwargs: Keyword arguments passed to the World constructor.
+
+        Keyword Args:
+            physics_dt: dt between physics steps.
+            rendering_dt: dt between rendering steps. Note: rendering means rendering a frame of the current
+                application and not only rendering a frame to the viewports/ cameras. So UI elements of Isaac Sim
+                will be refreshed with this dt as well if running non-headless.
+            stage_units_in_meters: The metric units of assets. This will affect gravity value.
+            physics_prim_path: Prim path to create a PhysicsScene at, only in the case where no PhysicsScene is
+                already defined.
+            set_defaults: Whether to use the default settings.
+            backend: Backend to be used, such as numpy or torch.
+            device: Device to be used if running on the gpu with torch backend.
         """
         self._world_settings = kwargs
 
     def _on_clicked_fn_wrapper(self) -> None:
-        """This function is called when the Load Button is Clicked."""
+        """Handles Load Button clicks by creating a World, running setup callbacks, resetting the World, and pausing."""
         # From an extension workflow, the stage and world need to be interacted with asynchronously
 
         async def _on_click_async() -> None:
@@ -176,6 +186,16 @@ class LoadButton(UIWidgetWrapper):
         asyncio.ensure_future(_on_click_async())
 
     def _create_ui_widget(self, label: str, text: str, tooltip: str) -> object:
+        """Create the UI widget frame containing the LoadButton label and button.
+
+        Args:
+            label: Short descriptive text to the left of the LoadButton.
+            text: Text on the LoadButton.
+            tooltip: Text to appear when the mouse hovers over the LoadButton.
+
+        Returns:
+            The containing frame with the UI elements.
+        """
         containing_frame = Frame().frame
         with containing_frame:
             with ui.HStack():
@@ -199,9 +219,9 @@ class LoadButton(UIWidgetWrapper):
 class ResetButton(UIWidgetWrapper):
     """Create a special type of UI button that connects to the isaacsim.core.api.World to perform a reset.
 
-    If no World instance exists when this button will be clicked, this button will not create one.
+    If no World instance exists when this button is clicked, this button will not create one.
     In this case, the button logs a warning and calls user callback functions with no guarantees
-    on the Simulator State.
+    on the simulator state.
 
     Args:
         label: Short descriptive text to the left of the ResetButton.
@@ -229,7 +249,7 @@ class ResetButton(UIWidgetWrapper):
         """UI Label element that contains the descriptive text.
 
         Returns:
-            UI Label element that contains the descriptive text.
+            The UI Label element that contains the descriptive text.
         """
         return self._label
 
@@ -238,7 +258,7 @@ class ResetButton(UIWidgetWrapper):
         """UI Button element.
 
         Returns:
-            UI Button element.
+            The UI Button element.
         """
         return self._button
 
@@ -247,7 +267,7 @@ class ResetButton(UIWidgetWrapper):
 
         Args:
             pre_reset_fn: A function that will be called before resetting the World.
-                This function should take 0 arguments.  The return value will not be used.
+                This function should take 0 arguments. The return value will not be used.
         """
         self._pre_reset_fn = pre_reset_fn
 

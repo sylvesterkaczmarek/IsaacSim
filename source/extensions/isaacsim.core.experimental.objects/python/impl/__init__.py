@@ -32,3 +32,4 @@ from .shapes import Cylinder as Cylinder
 from .shapes import Plane as Plane
 from .shapes import Shape as Shape
 from .shapes import Sphere as Sphere
+from .stage import Stage as Stage

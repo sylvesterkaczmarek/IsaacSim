@@ -703,6 +703,17 @@ def combo_floatfield_slider_builder(
             width=ui.Fraction(1), alignment=ui.Alignment.LEFT_CENTER, min=min, max=max, step=step, model=ff
         )
 
+        _min_bound = min
+        _max_bound = max
+
+        def _clamp_to_bounds(model: object) -> None:
+            value = model.as_float
+            clamped = _max_bound if value > _max_bound else (_min_bound if value < _min_bound else value)
+            if clamped != value:
+                model.set_value(clamped)
+
+        ff.add_value_changed_fn(_clamp_to_bounds)
+
         add_line_rect_flourish(False)
         return ff, fs
 

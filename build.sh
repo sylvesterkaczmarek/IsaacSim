@@ -26,4 +26,4 @@ if [ $EULA_STATUS -ne 0 ]; then
 fi
 
 set -e
-source "$SCRIPT_DIR/repo.sh" build $@ || exit $?
+source "$SCRIPT_DIR/repo.sh" build "$@" || exit $?

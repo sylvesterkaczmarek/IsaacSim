@@ -15,8 +15,10 @@
 
 """Test the grasping manager functionality."""
 
-import omni.kit.app
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.commands
+import omni.kit.test
 import omni.usd
 from isaacsim.replicator.grasping.grasping_manager import GraspingManager
 from isaacsim.storage.native import get_assets_root_path_async
@@ -45,18 +47,18 @@ class TestGraspingManager(omni.kit.test.AsyncTestCase):
     """Test grasp pose generation with the grasping manager."""
 
     async def setUp(self) -> None:
-        """Set up test fixtures."""
-        await omni.kit.app.get_app().next_update_async()
-        await omni.usd.get_context().new_stage_async()
-        await omni.kit.app.get_app().next_update_async()
+        """Create a clean stage."""
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
 
     async def tearDown(self) -> None:
-        """Tear down test fixtures."""
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
+        """Close the stage and wait for pending asset loads."""
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
         # In some cases the test will end before the asset is loaded, in this case wait for assets to load
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
 
     async def test_grasp_pose_generation_cube(self) -> None:
         """Test grasp pose generation on a simple cube primitive."""
@@ -64,13 +66,13 @@ class TestGraspingManager(omni.kit.test.AsyncTestCase):
             print("Warning: Skipping test because grasp pose generation dependencies are not installed.")
             return
 
-        await omni.usd.get_context().new_stage_async()
-        await omni.kit.app.get_app().next_update_async()
-        stage = omni.usd.get_context().get_stage()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
+        stage = stage_utils.get_current_stage()
 
         object_path = "/World/ObjectAsset"
         omni.kit.commands.execute("CreateMeshPrimWithDefaultXformCommand", prim_type="Cube", prim_path=object_path)
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
         object_prim = stage.GetPrimAtPath(object_path)
         if not object_prim.HasAttribute("xformOp:scale"):
             UsdGeom.Xformable(object_prim).AddScaleOp()
@@ -90,14 +92,13 @@ class TestGraspingManager(omni.kit.test.AsyncTestCase):
             print("Warning: Skipping test because grasp pose generation dependencies are not installed.")
             return
 
-        await omni.usd.get_context().new_stage_async()
-        await omni.kit.app.get_app().next_update_async()
-        stage = omni.usd.get_context().get_stage()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
 
         assets_root_path = await get_assets_root_path_async()
         asset_url = assets_root_path + OBJECT_ASSET_URL
         asset_path = "/World/ObjectAsset"
-        object_prim = stage.DefinePrim(asset_path, "Xform")
+        object_prim = stage_utils.define_prim(asset_path, type_name="Xform")
         object_prim.GetReferences().AddReference(asset_url)
 
         grasping_manager = GraspingManager()

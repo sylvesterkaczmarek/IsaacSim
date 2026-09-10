@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.13] - 2026-08-14
+### Changed
+- Document that a semantic filter (`semanticTypes`/`semanticFilter`) applies to the render product rather than to a single annotator, so all bounding box and segmentation annotators on a camera share one filter. `Camera.attach_annotator` shows how to add a second render product to filter independently.
+
+## [1.7.12] - 2026-08-11
+### Fixed
+- Clean up camera resources between tests to prevent stale Replicator annotators.
+
+## [1.7.11] - 2026-08-05
+### Fixed
+- Use a Windows-specific golden image for the `SingleViewDepthSensor` distance annotator test.
+
+## [1.7.10] - 2026-07-05
+### Fixed
+- `SingleViewDepthSensor` now requests the input render variables required to produce depth sensor annotator data.
+- Enable the RTX camera provider and SPG pipeline required by single-view depth sensors, and update the depth golden image for the current renderer output.
+
 ## [1.7.9] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

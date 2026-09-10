@@ -21,7 +21,7 @@ from collections.abc import Callable
 def find_unique_string_name(initial_name: str, is_unique_fn: Callable[[str], bool]) -> str:
     """Find a unique string name based on the predicate function provided.
 
-    The string is appended with "_N", where N is a natural number till the resultant string
+    The string is appended with "_N", where N is a natural number until the resultant string
     is unique.
 
     Args:
@@ -29,7 +29,7 @@ def find_unique_string_name(initial_name: str, is_unique_fn: Callable[[str], boo
         is_unique_fn: The predicate function to validate against.
 
     Returns:
-        A unique string based on input function.
+        A unique string based on the input function.
     """
     if is_unique_fn(initial_name):
         return initial_name

@@ -125,10 +125,10 @@ class TestURDFImportFunctional(unittest.TestCase):
     def _import(self) -> Usd.Stage:
         """Run the URDF importer and return the resulting USD stage.
 
-        Uses the intermediate output (before the asset transformer restructuring)
-        since the full pipeline depends on additional transformer infrastructure
-        that may produce a different output layout. The intermediate stage still
-        contains all USD prims, joints, and physics schemas.
+        The final transformed asset leaves physics variant selection to the
+        consumer. Select the standard ``physics`` overlay so joint type and limit
+        assertions inspect the composed physics prims rather than the unselected
+        routing stubs.
 
         Returns:
             The USD stage opened from the generated import output.
@@ -158,6 +158,10 @@ class TestURDFImportFunctional(unittest.TestCase):
 
         stage = Usd.Stage.Open(usd_path)
         self.assertIsNotNone(stage, "Failed to open generated USD stage")
+        root_prim = stage.GetDefaultPrim()
+        physics_variants = root_prim.GetVariantSet("Physics")
+        if physics_variants and "physics" in physics_variants.GetVariantNames():
+            physics_variants.SetVariantSelection("physics")
         return stage
 
     def test_import_produces_usd(self) -> None:

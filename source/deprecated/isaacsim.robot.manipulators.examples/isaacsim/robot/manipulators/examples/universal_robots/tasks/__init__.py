@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides task definitions for Universal Robots manipulator examples."""
+
 from isaacsim.robot.manipulators.examples.universal_robots.tasks.bin_filling import BinFilling as BinFilling
 from isaacsim.robot.manipulators.examples.universal_robots.tasks.follow_target import FollowTarget as FollowTarget
 from isaacsim.robot.manipulators.examples.universal_robots.tasks.pick_place import PickPlace as PickPlace

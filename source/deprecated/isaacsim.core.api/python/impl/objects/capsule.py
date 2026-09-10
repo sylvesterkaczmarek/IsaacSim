@@ -31,29 +31,32 @@ from pxr import Gf, UsdGeom
 
 
 class VisualCapsule(SingleGeometryPrim):
-    """High level wrapper to create/encapsulate a visual capsule.
+    """High-level wrapper to create or encapsulate a visual capsule.
 
     .. note::
 
-        Visual capsules (Capsule shape) have no collisions (Collider API) or rigid body dynamics (Rigid Body API)
+        Visual capsules (Capsule shape) have no collisions (Collider API) or rigid body dynamics (Rigid Body API).
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create
-        name: shortname to be used as a key by Scene class.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. shape is (3, ).
-        translation: translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
+        position: Position in the world frame of the prim. Shape is (3, ).
+        translation: Translation in the local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world or local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        color: color of the visual shape.
-        radius: capsule radius.
-        height: capsule height.
-        visual_material: visual material to be applied to the held prim.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to False for an invisible prim in the stage while rendering.
+        color: Color of the visual shape.
+        radius: Capsule radius.
+        height: Capsule height.
+        visual_material: Visual material to be applied to the held prim.
             If not specified, a default visual material will be added.
+
+    Raises:
+        Exception: If an existing prim at ``prim_path`` cannot be parsed as a Capsule object.
 
     Example:
 
@@ -71,7 +74,6 @@ class VisualCapsule(SingleGeometryPrim):
         ... )
         >>> prim
         <isaacsim.core.api.objects.capsule.VisualCapsule object at 0x7f4ff958b0d0>
-
     """
 
     def __init__(
@@ -137,14 +139,13 @@ class VisualCapsule(SingleGeometryPrim):
         """Set the capsule radius.
 
         Args:
-            radius: capsule radius
+            radius: Capsule radius.
 
         Example:
 
         .. code-block:: python
 
             >>> prim.set_radius(1.0)
-
         """
         self.geom.GetRadiusAttr().Set(radius)
         return
@@ -161,7 +162,6 @@ class VisualCapsule(SingleGeometryPrim):
 
             >>> prim.get_radius()
             0.5
-
         """
         return self.geom.GetRadiusAttr().Get()
 
@@ -169,14 +169,13 @@ class VisualCapsule(SingleGeometryPrim):
         """Set the capsule height.
 
         Args:
-            height: capsule height
+            height: Capsule height.
 
         Example:
 
         .. code-block:: python
 
             >>> prim.set_height(2.0)
-
         """
         self.geom.GetHeightAttr().Set(height)
         return
@@ -193,36 +192,35 @@ class VisualCapsule(SingleGeometryPrim):
 
             >>> prim.get_height()
             1.0
-
         """
         return self.geom.GetHeightAttr().Get()
 
 
 class FixedCapsule(VisualCapsule):
-    """High level wrapper to create/encapsulate a fixed capsule.
+    """High level wrapper to create or encapsulate a fixed capsule.
 
     .. note::
 
-        Fixed capsules (Capsule shape) have collisions (Collider API) but no rigid body dynamics (Rigid Body API)
+        Fixed capsules (Capsule shape) have collisions (Collider API) but no rigid body dynamics (Rigid Body API).
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create
-        name: shortname to be used as a key by Scene class.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. shape is (3, ).
-        translation: translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
+        position: Position in the world frame of the prim. Shape is (3, ).
+        translation: Translation in the local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world/local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        color: color of the visual shape.
-        radius: capsule radius.
-        height: capsule height.
-        visual_material: visual material to be applied to the held prim.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to False for an invisible prim in the stage while rendering.
+        color: Color of the visual shape.
+        radius: Capsule radius.
+        height: Capsule height.
+        visual_material: Visual material to be applied to the held prim.
             If not specified, a default visual material will be added.
-        physics_material: physics material to be applied to the held prim.
+        physics_material: Physics material to be applied to the held prim.
             If not specified, a default physics material will be added.
 
     Example:
@@ -241,7 +239,6 @@ class FixedCapsule(VisualCapsule):
         ... )
         >>> print(prim)
         <isaacsim.core.api.objects.capsule.FixedCapsule object at 0x7f520c0d4790>
-
     """
 
     def __init__(
@@ -303,26 +300,28 @@ class DynamicCapsule(SingleRigidPrim, FixedCapsule):
         Dynamic capsules (Capsule shape) have collisions (Collider API) and rigid body dynamics (Rigid Body API)
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create
-        name: shortname to be used as a key by Scene class.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. shape is (3, ).
-        translation: translation in the local frame of the prim (with respect to its parent prim). shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
-            (depends if translation or position is specified). quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        color: color of the visual shape.
-        radius: capsule radius.
-        height: capsule height.
-        visual_material: visual material to be applied to the held prim.
+        position: Position in the world frame of the prim. Shape is (3, ).
+        translation: Translation in the local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world/local frame of the prim
+            (depends on whether translation or position is specified).
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to false for an invisible prim in the stage while rendering.
+        color: Color of the visual shape.
+        radius: Capsule radius.
+        height: Capsule height.
+        visual_material: Visual material to be applied to the held prim.
             If not specified, a default visual material will be added.
-        physics_material: physics material to be applied to the held prim.
+        physics_material: Physics material to be applied to the held prim.
             If not specified, a default physics material will be added.
-        mass: mass in kg.
-        density: density.
-        linear_velocity: linear velocity in the world frame.
-        angular_velocity: angular velocity in the world frame.
+        mass: Mass in kg.
+        density: Density.
+        linear_velocity: Linear velocity in the world frame.
+        angular_velocity: Angular velocity in the world frame.
 
     Example:
 
@@ -341,7 +340,6 @@ class DynamicCapsule(SingleRigidPrim, FixedCapsule):
         ... )
         >>> prim
         <isaacsim.core.api.objects.capsule.DynamicCapsule object at 0x7f4ff915f8e0>
-
     """
 
     def __init__(

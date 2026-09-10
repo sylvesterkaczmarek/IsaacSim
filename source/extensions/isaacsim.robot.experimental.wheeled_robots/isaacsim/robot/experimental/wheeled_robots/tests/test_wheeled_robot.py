@@ -40,7 +40,7 @@ class TestWheeledRobot(omni.kit.test.AsyncTestCase):
     async def setUp(self) -> None:
         """Set up test environment with a Jetbot wheeled robot."""
         assets_root_path = await get_assets_root_path_async()
-        self._jetbot_usd = assets_root_path + "/Isaac/Robots/NVIDIA/Jetbot/jetbot.usd"
+        self._jetbot_usd = assets_root_path + "/Isaac/Robots_Multiphysics/NVIDIA/Jetbot/jetbot.usda"
         await stage_utils.create_new_stage_async()
         stage_utils.set_stage_up_axis("Z")
         stage_utils.set_stage_units(meters_per_unit=1.0)

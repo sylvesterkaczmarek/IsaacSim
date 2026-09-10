@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nvidia.com/isaac/schemas/sysid_run_report.schema.json",
+  "title": "SysID Run Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_schema_version",
+    "run_spec",
+    "schema_issues",
+    "telemetry_quality",
+    "backend",
+    "simulation_engine",
+    "newton_config",
+    "robot_prim_path",
+    "train_chunks",
+    "validation_metrics",
+    "validation_summary",
+    "validation_artifacts",
+    "resampling_diagnostics",
+    "tuning_assessment",
+    "parameters",
+    "command_alignment_seconds",
+    "actuator_command_delay_seconds",
+    "parameters_written",
+    "provenance_path",
+    "final_status",
+    "last_accepted_status",
+    "selected_status",
+    "parameter_confidence",
+    "extra"
+  ],
+  "properties": {
+    "report_schema_version": { "const": 3 },
+    "run_spec": { "$ref": "sysid_run_spec.schema.json" },
+    "schema_issues": { "type": "array", "items": { "type": "object" } },
+    "telemetry_quality": { "type": "object" },
+    "backend": { "type": "string" },
+    "simulation_engine": { "enum": ["isaac_sim", "newton"] },
+    "newton_config": { "type": ["object", "null"] },
+    "robot_prim_path": { "type": "string" },
+    "train_chunks": { "type": "array", "items": { "type": "object" } },
+    "parameters": { "type": "array", "items": { "type": "object" } },
+    "command_alignment_seconds": { "type": "number" },
+    "actuator_command_delay_seconds": { "type": "object" },
+    "parameters_written": { "type": "boolean" },
+    "validation_metrics": { "type": "array", "items": { "type": "object" } },
+    "validation_summary": { "type": "object" },
+    "validation_artifacts": { "type": "object" },
+    "resampling_diagnostics": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/resampling_diagnostic" }
+    },
+    "tuning_assessment": { "$ref": "#/$defs/tuning_assessment" },
+    "provenance_path": { "type": "string" },
+    "final_status": { "type": ["object", "null"] },
+    "last_accepted_status": { "type": ["object", "null"] },
+    "selected_status": { "type": ["object", "null"] },
+    "parameter_confidence": { "type": "object" },
+    "extra": { "type": "object" }
+  },
+  "$defs": {
+    "resampling_diagnostic": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "raw_sample_count": { "type": "integer", "minimum": 0 },
+        "resampled_sample_count": { "type": "integer", "minimum": 0 },
+        "raw_dt_median": { "type": ["number", "null"] },
+        "raw_dt_min": { "type": ["number", "null"] },
+        "raw_dt_max": { "type": ["number", "null"] },
+        "raw_jitter_ratio": { "type": ["number", "null"] },
+        "physics_dt": { "type": "number" },
+        "target_dt": { "type": ["number", "null"] },
+        "capped": { "type": "boolean" },
+        "command_interpolation": { "enum": ["zero_order_hold", "linear"] },
+        "measured_interpolation": { "enum": ["linear"] },
+        "time_weighting": { "type": "boolean" }
+      }
+    },
+    "tuning_assessment": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "schema_version": { "type": "integer" },
+        "status": { "enum": ["pass", "warn", "fail"] },
+        "checks": { "type": "object" },
+        "issues": { "type": "array", "items": { "type": "object" } },
+        "metrics": { "type": "object" },
+        "parameter_summary": { "type": "object" },
+        "recommended_next_parameters": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "reduce_selected_parameter_families_or_tighten_bounds",
+              "add_independent_validation_chunks_before_broadening_parameters",
+              "rerun_with_smaller_parameter_set",
+              "consider_joint_armature_only_after_validation_improves",
+              "consider_link_mass_or_inertia_only_with_torque_and_rich_acceleration_data",
+              "keep_current_parameter_set_and_validate_on_more_holdouts"
+            ]
+          }
+        },
+        "recommended_actions": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "do_not_save_as_final_tuned_usd_until_errors_are_resolved",
+              "inspect_validation_overlay_pngs_for_timing_and_amplitude_match",
+              "review_bounds_and_physical_plausibility_for_bound_hit_parameters",
+              "review_large_parameter_deltas_for_coupling_or_bad_initial_values",
+              "run_next_holdout_or_repeated_trial_before_broadening_parameter_scope"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

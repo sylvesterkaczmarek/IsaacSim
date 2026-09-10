@@ -14,16 +14,16 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 
 #include <carb/Framework.h>
 #include <carb/logging/Log.h>
 
-#include <isaacsim/core/includes/PhysicsEngine.h>
-#include <isaacsim/ros2/core/Ros2Node.h>
+#include <isaacsim/core/includes/PhysicsEngine.hpp>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
 #include <omni/fabric/FabricUSD.h>
 #include <omni/physics/tensors/IArticulationView.h>
 #include <omni/physics/tensors/ISimulationView.h>

@@ -13,11 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "SimulationBackend.h"
+#include "SimulationBackend.hpp"
 
-#include "base/BaseSimulationView.h"
-#include "cpu/CpuSimulationView.h"
-#include "gpu/GpuSimulationView.h"
+#include "base/BaseSimulationView.hpp"
+#include "cpu/CpuSimulationView.hpp"
+#include "gpu/GpuSimulationView.hpp"
 
 #include <carb/logging/Log.h>
 

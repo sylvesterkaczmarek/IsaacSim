@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides UI components for robot manipulators in isaacsim.robot.manipulators."""
+
 from .extension import Extension as Extension
 
 __all__ = []

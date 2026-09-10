@@ -14,8 +14,8 @@
 # limitations under the License.
 
 ANNOTATOR_SPEC = {
-    "generic-model-output": {"name": "GenericModelOutput"},
-    "stable-id-map": {"name": "StableIdMap"},
+    "generic-model-output": {"name": "GenericModelOutput", "device": "cpu"},
+    "stable-id-map": {"name": "StableIdMap", "device": "cpu"},
 }
 
 WRITER_SPEC: dict[str, dict] = {}

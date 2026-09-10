@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.11.0] - 2026-08-11
+### Changed
+- Updated Newton to 1.5.0.
+
+## [0.10.0] - 2026-08-05
+### Changed
+- Updated newton to 1.5.0rc2, mujoco to 3.11.0, and mujoco-warp to 3.11.0
+- Updated newton-usd-schemas to 0.4.1
+- Updated mujoco-usd-converter to 0.5.0
+
+## [0.9.0] - 2026-07-16
+### Changed
+- Updated newton to 1.4.0 and mujoco-warp to 3.10.0.2
+- Removed newton-actuators dependency
+
+## [0.8.0] - 2026-07-10
+### Changed
+- Updated newton to 1.4.0rc1, newton-usd-schemas to 0.4.0, and newton-actuators to 0.1.1
+- Updated mujoco to 3.10.0, mujoco-warp to 3.10.0.1, and mujoco-usd-converter to 0.4.0rc1
+
+## [0.7.0] - 2026-06-09
+### Changed
+- Updated newton to 1.3.0
+- Updated newton-usd-schemas to 0.3.1
+
 ## [0.6.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

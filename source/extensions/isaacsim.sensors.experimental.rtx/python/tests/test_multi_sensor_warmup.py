@@ -120,12 +120,10 @@ class TestMultiSensorWarmup(omni.kit.test.AsyncTestCase):
         Each sensor's writer is checked independently for at least one frame
         with ``numElements > 0``.
 
-        Note: ``WARMUP_FRAMES`` is load-bearing on affected hardware - it is
-        what closes the FIF race window. On the CI hardware this test typically
-        runs against, the race does not fire even with ``WARMUP_FRAMES = 0``, so
-        CI cannot directly observe a regression if the warmup is removed. Do
-        not lower this value casually; see
-        :ref:`isaac_sim_sensors_multitick_known_issue_radar_lidar_fif_race`.
+        Note: ``WARMUP_FRAMES`` is load-bearing on older affected hardware. On
+        the CI hardware this test typically runs against, the race does not fire
+        even with ``WARMUP_FRAMES = 0``, so CI cannot directly observe a
+        regression if the warmup is removed.
         """
         WARMUP_FRAMES = 5
         COLLECTION_FRAMES = int(3.0 * 60)

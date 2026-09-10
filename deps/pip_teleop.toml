@@ -7,7 +7,7 @@
 python = "../_build/target-deps/python"
 packages = [
     # -- Direct dependencies ------------------------------------------------
-    "isaacteleop~=1.0.0",                  # SWIPAT filed under: N/A (NVIDIA-authored) # Used by: isaacsim.replicator.teleop
+    "isaacteleop==1.3.131",              # SWIPAT filed under: N/A (NVIDIA-authored) # Used by: isaacsim.replicator.teleop
     # -- QP solver backend for pink -----------------------------------------
     "daqp==0.8.5",                         # SWIPAT filed under: https://nvbugs/6047066 # Used by: isaacsim.replicator.teleop
 ]

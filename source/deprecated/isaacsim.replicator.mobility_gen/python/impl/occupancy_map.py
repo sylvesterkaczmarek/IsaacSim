@@ -179,6 +179,9 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
 
         Args:
             path: The output path to save the occupancy map.
+
+        Raises:
+            AssertionError: If the output path exists and is not a directory.
         """
         if not os.path.exists(path):
             os.makedirs(path)
@@ -200,7 +203,7 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
             ros_yaml_path: The path to the ROS yaml file.
 
         Returns:
-            OccupancyMap
+            The loaded occupancy map.
         """
         with open(ros_yaml_path) as f:
             yaml_data = yaml.safe_load(f)
@@ -237,9 +240,7 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
             origin: The origin of the occupancy map in world coordinates.
             negate: See "negate" in ROS occupancy map documentation.
             occupied_thresh: The threshold to consider a value occupied.
-                Defaults to ROS_OCCUPIED_THRESH_DEFAULT.
-            free_thresh: The threshold to consider a value free. Defaults to
-                ROS_FREESPACE_THRESH_DEFAULT.
+            free_thresh: The threshold to consider a value free.
 
         Returns:
             The occupancy map.
@@ -325,7 +326,7 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
 
         Returns:
             The (x, y) world coordinates of the
-                bottom left pixel in the occupancy map.
+            bottom left pixel in the occupancy map.
         """
         return (self.origin[0], self.origin[1])
 
@@ -334,7 +335,7 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
 
         Returns:
             The (x, y) world coordinates of the
-                top left pixel in the occupancy map.
+            top left pixel in the occupancy map.
         """
         return (self.origin[0], self.origin[1] + self.height_meters())
 
@@ -343,7 +344,7 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
 
         Returns:
             The (x, y) world coordinates of the
-                bottom right pixel in the occupancy map.
+            bottom right pixel in the occupancy map.
         """
         return (self.origin[0] + self.width_meters(), self.origin[1])
 
@@ -352,7 +353,7 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
 
         Returns:
             The (x, y) world coordinates of the
-                top right pixel in the occupancy map.
+            top right pixel in the occupancy map.
         """
         return (self.origin[0] + self.width_meters(), self.origin[1] + self.height_meters())
 
@@ -360,7 +361,7 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
         """Get a buffered occupancy map by dilating the occupied regions.
 
         This method buffers (aka: pads / dilates) an occupancy map by dilating
-        the occupied regions using a circular mask with the a radius
+        the occupied regions using a circular mask with a radius
         specified by "buffer_distance_pixels".
 
         This is useful for modifying an occupancy map for path planning,
@@ -394,7 +395,7 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
     def buffered_meters(self, buffer_distance_meters: float) -> "OccupancyMap":
         """Get a buffered occupancy map by dilating the occupied regions.
 
-        See OccupancyMap.buffer() for more details.
+        See OccupancyMap.buffered() for more details.
 
         Args:
             buffer_distance_meters: The buffer radius / distance in meters.
@@ -426,10 +427,10 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
         """Convert an array of pixel coordinates to world coordinates.
 
         Args:
-            points: The Nx2 numpy array of pixel coordinates.
+            points: Nx2 pixel coordinates.
 
         Returns:
-            The Nx2 numpy array of world coordinates.
+            Nx2 world coordinates.
         """
         bot_left = self.bottom_left_pixel_world_coords()
         u = points[:, 0] / self.width_pixels()
@@ -442,10 +443,10 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
         """Convert an array of world coordinates to pixel coordinates.
 
         Args:
-            points: The Nx2 numpy array of world coordinates.
+            points: Nx2 world coordinates.
 
         Returns:
-            The Nx2 numpy array of pixel coordinates.
+            Nx2 pixel coordinates.
         """
         bot_left_world = self.bottom_left_pixel_world_coords()
         u = (points[:, 0] - bot_left_world[0]) / self.width_meters()
@@ -486,7 +487,7 @@ resolution, origin, negate flag, occupied threshold, and free threshold."""
 
         Returns:
             True if the world coordinate is inside the freespace region of the occupancy map.
-                False otherwise.
+            False otherwise.
         """
         if not self.check_world_point_in_bounds(point):
             return False

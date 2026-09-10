@@ -63,11 +63,11 @@ class IMUSensorReading:
     """IMU sensor reading data."""
 
     linear_acceleration_x: float = 0.0
-    """Linear acceleration along X axis in m/s^2."""
+    """Linear acceleration along X axis in stage linear units per second squared."""
     linear_acceleration_y: float = 0.0
-    """Linear acceleration along Y axis in m/s^2."""
+    """Linear acceleration along Y axis in stage linear units per second squared."""
     linear_acceleration_z: float = 0.0
-    """Linear acceleration along Z axis in m/s^2."""
+    """Linear acceleration along Z axis in stage linear units per second squared."""
     angular_velocity_x: float = 0.0
     """Angular velocity around X axis in rad/s."""
     angular_velocity_y: float = 0.0

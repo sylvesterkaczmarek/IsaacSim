@@ -17,7 +17,7 @@ launch_config:
   renderer: RealTimePathTracing
   headless: true
 resolution: [512, 512]
-num_frames: 5
+num_frames: 4
 clear_previous_semantics: true
 backend_type: null
 writer: CocoWriter

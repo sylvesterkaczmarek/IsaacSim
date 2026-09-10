@@ -1,0 +1,51 @@
+[package]
+version = "2.2.3"
+category = "Simulation"
+title = "System Identification Backend (Beta)"
+description = "Beta: headless system identification runtime and optimizers for robot simulation parameters. Run contracts and APIs may change in future releases."
+keywords = ["isaac", "physics", "sysid", "robotics", "optimization"]
+changelog = "docs/CHANGELOG.md"
+readme = "docs/Overview.md"
+preview_image = "data/preview.png"
+icon = "data/icon.png"
+writeTarget.kit = true
+writeTarget.platform = true # generated telemetry prebundle contains platform-specific PyArrow binaries
+writeTarget.python = true
+
+[dependencies]
+"isaacsim.core.cloner" = {}  # cloned articulation environments
+"isaacsim.core.experimental.actuators" = {}  # explicit Newton actuator integration
+"isaacsim.core.experimental.prims" = {}  # batched articulation access
+"isaacsim.core.experimental.utils" = {}  # stage lifecycle and app launch helpers
+"isaacsim.core.simulation_manager" = {}  # physics-step timing
+"isaacsim.physics.newton" = { optional = true }  # optional Isaac-hosted Newton backend
+"isaacsim.pip.newton" = {}  # packaged Newton, Warp, MuJoCo, and USD schemas
+"omni.physics" = {}  # physics stepping and PhysX replication
+"omni.timeline" = {}  # rollout timeline control
+"omni.usd" = {}  # authored USD telemetry and articulation inspection
+
+[[python.module]]
+path = "pip_prebundle"
+
+[[python.module]]
+name = "isaacsim.robot_setup.sysid"
+
+[[python.module]]
+name = "isaacsim.robot_setup.sysid.tests"
+
+[[test]]
+dependencies = [
+    "isaacsim.test.utils", # Used to suppress NumPy coverage errors
+    "omni.isaac.ml_archive", # tests import torch directly
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    '*SyntheticData extension needs*FrameHistoryCount*',
+]
+
+[documentation]
+pages = [
+    "docs/Overview.md",
+    "docs/CHANGELOG.md"
+]

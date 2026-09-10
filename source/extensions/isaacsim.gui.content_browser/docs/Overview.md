@@ -1,12 +1,12 @@
 # Overview
 
-The isaacsim.gui.content_browser extension enhances the Omniverse content browser by adding an Isaac Sim collection that provides quick access to curated robot models, environments, materials, and sensor assets. This extension creates a dedicated "Isaac Sim" collection within the content browser interface, allowing users to browse and access Isaac Sim-specific assets without manually navigating to remote servers.
+The isaacsim.gui.content_browser extension enhances the Omniverse content browser and File > Open dialog by adding an Isaac Sim collection that provides quick access to curated robot models, environments, materials, and sensor assets. This extension creates a dedicated "Isaac Sim" collection in both interfaces, allowing users to browse and access Isaac Sim-specific assets without manually navigating to remote servers.
 
 ## Key Components
 
 ### {class}`IsaacCollection <isaacsim.gui.content_browser.IsaacCollection>`
 
-The {class}`IsaacCollection <isaacsim.gui.content_browser.IsaacCollection>` class creates the main Isaac Sim collection that appears in the content browser with a cloud icon. This collection automatically detects the appropriate protocol (Omniverse or HTTPS) based on the default asset root configuration and populates itself with configured asset folders from the extension settings.
+The {class}`IsaacCollection <isaacsim.gui.content_browser.IsaacCollection>` class creates the Isaac Sim collection that appears in the content browser and File > Open dialog with a cloud icon. It reads the default asset root configuration and populates itself with configured asset folders from the extension settings.
 
 The collection is read-only and does not support adding new connections. Asset folders are loaded asynchronously from the application settings and displayed as browsable items within the file browser interface.
 

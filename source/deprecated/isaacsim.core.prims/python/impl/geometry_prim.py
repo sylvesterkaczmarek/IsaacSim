@@ -37,12 +37,12 @@ torch = import_module("torch")
 class GeometryPrim(XFormPrim):
     """High level wrapper to deal with geom prims (one or many) as well as their attributes/properties.
 
-    This class wraps all matching geom prims found at the regex provided at the ``prim_paths_expr`` argument
+    This class wraps all matching geom prims found at the regex provided to the ``prim_paths_expr`` argument.
 
     .. note::
 
-        Each prim will have ``xformOp:orient``, ``xformOp:translate`` and ``xformOp:scale`` only post-init,
-        unless it is a non-root articulation link.
+        Each prim will have ``xformOp:orient``, ``xformOp:translate`` and ``xformOp:scale`` only after
+        initialization, unless it is a non-root articulation link.
 
     .. warning::
 
@@ -51,42 +51,42 @@ class GeometryPrim(XFormPrim):
 
     .. warning::
 
-        Some methods require the prims to have the Physx Collision API. Instantiate the class with the ``collision``
-        parameter to a list of True values to apply the collision API.
+        Some methods require the prims to have the PhysX Collision API. Instantiate the class with the ``collisions``
+        parameter set to a list of True values to apply the collision API.
 
     Args:
-        prim_paths_expr: prim paths regex to encapsulate all prims that match it.
+        prim_paths_expr: Prim paths regex to encapsulate all prims that match it.
             example: "/World/Env[1-5]/Microwave" will match /World/Env1/Microwave,
-            /World/Env2/Microwave..etc.
-            (a non regex prim path can also be used to encapsulate one XForm).
-        name: shortname to be used as a key by Scene class.
+            /World/Env2/Microwave, etc.
+            A non-regex prim path can also be used to encapsulate one XForm.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        positions: default positions in the world frame of the prim.
-            shape is (N, 3).
-        translations: default translations in the local frame of the prims
-            (with respect to its parent prims). shape is (N, 3).
-        orientations: default quaternion orientations in the world/ local frame of the prim
-            (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (N, 4).
-        scales: local scales to be applied to
-            the prim's dimensions. shape is (N, 3).
-        visibilities: set to false for an invisible prim in
-            the stage while rendering. shape is (N,).
-        reset_xform_properties: True if the prims don't have the right set of xform properties
+        positions: Positions in the world frame of the prim.
+            Shape is (N, 3).
+        translations: Translations in the local frame of the prims
+            with respect to their parent prims. Shape is (N, 3).
+        orientations: Quaternion orientations in the world or local frame of the prim,
+            depending on whether translation or position is specified.
+            Quaternion is scalar-first (w, x, y, z). Shape is (N, 4).
+        scales: Local scales to be applied to
+            the prim's dimensions. Shape is (N, 3).
+        visibilities: Set to False for an invisible prim in
+            the stage while rendering. Shape is (N,).
+        reset_xform_properties: True if the prims do not have the right set of xform properties
             (i.e: translate, orient and scale) ONLY and in that order.
-            Set this parameter to False if the object were cloned using using
-            the cloner api in isaacsim.core.cloner.
-        collisions: Set to True if the geometry already have/
-            should have a collider (i.e not only a visual geometry). shape is (N,).
-        track_contact_forces: if enabled, the view will track the net contact forces on each geometry prim
+            Set this parameter to False if the object was cloned using
+            the cloner API in isaacsim.core.cloner.
+        collisions: Set to True if the geometry already has or
+            should have a collider (i.e. not only a visual geometry). Shape is (N,).
+        track_contact_forces: If enabled, the view will track the net contact forces on each geometry prim
             in the view. Note that the collision flag should be set to True to report
             contact forces.
-        prepare_contact_sensors: applies contact reporter API to the prim if it already does not have one.
-        disable_stablization: disables the contact stabilization parameter in the physics context.
-        contact_filter_prim_paths_expr: a list of filter expressions which allows for tracking
+        prepare_contact_sensors: Applies contact reporter API to the prim if it does not already have one.
+        disable_stablization: Disables the contact stabilization parameter in the physics context.
+        contact_filter_prim_paths_expr: A list of filter expressions that allows tracking
             contact forces between the geometry prim and this subset
             through get_contact_force_matrix().
-        max_contact_count: maximum number of contact data to report when detailed contact information is needed
+        max_contact_count: Maximum number of contact data to report when detailed contact information is needed.
 
     Example:
 
@@ -248,13 +248,12 @@ class GeometryPrim(XFormPrim):
     ) -> None:
         """Set contact offsets for prims in the view.
 
-        Shapes whose distance is less than the sum of their contact offset values will generate contacts
+        Shapes whose distance is less than the sum of their contact offset values will generate contacts.
 
-        Search for *Advanced Collision Detection* in |physx_docs| for more details
+        Search for *Advanced Collision Detection* in |physx_docs| for more details.
 
         Args:
             offsets: Contact offsets of the collision shapes. Allowed range [maximum(0, rest_offset), 0].
-                Default value is -inf, means default is picked by simulation based on the shape extent.
                 Shape (M,).
             indices: Indices to specify which prims
                 to manipulate. Shape (M,).
@@ -290,9 +289,9 @@ class GeometryPrim(XFormPrim):
     ) -> np.ndarray | torch.Tensor | wp.indexedarray:
         """Get contact offsets for prims in the view.
 
-        Shapes whose distance is less than the sum of their contact offset values will generate contacts
+        Shapes whose distance is less than the sum of their contact offset values will generate contacts.
 
-        Search for *Advanced Collision Detection* in |physx_docs| for more details
+        Search for *Advanced Collision Detection* in |physx_docs| for more details.
 
         Args:
             indices: Indices to specify which prims
@@ -336,18 +335,17 @@ class GeometryPrim(XFormPrim):
         """Set rest offsets for prims in the view.
 
         Two shapes will come to rest at a distance equal to the sum of their rest offset values.
-        If the rest offset is 0, they should converge to touching exactly
+        If the rest offset is 0, they should converge to touching exactly.
 
-        Search for *Advanced Collision Detection* in |physx_docs| for more details
+        Search for *Advanced Collision Detection* in |physx_docs| for more details.
 
         .. warning::
 
-            The contact offset must be positive and greater than the rest offset
+            The contact offset must be positive and greater than the rest offset.
 
         Args:
             offsets: Rest offset of a collision shape. Allowed range [-max_float, contact_offset].
-                Default value is -inf, means default is picked by simulation.
-                For rigid bodies its zero. Shape (M,).
+                Shape (M,).
             indices: Indices to specify which prims
                 to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
@@ -383,9 +381,9 @@ class GeometryPrim(XFormPrim):
         """Get rest offsets for prims in the view.
 
         Two shapes will come to rest at a distance equal to the sum of their rest offset values.
-        If the rest offset is 0, they should converge to touching exactly
+        If the rest offset is 0, they should converge to touching exactly.
 
-        Search for *Advanced Collision Detection* in |physx_docs| for more details
+        Search for *Advanced Collision Detection* in |physx_docs| for more details.
 
         Args:
             indices: Indices to specify which prims
@@ -428,7 +426,7 @@ class GeometryPrim(XFormPrim):
     ) -> None:
         """Set torsional patch radii for prims in the view.
 
-        Search for *"Torsional Patch Radius"* in |physx_docs| for more details
+        Search for *"Torsional Patch Radius"* in |physx_docs| for more details.
 
         Args:
             radii: Radius of the contact patch used to apply torsional friction. Allowed range [0, max_float].
@@ -467,7 +465,7 @@ class GeometryPrim(XFormPrim):
     ) -> np.ndarray | torch.Tensor | wp.indexedarray:
         """Get torsional patch radii for prims in the view.
 
-        Search for *"Torsional Patch Radius"* in |physx_docs| for more details
+        Search for *"Torsional Patch Radius"* in |physx_docs| for more details.
 
         Args:
             indices: Indices to specify which prims
@@ -510,7 +508,7 @@ class GeometryPrim(XFormPrim):
     ) -> None:
         """Set minimum torsional patch radii for prims in the view.
 
-        Search for *"Torsional Patch Radius"* in |physx_docs| for more details
+        Search for *"Torsional Patch Radius"* in |physx_docs| for more details.
 
         Args:
             radii: Minimum radius of the contact patch used to apply torsional friction.
@@ -549,7 +547,7 @@ class GeometryPrim(XFormPrim):
     ) -> np.ndarray | torch.Tensor:
         """Get minimum torsional patch radii for prims in the view.
 
-        Search for *"Torsional Patch Radius"* in |physx_docs| for more details
+        Search for *"Torsional Patch Radius"* in |physx_docs| for more details.
 
         Args:
             indices: Indices to specify which prims
@@ -616,27 +614,25 @@ class GeometryPrim(XFormPrim):
               - A mesh simplification step is performed, resulting in a simplified triangle mesh collider
             * - ``"sdf"``
               - SDF Mesh
-              - SDF (Signed-Distance-Field) use high-detail triangle meshes as collision shape
+              - SDF (Signed-Distance-Field) uses high-detail triangle meshes as collision shape
             * - ``"sphereFill"``
               - Sphere Approximation
               - A sphere mesh decomposition is performed. This results in a set of sphere colliders
 
         Args:
-            approximation_types: approximations used for collision. List size == M or the size of the view.
-            indices: indices to specify which prims
-                                                                                 to manipulate. Shape (M,).
-                                                                                 Where M <= size of the encapsulated prims in the view.
+            approximation_types: Collision approximation types. List size == M or the size of the view.
+            indices: Indices to specify which prims to manipulate. Shape (M,).
+                Where M <= size of the encapsulated prims in the view.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> # set the collision approximations for all the prims to the specified values.
-            >>> prims.set_collision_approximations(["convexDecomposition"] * num_envs)
-            >>>
-            >>> # set the collision approximations for the first, middle and last of the 5 envs
-            >>> types = ["convexDecomposition", "convexHull", "meshSimplification"]
-            >>> prims.set_collision_approximations(types, indices=np.array([0, 2, 4]))
+                >>> # set the collision approximations for all the prims to the specified values.
+                >>> prims.set_collision_approximations(["convexDecomposition"] * num_envs)
+                >>>
+                >>> # set the collision approximations for the first, middle and last of the 5 envs
+                >>> types = ["convexDecomposition", "convexHull", "meshSimplification"]
+                >>> prims.set_collision_approximations(types, indices=np.array([0, 2, 4]))
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         read_idx = 0
@@ -683,30 +679,28 @@ class GeometryPrim(XFormPrim):
               - A mesh simplification step is performed, resulting in a simplified triangle mesh collider
             * - ``"sdf"``
               - SDF Mesh
-              - SDF (Signed-Distance-Field) use high-detail triangle meshes as collision shape
+              - SDF (Signed-Distance-Field) uses high-detail triangle meshes as collision shape
             * - ``"sphereFill"``
               - Sphere Approximation
               - A sphere mesh decomposition is performed. This results in a set of sphere colliders
 
         Args:
-            indices: indices to specify which prims
-                                                                                 to query. Shape (M,).
-                                                                                 Where M <= size of the encapsulated prims in the view.
+            indices: Indices to specify which prims to query. Shape (M,).
+                Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            approximations used for collision. size == M or size of the view.
+            Collision approximation types. Size == M or size of the view.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> # get the collision approximation of all prims. Returned size is (5,).
-            >>> prims.get_collision_approximations()
-            ['none', 'none', 'none', 'none', 'none']
-            >>>
-            >>> # get the collision approximation of the prims for the first, middle and last of the 5 envs
-            >>> prims.get_collision_approximations(indices=np.array([0, 2, 4]))
-            ['none', 'none', 'none']
+                >>> # get the collision approximation of all prims. Returned size is (5,).
+                >>> prims.get_collision_approximations()
+                ['none', 'none', 'none', 'none', 'none']
+                >>>
+                >>> # get the collision approximation of the prims for the first, middle and last of the 5 envs
+                >>> prims.get_collision_approximations(indices=np.array([0, 2, 4]))
+                ['none', 'none', 'none']
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         approximation_types = [None] * indices.shape[0]
@@ -724,22 +718,20 @@ class GeometryPrim(XFormPrim):
         return approximation_types
 
     def enable_collision(self, indices: np.ndarray | list | torch.Tensor | wp.array | None = None) -> None:
-        """Enables collision on prims in the view.
+        """Enable collision on prims in the view.
 
         Args:
-            indices: indices to specify which prims
-                                                                                 to manipulate. Shape (M,).
-                                                                                 Where M <= size of the encapsulated prims in the view.
+            indices: Indices to specify which prims to manipulate. Shape (M,).
+                Where M <= size of the encapsulated prims in the view.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> # enable the collision API for all prims
-            >>> prims.enable_collision()
-            >>>
-            >>> # enable the collision API for the prims for the first, middle and last of the 5 envs
-            >>> prims.enable_collision(indices=np.array([0, 2, 4]))
+                >>> # enable the collision API for all prims
+                >>> prims.enable_collision()
+                >>>
+                >>> # enable the collision API for the prims for the first, middle and last of the 5 envs
+                >>> prims.enable_collision(indices=np.array([0, 2, 4]))
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         indices = self._backend_utils.to_list(indices)
@@ -750,22 +742,20 @@ class GeometryPrim(XFormPrim):
         return
 
     def disable_collision(self, indices: np.ndarray | list | torch.Tensor | wp.array | None = None) -> None:
-        """Disables collision on prims in the view.
+        """Disable collision on prims in the view.
 
         Args:
-            indices: indices to specify which prims
-                                                                                 to manipulate. Shape (M,).
-                                                                                 Where M <= size of the encapsulated prims in the view.
+            indices: Indices to specify which prims to manipulate. Shape (M,).
+                Where M <= size of the encapsulated prims in the view.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> # disable the collision API for all prims
-            >>> prims.disable_collision()
-            >>>
-            >>> # disable the collision API for the prims for the first, middle and last of the 5 envs
-            >>> prims.disable_collision(indices=np.array([0, 2, 4]))
+                >>> # disable the collision API for all prims
+                >>> prims.disable_collision()
+                >>>
+                >>> # disable the collision API for the prims for the first, middle and last of the 5 envs
+                >>> prims.disable_collision(indices=np.array([0, 2, 4]))
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         indices = self._backend_utils.to_list(indices)
@@ -781,27 +771,25 @@ class GeometryPrim(XFormPrim):
     def is_collision_enabled(
         self, indices: np.ndarray | list | torch.Tensor | wp.array | None = None
     ) -> np.ndarray | torch.Tensor | wp.indexedarray:
-        """Queries if collision is enabled on prims in the view.
+        """Query whether collision is enabled on prims in the view.
 
         Args:
-            indices: indices to specify which prims
-                                                                                 to query. Shape (M,).
-                                                                                 Where M <= size of the encapsulated prims in the view.
+            indices: Indices to specify which prims to query. Shape (M,).
+                Where M <= size of the encapsulated prims in the view.
 
         Returns:
             True if collision is enabled. Shape is (M,).
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> # check if the collision is enabled for all prims. Returned size is (5,).
-            >>> prims.is_collision_enabled()
-            [ True  True  True  True  True]
-            >>>
-            >>> # check if the collision is enabled for the first, middle and last of the 5 envs
-            >>> prims.is_collision_enabled(indices=np.array([0, 2, 4]))
-            [ True  True  True]
+                >>> # check if the collision is enabled for all prims. Returned size is (5,).
+                >>> prims.is_collision_enabled()
+                [ True  True  True  True  True]
+                >>>
+                >>> # check if the collision is enabled for the first, middle and last of the 5 envs
+                >>> prims.is_collision_enabled(indices=np.array([0, 2, 4]))
+                [ True  True  True]
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         collisions = np.zeros(shape=indices.shape[0], dtype=bool)
@@ -824,19 +812,17 @@ class GeometryPrim(XFormPrim):
         """Apply the collision API to prims in the view and update internal variables.
 
         Args:
-            indices: indices to specify which prims
-                                                                                 to manipulate. Shape (M,).
-                                                                                 Where M <= size of the encapsulated prims in the view.
+            indices: Indices to specify which prims to manipulate. Shape (M,).
+                Where M <= size of the encapsulated prims in the view.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> # apply the collision API for all prims
-            >>> prims.apply_collision_apis()
-            >>>
-            >>> # apply the collision API for the first, middle and last of the 5 envs
-            >>> prims.apply_collision_apis(indices=np.array([0, 2, 4]))
+                >>> # apply the collision API for all prims
+                >>> prims.apply_collision_apis()
+                >>>
+                >>> # apply the collision API for the first, middle and last of the 5 envs
+                >>> prims.apply_collision_apis(indices=np.array([0, 2, 4]))
         """
         indices = self._backend_utils.to_list(self._backend_utils.resolve_indices(indices, self.count, self._device))
         for i in indices:
@@ -860,46 +846,41 @@ class GeometryPrim(XFormPrim):
         weaker_than_descendants: bool | list[bool] | None = None,
         indices: np.ndarray | list | torch.Tensor | wp.array | None = None,
     ) -> None:
-        """Used to apply physics material to prims in the view and optionally its descendants.
+        """Apply physics material to prims in the view and optionally its descendants.
 
         Args:
-            physics_materials: physics materials to be applied to prims in the view.
-                                                                            Physics material can be used to define friction, restitution..etc.
-                                                                            Note: if a physics material is not defined, the defaults will be used
-                                                                            from PhysX. If a list is provided then its size has to be equal
-                                                                            the view's size or indices size.
-                                                                            If one material is provided it will be applied to all prims in the view.
-            weaker_than_descendants: True if the material shouldn't override the descendants
-                                                                                    materials, otherwise False.
-                                                                                    If a list of visual materials is provided then a list
-                                                                                    has to be provided with the same size for this arg as well.
-            indices: indices to specify which prims
-                                                                                 to manipulate. Shape (M,).
-                                                                                 Where M <= size of the encapsulated prims in the view.
+            physics_materials: Physics materials to apply to prims in the view.
+                Physics material can be used to define friction, restitution, etc.
+                Note: if a physics material is not defined, the defaults will be used from PhysX.
+                If a list is provided then its size has to be equal the view's size or indices size.
+                If one material is provided it will be applied to all prims in the view.
+            weaker_than_descendants: True if the material should not override the descendants materials.
+                If a list of physics materials is provided, provide a list with the same size for this argument.
+            indices: Indices to specify which prims to manipulate. Shape (M,).
+                Where M <= size of the encapsulated prims in the view.
 
         Raises:
-            Exception: length of physics materials != length of prims indexed
-            Exception: length of physics materials != length of weaker descendants arg
+            Exception: If the length of physics materials does not match the number of selected prims.
+            Exception: If the length of physics materials does not match weaker_than_descendants.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> from isaacsim.core.api.materials import PhysicsMaterial
-            >>>
-            >>> # create a rigid body physical material
-            >>> material = PhysicsMaterial(
-            ...     prim_path="/World/physics_material/aluminum",  # path to the material prim to create
-            ...     dynamic_friction=0.4,
-            ...     static_friction=1.1,
-            ...     restitution=0.1
-            ... )
-            >>>
-            >>> # apply the material to all prims
-            >>> prims.apply_physics_materials(material)  # or [material] * num_envs
-            >>>
-            >>> # apply the collision API for the first, middle and last of the 5 envs
-            >>> prims.apply_physics_materials(material, indices=np.array([0, 2, 4]))
+                >>> from isaacsim.core.api.materials import PhysicsMaterial
+                >>>
+                >>> # create a rigid body physical material
+                >>> material = PhysicsMaterial(
+                ...     prim_path="/World/physics_material/aluminum",  # path to the material prim to create
+                ...     dynamic_friction=0.4,
+                ...     static_friction=1.1,
+                ...     restitution=0.1
+                ... )
+                >>>
+                >>> # apply the material to all prims
+                >>> prims.apply_physics_materials(material)  # or [material] * num_envs
+                >>>
+                >>> # apply the collision API for the first, middle and last of the 5 envs
+                >>> prims.apply_physics_materials(material, indices=np.array([0, 2, 4]))
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         indices = self._backend_utils.to_list(indices)
@@ -960,33 +941,31 @@ class GeometryPrim(XFormPrim):
     def get_applied_physics_materials(
         self, indices: np.ndarray | list | torch.Tensor | wp.array | None = None
     ) -> list[PhysicsMaterial]:
-        """Get the applied physics material to prims in the view.
+        """Get the applied physics material for prims in the view.
 
         Args:
-            indices: indices to specify which prims
-                                                                                 to query. Shape (M,).
-                                                                                 Where M <= size of the encapsulated prims in the view.
+            indices: Indices to specify which prims to query. Shape (M,).
+                Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            the current applied physics materials for prims in the view.
+            Current applied physics materials for prims in the view.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> # get the applied material for all prims
-            >>> prims.get_applied_physics_materials()
-            [<isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
-             <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
-             <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
-             <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
-             <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>]
-            >>>
-            >>> # get the applied material for the first, middle and last of the 5 envs
-            >>> prims.get_applied_physics_materials(indices=np.array([0, 2, 4]))
-            [<isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
-             <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
-             <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>]
+                >>> # get the applied material for all prims
+                >>> prims.get_applied_physics_materials()
+                [<isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
+                 <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
+                 <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
+                 <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
+                 <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>]
+                >>>
+                >>> # get the applied material for the first, middle and last of the 5 envs
+                >>> prims.get_applied_physics_materials(indices=np.array([0, 2, 4]))
+                [<isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
+                 <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>,
+                 <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f720859ece0>]
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         result = [None] * indices.shape[0]
@@ -1022,19 +1001,19 @@ class GeometryPrim(XFormPrim):
         clone: bool = True,
         dt: float = 1.0,
     ) -> np.ndarray | torch.Tensor | wp.indexedarray | None:
-        """If contact forces of the prims in the view are tracked, this method returns the net contact forces on prims.
+        """Return net contact forces on prims when contact force tracking is enabled.
 
-        i.e., a matrix of dimension (self.count, 3).
+        The returned matrix has shape (self.count, 3) before indexing.
 
         Args:
-            indices: indices to specify which prims
-                                                                                 to query. Shape (M,).
-                                                                                 Where M <= size of the encapsulated prims in the view.
+            indices: Indices to specify which prims to query. Shape (M,).
+                Where M <= size of the encapsulated prims in the view.
             clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: time step multiplier to convert the underlying impulses to forces. If the default value is used then the forces are in fact contact impulses
+            dt: Time step multiplier to convert the underlying impulses to forces.
+                A value of 1.0 returns contact impulses.
 
         Returns:
-            Net contact forces of the prims with shape (M,3). None if contact tracking is not enabled.
+            Net contact forces of the prims with shape (M, 3). None if contact tracking is not enabled.
         """
         if self._track_contact_forces:
             return self._contact_view.get_net_contact_forces(indices, clone, dt)
@@ -1050,20 +1029,21 @@ class GeometryPrim(XFormPrim):
         clone: bool = True,
         dt: float = 1.0,
     ) -> np.ndarray | torch.Tensor | wp.indexedarray | None:
-        """If the object is initialized with filter_paths_expr list, this method returns the contact forces between the prims.
+        """Return contact forces between the prims in the view and filter prims when contact filters are specified.
 
-        in the view and the filter prims. i.e., a matrix of dimension (self.count, self._contact_view.num_filters, 3)
-        where num_filters is the determined according to the filter_paths_expr parameter.
+        The returned matrix has shape (self.count, self._contact_view.num_filters, 3) before indexing.
+        The number of filters is determined according to the filter_paths_expr parameter.
 
         Args:
-            indices: indices to specify which prims
-                                                                                 to query. Shape (M,).
-                                                                                 Where M <= size of the encapsulated prims in the view.
+            indices: Indices to specify which prims to query. Shape (M,).
+                Where M <= size of the encapsulated prims in the view.
             clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: time step multiplier to convert the underlying impulses to forces. If the default value is used then the forces are in fact contact impulses
+            dt: Time step multiplier to convert the underlying impulses to forces.
+                A value of 1.0 returns contact impulses.
 
         Returns:
-            Net contact forces of the prims with shape (M, self._contact_view.num_filters, 3). None if no contact filter is specified.
+            Net contact forces of the prims with shape (M, self._contact_view.num_filters, 3).
+            None if no contact filter is specified.
         """
         if len(self._contact_filter_prim_paths_expr) != 0:
             return self._contact_view.get_contact_force_matrix(indices, clone, dt)
@@ -1089,26 +1069,26 @@ class GeometryPrim(XFormPrim):
         ]
         | None
     ):
-        """Get more detailed contact information between the prims in the view and the filter prims. Specifically, this method provides individual.
+        """Get detailed contact data between the prims in the view and the filter prims.
 
-        contact normals, contact points, contact separations as well as contact forces for each pair
-        (the sum of which equals the forces that the get_contact_force_matrix method provides as the force aggregate of a pair)
-        Given to the dynamic nature of collision between bodies, this method will provide buffers of contact data which are arranged sequentially for each pair.
-        The starting index and the number of contact data points for each pair in this stream can be realized from pair_contacts_start_indices,
-        and pair_contacts_count tensors. They both have a dimension of (self.num_shapes, self.num_filters) where filter_count is determined
-        according to the filter_paths_expr parameter.
+        This method provides individual contact normals, contact points, contact separations, and contact forces for each
+        pair. The sum of the contact forces equals the force aggregate for a pair returned by get_contact_force_matrix.
+        Due to the dynamic nature of collision between bodies, this method provides contact data buffers arranged
+        sequentially for each pair. The starting index and number of contact data points for each pair in this stream can
+        be read from the pair_contacts_start_indices and pair_contacts_count tensors. They both have a dimension of
+        (self.num_shapes, self.num_filters), where filter_count is determined according to the filter_paths_expr parameter.
 
         Args:
-            indices: indices to specify which prims to query. Shape (M,).
+            indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
             clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: time step multiplier to convert the underlying impulses to forces. If the default value is used then the forces are in fact contact impulses
+            dt: Time step multiplier to convert the underlying impulses to forces.
 
         Returns:
-            A set of buffers for normal forces with shape (max_contact_count, 1), points with shape (max_contact_count, 3), normals with shape (max_contact_count, 3),
-            and distances with shape (max_contact_count, 1), as well as two tensors with shape (M, self.num_filters)
-            to indicate the starting index and the number of contact data points per pair in the aforementioned buffers.
+            A set of buffers for normal forces with shape (max_contact_count, 1), points with shape (max_contact_count,
+            3), normals with shape (max_contact_count, 3), and distances with shape (max_contact_count, 1), as well as two
+            tensors with shape (M, self.num_filters) to indicate the starting index and number of contact data points per
+            pair in the aforementioned buffers. None if no contact filter is specified.
         """
         if len(self._contact_filter_prim_paths_expr) != 0:
             return self._contact_view.get_contact_force_data(indices, clone, dt)
@@ -1132,26 +1112,26 @@ class GeometryPrim(XFormPrim):
         ]
         | None
     ):
-        """Gets friction data between the prims in the view and the filter prims. Specifically, this method provides frictional contact forces,.
+        """Get friction data between the prims in the view and the filter prims.
 
-        and points. The data in reported for number of anchor points that includes tangential forces in a single tangent direction to contact normal.
-        Given to the dynamic nature of collision between bodies, this method will provide buffers of friction data arranged sequentially for each pair.
-        The starting index and the number of contact data points for each pair in this stream can be realized from pair_contacts_start_indices,
-        and pair_contacts_count tensors. They both have a dimension of (self.num_shapes, self.num_filters) where filter_count is determined
-        according to the filter_paths_expr parameter.
+        This method provides frictional contact forces and points. The data is reported for anchor points that include
+        tangential forces in a single tangent direction to the contact normal. Due to the dynamic nature of collision
+        between bodies, this method provides friction data buffers arranged sequentially for each pair. The starting index
+        and number of contact data points for each pair in this stream can be read from the pair_contacts_start_indices and
+        pair_contacts_count tensors. They both have a dimension of (self.num_shapes, self.num_filters), where filter_count
+        is determined according to the filter_paths_expr parameter.
 
         Args:
-            indices: indicies to specify which prims to query. Shape (M,).
+            indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
             clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: time step multiplier to convert the underlying impulses to forces. If the default value is used then the forces are in fact contact impulses
+            dt: Time step multiplier to convert the underlying impulses to forces.
 
         Returns:
-            A set of buffers for tangential forces per patch (at number of anchor points, each in a single directions)
-            with shape (max_contact_count, 3), points with shape (max_contact_count, 3),
-            as well as two tensors with shape (M, self.num_filters) to indicate the starting index and the number of
-            contact data points per pair in the aforementioned buffers.
+            A set of buffers for tangential forces per patch at anchor points, each in a single direction, with shape
+            (max_contact_count, 3), points with shape (max_contact_count, 3), as well as two tensors with shape (M,
+            self.num_filters) to indicate the starting index and number of contact data points per pair in the
+            aforementioned buffers. None if no contact filter is specified.
         """
         if len(self._contact_filter_prim_paths_expr) != 0:
             return self._contact_view.get_friction_data(indices, clone, dt)

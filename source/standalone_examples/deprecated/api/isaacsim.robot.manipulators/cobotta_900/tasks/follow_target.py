@@ -27,7 +27,16 @@ from isaacsim.storage.native import get_assets_root_path
 
 # Inheriting from the base class Follow Target
 class FollowTarget(tasks.FollowTarget):
-    """Track a target pose with the Cobotta Pro 900 end effector."""
+    """Track a target pose with the Cobotta Pro 900 end effector.
+
+    Args:
+        name: Name used to register the task in the world.
+        target_prim_path: Optional path of an existing target prim. When ``None``, the base task creates one.
+        target_name: Optional scene-object name for the target.
+        target_position: Optional initial world position of the target.
+        target_orientation: Optional initial world orientation of the target.
+        offset: Optional positional offset applied to the target pose.
+    """
 
     def __init__(
         self,
@@ -50,7 +59,14 @@ class FollowTarget(tasks.FollowTarget):
         return
 
     def set_robot(self) -> SingleManipulator:
-        """Create and configure the Cobotta Pro 900 manipulator for the task."""
+        """Create and configure the Cobotta Pro 900 manipulator for the task.
+
+        Returns:
+            Configured Cobotta manipulator with its parallel gripper.
+
+        Raises:
+            Exception: If the Isaac Sim asset root cannot be found.
+        """
         assets_root_path = get_assets_root_path()
         if assets_root_path is None:
             raise Exception("Could not find Isaac Sim assets folder")

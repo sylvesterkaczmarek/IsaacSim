@@ -1,5 +1,5 @@
 [package]
-version = "3.4.4"
+version = "3.4.5"
 category = "Simulation"
 title = "Isaac Sim Manipulators"
 description = "Provides Python classes for controlling robotic manipulators including single-arm robots, parallel grippers, and surface grippers with pick-and-place and stacking controllers."
@@ -11,7 +11,7 @@ icon = "data/icon.png"
 writeTarget.kit = true
 
 [deprecation]
-warning = "Extension deprecated since Isaac Sim 6.0.0. Refer to isaacsim.robot.experimental.manipulators.examples for recommended alternatives."
+warning = "Extension deprecated since Isaac Sim 6.0.0. Refer to isaacsim.robot_motion.examples for maintained examples."
 
 [dependencies]
 "isaacsim.core.api" = {}
@@ -46,6 +46,7 @@ timeout = 900
 dependencies = [
     "omni.isaac.ml_archive",
 ]
+
 stdoutFailPatterns.exclude = [
     "*[Error] [omni.graph.core.plugin] /TestGraph/Template_isaacsim_robot_manipulators_IsaacGripperController: [/TestGraph] OmniGraph Error: No robot prim found for the articulation controller*",
     "*[Error] [carb.glinterop.plugin] GLInteropContext::init: carb::windowing is not available*",

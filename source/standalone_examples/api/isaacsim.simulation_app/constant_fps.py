@@ -42,7 +42,11 @@ app_update_time_s = 0.0
 
 
 def update_event_callback(event: carb.events.IEvent) -> None:
-    """Record the wall-clock time of each app update event."""
+    """Record the wall-clock time of each app update event.
+
+    Args:
+        event: Application update event that triggered the timing sample.
+    """
     global last_frametime_timestamp_ns, app_update_time_s
     timestamp_ns = time.perf_counter_ns()
     app_update_time_s = round((timestamp_ns - last_frametime_timestamp_ns) / 1e9, 9)

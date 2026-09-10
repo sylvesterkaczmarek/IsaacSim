@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.7] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [2.5.6] - 2026-07-07
+### Changed
+- Update the generated Python API inventory.
+
 ## [2.5.5] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.
@@ -88,7 +96,7 @@
 
 ## [2.2.22] - 2025-06-18
 ### Changed
-- Track change from isaacsim.core.include Pose.h
+- Track change from isaacsim.core.include Pose.hpp
 
 ## [2.2.21] - 2025-05-31
 ### Changed
@@ -104,7 +112,7 @@
 
 ## [2.2.18] - 2025-05-15
 ### Changed
-- UsdUtilities.h was updated
+- UsdUtilities.hpp was updated
 
 ## [2.2.17] - 2025-05-11
 ### Changed

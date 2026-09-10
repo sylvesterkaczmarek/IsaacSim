@@ -141,9 +141,57 @@ class TestAttachHydraTexture(ogts.OmniGraphTestCase):
         self.assertTrue(render_prod_prim)
 
         ordered_vars = render_prod_prim.GetOrderedVarsRel().GetTargets()
-        render_var_names = [str(path).split("/")[-1] for path in ordered_vars]
-        self.assertIn("LdrColor", render_var_names)
-        self.assertIn("Depth", render_var_names)
+        ordered_var_paths = [str(path) for path in ordered_vars]
+        self.assertIn("/Render/Vars/LdrColor", ordered_var_paths)
+        self.assertIn("/Render/Vars/Depth", ordered_var_paths)
+        self.assertEqual(ordered_var_paths.count("/Render/Vars/LdrColor"), 1)
+        self.assertEqual(ordered_var_paths.count("/Render/Vars/Depth"), 1)
+
+        self._timeline.stop()
+        await omni.kit.app.get_app().next_update_async()
+
+    async def test_attach_hydra_texture_with_render_product_child_render_vars(self) -> None:
+        """Test hydra texture attachment with render vars defined under the render product."""
+        render_product_path = await self._create_render_product(self._camera_path)
+
+        test_graph, new_nodes, _, _ = og.Controller.edit(
+            {"graph_path": "/ActionGraph", "evaluator_name": "execution"},
+            {
+                og.Controller.Keys.CREATE_NODES: [
+                    ("OnTick", "omni.graph.action.OnTick"),
+                    ("attachHydraTexture", "isaacsim.core.nodes.IsaacAttachHydraTexture"),
+                ],
+                og.Controller.Keys.CONNECT: [
+                    ("OnTick.outputs:tick", "attachHydraTexture.inputs:execIn"),
+                ],
+                og.Controller.Keys.SET_VALUES: [
+                    ("attachHydraTexture.inputs:renderProductPrim", render_product_path),
+                    ("attachHydraTexture.inputs:renderVars", ["ChildColor", "ChildDepth"]),
+                    ("attachHydraTexture.inputs:renderVarLocation", "renderProductChild"),
+                ],
+            },
+        )
+
+        self._timeline.play()
+        await omni.kit.app.get_app().next_update_async()
+        await omni.kit.app.get_app().next_update_async()
+        await omni.kit.app.get_app().next_update_async()
+
+        render_prod_prim = UsdRender.Product(self._stage.GetPrimAtPath(render_product_path))
+        self.assertTrue(render_prod_prim)
+
+        ordered_vars = render_prod_prim.GetOrderedVarsRel().GetTargets()
+        ordered_var_paths = [str(path) for path in ordered_vars]
+        child_color_path = f"{render_product_path}/ChildColor"
+        child_depth_path = f"{render_product_path}/ChildDepth"
+        self.assertIn(child_color_path, ordered_var_paths)
+        self.assertIn(child_depth_path, ordered_var_paths)
+        self.assertEqual(ordered_var_paths.count(child_color_path), 1)
+        self.assertEqual(ordered_var_paths.count(child_depth_path), 1)
+        # omni.kit.hydra_texture 1.6.2 duplicates render vars to /Render/Vars
+        # self.assertFalse(self._stage.GetPrimAtPath("/Render/Vars/ChildColor").IsValid())
+        self.assertEqual(self._stage.GetPrimAtPath(child_color_path).GetAttribute("sourceName").Get(), "ChildColor")
+        self.assertEqual(self._stage.GetPrimAtPath(child_depth_path).GetAttribute("sourceName").Get(), "ChildDepth")
 
         self._timeline.stop()
         await omni.kit.app.get_app().next_update_async()

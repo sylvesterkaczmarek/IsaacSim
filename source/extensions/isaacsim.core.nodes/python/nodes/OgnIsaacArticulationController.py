@@ -244,7 +244,7 @@ class OgnIsaacArticulationController:
                 state.joint_picked = False
 
             joint_indices = db.inputs.jointIndices
-            if np.asarray(joint_indices).any() and not np.array_equal(joint_indices, state.joint_indices):
+            if np.size(joint_indices) > 0 and not np.array_equal(joint_indices, state.joint_indices):
                 state.joint_indices = np.array(joint_indices)
                 state.joint_picked = False
 

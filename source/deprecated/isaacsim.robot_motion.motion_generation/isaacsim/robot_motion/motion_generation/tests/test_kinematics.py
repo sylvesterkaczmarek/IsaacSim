@@ -72,6 +72,9 @@ class TestKinematics(omni.kit.test.AsyncTestCase):
         """Set up test environment before each test.
 
         Initializes physics settings, timeline interface, extension manager, and loads policy configurations.
+
+        Raises:
+            AssertionError: If the policy map file does not exist.
         """
         self._physics_fps = 60
         self._physics_dt = 1 / self._physics_fps  # duration of physics frame in seconds
@@ -147,6 +150,9 @@ class TestKinematics(omni.kit.test.AsyncTestCase):
 
         Loads UR10 robot, performs forward kinematics test with specific joint targets,
         and verifies translational distance is less than 0.001 and rotational distance is less than 0.005.
+
+        Raises:
+            AssertionError: If the forward kinematics distance checks fail.
         """
         usd_path = await get_assets_root_path_async()
         usd_path += "/Isaac/Robots/UniversalRobots/ur10/ur10.usd"
@@ -168,6 +174,9 @@ class TestKinematics(omni.kit.test.AsyncTestCase):
 
         Loads Franka Panda robot, performs forward kinematics test with specific base pose and orientation,
         and verifies accuracy excluding known issues with finger frames and frame 0.
+
+        Raises:
+            AssertionError: If the forward kinematics distance checks fail.
         """
         usd_path = await get_assets_root_path_async()
         usd_path += "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
@@ -267,6 +276,9 @@ class TestKinematics(omni.kit.test.AsyncTestCase):
 
         Loads UR10 robot and performs inverse kinematics tests with position-only and
         position-orientation targets to verify solver convergence and accuracy.
+
+        Raises:
+            AssertionError: If the inverse kinematics validation checks fail.
         """
         usd_path = await get_assets_root_path_async()
         usd_path += "/Isaac/Robots/UniversalRobots/ur10/ur10.usd"
@@ -305,6 +317,9 @@ class TestKinematics(omni.kit.test.AsyncTestCase):
 
         Loads Franka Panda robot and performs inverse kinematics tests on different end-effector frames
         with various target poses to verify solver convergence and accuracy.
+
+        Raises:
+            AssertionError: If the inverse kinematics validation checks fail.
         """
         usd_path = await get_assets_root_path_async()
         usd_path += "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
@@ -368,6 +383,9 @@ class TestKinematics(omni.kit.test.AsyncTestCase):
             orientation_tolerance: Tolerance for orientation accuracy.
             base_pose: Base position of the robot in world coordinates.
             base_orient: Base orientation of the robot as a quaternion.
+
+        Raises:
+            AssertionError: If the IK solver fails to converge or the pose accuracy checks fail.
         """
         await create_new_stage_async()
         add_reference_to_stage(usd_path, robot_prim_path)
@@ -428,6 +446,9 @@ class TestKinematics(omni.kit.test.AsyncTestCase):
 
         Verifies that BFGS and CCD algorithm parameters, sampling settings, and tolerance values
         can be correctly assigned and retrieved from the kinematics solver.
+
+        Raises:
+            AssertionError: If any assigned LulaKinematicsSolver inverse kinematics configuration value is not retrieved.
         """
         robot_name = "UR10"
 
@@ -499,6 +520,9 @@ class TestKinematics(omni.kit.test.AsyncTestCase):
         Verifies that tolerance and cspace seed values can be set and retrieved correctly.
         Also validates that configuration limits loaded from Robot Description files match expected values
         for UR10 and Franka robots.
+
+        Raises:
+            AssertionError: If tolerance, cspace seed, or configuration limit values do not match expected values.
         """
         await create_new_stage_async()
 

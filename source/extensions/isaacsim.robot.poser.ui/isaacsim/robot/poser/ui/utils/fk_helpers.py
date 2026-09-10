@@ -23,14 +23,14 @@ ancestor resolution.
 from __future__ import annotations
 
 import carb
+import isaacsim.robot.poser.math as poser_math
 import isaacsim.robot.poser.robot_poser as robot_poser
 import numpy as np
 import omni.usd
-import usd.schema.isaac.robot_schema.math as poser_math
+from isaacsim.robot.poser.kinematic_chain import KinematicChain
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 from usd.schema.isaac.robot_schema import Relations
 from usd.schema.isaac.robot_schema import utils as robot_schema_utils
-from usd.schema.isaac.robot_schema.kinematic_chain import KinematicChain
 
 NAMED_POSES_SCOPE = robot_poser.NAMED_POSES_SCOPE
 

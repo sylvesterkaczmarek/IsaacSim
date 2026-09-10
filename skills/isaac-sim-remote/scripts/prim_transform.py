@@ -80,7 +80,10 @@ elif action == "set":
     pos_vec = _parse_vec(position)
     rot_vec = _parse_vec(orientation)
     scale_vec = _parse_vec(scale)
-    xp = XformPrim(paths=prim_path)
+    # reset_xform_op_properties ensures canonical translate/orient/scale ops exist
+    # (required to set a pose on prims that lack them, e.g. freshly-defined prims).
+    # It preserves the current world pose, so partial updates below stay correct.
+    xp = XformPrim(paths=prim_path, reset_xform_op_properties=True)
 
     if pos_vec is not None or rot_vec is not None:
         cur_poses = xp.get_world_poses()

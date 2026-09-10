@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nvidia.com/isaac/schemas/sysid_result_summary.schema.json",
+  "title": "SysID Result Summary",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "report_schema_version": { "type": "integer" },
+    "backend": { "type": "string" },
+    "schema_issues": { "type": "array", "items": { "type": "object" } },
+    "telemetry_quality": { "type": "object" },
+    "validation_metrics": { "type": "array", "items": { "type": "object" } },
+    "validation_summary": { "type": "object" },
+    "validation_artifacts": { "type": "object" },
+    "resampling_diagnostics": { "type": "array", "items": { "type": "object" } },
+    "tuning_assessment": { "type": "object" },
+    "final_status": { "type": "object" },
+    "selected_status": { "type": "object" }
+  }
+}

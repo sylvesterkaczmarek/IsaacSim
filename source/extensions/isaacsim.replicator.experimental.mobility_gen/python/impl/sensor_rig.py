@@ -23,9 +23,10 @@ import carb
 
 if TYPE_CHECKING:
     from .types import SensorConfig
+from isaacsim.core.experimental.utils.prim import join_prim_paths
 from isaacsim.core.experimental.utils.stage import get_current_stage
 
-from .common import Module, _join_sdf_paths
+from .common import Module
 
 
 def parse_sensor_entries(entries: list[dict[str, Any]]) -> list[SensorConfig]:
@@ -82,7 +83,7 @@ def _attach_sensors(owner: object, configs: list[SensorConfig], robot_root_path:
             carb.log_warn(f"_attach_sensors: unsupported config type {type(cfg).__name__!r}, skipping")
             continue
 
-        cam_path = _join_sdf_paths(robot_root_path, cfg.sensor_prim_path)
+        cam_path = join_prim_paths(robot_root_path, cfg.sensor_prim_path)
         if not stage.GetPrimAtPath(cam_path).IsValid():
             carb.log_error(f"_attach_sensors: prim not found at '{cam_path}' for camera '{cfg.name}', skipping")
             continue

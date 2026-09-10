@@ -66,6 +66,7 @@ def _build_two_link_robot(stage: Usd.Stage) -> None:
     jprim.CreateAttribute(PhysxAttr.JOINT_ARMATURE.name, PhysxAttr.JOINT_ARMATURE.type).Set(0.01)
     jprim.CreateAttribute(PhysxAttr.JOINT_FRICTION.name, PhysxAttr.JOINT_FRICTION.type).Set(0.1)
     jprim.CreateAttribute(PhysxAttr.JOINT_MAX_VELOCITY.name, PhysxAttr.JOINT_MAX_VELOCITY.type).Set(180.0)
+    UsdPhysics.DriveAPI.Apply(jprim, "angular").CreateMaxForceAttr().Set(50.0)
 
 
 @unittest.skipUnless(
@@ -125,6 +126,7 @@ class TestRoundTrip(unittest.TestCase):
             if revolute_joints:
                 limit = revolute_joints[0].find("limit")
                 self.assertIsNotNone(limit, "Revolute joint missing <limit> element")
+                self.assertAlmostEqual(float(limit.get("effort")), 50.0)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.6.2] - 2026-08-28
+### Fixed
+- Proper drives for the ant asset so it stands on its feet for contact report to work
+
+## [1.6.1] - 2026-08-13
+### Changed
+- Update `ant_colored` asset path to `isaacsim/Assets/Ant/ant_colored.usd`.
+
+## [1.6.0] - 2026-08-12
+### Deprecated
+- The `readGravity` input on `IsaacReadIMU`, still honored, as the IMU settles on the specific force a real accelerometer reports.
+
+## [1.5.5] - 2026-07-23
+### Changed
+- Add Newton contact and IMU test coverage using a compatible ant asset.
+
+### Fixed
+- Stabilize contact and IMU tests across PhysX and Newton.
+
+## [1.5.4] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
 ## [1.5.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

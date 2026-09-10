@@ -74,7 +74,7 @@ class TestInterfaceConnectionRule(omni.kit.test.AsyncTestCase):
 
         params = rule.get_configuration_parameters()
 
-        self.assertEqual(len(params), 6)
+        self.assertEqual(len(params), 7)
         param_names = [p.name for p in params]
         self.assertIn("base_layer", param_names)
         self.assertIn("base_connection_type", param_names)
@@ -82,6 +82,7 @@ class TestInterfaceConnectionRule(omni.kit.test.AsyncTestCase):
         self.assertIn("payloads_folder", param_names)
         self.assertIn("connections", param_names)
         self.assertIn("default_variant_selections", param_names)
+        self.assertIn("clear_default_variant_sets", param_names)
         self._success = True
 
     async def test_process_rule_creates_interface_layer(self) -> None:
@@ -520,6 +521,159 @@ class TestInterfaceConnectionRule(omni.kit.test.AsyncTestCase):
                 # Sensor should default to None since not specified
                 if selections.get("Sensor") != "none":
                     errors.append(f"Expected Sensor='none' (default), got '{selections.get('Sensor')}'")
+
+        if errors:
+            self.fail("\n".join(errors))
+
+        self._success = True
+
+    async def test_physics_variant_defaults_to_none_without_clear_config(self) -> None:
+        """Physics is no longer special-cased: without clear_default_variant_sets it defaults to 'none'."""
+        base_usd = os.path.join(self._tmpdir, "payloads", "base.usda")
+        stage = Usd.Stage.Open(base_usd)
+
+        rule = InterfaceConnectionRule(
+            source_stage=stage,
+            package_root=self._tmpdir,
+            destination_path="",
+            args={
+                "input_stage_path": base_usd,
+                "interface_asset_name": "ur10e.usda",
+                "params": {
+                    "base_layer": "payloads/base.usda",
+                    "base_connection_type": CONNECTION_REFERENCE,
+                    "generate_folder_variants": True,
+                    "payloads_folder": "payloads",
+                },
+            },
+        )
+        rule.process_rule()
+
+        interface_path = os.path.join(self._tmpdir, "ur10e.usda")
+        interface_layer = Sdf.Layer.FindOrOpen(interface_path)
+        self.assertIsNotNone(interface_layer, f"Failed to open interface layer: {interface_path}")
+
+        prim_spec = interface_layer.GetPrimAtPath("/ur10e")
+        self.assertIsNotNone(prim_spec, "Default prim /ur10e not found")
+        selections = dict(prim_spec.variantSelections)
+        self.assertEqual(selections.get("Physics"), "none")
+        self.assertEqual(selections.get("Sensor"), "none")
+
+    async def test_clear_default_variant_sets_leaves_selection_empty(self) -> None:
+        """Variant sets listed in clear_default_variant_sets stay unselected."""
+        base_usd = os.path.join(self._tmpdir, "payloads", "base.usda")
+        stage = Usd.Stage.Open(base_usd)
+
+        rule = InterfaceConnectionRule(
+            source_stage=stage,
+            package_root=self._tmpdir,
+            destination_path="",
+            args={
+                "input_stage_path": base_usd,
+                "interface_asset_name": "ur10e.usda",
+                "params": {
+                    "base_layer": "payloads/base.usda",
+                    "base_connection_type": CONNECTION_REFERENCE,
+                    "generate_folder_variants": True,
+                    "payloads_folder": "payloads",
+                    "clear_default_variant_sets": ["Physics"],
+                },
+            },
+        )
+        rule.process_rule()
+
+        interface_path = os.path.join(self._tmpdir, "ur10e.usda")
+        interface_layer = Sdf.Layer.FindOrOpen(interface_path)
+        self.assertIsNotNone(interface_layer, f"Failed to open interface layer: {interface_path}")
+
+        prim_spec = interface_layer.GetPrimAtPath("/ur10e")
+        self.assertIsNotNone(prim_spec, "Default prim /ur10e not found")
+        selections = dict(prim_spec.variantSelections)
+        self.assertNotIn("Physics", selections)
+        # Sets not listed still default to 'none'.
+        self.assertEqual(selections.get("Sensor"), "none")
+
+    async def test_clear_default_variant_sets_overridden_by_explicit_default(self) -> None:
+        """An explicit default_variant_selections entry wins over clear_default_variant_sets."""
+        base_usd = os.path.join(self._tmpdir, "payloads", "base.usda")
+        stage = Usd.Stage.Open(base_usd)
+
+        rule = InterfaceConnectionRule(
+            source_stage=stage,
+            package_root=self._tmpdir,
+            destination_path="",
+            args={
+                "input_stage_path": base_usd,
+                "interface_asset_name": "ur10e.usda",
+                "params": {
+                    "base_layer": "payloads/base.usda",
+                    "base_connection_type": CONNECTION_REFERENCE,
+                    "generate_folder_variants": True,
+                    "payloads_folder": "payloads",
+                    "clear_default_variant_sets": ["Physics"],
+                    "default_variant_selections": {"Physics": "physx"},
+                },
+            },
+        )
+        rule.process_rule()
+
+        interface_path = os.path.join(self._tmpdir, "ur10e.usda")
+        interface_layer = Sdf.Layer.FindOrOpen(interface_path)
+        self.assertIsNotNone(interface_layer, f"Failed to open interface layer: {interface_path}")
+
+        prim_spec = interface_layer.GetPrimAtPath("/ur10e")
+        self.assertIsNotNone(prim_spec, "Default prim /ur10e not found")
+        self.assertEqual(dict(prim_spec.variantSelections).get("Physics"), "physx")
+
+    async def test_default_variant_selection_nonexistent_variant_not_set(self) -> None:
+        """Validate that a requested default variant that does not exist is not selected."""
+        errors = []
+
+        base_usd = os.path.join(self._tmpdir, "payloads", "base.usda")
+        stage = Usd.Stage.Open(base_usd)
+
+        rule = InterfaceConnectionRule(
+            source_stage=stage,
+            package_root=self._tmpdir,
+            destination_path="",
+            args={
+                "input_stage_path": base_usd,
+                "interface_asset_name": "ur10e.usda",
+                "params": {
+                    "base_layer": "payloads/base.usda",
+                    "base_connection_type": CONNECTION_REFERENCE,
+                    "generate_folder_variants": True,
+                    "payloads_folder": "payloads",
+                    "default_variant_selections": {
+                        # This variant does not exist in the Physics variant set
+                        "Physics": "does_not_exist",
+                    },
+                },
+            },
+        )
+
+        rule.process_rule()
+
+        interface_path = os.path.join(self._tmpdir, "ur10e.usda")
+        interface_layer = Sdf.Layer.FindOrOpen(interface_path)
+        if not interface_layer:
+            errors.append(f"Failed to open interface layer: {interface_path}")
+        else:
+            prim_spec = interface_layer.GetPrimAtPath("/ur10e")
+            if not prim_spec:
+                errors.append("Default prim /ur10e not found")
+            else:
+                selections = dict(prim_spec.variantSelections)
+                # The nonexistent variant should not be selected at all
+                if "Physics" in selections:
+                    errors.append(
+                        f"Physics selection should be unset for nonexistent variant, got '{selections.get('Physics')}'"
+                    )
+
+        # The rule should log that the requested variant was not found
+        log = rule.get_operation_log()
+        if not any("does_not_exist" in msg and "not found" in msg for msg in log):
+            errors.append("Log should indicate the requested default variant was not found")
 
         if errors:
             self.fail("\n".join(errors))

@@ -65,58 +65,100 @@ _GOLDEN_BBOX_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "da
 _DEBUG_BBOX_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data", "debug", "bbox")
 
 
-class _BBoxSet:
-    """Class ID to pixel bounding boxes, with CSV I/O and overlay drawing.
+def _semantic_id_to_label(semantic_labels_json: str) -> dict[str, str]:
+    """Map published semantic IDs to their class label.
 
     Args:
-        boxes: Bounding boxes keyed by class ID.
+        semantic_labels_json: JSON payload from a ``semanticLabelsTopicName`` topic.
+
+    Returns:
+        Class label for each semantic ID, both as strings.
+    """
+    mapping: dict[str, str] = {}
+    for semantic_id, entry in json.loads(semantic_labels_json).items():
+        label = entry.get("class") if isinstance(entry, dict) else entry
+        if label:
+            mapping[str(semantic_id)] = str(label)
+    return mapping
+
+
+def _detections_by_label(detections: Any, id_to_label: dict[str, str]) -> dict[str, Any]:
+    """Index detections by class label rather than by their published semantic ID.
+
+    Args:
+        detections: Detections from a ``Detection2DArray`` or ``Detection3DArray`` message.
+        id_to_label: Class label for each semantic ID, from :func:`_semantic_id_to_label`.
+
+    Returns:
+        Detection for each class label.
+
+    Raises:
+        KeyError: If a detection carries a semantic ID that the labels topic did not publish.
+    """
+    by_label: dict[str, Any] = {}
+    for detection in _BBoxSet.sort_detections(detections):
+        if not detection.results:
+            continue
+        semantic_id = str(detection.results[0].hypothesis.class_id)
+        if semantic_id not in id_to_label:
+            raise KeyError(f"semantic id {semantic_id!r} is missing from the published labels {id_to_label!r}")
+        by_label[id_to_label[semantic_id]] = detection
+    return by_label
+
+
+class _BBoxSet:
+    """Semantic label to pixel bounding boxes, with CSV I/O and overlay drawing.
+
+    Boxes are keyed by class label rather than by the published semantic ID, because
+    semantic IDs are assigned per session and are not stable across runs or renderer
+    versions.
+
+    Args:
+        boxes: Bounding boxes keyed by class label.
     """
 
     def __init__(self, boxes: dict[str, tuple[float, float, float, float]]) -> None:
         self._boxes = dict(boxes)
 
     @staticmethod
-    def _sort_key(cid: str) -> tuple:
-        return (0, int(cid)) if cid.isdigit() else (1, cid)
+    def _sort_key(label: str) -> tuple:
+        return (0, int(label)) if label.isdigit() else (1, label)
 
     @staticmethod
     def sort_detections(detections: Any) -> Any:
         return sorted(detections, key=lambda d: str(d.results[0].hypothesis.class_id) if d.results else "999")
 
     @classmethod
-    def from_detections(cls, detections: Any) -> "_BBoxSet":
+    def from_detections(cls, detections: Any, id_to_label: dict[str, str]) -> "_BBoxSet":
         boxes: dict[str, tuple[float, float, float, float]] = {}
-        for d in cls.sort_detections(detections):
-            if not d.results:
-                continue
-            cid = str(d.results[0].hypothesis.class_id)
-            bb = d.bbox
+        for label, detection in _detections_by_label(detections, id_to_label).items():
+            bb = detection.bbox
             cx, cy = float(bb.center.position.x), float(bb.center.position.y)
             sx, sy = float(bb.size_x), float(bb.size_y)
-            boxes[cid] = (cx - 0.5 * sx, cy - 0.5 * sy, cx + 0.5 * sx, cy + 0.5 * sy)
+            boxes[label] = (cx - 0.5 * sx, cy - 0.5 * sy, cx + 0.5 * sx, cy + 0.5 * sy)
         return cls(boxes)
 
     @classmethod
     def from_csv(cls, path: str) -> "_BBoxSet":
         with open(path, newline="") as f:
             rows = list(csv.DictReader(f))
-        return cls({r["class_id"].strip(): tuple(float(r[k]) for k in ("x0", "y0", "x1", "y1")) for r in rows})
+        return cls({r["label"].strip(): tuple(float(r[k]) for k in ("x0", "y0", "x1", "y1")) for r in rows})
 
     def to_csv(self, path: str) -> None:
         with open(path, "w", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(["class_id", "x0", "y0", "x1", "y1"])
-            for cid in self:
-                w.writerow([cid, *self._boxes[cid]])
+            w = csv.writer(f, lineterminator="\n")
+            w.writerow(["label", "x0", "y0", "x1", "y1"])
+            for label in self:
+                w.writerow([label, *self._boxes[label]])
 
     def sorted_xyxy(self) -> list[tuple[float, float, float, float]]:
         return [self._boxes[k] for k in self]
 
-    def class_ids(self) -> set[str]:
+    def labels(self) -> set[str]:
         return set(self._boxes)
 
-    def __getitem__(self, cid: str) -> tuple[float, float, float, float]:
-        return self._boxes[cid]
+    def __getitem__(self, label: str) -> tuple[float, float, float, float]:
+        return self._boxes[label]
 
     def __iter__(self) -> None:
         return iter(sorted(self._boxes, key=self._sort_key))
@@ -162,13 +204,18 @@ class TestROS2BboxPublishing(ROS2TestCase):
         await omni.kit.app.get_app().next_update_async()
 
     async def test_bbox(self) -> Any:
-        """Geometry and semantics for 2D tight/loose and 3D bbox (viewport render product).
+        """Geometry for 2D tight/loose and 3D bbox (explicit render product).
 
-        cube_1 partially occludes cube_2 so 2D tight areas are smaller than 2D loose for class "1".
+        cube_1 partially occludes cube_2, so 2D tight areas are smaller than 2D loose for label "cube1".
 
         Returns:
             None.
         """
+        opened, _ = await stage_utils.open_stage_async(
+            self._assets_root_path + "/Isaac/Environments/Grid/default_environment.usd"
+        )
+        self.assertTrue(opened, "Failed to open grid environment stage")
+
         cube_1 = Cube("/cube_1", positions=[0, -4, 0.5], scales=[1.55, 0.4, 1.0], sizes=1.0)
         cube_2 = Cube("/cube_2", positions=[1.45, -1.9, 0.52], scales=[0.55, 0.55, 0.55], sizes=1.0)
         add_labels(cube_1.prims[0], labels=["Cube0"], taxonomy="class")
@@ -179,9 +226,6 @@ class TestROS2BboxPublishing(ROS2TestCase):
         add_labels(cube_4.prims[0], labels=["Cube3"], taxonomy="class")
         ViewportManager.set_camera_view("/OmniverseKit_Persp", eye=[0, -6, 0.5], target=[0, 0, 0.5])
 
-        viewport_api = omni.kit.viewport.utility.get_active_viewport()
-        render_product_path = viewport_api.get_render_product_path()
-
         try:
             og.Controller.edit(
                 {"graph_path": "/ActionGraph", "evaluator_name": "execution"},
@@ -191,47 +235,42 @@ class TestROS2BboxPublishing(ROS2TestCase):
                         ("Bbox2dTightPublish", "isaacsim.ros2.bridge.ROS2CameraHelper"),
                         ("Bbox2dLoosePublish", "isaacsim.ros2.bridge.ROS2CameraHelper"),
                         ("Bbox3dPublish", "isaacsim.ros2.bridge.ROS2CameraHelper"),
-                        ("InstancePublish", "isaacsim.ros2.bridge.ROS2CameraHelper"),
-                        ("SemanticPublish", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                        ("CreateRenderProduct", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
                     ],
                     og.Controller.Keys.SET_VALUES: [
-                        ("InstancePublish.inputs:renderProductPath", render_product_path),
-                        ("InstancePublish.inputs:topicName", "instance_segmentation"),
-                        ("InstancePublish.inputs:type", "instance_segmentation"),
-                        ("InstancePublish.inputs:resetSimulationTimeOnStop", True),
-                        ("SemanticPublish.inputs:renderProductPath", render_product_path),
-                        ("SemanticPublish.inputs:topicName", "semantic_segmentation"),
-                        ("SemanticPublish.inputs:type", "semantic_segmentation"),
-                        ("SemanticPublish.inputs:resetSimulationTimeOnStop", True),
-                        ("Bbox2dTightPublish.inputs:renderProductPath", render_product_path),
+                        ("CreateRenderProduct.inputs:cameraPrim", [usdrt.Sdf.Path("/OmniverseKit_Persp")]),
+                        ("CreateRenderProduct.inputs:height", 480),
+                        ("CreateRenderProduct.inputs:width", 640),
                         ("Bbox2dTightPublish.inputs:topicName", "bbox_2d_tight"),
                         ("Bbox2dTightPublish.inputs:type", "bbox_2d_tight"),
                         ("Bbox2dTightPublish.inputs:resetSimulationTimeOnStop", True),
-                        ("Bbox2dLoosePublish.inputs:renderProductPath", render_product_path),
+                        ("Bbox2dTightPublish.inputs:enableSemanticLabels", True),
+                        ("Bbox2dTightPublish.inputs:semanticLabelsTopicName", "semantic_labels_tight"),
                         ("Bbox2dLoosePublish.inputs:topicName", "bbox_2d_loose"),
                         ("Bbox2dLoosePublish.inputs:type", "bbox_2d_loose"),
                         ("Bbox2dLoosePublish.inputs:resetSimulationTimeOnStop", True),
-                        ("Bbox3dPublish.inputs:renderProductPath", render_product_path),
+                        ("Bbox2dLoosePublish.inputs:enableSemanticLabels", True),
+                        ("Bbox2dLoosePublish.inputs:semanticLabelsTopicName", "semantic_labels_loose"),
                         ("Bbox3dPublish.inputs:topicName", "bbox_3d"),
                         ("Bbox3dPublish.inputs:type", "bbox_3d"),
                         ("Bbox3dPublish.inputs:resetSimulationTimeOnStop", True),
-                        ("InstancePublish.inputs:enableSemanticLabels", True),
-                        ("InstancePublish.inputs:semanticLabelsTopicName", "semantic_labels_instance"),
-                        ("SemanticPublish.inputs:enableSemanticLabels", True),
-                        ("SemanticPublish.inputs:semanticLabelsTopicName", "semantic_labels_semantic"),
-                        ("Bbox2dTightPublish.inputs:enableSemanticLabels", True),
-                        ("Bbox2dTightPublish.inputs:semanticLabelsTopicName", "semantic_labels_tight"),
-                        ("Bbox2dLoosePublish.inputs:enableSemanticLabels", True),
-                        ("Bbox2dLoosePublish.inputs:semanticLabelsTopicName", "semantic_labels_loose"),
                         ("Bbox3dPublish.inputs:enableSemanticLabels", True),
                         ("Bbox3dPublish.inputs:semanticLabelsTopicName", "semantic_labels_3d"),
                     ],
                     og.Controller.Keys.CONNECT: [
-                        ("OnPlaybackTick.outputs:tick", "InstancePublish.inputs:execIn"),
-                        ("OnPlaybackTick.outputs:tick", "SemanticPublish.inputs:execIn"),
-                        ("OnPlaybackTick.outputs:tick", "Bbox2dTightPublish.inputs:execIn"),
-                        ("OnPlaybackTick.outputs:tick", "Bbox2dLoosePublish.inputs:execIn"),
-                        ("OnPlaybackTick.outputs:tick", "Bbox3dPublish.inputs:execIn"),
+                        ("OnPlaybackTick.outputs:tick", "CreateRenderProduct.inputs:execIn"),
+                        ("CreateRenderProduct.outputs:execOut", "Bbox2dTightPublish.inputs:execIn"),
+                        ("CreateRenderProduct.outputs:execOut", "Bbox2dLoosePublish.inputs:execIn"),
+                        ("CreateRenderProduct.outputs:execOut", "Bbox3dPublish.inputs:execIn"),
+                        (
+                            "CreateRenderProduct.outputs:renderProductPath",
+                            "Bbox2dTightPublish.inputs:renderProductPath",
+                        ),
+                        (
+                            "CreateRenderProduct.outputs:renderProductPath",
+                            "Bbox2dLoosePublish.inputs:renderProductPath",
+                        ),
+                        ("CreateRenderProduct.outputs:renderProductPath", "Bbox3dPublish.inputs:renderProductPath"),
                     ],
                 },
             )
@@ -245,8 +284,6 @@ class TestROS2BboxPublishing(ROS2TestCase):
                 "bbox_2d_tight",
                 "bbox_2d_loose",
                 "bbox_3d",
-                "semantic_data_instance",
-                "semantic_data_semantic",
                 "semantic_data_3d",
                 "semantic_data_tight",
                 "semantic_data_loose",
@@ -259,12 +296,6 @@ class TestROS2BboxPublishing(ROS2TestCase):
         self.create_subscription(node, Detection2DArray, "bbox_2d_tight", lambda d: _set("bbox_2d_tight", d), qos)
         self.create_subscription(node, Detection2DArray, "bbox_2d_loose", lambda d: _set("bbox_2d_loose", d), qos)
         self.create_subscription(node, Detection3DArray, "bbox_3d", lambda d: _set("bbox_3d", d), qos)
-        self.create_subscription(
-            node, String, "semantic_labels_instance", lambda d: _set("semantic_data_instance", d), qos
-        )
-        self.create_subscription(
-            node, String, "semantic_labels_semantic", lambda d: _set("semantic_data_semantic", d), qos
-        )
         self.create_subscription(node, String, "semantic_labels_3d", lambda d: _set("semantic_data_3d", d), qos)
         self.create_subscription(node, String, "semantic_labels_tight", lambda d: _set("semantic_data_tight", d), qos)
         self.create_subscription(node, String, "semantic_labels_loose", lambda d: _set("semantic_data_loose", d), qos)
@@ -277,7 +308,7 @@ class TestROS2BboxPublishing(ROS2TestCase):
         self._timeline.play()
         await omni.kit.app.get_app().next_update_async()
         await self.simulate_until_condition(
-            lambda: all(received[k] is not None for k in received),
+            lambda: all(message is not None for message in received.values()),
             max_frames=600,
             per_frame_callback=spin,
         )
@@ -285,105 +316,65 @@ class TestROS2BboxPublishing(ROS2TestCase):
         bbox_2d_tight = received["bbox_2d_tight"]
         bbox_2d_loose = received["bbox_2d_loose"]
         bbox_3d = received["bbox_3d"]
-        semantic_data_instance = received["semantic_data_instance"]
-        semantic_data_semantic = received["semantic_data_semantic"]
-        semantic_data_3d = received["semantic_data_3d"]
 
         self.assertIsNotNone(bbox_2d_tight)
         self.assertIsNotNone(bbox_2d_loose)
         self.assertIsNotNone(bbox_3d)
 
-        detections = _BBoxSet.sort_detections(bbox_3d.detections)
-        semantic_instance_dict = json.loads(semantic_data_instance.data)
-        semantic_semantic_dict = json.loads(semantic_data_semantic.data)
-        semantic_3d_dict = json.loads(semantic_data_3d.data)
+        # Semantic IDs are assigned per session and are not even consistent between topics, so every
+        # detection is resolved to its class label through the labels topic published alongside it.
+        # cube_3 sits outside the frustum, so it contributes no label.
+        in_frustum_labels = {"cube0", "cube1", "cube3"}
 
-        self.assertEqual(semantic_instance_dict["0"], "BACKGROUND")
-        self.assertEqual(semantic_instance_dict["1"], "UNLABELLED")
+        # Size and center of each labelled cube in world space, keyed by published class label.
+        expected_3d = {
+            "cube0": ((1.55, 0.4, 1.0), (0.0, -4.0, 0.5)),
+            "cube1": ((0.55, 0.55, 0.55), (1.45, -1.9, 0.52)),
+            "cube3": ((1.0, 1.0, 3.0), (2.4, -0.3, 0.5)),
+        }
+        dets_3d = _detections_by_label(bbox_3d.detections, _semantic_id_to_label(received["semantic_data_3d"].data))
+        self.assertEqual(set(dets_3d), in_frustum_labels, msg="3D detections keyed by class label")
+        for label, (size, center) in expected_3d.items():
+            with self.subTest(kind="bbox_3d", label=label):
+                bbox = dets_3d[label].bbox
+                for axis, expected in zip("xyz", size):
+                    self.assertAlmostEqual(float(getattr(bbox.size, axis)), expected, places=5, msg=f"size {axis}")
+                for axis, expected in zip("xyz", center):
+                    self.assertAlmostEqual(
+                        float(getattr(bbox.center.position, axis)), expected, places=5, msg=f"center {axis}"
+                    )
 
-        def _json_has_prim(data: Any, prim_path: str) -> bool:
-            tail = "/" + prim_path.strip("/").split("/")[-1]
+        tight_dets = _detections_by_label(
+            bbox_2d_tight.detections, _semantic_id_to_label(received["semantic_data_tight"].data)
+        )
+        loose_dets = _detections_by_label(
+            bbox_2d_loose.detections, _semantic_id_to_label(received["semantic_data_loose"].data)
+        )
+        self.assertEqual(set(tight_dets), in_frustum_labels, msg="expected three in-frustum class detections (tight)")
+        self.assertEqual(set(loose_dets), in_frustum_labels, msg="expected three in-frustum class detections (loose)")
 
-            def walk(o: Any) -> Any:
-                if isinstance(o, str):
-                    return o.startswith("/") and (o == prim_path or o.endswith(tail))
-                if isinstance(o, dict):
-                    return any(walk(v) for v in o.values())
-                if isinstance(o, list):
-                    return any(walk(v) for v in o)
-                return False
+        def _area(detection: Any) -> float:
+            return float(detection.bbox.size_x) * float(detection.bbox.size_y)
 
-            return walk(data)
-
-        for path in ("/cube_1", "/cube_2", "/cube_4"):
-            self.assertTrue(
-                _json_has_prim(semantic_instance_dict, path),
-                msg=f"instance segmentation JSON missing prim path {path}",
-            )
-
-        self.assertEqual(semantic_semantic_dict["0"]["class"], "BACKGROUND")
-        self.assertEqual(len(semantic_semantic_dict.keys()), 6)
-
-        self.assertEqual(semantic_3d_dict["0"]["class"], "cube0")
-        self.assertEqual(semantic_3d_dict["1"]["class"], "cube1")
-        self.assertEqual(semantic_3d_dict["2"]["class"], "cube3")
-
-        self.assertEqual(len(detections), 3)
-        self.assertEqual(detections[0].results[0].hypothesis.class_id, "0")
-        self.assertEqual(detections[1].results[0].hypothesis.class_id, "1")
-        self.assertEqual(detections[2].results[0].hypothesis.class_id, "2")
-
-        self.assertAlmostEqual(detections[0].bbox.size.x, 1.55, places=5)
-        self.assertAlmostEqual(detections[0].bbox.size.y, 0.4, places=5)
-        self.assertAlmostEqual(detections[0].bbox.size.z, 1.0, places=5)
-        self.assertAlmostEqual(detections[1].bbox.size.x, 0.55, places=5)
-        self.assertAlmostEqual(detections[1].bbox.size.y, 0.55, places=5)
-        self.assertAlmostEqual(detections[1].bbox.size.z, 0.55, places=5)
-        self.assertAlmostEqual(detections[2].bbox.size.x, 1.0, places=5)
-        self.assertAlmostEqual(detections[2].bbox.size.y, 1.0, places=5)
-        self.assertAlmostEqual(detections[2].bbox.size.z, 3.0, places=5)
-
-        self.assertAlmostEqual(detections[0].bbox.center.position.x, 0.0, places=5)
-        self.assertAlmostEqual(detections[0].bbox.center.position.y, -4.0, places=5)
-        self.assertAlmostEqual(detections[0].bbox.center.position.z, 0.5, places=5)
-        self.assertAlmostEqual(detections[1].bbox.center.position.x, 1.45, places=5)
-        self.assertAlmostEqual(detections[1].bbox.center.position.y, -1.9, places=5)
-        self.assertAlmostEqual(detections[1].bbox.center.position.z, 0.52, places=5)
-        self.assertAlmostEqual(detections[2].bbox.center.position.x, 2.4, places=5)
-        self.assertAlmostEqual(detections[2].bbox.center.position.y, -0.3, places=5)
-        self.assertAlmostEqual(detections[2].bbox.center.position.z, 0.5, places=5)
-
-        tight_dets = bbox_2d_tight.detections
-        loose_dets = bbox_2d_loose.detections
-        self.assertEqual(len(tight_dets), 3, msg="expected three in-frustum class detections (tight)")
-        self.assertEqual(len(loose_dets), 3, msg="expected three in-frustum class detections (loose)")
-
-        def _det(dets: Any, cid: Any) -> Any:
-            return next((d for d in dets if d.results and str(d.results[0].hypothesis.class_id) == cid), None)
-
-        for cid in ("0", "1", "2"):
-            with self.subTest(kind="pairing", class_id=cid):
-                t, l = _det(tight_dets, cid), _det(loose_dets, cid)
-                self.assertIsNotNone(t, msg=f"missing tight detection for class_id={cid}")
-                self.assertIsNotNone(l, msg=f"missing loose detection for class_id={cid}")
-                tight_area = float(t.bbox.size_x) * float(t.bbox.size_y)
-                loose_area = float(l.bbox.size_x) * float(l.bbox.size_y)
+        for label in sorted(in_frustum_labels):
+            with self.subTest(kind="pairing", label=label):
                 self.assertLessEqual(
-                    tight_area, loose_area + 1.0, msg=f"class {cid}: tight area should not exceed loose"
+                    _area(tight_dets[label]),
+                    _area(loose_dets[label]) + 1.0,
+                    msg=f"{label}: tight area should not exceed loose",
                 )
-        t1, l1 = _det(tight_dets, "1"), _det(loose_dets, "1")
         self.assertLess(
-            float(t1.bbox.size_x) * float(t1.bbox.size_y),
-            0.92 * float(l1.bbox.size_x) * float(l1.bbox.size_y),
+            _area(tight_dets["cube1"]),
+            0.92 * _area(loose_dets["cube1"]),
             msg="partially occluded cube_2: tight box should be clearly smaller than loose",
         )
-        # Class "0" is unobstructed; tight and loose boxes match.
-        with self.subTest(kind="unoccluded_tight_matches_loose", class_id="0"):
-            t, l = _det(tight_dets, "0"), _det(loose_dets, "0")
-            self.assertAlmostEqual(float(t.bbox.size_x), float(l.bbox.size_x), delta=1.5)
-            self.assertAlmostEqual(float(t.bbox.size_y), float(l.bbox.size_y), delta=1.5)
-            self.assertAlmostEqual(float(t.bbox.center.position.x), float(l.bbox.center.position.x), delta=1.5)
-            self.assertAlmostEqual(float(t.bbox.center.position.y), float(l.bbox.center.position.y), delta=1.5)
+        # cube0 (cube_1) is unobstructed; tight and loose boxes match.
+        with self.subTest(kind="unoccluded_tight_matches_loose", label="cube0"):
+            tight, loose = tight_dets["cube0"].bbox, loose_dets["cube0"].bbox
+            self.assertAlmostEqual(float(tight.size_x), float(loose.size_x), delta=1.5)
+            self.assertAlmostEqual(float(tight.size_y), float(loose.size_y), delta=1.5)
+            self.assertAlmostEqual(float(tight.center.position.x), float(loose.center.position.x), delta=1.5)
+            self.assertAlmostEqual(float(tight.center.position.y), float(loose.center.position.y), delta=1.5)
 
     async def test_empty_semantics(self) -> None:
         """Verifies empty semantic labels don't cause a crash."""
@@ -631,11 +622,13 @@ class TestROS2BboxPublishing(ROS2TestCase):
     def _assert_live_matches_golden(self, *, golden: _BBoxSet, live: _BBoxSet, stem: str, rgb: np.ndarray) -> None:
         if SAVE_GOLDEN_IMAGES:
             _BBoxSet.save_debug_overlay(rgb, golden, live, stem)
-        self.assertEqual(golden.class_ids(), live.class_ids(), msg=f"{stem}: class id mismatch")
-        for cid in golden:
-            with self.subTest(stem=stem, class_id=cid):
-                for axis, (g, lv) in enumerate(zip(golden[cid], live[cid])):
-                    self.assertAlmostEqual(g, lv, delta=_GOLDEN_BBOX_PIXEL_DELTA, msg=f"{stem} cid={cid} axis={axis}")
+        self.assertEqual(golden.labels(), live.labels(), msg=f"{stem}: label mismatch")
+        for label in golden:
+            with self.subTest(stem=stem, label=label):
+                for axis, (g, lv) in enumerate(zip(golden[label], live[label])):
+                    self.assertAlmostEqual(
+                        g, lv, delta=_GOLDEN_BBOX_PIXEL_DELTA, msg=f"{stem} label={label} axis={axis}"
+                    )
 
     async def _assert_2d_tight_boxes_match_golden_csv(
         self,
@@ -647,6 +640,7 @@ class TestROS2BboxPublishing(ROS2TestCase):
         csv_path = os.path.join(_GOLDEN_BBOX_DIR, f"{golden_stem}.csv")
         rgb_topic = f"{golden_stem}_rgb"
         bbox_topic = f"{golden_stem}_bbox"
+        labels_topic = f"{golden_stem}_labels"
         if not UPDATE_GOLDEN_BBOX_CSV:
             self.assertTrue(os.path.isfile(csv_path), f"Missing {csv_path}. Set UPDATE_GOLDEN_BBOX_CSV=True.")
 
@@ -679,6 +673,8 @@ class TestROS2BboxPublishing(ROS2TestCase):
                         ("Bbox2dTightPublish.inputs:topicName", bbox_topic),
                         ("Bbox2dTightPublish.inputs:type", "bbox_2d_tight"),
                         ("Bbox2dTightPublish.inputs:resetSimulationTimeOnStop", True),
+                        ("Bbox2dTightPublish.inputs:enableSemanticLabels", True),
+                        ("Bbox2dTightPublish.inputs:semanticLabelsTopicName", labels_topic),
                     ],
                     og.Controller.Keys.CONNECT: [
                         ("OnPlaybackTick.outputs:tick", "CreateRenderProduct.inputs:execIn"),
@@ -697,19 +693,19 @@ class TestROS2BboxPublishing(ROS2TestCase):
 
         await omni.kit.app.get_app().next_update_async()
 
-        received = {"rgb": None, "bbox": None}
+        received = {"rgb": None, "bbox": None, "labels": None}
         _set = received.__setitem__
         node = self.create_node(f"node_{golden_stem}")
         self.create_subscription(node, RosImage, rgb_topic, lambda d: _set("rgb", d), get_qos_profile())
         self.create_subscription(node, Detection2DArray, bbox_topic, lambda d: _set("bbox", d), get_qos_profile())
+        self.create_subscription(node, String, labels_topic, lambda d: _set("labels", d), get_qos_profile())
 
         def spin() -> None:
             rclpy.spin_once(node, timeout_sec=0.1)
 
         self._timeline.play()
         await self.simulate_until_condition(
-            lambda: received["rgb"] is not None
-            and received["bbox"] is not None
+            lambda: all(v is not None for v in received.values())
             and len(received["bbox"].detections) >= expected_num_detections,
             max_frames=600,
             per_frame_callback=spin,
@@ -725,7 +721,7 @@ class TestROS2BboxPublishing(ROS2TestCase):
             squeeze_singleton_channel=True,
             copy=True,
         )
-        live = _BBoxSet.from_detections(received["bbox"].detections)
+        live = _BBoxSet.from_detections(received["bbox"].detections, _semantic_id_to_label(received["labels"].data))
 
         if UPDATE_GOLDEN_BBOX_CSV:
             os.makedirs(_GOLDEN_BBOX_DIR, exist_ok=True)
@@ -822,6 +818,8 @@ class TestROS2BboxPublishing(ROS2TestCase):
         rgb_topic = "bbox_occlusion_rgb"
         tight_topic = "bbox_occlusion_tight"
         loose_topic = "bbox_occlusion_loose"
+        tight_labels_topic = "bbox_occlusion_tight_labels"
+        loose_labels_topic = "bbox_occlusion_loose_labels"
         try:
             og.Controller.edit(
                 {"graph_path": "/ActionGraph_occlusion_tight_loose", "evaluator_name": "execution"},
@@ -843,9 +841,13 @@ class TestROS2BboxPublishing(ROS2TestCase):
                         ("Bbox2dTightPublish.inputs:topicName", tight_topic),
                         ("Bbox2dTightPublish.inputs:type", "bbox_2d_tight"),
                         ("Bbox2dTightPublish.inputs:resetSimulationTimeOnStop", True),
+                        ("Bbox2dTightPublish.inputs:enableSemanticLabels", True),
+                        ("Bbox2dTightPublish.inputs:semanticLabelsTopicName", tight_labels_topic),
                         ("Bbox2dLoosePublish.inputs:topicName", loose_topic),
                         ("Bbox2dLoosePublish.inputs:type", "bbox_2d_loose"),
                         ("Bbox2dLoosePublish.inputs:resetSimulationTimeOnStop", True),
+                        ("Bbox2dLoosePublish.inputs:enableSemanticLabels", True),
+                        ("Bbox2dLoosePublish.inputs:semanticLabelsTopicName", loose_labels_topic),
                     ],
                     og.Controller.Keys.CONNECT: [
                         ("OnPlaybackTick.outputs:tick", "CreateRenderProduct.inputs:execIn"),
@@ -869,12 +871,14 @@ class TestROS2BboxPublishing(ROS2TestCase):
 
         await omni.kit.app.get_app().next_update_async()
 
-        received = dict.fromkeys(("rgb", "tight", "loose"))
+        received = dict.fromkeys(("rgb", "tight", "loose", "tight_labels", "loose_labels"))
         _set = received.__setitem__
         node = self.create_node("bbox_occlusion_tester")
         self.create_subscription(node, RosImage, rgb_topic, lambda d: _set("rgb", d), get_qos_profile())
         self.create_subscription(node, Detection2DArray, tight_topic, lambda d: _set("tight", d), get_qos_profile())
         self.create_subscription(node, Detection2DArray, loose_topic, lambda d: _set("loose", d), get_qos_profile())
+        self.create_subscription(node, String, tight_labels_topic, lambda d: _set("tight_labels", d), get_qos_profile())
+        self.create_subscription(node, String, loose_labels_topic, lambda d: _set("loose_labels", d), get_qos_profile())
 
         def spin() -> None:
             rclpy.spin_once(node, timeout_sec=0.1)
@@ -899,8 +903,12 @@ class TestROS2BboxPublishing(ROS2TestCase):
             squeeze_singleton_channel=True,
             copy=True,
         )
-        tight_live = _BBoxSet.from_detections(received["tight"].detections)
-        loose_live = _BBoxSet.from_detections(received["loose"].detections)
+        tight_live = _BBoxSet.from_detections(
+            received["tight"].detections, _semantic_id_to_label(received["tight_labels"].data)
+        )
+        loose_live = _BBoxSet.from_detections(
+            received["loose"].detections, _semantic_id_to_label(received["loose_labels"].data)
+        )
         self.assertFalse(
             np.array_equal(tight_live.overlay(rgb_array), loose_live.overlay(rgb_array)),
             "occlusion scene: tight and loose overlays must differ so both goldens are meaningful",

@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Topic-to-signal mapping schema for ROS 2 bag and MCAP ingestion (SRD REQ-4).
+#
+# Reference this file when authoring a topic map for System Identification telemetry.
+# Save your map as JSON or YAML and point the SysID UI "Mapping config" field at it.
+
+# Optional topic providing timestamps (seconds). When omitted, message log time is used.
+time_topic: null
+time_field: timestamp
+
+# Joint positions (required). Typically sensor_msgs/msg/JointState.position
+position_topic: /joint_states
+position_fields:
+  - position
+
+# Joint velocities (optional). Derived from positions when omitted.
+velocity_topic: /joint_states
+velocity_fields:
+  - velocity
+
+# Command / reference positions (optional). Defaults to measured positions.
+command_topic: /joint_commands
+command_fields:
+  - position
+
+# Joint torques/efforts (optional). Typically sensor_msgs/msg/JointState.effort.
+torque_topic: /joint_states
+torque_fields:
+  - effort
+
+# What the effort channel measures (required when torque telemetry is used):
+# - link_side: transmitted joint torque tau_J = M(q)*qdd + C(q,qd)*qd + g(q). This is the
+#   JointState.effort convention on gravity-compensated robots (e.g. Franka), where the
+#   recorded effort includes the controller's internal gravity feedforward. The analytical
+#   presolve regresses gravity-inclusive inverse dynamics (plus friction) against it.
+# - external: estimated external torque (e.g. Franka tau_ext_hat_filtered). Carries no
+#   parameter information in a contact-free run, so the presolve ignores the channel.
+torque_semantics: link_side
+
+# End-effector pose (optional). Use one composite pose field or separate position/orientation fields.
+end_effector_pose_topic: /ee_pose
+end_effector_pose_fields:
+  - pose
+
+# Contact force (optional). Supports force, wrench.force, or contact_force fields.
+contact_force_topic: /contact_force
+contact_force_fields:
+  - wrench.force
+
+# Optional explicit joint order. When set, signals are reordered to match telemetry DOFs.
+joint_names:
+  - joint_1
+  - joint_2

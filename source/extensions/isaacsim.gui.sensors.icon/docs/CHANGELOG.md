@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.2.4] - 2026-08-25
+### Fixed
+- `add_sensor_icon` now applies a custom `icon_url` to auto-discovered sensors and preserves it after viewport refreshes; calls without `icon_url` leave the current icon unchanged.
+
+## [2.2.3] - 2026-08-11
+### Fixed
+- Read the icon label setting from the documented `exts/omni.kit.prim.sensor/showTitle` path instead of the legacy `omni.kit.prim.icon` path.
+
+## [2.2.2] - 2026-07-16
+### Fixed
+- Avoid global USDRT sensor-type queries on every frame; refresh cached sensor paths only after structural USD changes.
+
 ## [2.2.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

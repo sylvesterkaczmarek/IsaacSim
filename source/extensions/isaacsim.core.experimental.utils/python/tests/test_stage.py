@@ -54,6 +54,7 @@ class TestStage(omni.kit.test.AsyncTestCase):
         stage_in_memory = Usd.Stage.CreateInMemory()
         default_stage = omni.usd.get_context().get_stage()
         default_stage_id = UsdUtils.StageCache.Get().GetId(default_stage).ToLongInt()
+        self.assertIsNotNone(omni.usd.get_context().get_stage())
         self.assertIs(stage_utils.get_current_stage(), default_stage)
         self.assertFalse(stage_utils.is_stage_set())
         self.assertEqual(stage_utils.get_stage_id(default_stage), default_stage_id)
@@ -120,14 +121,14 @@ class TestStage(omni.kit.test.AsyncTestCase):
         # test cases
         # - sync
         result, stage = stage_utils.open_stage(
-            usd_path=assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+            usd_path=assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
         )
         self.assertTrue(result, "Failed to open stage")
         self.assertTrue(stage.GetPrimAtPath("/panda/panda_hand").IsValid())
         # - async
         await stage_utils.create_new_stage_async()
         result, stage = await stage_utils.open_stage_async(
-            usd_path=assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+            usd_path=assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
         )
         self.assertTrue(result, "Failed to open stage")
         self.assertTrue(stage.GetPrimAtPath("/panda/panda_hand").IsValid())
@@ -137,10 +138,11 @@ class TestStage(omni.kit.test.AsyncTestCase):
         assets_root_path = await get_assets_root_path_async(skip_check=True)
         # create and populate stage
         await stage_utils.create_new_stage_async()
+        self.assertIsNotNone(omni.usd.get_context().get_stage())
         stage_utils.add_reference_to_stage(
-            usd_path=assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+            usd_path=assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
             path="/World/panda",
-            variants=[("Gripper", "AlternateFinger"), ("Mesh", "Performance")],
+            variants=[("Gripper", "alternatefinger"), ("Mesh", "performance")],
         )
         # save and close stage, then open it again
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_dir:
@@ -150,10 +152,16 @@ class TestStage(omni.kit.test.AsyncTestCase):
             self.assertTrue(os.path.exists(tmp_file) and os.path.isfile(tmp_file))
             # - close stage
             self.assertTrue(stage_utils.close_stage())
+            self.assertFalse(stage_utils.is_stage_set() or omni.usd.get_context().get_stage() is not None)
             self.assertRaises(ValueError, stage_utils.get_current_stage)
+            stage_in_memory = Usd.Stage.CreateInMemory()
+            with stage_utils.use_stage(stage_in_memory):
+                self.assertTrue(stage_utils.is_stage_set())
+            self.assertFalse(stage_utils.is_stage_set() or omni.usd.get_context().get_stage() is not None)
             # - open stage
             result, stage = stage_utils.open_stage(usd_path=tmp_file)
             self.assertTrue(result)
+            self.assertIsNotNone(omni.usd.get_context().get_stage())
             self.assertTrue(stage.GetPrimAtPath("/World/panda/panda_hand").IsValid())
 
     async def test_add_reference_to_stage(self) -> None:
@@ -162,14 +170,14 @@ class TestStage(omni.kit.test.AsyncTestCase):
         # create and populate stage
         await stage_utils.create_new_stage_async()
         prim = stage_utils.add_reference_to_stage(
-            usd_path=assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+            usd_path=assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
             path="/World/panda",
-            variants=[("Gripper", "AlternateFinger"), ("Mesh", "Performance")],
+            variants=[("Gripper", "alternatefinger"), ("Mesh", "performance")],
         )
         self.assertIsInstance(prim, Usd.Prim)
         self.assertEqual(prim.GetPath(), "/World/panda")
-        self.assertEqual(prim.GetVariantSet("Gripper").GetVariantSelection(), "AlternateFinger")
-        self.assertEqual(prim.GetVariantSet("Mesh").GetVariantSelection(), "Performance")
+        self.assertEqual(prim.GetVariantSet("Gripper").GetVariantSelection(), "alternatefinger")
+        self.assertEqual(prim.GetVariantSet("Mesh").GetVariantSelection(), "performance")
 
     async def test_define_prim(self) -> None:
         """Test define prim."""
@@ -221,9 +229,9 @@ class TestStage(omni.kit.test.AsyncTestCase):
         await stage_utils.create_new_stage_async()
         prim = stage_utils.define_prim("/World/A", "Xform")
         stage_utils.add_reference_to_stage(
-            usd_path=assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+            usd_path=assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
             path="/World/panda",
-            variants=[("Gripper", "AlternateFinger"), ("Mesh", "Performance")],
+            variants=[("Gripper", "alternatefinger"), ("Mesh", "performance")],
         )
         # test cases
         self.assertTrue(stage_utils.delete_prim(prim))

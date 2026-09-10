@@ -1,0 +1,103 @@
+Package: Pint
+Version: 0.25.2
+Ecosystem: pypi
+License: BSD-2-Clause
+Homepage: https://github.com/hgrecco/pint
+
+--- Installed file: pint-0.25.2.dist-info/licenses/AUTHORS ---
+
+Pint was originally written by Hernan E. Grecco <hernan.grecco@gmail.com>.
+
+and is currently maintained, listed alphabetically, by:
+
+* Jules Chéron <me@julescheron.com>
+* Hernan E. Grecco <hernan.grecco@gmail.com>.
+
+Other contributors, listed alphabetically, are:
+
+* Aaron Coleman
+* Alexander Böhn <fish2000@gmail.com>
+* Ana Krivokapic <akrivokapic1@gmail.com>
+* Andrea Zonca <code@andreazonca.com>
+* Andrew Savage <andrewgsavage@gmail.com>
+* Brend Wanders <b.wanders@utwente.nl>
+* choloepus
+* coutinho <coutinho@esrf.fr>
+* Clément Pit-Claudel <clement.pitclaudel@live.com>
+* Daniel Sokolowski <daniel.sokolowski@danols.com>
+* Dave Brooks <dave@bcs.co.nz>
+* David Linke
+* Ed Schofield <ed@pythoncharmers.com>
+* Eduard Bopp <eduard.bopp@aepsil0n.de>
+* Eli <elifab@gmail.com>
+* Felix Hummel <felix@felixhummel.de>
+* Francisco Couzo <franciscouzo@gmail.com>
+* Giel van Schijndel <me@mortis.eu>
+* Guido Imperiale <crusaderky@gmail.com>
+* Ignacio Fdez. Galván <jellby@yahoo.com>
+* James Rowe <jnrowe@gmail.com>
+* Jim Turner <jturner314@gmail.com>
+* Joel B. Mohler <joel@kiwistrawberry.us>
+* John David Reaver <jdreaver@adlerhorst.com>
+* Jonas Olson <jolson@kth.se>
+* Jules Chéron <me@julescheron.com>
+* Kaido Kert <kaidokert@gmail.com>
+* Kenneth D. Mankoff <mankoff@gmail.com>
+* Kevin Davies <kdavies4@gmail.com>
+* Luke Campbell <luke.s.campbell@gmail.com>
+* Matthieu Dartiailh <marul@laposte.net>
+* Nate Bogdanowicz <natezb@gmail.com>
+* Peter Grayson <jpgrayson@gmail.com>
+* Richard Barnes <rbarnes@umn.edu>
+* Robert Booth <rob@ishigoya.com>
+* Ryan Dwyer <ryanpdwyer@gmail.com>
+* Ryan Kingsbury <RyanSKingsbury@alumni.unc.edu>
+* Ryan May
+* Sebastian Kosmeier
+* Sigvald Marholm <sigvald@marebakken.com>
+* Sundar Raman <cybertoast@gmail.com>
+* Tiago Coutinho <coutinho@esrf.fr>
+* Thomas Kluyver <takowl@gmail.com>
+* Tom Nicholas <tomnicholas1@gmail.com>
+* Tom Ritchford <tom@swirly.com>
+* Virgil Dupras <virgil.dupras@savoirfairelinux.com>
+* Zebedee Nicholls <zebedee.nicholls@climate-energy-college.org>
+
+(If you think that your name belongs here, please let the maintainer know)
+
+
+--- Installed file: pint-0.25.2.dist-info/licenses/LICENSE ---
+
+Copyright (c) 2012 by Hernan E. Grecco and contributors.  See AUTHORS
+for more details.
+
+Some rights reserved.
+
+Redistribution and use in source and binary forms of the software as well
+as documentation, with or without modification, are permitted provided
+that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above
+  copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided
+  with the distribution.
+
+* The names of the contributors may not be used to endorse or
+  promote products derived from this software without specific
+  prior written permission.
+
+THIS SOFTWARE AND DOCUMENTATION IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT
+NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE AND DOCUMENTATION, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGE.

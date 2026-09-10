@@ -1,0 +1,18 @@
+{
+  "name": "@ISAACSIM_MANIFEST_NAME@",
+  "version": "@ISAACSIM_MANIFEST_VERSION@",
+  "version_scheme": "pep440",
+  "complete": true,
+  "dependencies": {@ISAACSIM_MANIFEST_DEPENDENCIES@
+  },
+  "modules": [@ISAACSIM_MANIFEST_MODULES@
+  ],
+  "python_imports": [@ISAACSIM_MANIFEST_PYTHON_IMPORTS@
+  ],
+  "components": {
+    "runtime": "@ISAACSIM_MANIFEST_RUNTIME_COMPONENT@",
+    "development": "@ISAACSIM_MANIFEST_DEVELOPMENT_COMPONENT@",
+    "python": "@ISAACSIM_MANIFEST_PYTHON_COMPONENT@",
+    "documentation": "@ISAACSIM_MANIFEST_DOCUMENTATION_COMPONENT@"
+  }
+}

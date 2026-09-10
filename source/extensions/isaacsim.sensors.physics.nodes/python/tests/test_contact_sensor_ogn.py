@@ -28,7 +28,6 @@ from isaacsim.core.experimental.objects import Cube, GroundPlane
 from isaacsim.core.experimental.prims import GeomPrim, RigidPrim
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.sensors.experimental.physics import Contact
-from pxr import PhysxSchema
 
 from .common import setup_ant_scene, step_simulation
 
@@ -57,16 +56,17 @@ class TestContactSensorOgn(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
 
     async def setup_environment(self) -> None:
-        """Create a falling cube with collision, mass, contact report API, and contact sensor."""
+        """Create a resting cube with collision, mass, and contact sensor."""
         GroundPlane("/World/GroundPlane", positions=[0.0, 0.0, 0.0])
-        Cube("/World/Cube", sizes=1.0, positions=[0.0, 0.0, 1.0])
+        # Center at z=0.5 so a size-1 cube rests on the ground under PhysX and Newton.
+        Cube("/World/Cube", sizes=1.0, positions=[0.0, 0.0, 0.5])
         GeomPrim("/World/Cube", apply_collision_apis=True)
         RigidPrim("/World/Cube", masses=[1.0])
-        contact_report_api = PhysxSchema.PhysxContactReportAPI.Apply(prim_utils.get_prim_at_path("/World/Cube"))
-        contact_report_api.CreateThresholdAttr().Set(0)
         Contact.create(
             "/World/Cube/contact_sensor",
+            min_threshold=0,
             max_threshold=10000000,
+            radius=-1,
         )
 
     async def setup_ogn(self) -> None:
@@ -119,7 +119,7 @@ class TestContactSensorOgn(omni.kit.test.AsyncTestCase):
         """Outputs recover valid data after a stop/play cycle."""
         self._timeline.play()
         await omni.kit.app.get_app().next_update_async()
-        await step_simulation(1.0)
+        await step_simulation(2.0)
 
         force_value = og.Controller.attribute(self.graph_path + "/ReadContactNode.outputs:value").get()
         self.assertNotEqual(force_value, 0.0, "Should have non-zero force before stop")
@@ -129,7 +129,7 @@ class TestContactSensorOgn(omni.kit.test.AsyncTestCase):
 
         self._timeline.play()
         await omni.kit.app.get_app().next_update_async()
-        await step_simulation(1.0)
+        await step_simulation(2.0)
 
         force_after = og.Controller.attribute(self.graph_path + "/ReadContactNode.outputs:value").get()
         self.assertNotEqual(force_after, 0.0, "Should recover valid force after stop/play")
@@ -286,7 +286,7 @@ class TestContactSensorOgnWithAnt(omni.kit.test.AsyncTestCase):
 
         self._timeline.play()
 
-        await step_simulation(1.0)
+        await step_simulation(3.0)
 
         for i in range(10):
             await omni.kit.app.get_app().next_update_async()

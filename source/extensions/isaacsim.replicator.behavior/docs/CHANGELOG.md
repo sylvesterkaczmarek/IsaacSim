@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.6.2] - 2026-08-20
+### Fixed
+- Clamp `VolumeStackRandomizer` drop area to the surface center when an asset is larger than the target prim.
+
+## [1.6.1] - 2026-08-19
+### Fixed
+- Swap inverted min/max range bounds in the location, rotation, light, and texture randomizers.
+- Guard asset-root resolution in `TextureRandomizer` and `VolumeStackRandomizer` so relative CSV paths skip instead of crashing offline.
+- Guard `TextureRandomizer` material teardown when the USD stage is already closed.
+- Recreate the randomizer RNG when the USD seed changes on play, resume, or setup.
+- Skip `LightRandomizer` writes on prims that no longer have `UsdLux.LightAPI`.
+
+## [1.6.0] - 2026-07-11
+### Changed
+- Migrated behavior scripts toward Replicator functional transforms, attributes, and rigid-body configuration plus `isaacsim.core.experimental` prim, material, object, stage, transform, bounds, and physics APIs.
+- Reduced `scene_utils.py` to PhysX simulation helpers that have no equivalent compatible with the behavior's manual simulation loop.
+
+### Added
+- Added regression coverage for functional transform restoration, texture material wrapper updates, and volume stack collision/rigid body state toggles.
+
+### Fixed
+- Skip cached prim handles invalidated when another behavior rebuilds a managed subtree, and avoid stateful tensor wrappers when toggling temporary rigid bodies.
+- Account for asset transform scale when calculating volume-stack drop margins.
+
+## [1.5.6] - 2026-06-26
+### Changed
+- Expose the documented behavior classes and behavior script helpers from the package root.
+
+## [1.5.5] - 2026-06-26
+### Changed
+- Replace package-root star imports with explicit lifecycle imports.
+
 ## [1.5.4] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

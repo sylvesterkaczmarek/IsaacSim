@@ -15,7 +15,7 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/sensors/physx/IPhysxSensorInterface.h>
+#include <isaacsim/sensors/physx/IPhysxSensorInterface.hpp>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 

@@ -1,5 +1,5 @@
 [package]
-version = "1.8.1"
+version = "1.9.1"
 category = "Simulation"
 title = "Isaac Sim Asset Importer Utils"
 description = "Shared utility functions for asset importers."
@@ -14,8 +14,12 @@ writeTarget.kit = true
 "isaacsim.asset.transformer" = {}
 "isaacsim.robot.schema" = {}
 "omni.scene.optimizer.core" = {}
+"omni.usd.schema.mujoco" = {}
 "omni.usd.schema.newton" = {}
 "omni.usd.schema.physx" = {}
+
+[[python.module]]
+path = "pip_prebundle"
 
 [[python.module]]
 name = "isaacsim.asset.importer.utils"
@@ -28,6 +32,7 @@ timeout = 900
 dependencies = [
     "omni.hydra.usdrt_delegate",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

@@ -20,7 +20,7 @@ The {class}`RobotPoser <isaacsim.robot.poser.RobotPoser>` class serves as the pr
 poser = RobotPoser(stage, robot_prim, start_prim, end_prim)
 
 # Solve IK for a target transform
-target_transform = Transform(position=[0.5, 0.2, 0.8], orientation=[1, 0, 0, 0])
+target_transform = Transform(t=[0.5, 0.2, 0.8], q=[1, 0, 0, 0])
 result = poser.solve_ik(target_transform)
 
 # Apply the solution to the robot
@@ -35,6 +35,15 @@ When {meth}`solve_ik <isaacsim.robot.poser.RobotPoser.solve_ik>` is called witho
 ### {class}`PoseResult <isaacsim.robot.poser.PoseResult>`
 
 {class}`PoseResult <isaacsim.robot.poser.PoseResult>` encapsulates the outcome of IK solving or named pose queries. It contains joint values, success status, kinematic chain information, and target pose details. This data structure serves as the standard format for pose information exchange throughout the system.
+
+### Kinematics and IK solvers
+
+The extension owns the complete pose-authoring kinematics stack:
+
+- {class}`KinematicChain <isaacsim.robot.poser.KinematicChain>` builds chains from robot USD data and provides FK, Jacobian, joint-state, and teleport operations.
+- {class}`Transform <isaacsim.robot.poser.Transform>` and {class}`Joint <isaacsim.robot.poser.Joint>` provide the math primitives used by the chain.
+- {class}`IKSolver <isaacsim.robot.poser.IKSolver>` and {class}`IKSolverRegistry <isaacsim.robot.poser.IKSolverRegistry>` provide the pluggable solver API.
+- {class}`IKSolverLM <isaacsim.robot.poser.IKSolverLM>` is the bundled Levenberg-Marquardt solver.
 
 ### Joint State Management
 
@@ -64,7 +73,7 @@ export_poses(stage, robot_prim, "/path/to/poses.json")
 
 ### IK Solving
 
-The extension integrates with the robot schema's IK solver system to provide configurable inverse kinematics solving. It supports solution seeding, convergence tolerance adjustment, and joint locking through solver parameters.
+The extension provides configurable inverse kinematics solving with solution seeding, convergence tolerance adjustment, and joint locking through solver parameters.
 
 ### Robot Validation
 
@@ -72,4 +81,4 @@ The extension integrates with the robot schema's IK solver system to provide con
 
 ## Integration
 
-The extension uses **omni.kit.menu.utils** to integrate pose management capabilities into the Kit interface, enabling users to access robot posing functionality through standard menu systems. It builds upon isaacsim.robot.schema for kinematic chain management and forward kinematics operations.
+The extension uses **omni.kit.menu.utils** to integrate pose management capabilities into the Kit interface. It consumes robot structure, named-pose definitions, and relationships from isaacsim.robot.schema.

@@ -62,7 +62,11 @@ class TestMergeMesh(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
 
     async def test_startup(self) -> None:
-        """Test that the Mesh Merge Tool window loads without errors."""
+        """Test that the Mesh Merge Tool window loads without errors.
+
+        Raises:
+            AssertionError: If the Mesh Merge Tool window is not available.
+        """
         window = omni.ui.Workspace.get_window("Mesh Merge Tool")
         self.assertIsNotNone(window)
         window.visible = True
@@ -71,7 +75,11 @@ class TestMergeMesh(omni.kit.test.AsyncTestCase):
         window.visible = False
 
     async def test_basic_merge(self) -> None:
-        """Test basic mesh merge functionality without any additional options."""
+        """Test basic mesh merge functionality without any additional options.
+
+        Raises:
+            AssertionError: If the merged prim is invalid or does not contain three children.
+        """
         mesh_merger = MeshMerger(self._stage)
         mesh_merger.clear_parent_xform = False
         mesh_merger.deactivate_source = False
@@ -88,7 +96,11 @@ class TestMergeMesh(omni.kit.test.AsyncTestCase):
         self.assertEqual(len(merged.GetChildren()), 3)
 
     async def test_material_combine_merge(self) -> None:
-        """Test mesh merge with material combining enabled."""
+        """Test mesh merge with material combining enabled.
+
+        Raises:
+            AssertionError: If the merged prim is invalid, child count is incorrect, or material destination is incorrect.
+        """
         mesh_merger = MeshMerger(self._stage)
         mesh_merger.clear_parent_xform = False
         mesh_merger.deactivate_source = False
@@ -108,7 +120,11 @@ class TestMergeMesh(omni.kit.test.AsyncTestCase):
         self.assertEqual(len(newLooks.GetChildren()), 3)
 
     async def test_deactivate_source(self) -> None:
-        """Test that source prims are deactivated after merge when the option is enabled."""
+        """Test that source prims are deactivated after merge when the option is enabled.
+
+        Raises:
+            AssertionError: If the merged prim is invalid, child count is incorrect, or any source prim remains active.
+        """
         mesh_merger = MeshMerger(self._stage)
         mesh_merger.clear_parent_xform = False
         mesh_merger.deactivate_source = True
@@ -129,7 +145,11 @@ class TestMergeMesh(omni.kit.test.AsyncTestCase):
             self.assertFalse(prim.IsActive())
 
     async def test_clear_parent_xform(self) -> None:
-        """Test mesh merge with parent transform clearing enabled."""
+        """Test mesh merge with parent transform clearing enabled.
+
+        Raises:
+            AssertionError: If the merged prim is invalid.
+        """
         mesh_merger = MeshMerger(self._stage)
         mesh_merger.clear_parent_xform = True
         mesh_merger.deactivate_source = True
@@ -144,7 +164,11 @@ class TestMergeMesh(omni.kit.test.AsyncTestCase):
         self.assertTrue(merged.IsValid())
 
     async def test_merge_command(self) -> None:
-        """Test the MergeMeshesCommand with all options enabled."""
+        """Test the MergeMeshesCommand with all options enabled.
+
+        Raises:
+            AssertionError: If the merged prim from MergeMeshesCommand is invalid.
+        """
         result, prim = omni.kit.commands.execute(
             "MergeMeshesCommand",
             source=self.cubes_list,

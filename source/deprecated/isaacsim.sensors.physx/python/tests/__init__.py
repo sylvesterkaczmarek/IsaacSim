@@ -13,4 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Configures test module discovery for isaacsim.sensors.physx.tests."""
+
 scan_for_test_modules = True

@@ -25,8 +25,9 @@ import omni.kit.commands
 import omni.timeline
 import omni.ui as ui
 import omni.usd
-from isaacsim.gui.components.element_wrappers import CollapsableFrame, ScrollingWindow, TextBlock
-from isaacsim.gui.components.ui_utils import btn_builder, get_style, setup_ui_headers, str_builder
+from isaacsim.gui.components import CollapsableFrame, TextBlock, btn_builder, setup_ui_headers, str_builder
+from isaacsim.gui.components.element_wrappers import ScrollingWindow
+from isaacsim.gui.components.ui_utils import get_style
 from omni.kit.menu.utils import MenuItemDescription, add_menu_items, refresh_menu_items, remove_menu_items
 
 from .template_generator import TemplateGenerator
@@ -102,6 +103,11 @@ class Extension(omni.ext.IExt):
         gc.collect()
 
     def _is_visible(self) -> bool:
+        """Check whether the extension window is visible.
+
+        Returns:
+            True if the extension window exists and is visible.
+        """
         return self._window.visible if self._window else False
 
     def _on_window(self, visible: bool) -> None:

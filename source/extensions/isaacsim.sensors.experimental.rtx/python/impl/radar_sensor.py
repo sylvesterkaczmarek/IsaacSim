@@ -20,11 +20,11 @@ This module provides the RadarSensor class for operating single RTX-based radar 
 
 from __future__ import annotations
 
-from ._sensor_base import _SensorRuntime
+from ._sensor_base import SensorRuntime
 from .radar import Radar
 
 
-class RadarSensor(_SensorRuntime):
+class RadarSensor(SensorRuntime):
     """Runtime class for operating a single RTX-based radar sensor.
 
     Wraps a :class:`Radar` authoring object, attaches Replicator annotators,

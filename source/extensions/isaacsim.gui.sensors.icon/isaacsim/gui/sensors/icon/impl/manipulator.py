@@ -26,7 +26,7 @@ import omni.kit.viewport.utility as vpUtil
 from omni.ui import scene as sc
 from pxr import Gf, Sdf
 
-SHOW_TITLE_PATH = "exts/omni.kit.prim.icon/showTitle"
+SHOW_TITLE_PATH = "exts/omni.kit.prim.sensor/showTitle"
 
 
 class PreventOthers(sc.GestureManager):
@@ -218,6 +218,10 @@ class IconManipulator(sc.Manipulator):
                 # Update visibility and position
                 if self._icons[prim_path]:
                     self._icons[prim_path].visible = item.visible
+                # Built once, so a later url change must be pushed onto the widget.
+                image = self._icons_images.get(prim_path)
+                if image and item.icon_url and image.source_url != item.icon_url:
+                    image.source_url = item.icon_url
                 self.update_icon_position(prim_path)
         elif not item.removed:
             # Item is new and not marked for removal, build it

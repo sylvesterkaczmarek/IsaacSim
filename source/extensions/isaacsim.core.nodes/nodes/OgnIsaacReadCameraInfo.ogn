@@ -1,6 +1,6 @@
 {
     "IsaacReadCameraInfo": {
-        "version": 2,
+        "version": 3,
         "icon": "icons/isaac-sim.svg",
         "description": "Isaac Sim node that reads camera info for a viewport",
         "categoryDefinitions": "config/CategoryDefinition.json",
@@ -58,6 +58,11 @@
             "physicalDistortionCoefficients": {
                 "type": "float[]",
                 "description": "physical distortion model used for approximation, empty if not specified on camera prim"
+            },
+            "cameraIntrinsics": {
+                "type": "matrixd[3]",
+                "description": "3x3 camera intrinsics matrix [fx, 0, cx; 0, fy, cy; 0, 0, 1]. Identity if the horizontal aperture is non-positive.",
+                "uiName": "Camera Intrinsics Matrix"
             }
         },
         "tests": [

@@ -26,7 +26,7 @@ import isaacsim.robot.poser.robot_poser as robot_poser
 import omni.timeline
 import omni.ui as ui
 import omni.usd
-from isaacsim.gui.components.element_wrappers import CollapsableFrame, DropDown
+from isaacsim.gui.components import CollapsableFrame, DropDown
 from pxr import Sdf, Tf, Usd
 from usd.schema.isaac import robot_schema
 
@@ -102,7 +102,7 @@ class UIBuilder:
     def on_menu_callback(self) -> None:
         """Refresh dropdown and named poses when window is toggled from menu."""
         self._refresh_articulation_dropdown()
-        self._refresh_named_poses()
+        self._schedule_named_poses_refresh()
 
     def on_timeline_event(self, event: Any) -> None:
         """Refresh articulation dropdown when timeline play state changes.
@@ -123,7 +123,7 @@ class UIBuilder:
         """Refresh dropdown and named poses when simulation stops."""
         if self._timeline.is_stopped():
             self._refresh_articulation_dropdown()
-            self._refresh_named_poses()
+            self._schedule_named_poses_refresh()
 
     def on_update(self, dt: float) -> None:
         """Per-frame update: solve IK for dirty tracked poses.
@@ -345,7 +345,7 @@ class UIBuilder:
             self._tracking_cache = {}
             self._unregister_usd_listener()
             self._release_update_subscription()
-            self._refresh_named_poses()
+            self._schedule_named_poses_refresh()
             return
 
         stage = omni.usd.get_context().get_stage()
@@ -368,7 +368,7 @@ class UIBuilder:
         self._unregister_usd_listener()
         self._release_update_subscription()
         self._refresh_site_candidates()
-        self._refresh_named_poses()
+        self._schedule_named_poses_refresh()
         self._register_usd_listener()
 
     def _refresh_site_candidates(self) -> None:
@@ -788,7 +788,7 @@ class UIBuilder:
             name = f"pose_{i}"
 
         robot_poser.store_named_pose(stage, self._robot_prim, name, result)
-        self._refresh_named_poses()
+        self._schedule_named_poses_refresh()
 
     def _on_remove_named_pose(self, item: NamedPoseItem) -> None:
         """Delete the named pose from USD and refresh the table.
@@ -807,7 +807,7 @@ class UIBuilder:
         robot_poser.delete_named_pose(stage, self._robot_prim, pose_name)
         self._tracking_cache.pop(item.prim_path, None)
         self._poser_cache.pop(item.prim_path, None)
-        self._refresh_named_poses()
+        self._schedule_named_poses_refresh()
 
     def _on_named_pose_name_changed(self, item: NamedPoseItem, old_name: str, new_name: str) -> None:
         """Rename the USD prim when the table name is edited.
@@ -925,7 +925,13 @@ class UIBuilder:
             self._apply_named_pose_joints(item)
 
     def _schedule_named_poses_refresh(self) -> None:
-        """Defer a named-poses table refresh to the next frame."""
+        """Defer a named-poses table refresh to the next frame.
+
+        Rebuilding the table tears down its rows, which omni.ui does not allow
+        while an event or draw is in progress, so every caller reached from a
+        widget callback goes through here. Repeated requests within one frame
+        collapse into a single refresh.
+        """
         if self._refresh_pending:
             return
         self._refresh_pending = True

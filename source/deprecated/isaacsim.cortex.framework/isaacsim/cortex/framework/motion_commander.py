@@ -41,8 +41,7 @@ from isaacsim.core.utils.rotations import quat_to_rot_matrix
 from isaacsim.cortex.framework.commander import Commander
 from isaacsim.cortex.framework.cortex_object import CortexObject
 from isaacsim.cortex.framework.smoothed_command import SmoothedCommand, TargetAdapter
-from isaacsim.robot_motion.motion_generation.articulation_motion_policy import ArticulationMotionPolicy
-from isaacsim.robot_motion.motion_generation.motion_policy_interface import MotionPolicy
+from isaacsim.robot_motion.motion_generation import ArticulationMotionPolicy, MotionPolicy
 
 # The CortexObject wraps a core API object. Obstacles can either be the core API object or a
 # CortexObject wrapped variant. All of these objects derive from SingleGeometryPrim, although the
@@ -52,19 +51,17 @@ CortexObstacleType = CortexObject | SingleGeometryPrim
 
 
 class ApproachParams(object):
-    """Parameters describing how to approach a target (in position). They generally describe a.
+    """Parameters describing how to approach a target (in position). They generally describe a funnel approaching the target from a particular direction.
 
-    funnel approaching the target from a particular direction.
-
-    The approach direction is a 3D vector pointing in the direction of approach. It's magnitude
+    The approach direction is a 3D vector pointing in the direction of approach. Its magnitude
     defines the max offset from the position target the intermediate approach target will be shifted
     by. The std dev defines the length scale a radial basis (Gaussian) weight function that defines
     what fraction of the shift we take. The radial basis function is defined on the orthogonal
     distance to the line defined by the target and the direction vector.
 
     Intuitively, the normalized vector direction of the direction vector defines which direction to
-    approach from, and it's magnitude defines how far back we want the end effector to come in from.
-    The std dev defines how tighly the end-effector approaches along that line. Small std dev is
+    approach from, and its magnitude defines how far back we want the end-effector to come in from.
+    The std dev defines how tightly the end-effector approaches along that line. Small std dev is
     tight around that approach line, large std dev is looser. A good value is often between 1 and 3
     cm (values of .01-.03 in meters).
 
@@ -94,7 +91,7 @@ class PosePq:
     """A pose represented internally as a position p and quaternion orientation q.
 
     Args:
-        p: The pose position
+        p: The pose position.
         q: The pose orientation as a quaternion.
     """
 
@@ -103,7 +100,7 @@ class PosePq:
         self.q = q
 
     def as_tuple(self) -> tuple[np.ndarray, np.ndarray]:
-        """Returns the pose as a (p,q) tuple.
+        """Returns the pose as a (p, q) tuple.
 
         Returns:
             A tuple (p, q) of position and quaternion.
@@ -120,19 +117,11 @@ class PosePq:
 
 
 class MotionCommand:
-    """Contains information about a motion command: an end-effector target (either full pose or.
+    """Contains information about a motion command: an end-effector target (either full pose or position only), optional approach parameters, and an optional posture configuration.
 
-    position only), optional approach parameters, and an optional posture configuration.
+    The target pose is a full position and orientation target. The approach parameters define how the end-effector should approach that target (see ApproachParams above). The posture config defines how the system should resolve redundancy and generally posture the arm throughout the movement.
 
-    The target pose is a full position and orientation target. The approach params define how the
-    end-effector should approach that target (see ApproachParams above). And the posture config
-    defines how the system should resolve redundancy and generally posture the arm throughout the
-    movement.
-
-    Users should set either target_pose or target_position, but not both. target_pose defines a full
-    pose target for the end-effector; target_position defines a postion-only end-effector allowing
-    the arm to move through the nullspace. That nullspace can be optionally biased by the posture
-    configuration.
+    Users should set either target_pose or target_position, but not both. target_pose defines a full pose target for the end-effector; target_position defines a position-only end-effector target, allowing the arm to move through the nullspace. That nullspace can be optionally biased by the posture configuration.
 
     Args:
         target_pose: A full pose end-effector target. Set this or target_position, but not both.
@@ -167,30 +156,30 @@ class MotionCommand:
 
     @property
     def has_approach_params(self) -> bool:
-        """Determines whether approach parameters have been specified.
+        """Whether approach parameters have been specified.
 
-        Returns: True if they've been set, False otherwise.
+        Returns:
+            True if they have been set, False otherwise.
         """
         return self.approach_params is not None
 
     @property
     def has_posture_config(self) -> bool:
-        """Determines whether a posture config has been specified.
+        """Whether a posture config has been specified.
 
-        Returns: True if it's been set, False otherwise.
+        Returns:
+            True if it has been set, False otherwise.
         """
         return self.posture_config is not None
 
 
 def calc_shifted_approach_target(target_T: np.ndarray, eff_T: np.ndarray, approach_params: np.ndarray) -> np.ndarray:
-    """Calculates how the target should be shifted to implement the approach given the current.
-
-    end-effector position.
+    """Calculates how the target position should be shifted to implement the approach from the current end-effector pose.
 
     Args:
         target_T: Final target pose as a homogeneous transform matrix.
         eff_T: Current end effector pose as a homogeneous transform matrix.
-        approach_params: The approach parameters.
+        approach_params: Parameters that provide the approach direction and radial basis standard deviation.
 
     Returns:
         The shifted target position.
@@ -213,9 +202,7 @@ def calc_shifted_approach_target(target_T: np.ndarray, eff_T: np.ndarray, approa
 
 
 class MotionCommandAdapter(TargetAdapter):
-    """A simple adapter class to extract the target information to pass into the SmoothedCommand.
-
-    object.
+    """A simple adapter class that extracts the target information to pass into the SmoothedCommand object.
 
     Args:
         command: The motion command being adapted.
@@ -233,7 +220,7 @@ class MotionCommandAdapter(TargetAdapter):
         return self.command.target_pose.p
 
     def has_rotation(self) -> bool:
-        """Determines whether there's a specified orientation in the target pose.
+        """Determines whether there is a specified orientation in the target pose.
 
         Returns:
             True if the commanded target orientation has been set, False otherwise.
@@ -243,8 +230,8 @@ class MotionCommandAdapter(TargetAdapter):
     def get_rotation_matrix(self) -> np.array:
         """Converts the target pose orientation to a rotation matrix.
 
-        Note that this method doesn't verify whether the rotation is set. Use has_rotation() to
-        verify it's been set before calling this method.
+        Note that this method does not verify whether the rotation is set. Use has_rotation() to
+        verify it has been set before calling this method.
 
         Returns:
             The 3x3 rotation matrix for the target orientation.
@@ -253,15 +240,13 @@ class MotionCommandAdapter(TargetAdapter):
 
 
 class MotionCommander(Commander):
-    """The motion commander provides an abstraction of motion for the cortex wherein a lower-level.
-
-    policy implements the motion commands defined by MotionCommand objects.
+    """The motion commander provides an abstraction of motion for the cortex in which a lower-level policy implements the motion commands defined by MotionCommand objects.
 
     This class uses a target prim for setting targets. The target prim can be set to a target
     manually via a call to set_target() or it can be controlled using a gizmo through the IsaacSim
     viewport.
 
-    See MotionCommand for a description of the information provided in the command. At a high-level,
+    See MotionCommand for a description of the information provided in the command. At a high level,
     it includes the end-effector target, approach parameters describing how to approach the target,
     and a posture config informing the policy about null space choice.
 
@@ -271,7 +256,7 @@ class MotionCommander(Commander):
         target_prim: The target SingleXFormPrim defining where the current end-effector target is. This
             target pose is passed into amp to move the robot.
         use_smoothed_commands: Optional boolean signifying whether to smooth the commands coming in.
-            Defaults to true. This smoothing helps reduce system jerk.
+            This smoothing helps reduce system jerk.
     """
 
     def __init__(
@@ -294,9 +279,10 @@ class MotionCommander(Commander):
         self.register_target_prim(target_prim)
 
     def reset(self) -> None:
-        """Reset this motion commander. This method ensures that any internal integrators of the.
+        """Reset this MotionCommander.
 
-        motion policy are reset, as is the smoothed command.
+        The reset clears internal motion policy integrators and the smoothed command. Registered obstacles are added
+        back to the motion policy after reset.
         """
         # Resetting the motion policy removes the obstacles, so we need to add them back.
         self.motion_policy.reset()
@@ -308,39 +294,50 @@ class MotionCommander(Commander):
         self._reset_target_print_to_eff = True
 
     def soft_reset(self) -> None:
-        """Soft reset this motion commander. This method only resets the internal integrators and.
+        """Soft reset this MotionCommander.
 
-        nothing else.
+        The soft reset clears only the internal motion policy joint state.
         """
         self.motion_policy._robot_joint_positions = None
         self.motion_policy._robot_joint_velocities = None
 
     @property
     def num_controlled_joints(self) -> int:
-        """Returns the number of joints commanded by this commander."""
+        """Number of joints commanded by this MotionCommander.
+
+        Returns:
+            The number of controlled joints.
+        """
         return self.amp.get_active_joints_subset().num_joints
 
     @property
     def motion_policy(self) -> MotionPolicy:
-        """Returns the motion policy used to command the robot."""
+        """MotionPolicy used to command the robot.
+
+        Returns:
+            The underlying motion policy from the ArticulationMotionPolicy.
+        """
         return self.amp.get_motion_policy()
 
     @property
     def aji(self) -> np.ndarray:
-        """Returns the active joint indices. These are the indices into the full C-space.
+        """Active joint indices into the full C-space configuration vector.
 
-        configuration vector of the joints which are actively controlled.
+        These indices identify the joints actively controlled by this MotionCommander.
+
+        Returns:
+            The active joint indices.
         """
         return self.amp.get_active_joints_subset().get_joint_subset_indices()
 
     def register_target_prim(self, target_prim: SingleXFormPrim) -> None:
-        """Register the specified target prim with this commander.
+        """Register the specified target prim with this MotionCommander.
 
-        This prim will both visualize the commands being sent to the motion commander, and it can be
-        used to manually control the robot using the OV viewport's gizmo.
+        This prim visualizes commands sent to the MotionCommander and can be used to manually control the robot
+        using the OV viewport's gizmo.
 
-        To manually control the target prim, make sure the latest command has been cleared by
-        calling clear() on this MotionCommander (defined in the Commander base class).
+        To manually control the target prim, clear the latest command by calling clear() on this MotionCommander,
+        defined in the Commander base class.
 
         Args:
             target_prim: The target prim to register.
@@ -349,27 +346,21 @@ class MotionCommander(Commander):
         self._reset_target_print_to_eff = True
 
     def get_end_effector_pose(self, config: Optional[np.ndarray] = None) -> tuple[np.ndarray, np.ndarray]:
-        """Returns the end-effector pose as a pair (p, R), where p is the position and R is the.
+        """Return the end-effector pose as a pair (p, R), where p is the position and R is the rotation matrix.
 
-        rotation matrix.
+        If config is not provided, uses the current applied action, the current integration state of the underlying
+        motion policy that the robot is trying to follow. Using the applied action instead of measured simulation state
+        keeps behavior robust and consistent regardless of simulated PD control nuances.
 
-        If config is None (default), it uses the current applied action (i.e. current integration
-        state of the underlying motion policy which the robot is trying to follow).        By using
-        the applied action (rather than measured simulation state) the behavior is robust and
-        consistent regardless of simulated PD control nuances.
-
-        Otherwise, if config is set, it calculates the forward kinematics for the specified joint
-        config. config should contain only the commanded joints.
+        If config is provided, evaluates forward kinematics for the specified commanded joint configuration.
 
         Args:
-            config: An optional config input with the configuration to evaluate the end-effector
-                pose at. The config should specify joint values for each of the commanded joints
-                only, as defined by the underlying articulation_subset. If it's not provided, the
-                latest applied action is used.
+            config: An optional config input with the configuration to evaluate the end-effector pose at. The config
+                should specify joint values for each of the commanded joints only, as defined by the underlying
+                articulation_subset. If omitted, the latest applied action is used.
 
         Returns:
-            The pose as a pair (p, R) where p is the position vector and R is the rotation
-            matrix.
+            The pose as a pair (p, R) where p is the position vector and R is the rotation matrix.
         """
         if config is None:
             # No config was specified, so fill it in with the current applied action.
@@ -381,9 +372,9 @@ class MotionCommander(Commander):
         return p, R
 
     def get_fk_T(self, config: Optional[np.ndarray] = None) -> np.ndarray:  # noqa: N802
-        """Returns the end-effector transform as a 4x4 homogeneous matrix T.
+        """Return the end-effector transform as a 4x4 homogeneous matrix T.
 
-        Calls get_end_effector_pose() internally; see that method's docstring for details.
+        Calls get_end_effector_pose() for pose evaluation.
 
         Args:
             config: An optional joint configuration to evaluate at.
@@ -395,25 +386,23 @@ class MotionCommander(Commander):
         return math_util.pack_Rp(R, p)
 
     def get_fk_pq(self, config: Optional[np.ndarray] = None) -> tuple[np.ndarray, np.ndarray]:
-        """Returns the end-effector transform as a (<position>,<quaternion>) pair.
+        """Return the end-effector transform as a position and quaternion representation.
 
-        Calls get_end_effector_pose(config) internally; see that method's docstring for details.
+        Calls get_end_effector_pose(config) for pose evaluation.
 
         Args:
             config: An optional joint configuration to evaluate at.
 
         Returns:
-            A PosePq containing the position and quaternion.
+            The PosePq containing the position and quaternion.
         """
         p, R = self.get_end_effector_pose(config)
         return PosePq(p, math_util.matrix_to_quat(R))
 
     def get_fk_p(self, config: Optional[np.ndarray] = None) -> np.ndarray:
-        """Returns the position components of end-effector pose.
+        """Return the position component of the end-effector pose in the control frame.
 
-        control frame.
-
-        Calls get_end_effector_pose(config) internally; see that method's docstring for details.
+        Calls get_end_effector_pose(config) for pose evaluation.
 
         Args:
             config: An optional joint configuration to evaluate at.
@@ -439,9 +428,9 @@ class MotionCommander(Commander):
         return R
 
     def send_end_effector(self, *args: object, **kwargs: object) -> None:
-        """An alias for sending an explicit MotionCommand object via send(). The arguments should.
+        """Sends a MotionCommand object via send().
 
-        match those of MotionCommand. This is for convenience only.
+        The arguments match those of MotionCommand. This is for convenience only.
 
         Args:
             *args: Positional arguments passed to MotionCommand.
@@ -452,8 +441,8 @@ class MotionCommander(Commander):
     def set_posture_config(self, posture_config: np.ndarray) -> None:
         """Set the posture configuration of the underlying motion policy.
 
-        The posture configure should specify joint values for each of the commanded joints as
-        defined by the underlying articulation_subset object.
+        The posture configuration should specify joint values for each commanded joint as defined by the
+        underlying articulation_subset object.
 
         Args:
             posture_config: The posture config vector, one value for each commanded joint.
@@ -485,21 +474,20 @@ class MotionCommander(Commander):
     def add_obstacle(self, obs: CortexObstacleType) -> None:
         """Add an obstacle to the underlying motion policy.
 
-        The motion policy is the one underlying the ArticulationMotionPolicy passed in on
-        construction.
+        The motion policy is the one underlying the ArticulationMotionPolicy passed in on construction.
 
-        All added obstacles are tracked and made accessible by name via the obstacles member dict.
-        On reset, the underlying motion policy typically resets entirely, including removing all the
-        obstacles, but by adding the obstacles through this interface they will be automatically
-        added back on each reset so the set of obstacles remains consistent.
+        All added obstacles are tracked and made accessible by name via the obstacles member dict. On reset,
+        the underlying motion policy typically resets entirely, including removing all the obstacles, but by
+        adding the obstacles through this interface they will be automatically added back on each reset so
+        the set of obstacles remains consistent.
 
-        If adding the obstacle to the underlying policy is unsuccessful, it prints a message and
-        does not include it in the obstacles dict.
+        If adding the obstacle to the underlying policy is unsuccessful, it prints a message and does not
+        include it in the obstacles dict.
 
         Args:
-            obs: An obstacle represented as a core API type which can be added to the underlying
-                motion policy. This can be any object type supported by the underlying motion
-                policy's add_obstacle() method. The obstacle can be wrapped in a CortexObject.
+            obs: An obstacle represented as a core API type which can be added to the underlying motion
+                policy. This can be any object type supported by the underlying motion policy's
+                add_obstacle() method. The obstacle can be wrapped in a CortexObject.
         """
         obs_add = obs
         if hasattr(obs_add, "obj"):
@@ -515,13 +503,14 @@ class MotionCommander(Commander):
     def disable_obstacle(self, obs: CortexObstacleType) -> None:
         """Disable the given object as an obstacle in the underlying motion policy.
 
-        Disabling can be done repeatedly without enabling. The result is the same, the obstacle is
-        disabled. The object can either be a core API object or a CortexObject wrapping the core API
-        object.
+        Disabling can be done repeatedly without enabling. The result is the same, the obstacle is disabled.
+        The object can either be a core API object or a CortexObject wrapping the core API object.
 
         Args:
-            obs: The obstacle to disable. The obstacle can be any added to the underlying motion
-                policy.
+            obs: The obstacle to disable. The obstacle can be any added to the underlying motion policy.
+
+        Raises:
+            Exception: If disabling the obstacle fails for a reason other than it already being disabled.
         """
         try:
             # Handle cortex objects -- extract the underlying core api object.
@@ -536,15 +525,16 @@ class MotionCommander(Commander):
                 raise e
 
     def enable_obstacle(self, obs: CortexObstacleType) -> None:
-        """Enable the given obsect as an obstacle in the underlying motion policy.
+        """Enable the given object as an obstacle in the underlying motion policy.
 
-        Enabling can be done repeatedly without disabling. The result is the same, the obstacle is
-        enabled. The object can either be a core API object or a CortexObject wrapping the core API
-        object.
+        Enabling can be done repeatedly without disabling. The result is the same, the obstacle is enabled.
+        The object can either be a core API object or a CortexObject wrapping the core API object.
 
         Args:
-            obs: The obstacle to enable. The obstacle can be any added to the underlying motion
-                policy.
+            obs: The obstacle to enable. The obstacle can be any added to the underlying motion policy.
+
+        Raises:
+            Exception: If enabling the obstacle fails for a reason other than it already being enabled.
         """
         try:
             # Handle cortex obsects -- extract the underlying core api obsect.
@@ -561,8 +551,8 @@ class MotionCommander(Commander):
     def _sync_end_effector_target_to_motion_policy(self) -> None:
         """Set the underlying motion generator's target to the pose in the target prim.
 
-        Switches between only the position portion of the target_prim pose and using the entire
-        pose based on the value of _is_target_position_only set in _step_command_smoothing().
+        Switches between only the position portion of the target_prim pose and using the entire pose based
+        on the value of _is_target_position_only set in _step_command_smoothing().
         """
         if self._reset_target_print_to_eff:
             self._step_command_smoothing(MotionCommand(self.get_fk_pq()))
@@ -575,17 +565,14 @@ class MotionCommander(Commander):
             self.motion_policy.set_end_effector_target(target_translation, target_orientation)
 
     def _step_command_smoothing(self, command: MotionCommand) -> None:
-        """Processes the command's approach parameters, smooths the resulting pose, and apply the.
+        """Processes the command's approach parameters, smooths the resulting pose, and applies the smoothed pose to the target_prim. Additionally, passes the posture config into the underlying motion policy.
 
-        smoothed pose to the target_prim. Additionally, passes the posture config into the
-        underlying motion policy.
+        The target_prim will, therefore, render the current approach offset and smoothed target. When the
+        target in the motion command is position-only, the rotation component is filled in with the
+        end-effector's current rotation matrix so the target_prim will rotate with the end-effector's
+        rotation.
 
-        The target_prim will, therefore, render the current approach offset and smoothed target.
-        When the target in the motion command is position-only, the rotation component is filled in
-        with the end-effector's current rotation matrix so the target_prim will rotate with the
-        end-effector's rotation.
-
-        Note the posture configure should be a full C-space configuration for the robot.
+        Note the posture configuration should be a full C-space configuration for the robot.
 
         Args:
             command: The latest command applied to this motion commander.

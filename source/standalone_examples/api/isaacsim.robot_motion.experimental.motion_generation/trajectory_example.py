@@ -58,6 +58,16 @@ class LinearTrajectory(mg.Trajectory):
     This demonstrates how to implement the Trajectory interface. The TrajectoryFollower
     has no opinion about which trajectory type it follows - it works with any object
     that implements the Trajectory interface.
+
+    Args:
+        waypoints: Joint positions arranged as N waypoint rows by M joint columns.
+        robot_joint_space: Ordered joint names represented by generated robot states.
+        active_joints: Joint names controlled by the waypoint columns.
+        time_per_segment: Duration in seconds assigned to each waypoint segment.
+
+    Raises:
+        ValueError: If waypoints are not a two-dimensional array with at least two rows, or if their columns do
+            not match ``active_joints``.
     """
 
     # <start-linear-trajectory-init-snippet>
@@ -68,14 +78,6 @@ class LinearTrajectory(mg.Trajectory):
         active_joints: list[str],
         time_per_segment: float = 1.0,
     ) -> None:
-        """Initialize the linear trajectory.
-
-        Args:
-            waypoints: Array of shape (N, M) where N is number of waypoints and M is number of joints
-            robot_joint_space: The full joint space of the robot
-            active_joints: The joints controlled by this trajectory (must match waypoint columns)
-            time_per_segment: Time to spend moving between each pair of waypoints (seconds)
-        """
         if waypoints.ndim != 2:
             raise ValueError("Waypoints must be a 2D array")
         if len(waypoints) < 2:
@@ -212,7 +214,7 @@ async def setup_scene() -> tuple[Articulation, list[str]]:
 
     # Add Franka robot
     assets_root_path = await get_assets_root_path_async()
-    franka_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+    franka_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
     robot_prim = stage_utils.add_reference_to_stage(usd_path=franka_path, path="/World/Franka")
 
     # await the next kit step:

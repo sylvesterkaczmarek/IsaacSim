@@ -26,7 +26,7 @@ def radians_to_degrees(rad_angles: np.ndarray) -> np.ndarray:
     """Converts input angles from radians to degrees.
 
     Args:
-        rad_angles: Input array of angles (in radians).
+        rad_angles: Input array of angles in radians.
 
     Returns:
         Array of angles in degrees.
@@ -35,7 +35,7 @@ def radians_to_degrees(rad_angles: np.ndarray) -> np.ndarray:
 
 
 def cross(a: np.ndarray | list, b: np.ndarray | list) -> np.ndarray:
-    """Computes the cross-product between two 3-dimensional vectors.
+    """Computes the cross product between two 3-dimensional vectors.
 
     Args:
         a: A 3-dimensional vector.
@@ -48,13 +48,13 @@ def cross(a: np.ndarray | list, b: np.ndarray | list) -> np.ndarray:
 
 
 def normalize(v: np.ndarray) -> np.ndarray:
-    """Normalizes the vector inline (and also returns it).
+    """Normalizes the vector in place and returns it.
 
     Args:
-        v: The vector to normalize.
+        v: The vector to normalize in place.
 
     Returns:
-        The normalized vector.
+        The input vector after normalization, or unchanged if its norm is 0.
     """
     norm = np.linalg.norm(v)
     if norm == 0:

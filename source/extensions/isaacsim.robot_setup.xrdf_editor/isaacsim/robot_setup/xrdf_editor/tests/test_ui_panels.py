@@ -59,7 +59,7 @@ from isaacsim.robot_setup.xrdf_editor.yaml_utils import safe_load_yaml
 from isaacsim.storage.native import get_assets_root_path
 from pxr import PhysxSchema, Usd, UsdGeom, UsdPhysics
 
-_ROBOT_USD = "Isaac/Robots/UniversalRobots/ur10e/ur10e.usd"
+_ROBOT_USD = "Isaac/Robots_Multiphysics/UniversalRobots/ur10e/ur10e.usda"
 
 
 def _articulation_base_path(stage: Usd.Stage) -> str | None:

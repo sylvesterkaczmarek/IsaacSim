@@ -66,6 +66,7 @@ def cleanup() -> None:
     _simulation_context_reset_values.clear()
     _rigid_prim_views_reset_values.clear()
     _articulation_views_reset_values.clear()
+    context.cleanup()
 
 
 def _ensure_numpy(val: Any) -> Any:
@@ -628,11 +629,11 @@ def _write_physics_view_node(
             values.node.get_attribute("inputs:lower").connect(node.get_attribute("inputs:dist_param_1"), True)
             values.node.get_attribute("inputs:upper").connect(node.get_attribute("inputs:dist_param_2"), True)
 
-    counter = ReplicatorItem(utils.create_node, "isaacsim.replicator.domain_randomization.OgnCountIndices")
-
     upstream_node = ReplicatorItem._get_context()
-    upstream_node.get_attribute("outputs:indices").connect(counter.node.get_attribute("inputs:indices"), True)
-    counter.node.get_attribute("outputs:count").connect(values.node.get_attribute("inputs:numSamples"), True)
+    if values.node.get_attribute_exists("inputs:numSamples"):
+        counter = ReplicatorItem(utils.create_node, "isaacsim.replicator.domain_randomization.OgnCountIndices")
+        upstream_node.get_attribute("outputs:indices").connect(counter.node.get_attribute("inputs:indices"), True)
+        counter.node.get_attribute("outputs:count").connect(values.node.get_attribute("inputs:numSamples"), True)
     upstream_node.get_attribute("outputs:indices").connect(node.get_attribute("inputs:indices"), True)
     upstream_node.get_attribute("outputs:on_reset").connect(node.get_attribute("inputs:on_reset"), True)
 

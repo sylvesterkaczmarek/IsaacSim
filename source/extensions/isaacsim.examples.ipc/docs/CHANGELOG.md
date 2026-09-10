@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.4] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [1.0.3] - 2026-06-26
+### Changed
+- Hide the Kit lifecycle extension class from the generated public Python API.
+
 ## [1.0.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

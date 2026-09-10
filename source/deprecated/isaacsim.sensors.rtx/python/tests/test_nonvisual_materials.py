@@ -48,7 +48,11 @@ class TestNonvisualMaterials(omni.kit.test.AsyncTestCase):
         await omni.usd.get_context().close_stage_async()
 
     def test_base_materials_dictionary(self) -> None:
-        """Test that base materials dictionary has expected values."""
+        """Test that base materials dictionary has expected values.
+
+        Raises:
+            AssertionError: If the dictionary is missing expected base materials or the `none` value is not 0.
+        """
         # Test some key materials exist
         self.assertIn("none", BASE_MATERIALS)
         self.assertIn("aluminum", BASE_MATERIALS)
@@ -59,7 +63,11 @@ class TestNonvisualMaterials(omni.kit.test.AsyncTestCase):
         self.assertEqual(BASE_MATERIALS["none"], 0)
 
     def test_coatings_dictionary(self) -> None:
-        """Test that coatings dictionary has expected values."""
+        """Test that coatings dictionary has expected values.
+
+        Raises:
+            AssertionError: If coating IDs are outside the 3-bit range, the `none` value is not 0, or the count is wrong.
+        """
         # Test coatings exist and are within 3-bit range (0-7)
         for coating_name, coating_id in COATINGS.items():
             self.assertGreaterEqual(coating_id, 0)
@@ -70,7 +78,11 @@ class TestNonvisualMaterials(omni.kit.test.AsyncTestCase):
         self.assertEqual(len(COATINGS), 4)  # Should have 4 defined values
 
     def test_attributes_dictionary(self) -> None:
-        """Test that attributes dictionary has expected values."""
+        """Test that attributes dictionary has expected values.
+
+        Raises:
+            AssertionError: If attribute IDs are outside the 5-bit range or the `none` value is not 0.
+        """
         # Test attributes exist and are within 5-bit range (0-31)
         for attr_name, attr_id in ATTRIBUTES.items():
             self.assertGreaterEqual(attr_id, 0)
@@ -80,7 +92,11 @@ class TestNonvisualMaterials(omni.kit.test.AsyncTestCase):
         self.assertEqual(ATTRIBUTES["none"], 0)
 
     def test_apply_nonvisual_material_with_strings(self) -> None:
-        """Test applying nonvisual material with string inputs."""
+        """Test applying nonvisual material with string inputs.
+
+        Raises:
+            AssertionError: If applying the material fails or the USD attributes do not match the string inputs.
+        """
         # Create a material prim
         material = UsdShade.Material.Define(self.stage, "/World/TestMaterial")
         material_prim = material.GetPrim()
@@ -104,7 +120,11 @@ class TestNonvisualMaterials(omni.kit.test.AsyncTestCase):
         self.assertEqual(attr_attr.Get(), "emissive")
 
     def test_apply_nonvisual_material_with_integers(self) -> None:
-        """Test applying nonvisual material with integer inputs."""
+        """Test applying nonvisual material with integer inputs.
+
+        Raises:
+            AssertionError: If applying the material fails or integer IDs are not stored as the expected strings.
+        """
         # Create a material prim
         material = UsdShade.Material.Define(self.stage, "/World/TestMaterial")
         material_prim = material.GetPrim()
@@ -131,7 +151,11 @@ class TestNonvisualMaterials(omni.kit.test.AsyncTestCase):
         self.assertEqual(attr_attr.Get(), "retroreflective")
 
     def test_apply_nonvisual_material_with_defaults(self) -> None:
-        """Test applying nonvisual material with default coating and attribute."""
+        """Test applying nonvisual material with default coating and attribute.
+
+        Raises:
+            AssertionError: If applying the material fails or default coating and attribute values are not set to `none`.
+        """
         # Create a material prim
         material = UsdShade.Material.Define(self.stage, "/World/TestMaterial")
         material_prim = material.GetPrim()
@@ -151,7 +175,11 @@ class TestNonvisualMaterials(omni.kit.test.AsyncTestCase):
         self.assertEqual(attr_attr.Get(), "none")
 
     def test_apply_nonvisual_material_invalid_prim(self) -> None:
-        """Test applying nonvisual material to invalid prim."""
+        """Test applying nonvisual material to invalid prim.
+
+        Raises:
+            AssertionError: If applying the material to None or a non-material prim succeeds.
+        """
         # Test with None prim
         result = apply_nonvisual_material(None, base="aluminum")
         self.assertFalse(result)
@@ -165,7 +193,11 @@ class TestNonvisualMaterials(omni.kit.test.AsyncTestCase):
         self.assertFalse(result)
 
     def test_apply_nonvisual_material_invalid_base(self) -> None:
-        """Test applying nonvisual material with invalid base material."""
+        """Test applying nonvisual material with invalid base material.
+
+        Raises:
+            AssertionError: If applying a material with an invalid base material succeeds.
+        """
         # Create a material prim
         material = UsdShade.Material.Define(self.stage, "/World/TestMaterial")
         material_prim = material.GetPrim()

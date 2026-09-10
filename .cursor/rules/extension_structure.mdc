@@ -127,7 +127,7 @@ exts/isaacsim.my.extension/
 If present:
 - Must contain subfolders that match the extension name with dots replaced by directory separators
 - Example: For `isaacsim.foo.bar.baz`, the structure should be `include/isaacsim/foo/bar/baz/`
-- Must contain ONLY header files (`.h` files)
+- Must contain only C++ header files (`.hpp`) and C-compatible header files (`.h`)
 
 ### library/ (Optional)
 - No specific requirements for this folder
@@ -137,7 +137,7 @@ If present:
 - Must contain a `config/` subfolder with a `CategoryDefinition.json` file
 - Must contain an `icons/` subfolder with at least one `.svg` file
 - Must contain matching `.ogn` and `.cpp` files for each node, with names starting with "Ogn"
-- Must NOT contain header (`.h`) files directly in the nodes folder
+- Must NOT contain header (`.h` or `.hpp`) files directly in the nodes folder
 - Must NOT contain any `.cpp` files that do not correspond to an `.ogn` file (every `.cpp` file must have a matching `.ogn` file)
 
 #### OGN File Requirements
@@ -152,7 +152,7 @@ If present:
 ### plugins/ (Optional)
 If present:
 - Must contain a subfolder named exactly like the extension (e.g., `plugins/isaacsim.my_extension/`)
-- The subfolder may contain any number of `.cpp` and `.h` files
+- The subfolder may contain any number of `.cpp`, `.hpp`, and C-compatible `.h` files
 
 ### python/ (Optional)
 If present:
@@ -168,6 +168,20 @@ If present:
   - Test files that MUST start with `test_` prefix
   - An optional `common.py` file
 
+#### Python extension behavior
+
+- Use `carb.log_info`, `carb.log_warn`, and `carb.log_error` for extension logging instead of `print` or the standard
+  `logging` package.
+- Use `carb.settings.get_settings()` for Kit settings.
+- Use `unittest` and `omni.kit.test.AsyncTestCase` for extension tests.
+- Import Omniverse modules lazily when doing so reduces startup cost or avoids startup-order dependencies.
+- Use asyncio for asynchronous extension operations.
+- Handle USD stage operations within the appropriate stage context.
+- Clean up subscriptions, callbacks, and other owned resources in `on_shutdown`.
+- Use `isaacsim.core.simulation_manager.SimulationEvent` for simulation lifecycle events.
+- Use `isaacsim.core.experimental.utils.app` instead of `omni.timeline` for timeline-related utilities.
+- Use `isaacsim.core.simulation_manager.SimulationManager` for simulation setup and callback registration.
+
 ## File Naming Conventions
 
 - C++ source files must:
@@ -177,7 +191,7 @@ If present:
 
 - Header files must:
   - Use PascalCase naming (start with a capital letter)
-  - End with `.h` extension
+  - End with `.hpp` for C++ or `.h` for C-compatible interfaces
   - If the header file contains a `CARB_PLUGIN_INTERFACE`, its filename MUST start with a capital 'I'
 
 - Python files must:

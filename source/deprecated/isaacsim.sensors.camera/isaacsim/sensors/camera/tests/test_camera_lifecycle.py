@@ -29,7 +29,7 @@ class TestCameraLifecycle(omni.kit.test.AsyncTestCase):
     """Test cases for CameraLifecycle."""
 
     async def setUp(self) -> None:
-        """Set up test fixtures."""
+        """Set up test fixtures with a new stage, /World xform, and /World/Camera prim."""
         await omni.kit.app.get_app().next_update_async()
         omni.usd.get_context().new_stage()
         await omni.kit.app.get_app().next_update_async()
@@ -40,14 +40,18 @@ class TestCameraLifecycle(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
 
     async def tearDown(self) -> None:
-        """Tear down test fixtures."""
+        """Tear down test fixtures by closing the stage and waiting for stage loading to finish."""
         omni.usd.get_context().close_stage()
         await omni.kit.app.get_app().next_update_async()
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
             await omni.kit.app.get_app().next_update_async()
 
     async def test_destroy_cleans_up_observers_and_annotators(self) -> None:
-        """Test destroy cleans up observers and annotators."""
+        """Test destroy cleans up observers and annotators.
+
+        Raises:
+            AssertionError: If destroy does not clear callbacks, annotators, or render product state.
+        """
         camera = Camera(prim_path="/World/Camera", resolution=(64, 64))
         camera.initialize()
 
@@ -81,7 +85,11 @@ class TestCameraLifecycle(omni.kit.test.AsyncTestCase):
         self.assertIsNone(camera.get_render_product_path())
 
     async def test_attach_annotator_before_initialize_raises_clear_error(self) -> None:
-        """Test attach_annotator fails clearly before initialize creates a render product."""
+        """Test attach_annotator fails clearly before initialize creates a render product.
+
+        Raises:
+            AssertionError: If attach_annotator requests an annotator, raises the wrong error, or mutates frame state.
+        """
         camera = Camera(prim_path="/World/Camera", resolution=(64, 64))
 
         with patch.object(
@@ -96,7 +104,11 @@ class TestCameraLifecycle(omni.kit.test.AsyncTestCase):
         self.assertNotIn("rgb", camera.get_current_frame())
 
     async def test_dt_and_clipping_range_edge_cases(self) -> None:
-        """Test dt and clipping range edge cases."""
+        """Test dt and clipping range edge cases.
+
+        Raises:
+            AssertionError: If clipping range values or dt validation behavior do not match expected values.
+        """
         camera = Camera(prim_path="/World/Camera", resolution=(64, 64))
 
         # Ensure 0.0 is not treated as "unset"

@@ -26,13 +26,25 @@ prim_path="/World/Prim",
 
 ```python
 import omni.kit.commands
+import omni.usd
+from pxr import UsdGeom
 
-# Delete a prim at the specified path
-omni.kit.commands.execute("IsaacSimDestroyPrim", prim_path="/World/Prim")
+# Get the current USD stage
+stage = omni.usd.get_context().get_stage()
+
+# Create a prim to delete
+prim_path = "/World/PrimToDelete"
+UsdGeom.Xform.Define(stage, prim_path)
+
+# Delete the prim using the IsaacSimDestroyPrim command
+omni.kit.commands.execute(
+    "IsaacSimDestroyPrim",
+    prim_path=prim_path,
+)
 ```
 
 ## IsaacSimScalePrim
-Command to set a scale of a prim
+Command to set a scale of a prim.
 
 Typical usage example:
 
@@ -53,11 +65,16 @@ scale=(1.5, 1.5, 1.5),
 ```python
 import omni.kit.commands
 
-# Scale a prim at path "/World/Cube" to 1.5 times its original size on all axes
+# Scale an existing prim at this path.
+prim_path = "/World/Prim"
+
+# Set the prim scale along the X, Y, and Z axes.
+scale = (1.5, 1.5, 1.5)
+
 omni.kit.commands.execute(
     "IsaacSimScalePrim",
-    prim_path="/World/Cube",
-    scale=(1.5, 1.5, 1.5)
+    prim_path=prim_path,
+    scale=scale,
 )
 ```
 
@@ -86,20 +103,23 @@ rotation=(0, 0, 0, 1),
 
 ```python
 import omni.kit.commands
-import carb
 
-# Spawn a new prim by referencing a USD file
+# Path to the USD file to spawn.
+# Replace this with a valid local path or Omniverse/Nucleus USD path.
+usd_path = "/path/to/asset.usd"
+
+# Spawn the USD asset at /World/SpawnedPrim and set its transform.
 omni.kit.commands.execute(
     "IsaacSimSpawnPrim",
-    usd_path="/path/to/asset.usd",
-    prim_path="/World/MySpawnedPrim",
-    translation=(1.0, 2.0, 0.5),
-    rotation=(0.0, 0.0, 0.707, 0.707)  # 90 degree rotation around Z-axis
+    usd_path=usd_path,
+    prim_path="/World/SpawnedPrim",
+    translation=(0.0, 0.0, 0.5),  # position: (x, y, z)
+    rotation=(0.0, 0.0, 0.0, 1.0),  # quaternion: (x, y, z, w)
 )
 ```
 
 ## IsaacSimTeleportPrim
-Command to set a transform of a prim. This uses dynamic_control to properly handle physics objects and articulation
+Command to set a transform of a prim. This uses dynamic_control to properly handle physics objects and articulation.
 
 Typical usage example:
 
@@ -122,12 +142,14 @@ rotation=(0, 0, 0, 1),
 ```python
 import omni.kit.commands
 
-# Teleport a prim to a new position and rotation
+# Teleport an existing prim to a new world transform.
+# translation is (x, y, z)
+# rotation is a quaternion (x, y, z, w)
 omni.kit.commands.execute(
     "IsaacSimTeleportPrim",
-    prim_path="/World/Cube",
-    translation=(5.0, 0.0, 2.0),
-    rotation=(0.0, 0.0, 0.707, 0.707)
+    prim_path="/World/Prim",
+    translation=(1.0, 0.0, 0.5),
+    rotation=(0.0, 0.0, 0.0, 1.0),
 )
 ```
 

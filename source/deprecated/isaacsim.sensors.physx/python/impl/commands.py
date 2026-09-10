@@ -67,7 +67,7 @@ class RangeSensorCreatePrim(omni.kit.commands.Command):
     """Base command for creating range sensor prims.
 
     This command is used to create each range sensor prim and handles undo operations
-    so that individual prim commands don't have to implement their own undo logic.
+    so that individual prim commands do not have to implement their own undo logic.
 
     Args:
         path: Path for the new prim.
@@ -105,7 +105,7 @@ class RangeSensorCreatePrim(omni.kit.commands.Command):
         """Execute the command to create the range sensor prim.
 
         Returns:
-            The created USD prim.
+            The created range sensor schema object.
         """
         self._stage = omni.usd.get_context().get_stage()
         # make prim path unique
@@ -141,14 +141,14 @@ class RangeSensorCreatePrim(omni.kit.commands.Command):
         """Undo the command by removing the created prim.
 
         Returns:
-            Result of the undo operation.
+            Result of removing the created prim.
         """
         if self._prim_path is not None:
             return self._stage.RemovePrim(self._prim_path)
 
 
 class RangeSensorCreateLidar(omni.kit.commands.Command):
-    """Command class to create a lidar sensor.
+    """Command class to create a LiDAR sensor.
 
     Typical usage example:
 
@@ -175,10 +175,10 @@ class RangeSensorCreateLidar(omni.kit.commands.Command):
         )
 
     Args:
-        path: Path for the new lidar sensor prim.
+        path: Path for the new LiDAR sensor prim.
         parent: Parent prim path.
-        translation: Translation vector for the lidar sensor.
-        orientation: Orientation quaternion for the lidar sensor.
+        translation: Translation vector for the LiDAR sensor.
+        orientation: Orientation quaternion for the LiDAR sensor.
         min_range: Minimum range of the sensor.
         max_range: Maximum range of the sensor.
         draw_points: Whether to draw points for visualization.
@@ -223,7 +223,7 @@ class RangeSensorCreateLidar(omni.kit.commands.Command):
         """Execute the command to create the lidar sensor.
 
         Returns:
-            The created USD prim, or None if creation failed.
+            The created lidar schema object, or None if creation failed.
         """
         success, schema_obj = omni.kit.commands.execute(
             "RangeSensorCreatePrim",
@@ -322,10 +322,10 @@ class RangeSensorCreateGeneric(omni.kit.commands.Command):
         self._prim_path = None
 
     def do(self) -> Any:
-        """Execute the command to create the generic range sensor.
+        """Execute the command to create the generic range sensor and set its sampling rate.
 
         Returns:
-            The created USD prim, or None if creation failed.
+            The created generic range sensor schema object, or None if creation failed.
         """
         success, schema_obj = omni.kit.commands.execute(
             "RangeSensorCreatePrim",
@@ -358,7 +358,7 @@ class RangeSensorCreateGeneric(omni.kit.commands.Command):
         """Undo the command by removing the created prim.
 
         Returns:
-            Result of the undo operation.
+            Result of removing the created prim.
         """
         if self._prim_path is not None:
             stage = omni.usd.get_context().get_stage()
@@ -411,7 +411,7 @@ class IsaacSensorCreateLightBeamSensor(omni.kit.commands.Command):
         """Execute the command to create the light beam sensor.
 
         Returns:
-            The created USD prim, or None if creation failed.
+            The created IsaacLightBeamSensor schema object, or None if creation failed.
         """
         if self._num_rays > 1 and self._curtain_length == 0:
             carb.log_error("Must specify curtain length if num rays > 1")
@@ -451,7 +451,7 @@ class IsaacSensorCreateLightBeamSensor(omni.kit.commands.Command):
         """Undo the command by removing the created prim.
 
         Returns:
-            Result of the undo operation.
+            The result of removing the created prim.
         """
         if self._prim_path is not None:
             stage = omni.usd.get_context().get_stage()

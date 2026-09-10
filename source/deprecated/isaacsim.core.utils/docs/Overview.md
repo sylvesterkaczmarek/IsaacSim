@@ -4,64 +4,38 @@
 This extension is deprecated in favor of `isaacsim.core.experimental.utils`.
 ```
 
-The isaacsim.core.utils extension provides a comprehensive set of utility functions for working with USD stages, physics simulation, mathematics, and rendering operations within Isaac Sim. This extension serves as a foundational toolkit that simplifies common development tasks through high-level APIs for stage manipulation, geometry processing, coordinate transformations, and data interchange between different computational frameworks.
+The `isaacsim.core.utils` extension provides shared utility functions used across Isaac Sim workflows. It collects helpers for common USD, stage, prim, physics, math, transform, rotation, mesh, bounds, semantics, rendering, and carb tasks so that extension authors and tools can rely on consistent behavior across the simulation stack.
 
-## Functionality
-
-### USD Stage Management
-The extension provides comprehensive stage operations including creating, opening, saving, and manipulating USD stages. Users can traverse stage hierarchies, manage prim lifecycles, and handle references and payloads. Stage utilities support both synchronous and asynchronous operations for file I/O and stage updates.
-
-### Prim Operations and Manipulation
-Extensive prim utilities enable creating, querying, and modifying USD prims with support for attributes, properties, and metadata. The extension handles prim hierarchies, parent-child relationships, and provides advanced search capabilities using regex patterns and predicate functions.
-
-### Physics Integration
-Physics utilities facilitate rigid body management, simulation control, and raycasting operations. The extension integrates with Omni Physics to provide seamless physics-enabled prim manipulation and simulation stepping with configurable timing and callback support.
-
-### Mathematical Operations
-Comprehensive mathematical utilities support coordinate transformations, quaternion operations, rotation matrix conversions, and pose calculations. The extension provides both single-value and vectorized operations for efficient batch processing of geometric data.
-
-### Multi-Framework Data Interchange
-The extension includes comprehensive interoperability utilities for converting data between NumPy, PyTorch, JAX, TensorFlow, and Warp arrays. This enables seamless integration across different computational frameworks commonly used in robotics and simulation workflows.
-
-### Rendering and Viewport Control
-Rendering utilities provide viewport management, camera control, and render product configuration. Users can create custom viewports, manipulate camera transforms, configure AOVs (Arbitrary Output Variables), and manage intrinsic camera parameters.
-
-### Mesh and Geometry Processing
-Geometry utilities support mesh analysis, bounding box calculations, and vertex processing. The extension provides tools for computing axis-aligned and oriented bounding boxes, extracting mesh vertices in different coordinate systems, and performing geometric transformations.
+The extension is a utility layer rather than a standalone tool or UI. Its modules are typically imported directly, for example `from isaacsim.core.utils.stage import add_reference_to_stage`.
 
 ## Key Components
 
-### Commands System
-The extension registers several commands for common operations:
+### Utility submodules
 
-{class}`IsaacSimSpawnPrim <isaacsim.core.utils.IsaacSimSpawnPrim>` creates new prims with USD references and applies transformations using physics-aware positioning.
+Utilities are grouped by domain and accessed as `isaacsim.core.utils.<name>`:
 
-{class}`IsaacSimTeleportPrim <isaacsim.core.utils.IsaacSimTeleportPrim>` relocates existing prims with proper physics handling for articulated objects.
+- **USD and stage**: `stage`, `prims`, `semantics`, `xforms`, `fabric`, `render_product`
+- **Math and transforms**: `math`, `rotations`, `transformations`, `distance_metrics`, and backend-specific helpers under `numpy`, `torch`, and `warp`
+- **Physics and geometry**: `physics`, `articulations`, `bounds`, `collisions`, `mesh`, `deformable_mesh_utils`
+- **Application and data helpers**: `carb`, `extensions`, `string`, `constants`, `types`, `viewports`, `camera_utils`, `interops`, `random`
 
-{class}`IsaacSimScalePrim <isaacsim.core.utils.IsaacSimScalePrim>` applies scaling transformations to prims.
+```python
+from isaacsim.core.utils.stage import add_reference_to_stage, get_current_stage
+from isaacsim.core.utils.prims import get_prim_at_path
 
-{class}`IsaacSimDestroyPrim <isaacsim.core.utils.IsaacSimDestroyPrim>` removes prims from the stage with optimized performance for batch operations.
+add_reference_to_stage(usd_path="/path/to/asset.usd", prim_path="/World/Asset")
+stage = get_current_stage()
+prim = get_prim_at_path("/World/Asset")
+```
 
-### Data Structures
-Several specialized data classes facilitate state management:
+### Commands
 
-{class}`DataFrame <isaacsim.core.utils.DataFrame>` encapsulates simulation data at specific time steps with time indexing.
+The `commands` submodule registers `omni.kit` commands for common prim operations, including {class}`IsaacSimSpawnPrim <isaacsim.core.utils.commands.IsaacSimSpawnPrim>`, {class}`IsaacSimTeleportPrim <isaacsim.core.utils.commands.IsaacSimTeleportPrim>`, {class}`IsaacSimScalePrim <isaacsim.core.utils.commands.IsaacSimScalePrim>`, and {class}`IsaacSimDestroyPrim <isaacsim.core.utils.commands.IsaacSimDestroyPrim>`.
 
-{class}`XFormPrimState <isaacsim.core.utils.XFormPrimState>` and {class}`XFormPrimViewState <isaacsim.core.utils.XFormPrimViewState>` manage transformation states for single and multiple prims.
+### C++ interface
 
-{class}`DynamicState <isaacsim.core.utils.DynamicState>` and {class}`DynamicsViewState <isaacsim.core.utils.DynamicsViewState>` handle dynamic rigid body states including velocities.
-
-{class}`ArticulationAction <isaacsim.core.utils.ArticulationAction>` and {class}`ArticulationActions <isaacsim.core.utils.ArticulationActions>` define joint control commands for robotic systems.
-
-### Semantic Labeling System
-Semantic utilities provide comprehensive labeling support using UsdSemantics.LabelsAPI for scene understanding and automated annotation. The system supports label validation, missing label detection, and automatic migration from deprecated semantic APIs.
-
-### Physics Utilities
-Tetrahedral mesh generation and physics simulation utilities support soft body dynamics and advanced material modeling. The extension includes tools for creating tetrahedral meshes from voxel grids and geometric primitives.
-
-### Camera and Viewport Systems
-Dynamic camera utilities implement physics-based camera movement using spring-damper systems for smooth, natural motion. The system supports automatic focus adjustment and configurable motion characteristics for cinematic camera control.
+The extension includes a Carbonite plugin and pybind11 bindings exposed as `isaacsim.core.utils.bindings._isaac_utils`. The bindings provide a `math` submodule with vector and quaternion operations (such as `dot`, `cross`, `normalize`, `lerp`, and `slerp`) and a `transforms` submodule (`set_transform`, `set_scale`), and back the prim-path matching helper used by the Python utilities.
 
 ## Relationships
 
-The extension integrates with **omni.physics** and **omni.physx** for physics simulation capabilities, **omni.warp.core** for high-performance array operations, and **omni.usd.schema.semantics** for semantic labeling functionality. These integrations enable seamless data flow between USD authoring, physics simulation, and computational frameworks commonly used in robotics and AI applications.
+`isaacsim.core.utils` is a shared utility dependency for simulation-oriented extensions. It declares dependencies on USD and physics systems, including PhysX, USD physics schemas, semantic schema support, and USD metrics assembly, which align with the USD and physics utilities it provides.

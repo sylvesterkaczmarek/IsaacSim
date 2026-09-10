@@ -13,12 +13,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <isaacsim/core/includes/BindingsPythonUtils.h>
-#include <isaacsim/sensors/experimental/physics/IContactSensor.h>
-#include <isaacsim/sensors/experimental/physics/IEffortSensor.h>
-#include <isaacsim/sensors/experimental/physics/IImuSensor.h>
-#include <isaacsim/sensors/experimental/physics/IJointStateSensor.h>
-#include <isaacsim/sensors/experimental/physics/IRaycastSensor.h>
+#include <isaacsim/core/includes/BindingsPythonUtils.hpp>
+#include <isaacsim/sensors/experimental/physics/IContactSensor.hpp>
+#include <isaacsim/sensors/experimental/physics/IEffortSensor.hpp>
+#include <isaacsim/sensors/experimental/physics/IImuSensor.hpp>
+#include <isaacsim/sensors/experimental/physics/IJointStateSensor.hpp>
+#include <isaacsim/sensors/experimental/physics/IRaycastSensor.hpp>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 

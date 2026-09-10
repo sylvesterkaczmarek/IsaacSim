@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "isaacsim/ucx/core/UcxListenerRegistry.h"
+#include "isaacsim/ucx/core/UcxListenerRegistry.hpp"
 
 #include <carb/logging/Log.h>
 

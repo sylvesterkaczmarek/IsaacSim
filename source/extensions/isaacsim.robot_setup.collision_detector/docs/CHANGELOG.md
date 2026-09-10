@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.2] - 2026-07-01
+### Fixed
+- Halt subtree traversal at nested `RigidBodyAPI` prims so a body's collision list, viewport highlight, and stage selection no longer include the geometry of child rigid bodies.
+
 ## [0.2.1] - 2026-03-06
 ### Fixed
 - Deregister USD ObjectsChanged listener when window is hidden; re-register on show to avoid unnecessary stage traversals while the panel is not visible

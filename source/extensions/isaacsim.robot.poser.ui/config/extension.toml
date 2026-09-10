@@ -1,5 +1,5 @@
 [package]
-version = "1.1.1"
+version = "1.1.4"
 category = "Simulation"
 title = "Robot Poser"
 description = "Create, manage, and export mimic training points for an active robot using an IK goal workflow."
@@ -30,8 +30,16 @@ name = "isaacsim.robot.poser.ui.tests"
 [[test]]
 name = "startup"
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 name = "robot_poser"
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
 
 [[test]]
 name = "ui"
@@ -89,6 +97,7 @@ args = [
     "--/app/window/dpiScaleOverride=1.0",
     "--/app/window/scaleToMonitor=false",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

@@ -47,6 +47,9 @@ class TemplateGenerator:
         Args:
             file_path: Path to the target file.
             file_string: Content to write to the file.
+
+        Raises:
+            OSError: If the target directory cannot be created or the file cannot be written.
         """
         Path(os.path.dirname(file_path)).mkdir(parents=True, exist_ok=True)
 
@@ -62,6 +65,10 @@ class TemplateGenerator:
 
         Returns:
             List of paths to all copied files.
+
+        Raises:
+            OSError: If source directory contents cannot be listed, target directories cannot be created, or files cannot
+                be copied.
         """
         new_paths = []
 
@@ -86,6 +93,9 @@ class TemplateGenerator:
         Args:
             replace_dict: Dictionary mapping keywords to replacement values.
             file_paths: List of file paths to process for keyword replacement.
+
+        Raises:
+            OSError: If a template file cannot be read or written.
         """
         for file_path in file_paths:
             if file_path[-4:] == ".png":
@@ -105,6 +115,9 @@ class TemplateGenerator:
             file_path: Target directory path for the template files.
             extension_title: Title of the extension.
             extension_description: Description of the extension.
+
+        Raises:
+            OSError: If common template files cannot be copied, read, or written.
         """
         source_dir = os.path.join(self._extension_path, "template_source_files", "common")
         new_paths = self._copy_directory_contents(source_dir, file_path)
@@ -127,7 +140,7 @@ class TemplateGenerator:
             extension_name: Name of the extension.
 
         Returns:
-            Valid Python package name with special characters replaced by underscores and '_python' suffix.
+            Valid Python package name with special characters replaced by underscores and the '_python' suffix.
         """
         # Convert all special characters in extension_name to underscores to make a valid python package name
         package_name = ""
@@ -151,6 +164,9 @@ class TemplateGenerator:
             file_path: Target directory path for the generated template.
             extension_title: Title of the extension.
             extension_description: Description of the extension.
+
+        Raises:
+            OSError: If template files cannot be copied, read, or written.
         """
         self._write_common_data(file_path, extension_title, extension_description)
 
@@ -177,6 +193,9 @@ class TemplateGenerator:
             file_path: Target directory path for the generated template.
             extension_title: Title of the extension.
             extension_description: Description of the extension.
+
+        Raises:
+            OSError: If template files cannot be copied, read, or written.
         """
         self._write_common_data(file_path, extension_title, extension_description)
 
@@ -201,6 +220,9 @@ class TemplateGenerator:
             file_path: Target directory path for the generated template.
             extension_title: Title of the extension.
             extension_description: Description of the extension.
+
+        Raises:
+            OSError: If template files cannot be copied, read, or written.
         """
         self._write_common_data(file_path, extension_title, extension_description)
 
@@ -227,6 +249,9 @@ class TemplateGenerator:
             file_path: Target directory path for the generated template.
             extension_title: Title of the extension.
             extension_description: Description of the extension.
+
+        Raises:
+            OSError: If template files cannot be copied, read, or written.
         """
         self._write_common_data(file_path, extension_title, extension_description)
 

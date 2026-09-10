@@ -1,5 +1,5 @@
 [package]
-version = "0.1.3"
+version = "0.1.5"
 category = "Simulation"
 title = "Isaac Sim Episode Recorder UI"
 description = "Standalone record / replay window for the Episode Recorder system. Provides a Tools/Replicator menu entry that opens a dockable panel for discovering recordable targets (articulations, rigid bodies, xforms), opening HDF5 sessions, recording episodes, and replaying them back to the live stage."
@@ -31,6 +31,7 @@ name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

@@ -94,7 +94,14 @@ robot_path = "/ur10"
 
 
 def get_clipped_joint_ranges(articulation_view: Any) -> tuple[Any, Any]:
-    """Compute joint ranges clipped to a 2-pi window for the given articulation."""
+    """Compute joint ranges clipped to a 2-pi window for the given articulation.
+
+    Args:
+        articulation_view: UR10 articulation view from which to read degree-of-freedom limits.
+
+    Returns:
+        Lower and upper joint-limit tensors, with ranges wider than one revolution clipped around their midpoint.
+    """
     lower_limit, upper_limit = articulation_view.get_dof_limits()
     # convert to numpy
     lower_limit = torch.from_numpy(lower_limit.numpy())
@@ -115,7 +122,17 @@ def get_clipped_joint_ranges(articulation_view: Any) -> tuple[Any, Any]:
 def get_joint_commands(
     articulation_view: Any, v_max: Any, T: Any, joint_indices: Any
 ) -> tuple[Callable[[float], Any], Callable[[float], Any]]:
-    """Generate sinusoidal position and velocity command functions for the joints."""
+    """Generate sinusoidal position and velocity command functions for the joints.
+
+    Args:
+        articulation_view: UR10 articulation view whose limits bound the position commands.
+        v_max: Peak velocity for each commanded joint in radians per second.
+        T: Half-period of the sinusoidal trajectory in seconds.
+        joint_indices: Degree-of-freedom indices to command.
+
+    Returns:
+        Position and velocity functions that evaluate the bounded sinusoidal trajectory at a given time.
+    """
     lower_joint_limits, upper_joint_limits = get_clipped_joint_ranges(articulation_view)
 
     # Convert joint_indices to numpy if it's a torch tensor
@@ -139,7 +156,15 @@ def on_physics_step(
     step: float,
     context: object,
 ) -> None:
-    """Apply joint position and velocity commands on each physics step."""
+    """Apply joint position and velocity commands on each physics step.
+
+    Args:
+        articulation_view: UR10 articulation view to observe and command.
+        position_commands: Function that evaluates desired joint positions for elapsed time, or ``None`` to skip.
+        velocity_commands: Function that evaluates desired joint velocities for elapsed time.
+        step: Duration of the current physics step in seconds.
+        context: Physics callback context. This callback does not use it.
+    """
     if position_commands is None:
         return
     timestep[0] += step
@@ -172,7 +197,7 @@ benchmark.set_phase("loading", start_recording_frametime=False, start_recording_
 
 get_active_viewport().updates_enabled = visual
 
-robot_usd_path = get_assets_root_path() + "/Isaac/Robots/UniversalRobots/ur10/ur10.usd"
+robot_usd_path = get_assets_root_path() + "/Isaac/Robots_Multiphysics/UniversalRobots/ur10/ur10.usda"
 
 my_world = World(backend="torch", device=device)
 PhysicsContext(physics_dt=1.0 / 60.0)

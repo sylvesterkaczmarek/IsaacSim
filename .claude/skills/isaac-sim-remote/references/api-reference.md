@@ -8,6 +8,10 @@
 - **Async support**: Code containing `await` is detected and awaited automatically
 - **Execution scope**: Code runs in Isaac Sim's main Python environment with full access to all loaded extensions
 
+**Security**: Loopback developer endpoint (`127.0.0.1:8226` by default). Keep the bind on
+localhost; do not publish the port on shared or cloud hosts. Enable the extension only while
+remote iteration is needed.
+
 ### Response JSON Schema
 
 ```json

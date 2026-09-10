@@ -34,7 +34,7 @@ def ray_cast(
     """Projects a raycast forward along x axis with specified offset.
 
     If a hit is found within the maximum distance, then the object's prim path and distance to it is returned.
-    Otherwise, a None and 10000 is returned.
+    Otherwise, None and 10000 is returned.
 
     Args:
         position: Origin's position for ray cast.
@@ -43,7 +43,7 @@ def ray_cast(
         max_dist: Maximum distance to test for collisions in stage units.
 
     Returns:
-        Path to geometry that was hit and hit distance, returns None, 10000 if no hit occurred.
+        Path to geometry that was hit and hit distance, or None and 10000 if no hit occurred.
     """
     input_tr = Gf.Matrix4f()
     input_tr.SetTranslate(Gf.Vec3f(*position.tolist()))

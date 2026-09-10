@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.4] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [0.3.3] - 2026-06-29
+### Changed
+- Classify the example UI packages as lifecycle-only; `UIBuilder` and Kit `Extension` classes are no longer published Python API.
+
 ## [0.3.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

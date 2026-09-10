@@ -30,14 +30,14 @@ from .particle_system import ParticleSystem
 class SingleParticleSystem:
     """A wrapper around PhysX particle system.
 
-    PhysX uses GPU-accelerated position-based-dynamics (PBD) particle simulation [1]. The particle system
-    can be used to simulate fluids, cloth and inflatables [2].
+    PhysX uses GPU-accelerated position-based dynamics (PBD) particle simulation [1]. The particle system
+    can be used to simulate fluids, cloth, and inflatables [2].
 
     The wrapper is useful for creating and setting solver parameters common to the particle objects
     associated with the system. The particle system's solver parameters cannot be changed once the scene
     is playing.
 
-    Initializes and Applies PhysxSchema.PhysxParticleSystem to the prim at prim_path.
+    Initializes and applies PhysxSchema.PhysxParticleSystem to the prim at prim_path.
 
     All arguments are accepted as :obj:`None`. In this case, they either have the default values from
     `PhysxParticleSystem` schema (in case a new particle system is created), or the values present in the
@@ -273,10 +273,10 @@ class SingleParticleSystem:
     """
 
     def set_particle_system_enabled(self, value: bool) -> None:
-        """Set enabling of the particle system.
+        """Sets whether the particle system is enabled.
 
         Args:
-            value: Whether to enable or disable.
+            value: Whether to enable or disable the particle system.
         """
         value = self._backend_utils.convert(value, device=self._device)
         value = self._backend_utils.expand_dims(value, 0)
@@ -370,9 +370,7 @@ class SingleParticleSystem:
         self._particle_system_view.set_solver_position_iteration_counts(value)
 
     def set_max_depenetration_velocity(self, value: float) -> None:
-        """Set the maximum velocity permitted to be introduced by the solver to.
-
-            depenetrate intersecting particles.
+        """Set the maximum velocity permitted to be introduced by the solver to depenetrate intersecting particles.
 
         Args:
             value: The maximum depenetration velocity.
@@ -417,7 +415,8 @@ class SingleParticleSystem:
         If True, self collisions follow particle-object-specific settings. If False,
         all particle self collisions are disabled, regardless of any other settings.
 
-        Note: Improves performance if self collisions are not needed.
+        Note:
+            Improves performance if self collisions are not needed.
 
         Args:
             value: Whether to enable or disable.
@@ -535,11 +534,10 @@ class SingleParticleSystem:
         return self._particle_system_view.get_max_velocities()[0]
 
     def get_global_self_collision_enabled(self) -> bool:
-        """Whether self collisions to follow particle-object-specific settings is enabled or disabled.
+        """Whether self collisions follow particle-object-specific settings is enabled or disabled.
 
         Returns:
-            Whether self collisions to follow particle-object-specific settings
-                is enabled or disabled.
+            Whether self collisions follow particle-object-specific settings is enabled or disabled.
         """
         return self._particle_system_view.get_global_self_collisions_enabled()[0]
 

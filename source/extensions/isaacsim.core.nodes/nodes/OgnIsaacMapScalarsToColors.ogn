@@ -1,0 +1,57 @@
+{
+    "IsaacMapScalarsToColors": {
+        "version": 1,
+        "icon": "icons/isaac-sim.svg",
+        "description": "Isaac Sim Node that maps a scalar buffer to per-point RGBA colors",
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": "isaacCore",
+        "metadata": {
+            "uiName": "Isaac Map Scalars to Colors"
+        },
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "The input execution port"
+            },
+            "scalarPtr": {
+                "type": "uint64",
+                "description": "Pointer to the scalar buffer",
+                "default": 0
+            },
+            "scalarBufferSize": {
+                "type": "uint64",
+                "description": "Size in bytes of the scalar buffer; the scalar count is this divided by sizeof(float)",
+                "default": 0
+            },
+            "baseColor": {
+                "type": "colorf[4]",
+                "description": "RGBA multiplier applied to the generated color ramp",
+                "default": [1.0, 1.0, 1.0, 1.0]
+            },
+            "logScaleMode": {
+                "type": "bool",
+                "description": "Normalize the true logarithm of the raw scalar values across [minPositive, max] (matplotlib LogNorm semantics) instead of scaling linearly across [min, max]. Non-positive values are clamped to the low end of the ramp; if no positive values exist, linear scaling is used instead.",
+                "default": false
+            }
+        },
+        "outputs": {
+            "execOut": {
+                "type": "execution",
+                "description": "Triggers when colors have been computed"
+            },
+            "colorsPtr": {
+                "type": "uint64",
+                "description": "Pointer to a host buffer of RGBA float colors, one per scalar",
+                "default": 0
+            },
+            "colorsBufferSize": {
+                "type": "uint64",
+                "description": "Size in bytes of the color buffer pointed to by colorsPtr",
+                "default": 0
+            }
+        },
+        "state": {
+            "$comment": "Holds the persistent host color buffer that colorsPtr points to."
+        }
+    }
+}

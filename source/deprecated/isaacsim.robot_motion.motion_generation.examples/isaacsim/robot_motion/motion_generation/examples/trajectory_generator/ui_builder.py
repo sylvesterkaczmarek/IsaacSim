@@ -23,11 +23,11 @@ from typing import Any
 import carb
 import omni.timeline
 import omni.ui as ui
-from isaacsim.core.api.world import World
+from isaacsim.core.api import World
 from isaacsim.core.prims import SingleXFormPrim
 from isaacsim.core.utils.stage import create_new_stage, get_current_stage, update_stage_async
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.gui.components.element_wrappers import Button, CollapsableFrame, StateButton
+from isaacsim.gui.components import Button, CollapsableFrame, StateButton
 from isaacsim.gui.components.ui_utils import get_style
 from pxr import Sdf, UsdLux
 
@@ -76,6 +76,7 @@ class UIBuilder:
         """Callback for Timeline events (Play, Pause, Stop).
 
         Note: With Events 2.0, this is called only for STOP events from the extension.
+        Resets and disables the trajectory StateButton controls.
 
         Args:
             event: Timeline event.
@@ -104,6 +105,7 @@ class UIBuilder:
         """Callback for Stage Events.
 
         Note: With Events 2.0, this is called only for OPENED events from the extension.
+        Resets the extension state when a stage is opened.
 
         Args:
             event: Stage event.
@@ -114,8 +116,8 @@ class UIBuilder:
     def cleanup(self) -> None:
         """Called when the stage is closed or the extension is hot reloaded.
 
-        Perform any necessary cleanup such as removing active callback functions
-        Buttons imported from omni.isaac.ui.element_wrappers implement a cleanup function that should be called.
+        Performs cleanup for wrapped UI elements, such as removing active callback functions.
+        Buttons imported from isaacsim.gui.components.element_wrappers implement a cleanup function that should be called.
         """
         for ui_elem in self.wrapped_ui_elements:
             ui_elem.cleanup()
@@ -124,6 +126,7 @@ class UIBuilder:
         """Build a custom UI tool to run your extension.
 
         This function will be called any time the UI window is closed and reopened.
+        Creates World Controls and Run Scenario frames for loading, resetting, and running trajectory examples.
         """
         world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
 
@@ -192,9 +195,15 @@ class UIBuilder:
         SingleXFormPrim(str(sphereLight.GetPath().pathString)).set_world_pose([6.5, 0, 12])
 
     def _on_load_btn_clicked(self) -> None:
+        """Starts loading the UR10 trajectory generation world for the Load Button."""
         asyncio.ensure_future(self._load_world_async())
 
     async def _load_world_async(self) -> None:
+        """Loads and initializes the UR10 trajectory generation world.
+
+        Clears the existing World, creates a simulation World, sets up the stage assets, initializes and resets the
+        simulation, pauses the World, and sets up the scenario controls.
+        """
         prev_world = World.instance()
         if prev_world is not None:
             prev_world.clear_all_callbacks()
@@ -209,9 +218,11 @@ class UIBuilder:
         self._setup_scenario()
 
     def _on_reset_btn_clicked(self) -> None:
+        """Starts a World reset from the Reset Button."""
         asyncio.ensure_future(self._reset_world_async())
 
     async def _reset_world_async(self) -> None:
+        """Resets the active World, updates the stage, pauses the simulation, and runs the post-reset callback."""
         world = World.instance()
         if world is None:
             carb.log_warn("Reset Button was used when there is no instance of World.")
@@ -244,8 +255,8 @@ class UIBuilder:
         The user may assume that their assets have been loaded by their setup_scene_fn callback, that
         their objects are properly initialized, and that the timeline is paused on timestep 0.
 
-        In this example, a scenario is initialized which will move each robot joint one at a time in a loop while moving the
-        provided prim in a circle around the robot.
+        In this example, a scenario is initialized which will move each robot joint one at a time in a loop while moving
+        the provided prim in a circle around the robot.
         """
         self._scenario.setup()
 
@@ -279,7 +290,7 @@ class UIBuilder:
         When the b_text "STOP" is pressed, the physics callback is removed.
 
         Args:
-            step: The dt of the current physics step
+            step: The dt of the current physics step.
             *args: Additional positional arguments.
             **kwargs: Additional keyword arguments.
         """
@@ -329,7 +340,7 @@ class UIBuilder:
         self._timeline.pause()
 
     def _reset_extension(self) -> None:
-        """This is called when the user opens a new stage from self.on_stage_event().
+        """Resets extension state when the user opens a new stage from self.on_stage_event().
 
         All state should be reset.
         """

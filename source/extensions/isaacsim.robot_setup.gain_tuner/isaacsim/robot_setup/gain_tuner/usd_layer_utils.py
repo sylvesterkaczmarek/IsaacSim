@@ -19,12 +19,15 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
+from typing import NamedTuple
 
 import pxr
 from pxr import Sdf, Usd
 
 _PHYSICS_LAYER_RE = re.compile(r"_?physics\.usda?$")
+_MUJOCO_LAYER_RE = re.compile(r"_?mujoco\.usda?$")
+_PHYSX_LAYER_RE = re.compile(r"_?physx\.usda?$")
 _STANDARD_PHYSICS_REL_PATHS = (
     os.path.join("payloads", "Physics", "physics.usda"),
     os.path.join("payloads", "Physics", "_physics.usd"),
@@ -41,6 +44,30 @@ def is_physics_layer(layer_identifier: str) -> bool:
         True if the identifier matches a conventional physics layer name.
     """
     return _PHYSICS_LAYER_RE.search(layer_identifier) is not None
+
+
+def is_mujoco_layer(layer_identifier: str) -> bool:
+    """Return True if ``layer_identifier`` names a MuJoCo-native overlay layer.
+
+    Args:
+        layer_identifier: Layer identifier or path to inspect.
+
+    Returns:
+        True if the identifier matches a conventional ``mujoco.usda`` layer name.
+    """
+    return _MUJOCO_LAYER_RE.search(layer_identifier) is not None
+
+
+def is_physx_layer(layer_identifier: str) -> bool:
+    """Return True if ``layer_identifier`` names a PhysX overlay layer.
+
+    Args:
+        layer_identifier: Layer identifier or path to inspect.
+
+    Returns:
+        True if the identifier matches a conventional ``physx.usda`` layer name.
+    """
+    return _PHYSX_LAYER_RE.search(layer_identifier) is not None
 
 
 def _layer_files_match(layer_a: Sdf.Layer, layer_b: Sdf.Layer) -> bool:
@@ -103,6 +130,50 @@ def is_layer_savable(layer: Sdf.Layer | None) -> bool:
     if real_path and os.path.isfile(real_path):
         return os.access(real_path, os.W_OK)
     return False
+
+
+class StageSaveDecision(NamedTuple):
+    """Decision describing how a stage save action should treat its layers."""
+
+    writable_layer_identifiers: list[str]
+    #: Identifiers of layers that can be both edited and saved.
+
+    show_dialog: bool
+    #: Whether the stage save dialog should be presented.
+
+    post_no_permission_toast: bool
+    #: Whether the single no-permission warning should be posted.
+
+
+def plan_stage_layer_save(layers: Iterable[Sdf.Layer]) -> StageSaveDecision:
+    """Decide which layers to offer for saving and whether to warn about permissions.
+
+    Collect the identifiers of layers that can be both edited and saved. The stage
+    save dialog is offered only when at least one writable layer exists, and the
+    no-permission warning is posted once when any layer is not writable or when no
+    writable layers remain.
+
+    Args:
+        layers: Layers from the stage layer stack to inspect.
+
+    Returns:
+        A decision listing the writable layer identifiers and whether to show the
+        save dialog and post the no-permission warning.
+    """
+    writable_layer_identifiers: list[str] = []
+    has_unwritable = False
+    for layer in layers:
+        if layer is None:
+            continue
+        if layer.permissionToEdit and layer.permissionToSave:
+            writable_layer_identifiers.append(layer.identifier)
+        else:
+            has_unwritable = True
+    return StageSaveDecision(
+        writable_layer_identifiers=writable_layer_identifiers,
+        show_dialog=bool(writable_layer_identifiers),
+        post_no_permission_toast=has_unwritable or not writable_layer_identifiers,
+    )
 
 
 def iter_stage_layers(stage: Usd.Stage, *, include_session_layers: bool = False) -> Iterator[Sdf.Layer]:
@@ -305,7 +376,7 @@ def collect_gain_save_edits(
         ``(edits, physics_layer)`` where ``edits`` maps layer save ids to
         ``(property_path, value)`` pairs, remapped to the physics layer when found.
     """
-    from isaacsim.robot_setup.gain_tuner.ui.joint_table_widget import (
+    from isaacsim.robot_setup.gain_tuner.joint_drive_attrs import (
         get_damping_attr,
         get_joint_drive_type_attr,
         get_mimic_damping_ratio_attr,

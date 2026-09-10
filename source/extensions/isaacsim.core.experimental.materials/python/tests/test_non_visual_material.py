@@ -22,6 +22,7 @@ import numpy as np
 import omni.kit.test
 import warp as wp
 from isaacsim.core.experimental.materials import NonVisualMaterial
+from isaacsim.core.experimental.materials.impl import non_visual_material as non_visual_material_impl
 from isaacsim.core.experimental.materials.impl.non_visual_material import ATTRIBUTE_SPEC, BASE_SPEC, COATING_SPEC
 from isaacsim.core.experimental.prims.tests.common import (
     check_lists,
@@ -30,7 +31,22 @@ from isaacsim.core.experimental.prims.tests.common import (
     draw_indices,
     parametrize,
 )
-from pxr import UsdShade
+from pxr import Sdf, UsdShade
+
+
+class _SettingsWithoutNonVisualMaterialPrefix:
+    """Settings test double that behaves like Kit before the prefix is contributed."""
+
+    def __init__(self) -> None:
+        self.default_path = None
+        self.default_value = None
+
+    def get(self, path: str) -> None:
+        return None
+
+    def set_default_string(self, path: str, value: str) -> None:
+        self.default_path = path
+        self.default_value = value
 
 
 async def populate_stage(max_num_prims: int, operation: Literal["wrap", "create"]) -> None:
@@ -143,25 +159,108 @@ class TestNonVisualMaterial(omni.kit.test.AsyncTestCase):
             device: Simulation device selected by the parametrized case.
             backend: Prim backend selected by the parametrized case.
         """
-        choices = list(ATTRIBUTE_SPEC.keys())
-        # test cases
-        # - check before applying any values
-        attributes = prim.get_attributes()
-        check_lists(["none"] * num_prims, attributes)
+        # attributes are authored as a token[] array, so each material holds a list of attributes
+        # - check the default value before applying anything
+        self.assertEqual(prim.get_attributes(), [["none"]] * num_prims)
+        # - broadcast a single attribute (string) to all prims
+        prim.set_attributes("emissive")
+        self.assertEqual(prim.get_attributes(), [["emissive"]] * num_prims)
+        # - broadcast a shared multi-attribute set (list of strings) to all prims
+        prim.set_attributes(["emissive", "retroreflective"])
+        self.assertEqual(prim.get_attributes(), [["emissive", "retroreflective"]] * num_prims)
+        # - per-prim attribute sets (list of lists)
+        per_prim = [["single_sided"] if i % 2 == 0 else ["emissive", "visually_transparent"] for i in range(num_prims)]
+        prim.set_attributes(per_prim)
+        self.assertEqual(prim.get_attributes(), per_prim)
         # - by indices
-        for indices, expected_count in draw_indices(count=num_prims, step=2, types=[list, np.ndarray, wp.array]):
-            cprint(f"  |    |-- indices: {type(indices).__name__}, expected_count: {expected_count}")
-            count = expected_count
-            for v0, expected_v0 in draw_choice(shape=(count,), choices=choices):
-                prim.set_attributes(v0, indices=indices)
-                output = prim.get_attributes(indices=indices)
-                check_lists(expected_v0, output)
-        # - all
-        count = num_prims
-        for v0, expected_v0 in draw_choice(shape=(count,), choices=choices):
-            prim.set_attributes(v0)
-            output = prim.get_attributes()
-            check_lists(expected_v0, output)
+        prim.set_attributes("none")
+        prim.set_attributes("retroreflective", indices=[0])
+        self.assertEqual(prim.get_attributes(), [["retroreflective"]] + [["none"]] * (num_prims - 1))
+        # - invalid attribute raises
+        with self.assertRaises(ValueError):
+            prim.set_attributes("not_a_real_attribute")
+
+    @parametrize(backends=["usd"], prim_class=NonVisualMaterial, populate_stage_func=populate_stage)
+    async def test_attribute_usd_types(self, prim: Any, num_prims: Any, device: Any, backend: Any) -> None:
+        """Test that non-visual material attributes are authored using SimReady spec USD types.
+
+        Args:
+            prim: Material wrapper under test.
+            num_prims: Number of material prims in the parametrized case.
+            device: Simulation device selected by the parametrized case.
+            backend: Prim backend selected by the parametrized case.
+        """
+        from isaacsim.core.experimental.materials.impl.non_visual_material import (
+            ATTRIBUTE_ATTR,
+            BASE_ATTR,
+            COATING_ATTR,
+        )
+
+        for usd_prim in prim.prims:
+            self.assertEqual(usd_prim.GetAttribute(BASE_ATTR).GetTypeName(), Sdf.ValueTypeNames.Token)
+            self.assertEqual(usd_prim.GetAttribute(COATING_ATTR).GetTypeName(), Sdf.ValueTypeNames.Token)
+            self.assertEqual(usd_prim.GetAttribute(ATTRIBUTE_ATTR).GetTypeName(), Sdf.ValueTypeNames.TokenArray)
+
+    async def test_attribute_names_use_simready_prefix_when_setting_missing(self) -> None:
+        """Test that missing Kit settings fall back to the SimReady non-visual material prefix."""
+        settings = _SettingsWithoutNonVisualMaterialPrefix()
+
+        prefix = non_visual_material_impl._get_non_visual_material_prefix(settings)
+
+        self.assertEqual(prefix, "omni:simready:nonvisual")
+        self.assertEqual(
+            settings.default_path,
+            non_visual_material_impl._NON_VISUAL_MATERIAL_PREFIX_SETTING,
+        )
+        self.assertEqual(settings.default_value, "omni:simready:nonvisual")
+
+    @parametrize(backends=["usd"], prim_class=NonVisualMaterial, populate_stage_func=populate_stage)
+    async def test_surface_shader_authored(self, prim: Any, num_prims: Any, device: Any, backend: Any) -> None:
+        """Each non-visual material gets a surface shader connected to ``outputs:surface``.
+
+        A connected surface shader is required for the non-visual material IDs to resolve after a
+        cold stage load (not only when the material is authored live).
+
+        Args:
+            prim: Material wrapper under test.
+            num_prims: Number of material prims in the parametrized case.
+            device: Simulation device selected by the parametrized case.
+            backend: Prim backend selected by the parametrized case.
+        """
+        import omni.usd
+
+        for material in prim.materials:
+            surface_output = material.GetSurfaceOutput()
+            self.assertTrue(surface_output.HasConnectedSource(), "material outputs:surface is not connected")
+            shader_prim = omni.usd.get_shader_from_material(material.GetPrim(), get_prim=True)
+            self.assertTrue(shader_prim and shader_prim.IsValid(), "no shader connected to the material")
+            self.assertEqual(UsdShade.Shader(shader_prim).GetIdAttr().Get(), "UsdPreviewSurface")
+
+    @parametrize(backends=["usd"], prim_class=NonVisualMaterial, populate_stage_func=populate_stage)
+    async def test_encode_decode_multiple_attributes(
+        self, prim: Any, num_prims: Any, device: Any, backend: Any
+    ) -> None:
+        """Test encoding/decoding of multiple combined attributes (bitfield).
+
+        Args:
+            prim: Material wrapper under test.
+            num_prims: Number of material prims in the parametrized case.
+            device: Simulation device selected by the parametrized case.
+            backend: Prim backend selected by the parametrized case.
+        """
+        prim.set_bases("aluminum")
+        prim.set_coatings("paint")
+        prim.set_attributes(["emissive", "retroreflective"])
+        # emissive (1) | retroreflective (2) -> 3, shifted into bits 11-15 -> 3 << 11
+        expected_id = BASE_SPEC["aluminum"] + (COATING_SPEC["paint"] << 8) + (0x3 << 11)
+        encoded_ids = NonVisualMaterial.encode_material_ids(prim)
+        check_lists([expected_id] * num_prims, encoded_ids.numpy().flatten().tolist())
+        # decoding recovers both attributes
+        decoded_ids = NonVisualMaterial.decode_material_ids(encoded_ids)
+        for base, coating, attributes in decoded_ids:
+            self.assertEqual(base, "aluminum")
+            self.assertEqual(coating, "paint")
+            self.assertEqual(sorted(attributes), ["emissive", "retroreflective"])
 
     @parametrize(backends=["usd"], prim_class=NonVisualMaterial, populate_stage_func=populate_stage)
     async def test_encode_decode_material_ids(self, prim: Any, num_prims: Any, device: Any, backend: Any) -> None:
@@ -183,9 +282,11 @@ class TestNonVisualMaterial(omni.kit.test.AsyncTestCase):
         ):
             prim.set_bases(v0)
             prim.set_coatings(v1)
-            prim.set_attributes(v2)
+            # apply one attribute per prim (as single-element attribute sets)
+            prim.set_attributes([[attribute] for attribute in v2])
             encoded_ids = NonVisualMaterial.encode_material_ids(prim)
             decoded_ids = NonVisualMaterial.decode_material_ids(encoded_ids)
             check_lists(expected_v0, [item[0] for item in decoded_ids])
             check_lists(expected_v1, [item[1] for item in decoded_ids])
-            check_lists(expected_v2, [item[2] for item in decoded_ids])
+            # decoded attributes are returned as lists (single-element for a single attribute)
+            check_lists([[attribute] for attribute in expected_v2], [item[2] for item in decoded_ids])

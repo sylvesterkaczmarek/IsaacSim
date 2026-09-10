@@ -93,6 +93,7 @@ class SimulationApp:
         "headless": True,
         "hide_ui": None,
         "active_gpu": None,
+        "active_cuda_gpus": None,
         "physics_gpu": 0,
         "multi_gpu": True,
         "max_gpu_count": None,
@@ -118,7 +119,7 @@ class SimulationApp:
         "create_new_stage": True,
         "extra_args": [],
         "enable_crashreporter": True,
-        "limit_cpu_threads": 32,
+        "limit_cpu_threads": 16,
         "disable_viewport_updates": False,
     }
     """Default configuration dictionary for launching the SimulationApp.
@@ -145,7 +146,10 @@ class SimulationApp:
     Args:
         headless (bool): Disable window creation and UI when running. Defaults to True
         hide_ui (bool): Hide UI when running to improve performance, when headless is set to true, the UI is hidden, set to false to override this behavior when live streaming. Defaults to None
-        active_gpu (int): Specify the GPU to use when running, set to None to use default value which is usually the first gpu, default is None
+        active_gpu (int): Specify the physical GPU to use for rendering. Set to None to use the default, which is
+            usually the first GPU. Defaults to None.
+        active_cuda_gpus (list[int]): Specify the GPUs to use for rendering by CUDA index. This honors the device
+            ordering from `CUDA_VISIBLE_DEVICES`. Cannot be combined with `active_gpu`. Defaults to None.
         physics_gpu (int): Specify the GPU to use when running physics simulation. Defaults to 0 (first GPU).
         multi_gpu (bool): Set to true to enable Multi GPU support, Defaults to true
         max_gpu_count (int): Maximum number of GPUs to use, Defaults to None which will use all available
@@ -171,7 +175,7 @@ class SimulationApp:
         create_new_stage (bool): Set False to not create a new stage on application startup. Defaults to True, does not have an effect if open_usd is not None.
         extra_args: (list): List of extra command line arguments to pass down to the kit process
         enable_crashreporter (bool): Enable crash reporter. Defaults to True
-        limit_cpu_threads (int): Limit the number of CPU threads created to the lesser of cpu core count or specified value. Defaults to 32.
+        limit_cpu_threads (int): Limit the number of CPU threads created to the lesser of cpu core count or specified value. Defaults to 16.
         disable_viewport_updates (bool): Disable viewport updates to improve performance. Defaults to False.
     """
 
@@ -264,6 +268,7 @@ class SimulationApp:
 
         if launch_config is not None:
             self.config.update(launch_config)
+        self._validate_gpu_config()
         self._apply_renderer_defaults(launch_config)
         if builtins.ISAAC_LAUNCHED_FROM_JUPYTER:
             if self.config["headless"] is False:
@@ -395,6 +400,18 @@ class SimulationApp:
             if setting_key not in override_keys:
                 self.config[setting_key] = default_value
 
+    def _validate_gpu_config(self) -> None:
+        """Validate renderer GPU selection options."""
+        active_cuda_gpus = self.config.get("active_cuda_gpus")
+        if active_cuda_gpus is None:
+            return
+        if self.config.get("active_gpu") is not None:
+            raise ValueError("`active_gpu` and `active_cuda_gpus` cannot be specified together")
+        if not isinstance(active_cuda_gpus, list) or not active_cuda_gpus:
+            raise ValueError("`active_cuda_gpus` must be a non-empty list of non-negative integers")
+        if any(type(gpu_index) is not int or gpu_index < 0 for gpu_index in active_cuda_gpus):
+            raise ValueError("`active_cuda_gpus` must be a non-empty list of non-negative integers")
+
     def __del__(self) -> None:
         """Destructor for the SimulationApp class.
 
@@ -456,6 +473,10 @@ class SimulationApp:
             args.append("--/app/content/emptyStageOnStart=false")
         if self.config.get("active_gpu") is not None:
             args.append(f'--/renderer/activeGpu={self.config["active_gpu"]}')
+        if self.config.get("active_cuda_gpus") is not None:
+            # The trailing comma keeps a single-element value string-typed for Kit's list parser.
+            cuda_gpu_list = ",".join(str(gpu_index) for gpu_index in self.config["active_cuda_gpus"])
+            args.append(f"--/renderer/multiGpu/activeCudaGpus={cuda_gpu_list},")
         if self.config.get("physics_gpu") is not None:
             args.append(f'--/physics/cudaDevice={self.config["physics_gpu"]}')
         if self.config.get("max_gpu_count") is not None:
@@ -465,7 +486,9 @@ class SimulationApp:
             args.append("--/renderer/raytracingMotion/enableHydraEngineMasking=true")
             args.append("--/renderer/raytracingMotion/enabledForHydraEngines='0'")
 
-        # limit the number of CPU threads created to lesser of: num_cpu_cores or config-set limit
+        # Limit thread count to the lesser of physical cores or limit_cpu_threads (default 16).
+        # 16 is chosen as the default because Carbonite's task scheduler sees diminishing returns
+        # beyond that point; raise limit_cpu_threads explicitly if you need more threads.
         num_cpu_cores = os.cpu_count()
         num_threads = min(num_cpu_cores, self.config.get("limit_cpu_threads"))
         # set env variables to limit threads
@@ -838,12 +861,27 @@ class SimulationApp:
 
     @staticmethod
     def _flush_stdio() -> None:
-        """Flush Python's stdout and stderr, swallowing errors from closed/detached streams."""
+        """Flush Python and C stdout/stderr, swallowing errors from closed/detached streams."""
         for stream in (sys.stdout, sys.stderr):
             try:
                 stream.flush()
             except (ValueError, OSError, AttributeError):
                 pass
+        # Native Kit output (e.g. ``IApp.print_and_log``) goes through the C/C++ stdio
+        # buffers, which ``os._exit`` abandons unflushed. ``fflush(NULL)`` flushes every
+        # open C output stream, including ``std::cout`` (synchronized with C stdio).
+        try:
+            import ctypes
+
+            # ``CDLL(None)`` maps to ``dlopen(NULL)`` on POSIX (process-global symbols).
+            # Windows has no equivalent, and ``CDLL.__init__`` evaluates ``'/' in name``
+            # before loading, raising ``TypeError`` on ``None``. Load the Universal CRT
+            # there instead: Kit's MSVC C/C++ and the embedded CPython share
+            # ``ucrtbase.dll``, so ``fflush(NULL)`` still drains the native stdio buffers.
+            libc = ctypes.CDLL("ucrtbase" if os.name == "nt" else None)
+            libc.fflush(None)
+        except (ImportError, OSError, AttributeError, TypeError):
+            pass
 
     def close(self, wait_for_replicator: bool = True, skip_cleanup: bool = False, exit_code: int = 0) -> None:
         """Close the running Omniverse Toolkit application.
@@ -857,8 +895,9 @@ class SimulationApp:
             skip_cleanup: If True, performs immediate exit without cleanup.
                 If False, performs graceful shutdown with full cleanup.
             exit_code: Process exit status to preserve when fast shutdown terminates
-                the process. Nonzero values flush stdio and exit with the supplied
-                status before Kit's fast-shutdown path can replace it with 0.
+                the process. The same cleanup runs regardless of the value; a nonzero
+                status is applied at the point where Kit's fast-shutdown path would
+                otherwise terminate the process with 0.
 
         Example:
 
@@ -883,10 +922,6 @@ class SimulationApp:
         # the interpreter's normal flush-on-exit, so pending print() output would otherwise be lost.
         self._flush_stdio()
 
-        if exit_code != 0 and self.config.get("fast_shutdown", False):
-            self._exiting = True
-            os._exit(exit_code)
-
         # `post_quit()` can already stop Kit's run loop before callers reach `close()`.
         # In that state, forcing shutdown may block indefinitely.
         if not self._app.is_running():
@@ -904,6 +939,10 @@ class SimulationApp:
             _logging = carb.logging.acquire_logging()
             _logging.set_log_enabled(False)
             self._flush_stdio()
+            if exit_code != 0 and self.config.get("fast_shutdown", False):
+                # app.shutdown() under fast shutdown exits the process with status 0;
+                # preserve the caller's exit status instead.
+                os._exit(exit_code)
             self._arm_shutdown_watchdog()
             self._app.shutdown()
             return
@@ -960,6 +999,10 @@ class SimulationApp:
         # immediately.  When false it performs full extension teardown and returns;
         # the framework/plugin unload is left to process exit.
         self._flush_stdio()
+        if exit_code != 0 and self.config.get("fast_shutdown", False):
+            # app.shutdown() under fast shutdown exits the process with status 0;
+            # preserve the caller's exit status now that cleanup is complete.
+            os._exit(exit_code)
         self._arm_shutdown_watchdog()
         self._app.shutdown()
 

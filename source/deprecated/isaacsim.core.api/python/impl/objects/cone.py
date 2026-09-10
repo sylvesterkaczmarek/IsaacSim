@@ -31,29 +31,32 @@ from pxr import Gf, UsdGeom
 
 
 class VisualCone(SingleGeometryPrim):
-    """High level wrapper to create/encapsulate a visual cone.
+    """High level wrapper to create or encapsulate a visual cone.
 
     .. note::
 
-        Visual cones (Cone shape) have no collisions (Collider API) or rigid body dynamics (Rigid Body API)
+        Visual cones (Cone shape) have no collisions (Collider API) or rigid body dynamics (Rigid Body API).
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create
-        name: shortname to be used as a key by Scene class.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. shape is (3, ).
-        translation: translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
+        position: Position in the world frame of the prim. Shape is (3, ).
+        translation: Translation in the local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world or local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        color: color of the visual shape.
-        radius: base radius.
-        height: cone height.
-        visual_material: visual material to be applied to the held prim.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to false for an invisible prim in the stage while rendering.
+        color: Color of the visual shape.
+        radius: Base radius.
+        height: Cone height.
+        visual_material: Visual material to be applied to the held prim.
             If not specified, a default visual material will be added.
+
+    Raises:
+        TypeError: If an existing prim at prim_path cannot be parsed as a Cone object.
 
     Example:
 
@@ -71,7 +74,6 @@ class VisualCone(SingleGeometryPrim):
         ... )
         >>> prim
         <isaacsim.core.api.objects.cone.VisualCone object at 0x7f513413aa70>
-
     """
 
     def __init__(
@@ -137,14 +139,12 @@ class VisualCone(SingleGeometryPrim):
         """Set the base radius.
 
         Args:
-            radius: base radius
+            radius: Base radius.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> prim.set_radius(1.0)
-
+                >>> prim.set_radius(1.0)
         """
         self.geom.GetRadiusAttr().Set(radius)
         return
@@ -153,15 +153,13 @@ class VisualCone(SingleGeometryPrim):
         """Get the base radius.
 
         Returns:
-            base radius
+            The base radius.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> prim.get_radius()
-            0.5
-
+                >>> prim.get_radius()
+                0.5
         """
         return self.geom.GetRadiusAttr().Get()
 
@@ -169,14 +167,12 @@ class VisualCone(SingleGeometryPrim):
         """Set the cone height.
 
         Args:
-            height: cone height
+            height: Cone height.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> prim.set_height(2.0)
-
+                >>> prim.set_height(2.0)
         """
         self.geom.GetHeightAttr().Set(height)
         return
@@ -185,38 +181,36 @@ class VisualCone(SingleGeometryPrim):
         """Get the cone height.
 
         Returns:
-            cone height
+            The cone height.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> prim.get_height()
-            1.0
-
+                >>> prim.get_height()
+                1.0
         """
         return self.geom.GetHeightAttr().Get()
 
 
 class FixedCone(VisualCone):
-    """High level wrapper to create/encapsulate a fixed cone.
+    """High-level wrapper to create or encapsulate a fixed cone.
 
     .. note::
 
-        Fixed cones (Cone shape) have collisions (Collider API) but no rigid body dynamics (Rigid Body API)
+        Fixed cones (Cone shape) have collisions (Collider API) but no rigid body dynamics (Rigid Body API).
 
     Args:
         prim_path: Prim path of the Prim to encapsulate or create.
-        name: Shortname to be used as a key by Scene class.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: Position in the world frame of the prim. shape is (3, ).
+        position: Position in the world frame of the prim. Shape is (3, ).
         translation: Translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: Quaternion orientation in the world/ local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world or local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: Local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: Set to false for an invisible prim in the stage while rendering.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to False for an invisible prim in the stage while rendering.
         color: Color of the visual shape.
         radius: Base radius.
         height: Cone height.
@@ -241,7 +235,6 @@ class FixedCone(VisualCone):
         ... )
         >>> prim
         <isaacsim.core.api.objects.cone.FixedCone object at 0x7f51489f09a0>
-
     """
 
     def __init__(
@@ -296,7 +289,7 @@ class FixedCone(VisualCone):
 
 
 class DynamicCone(SingleRigidPrim, FixedCone):
-    """High level wrapper to create/encapsulate a dynamic cone.
+    """High-level wrapper to create or encapsulate a dynamic cone.
 
     .. note::
 
@@ -304,16 +297,16 @@ class DynamicCone(SingleRigidPrim, FixedCone):
 
     Args:
         prim_path: Prim path of the Prim to encapsulate or create.
-        name: Shortname to be used as a key by Scene class.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
         position: Position in the world frame of the prim. Shape is (3, ).
         translation: Translation in the local frame of the prim
             (with respect to its parent prim). Shape is (3, ).
-        orientation: Quaternion orientation in the world/ local frame of the prim
+        orientation: Quaternion orientation in the world or local frame of the prim
             (depends if translation or position is specified).
             Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
         scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
-        visible: Set to false for an invisible prim in the stage while rendering.
+        visible: Set to False for an invisible prim in the stage while rendering.
         color: Color of the visual shape.
         radius: Base radius.
         height: Cone height.
@@ -325,6 +318,9 @@ class DynamicCone(SingleRigidPrim, FixedCone):
         density: Density.
         linear_velocity: Linear velocity in the world frame.
         angular_velocity: Angular velocity in the world frame.
+
+    Raises:
+        TypeError: If the prim at ``prim_path`` cannot be parsed as a Cone object.
 
     Example:
 
@@ -343,7 +339,6 @@ class DynamicCone(SingleRigidPrim, FixedCone):
         ... )
         >>> prim
         <isaacsim.core.api.objects.cone.DynamicCone object at 0x7f4f9f5d11b0>
-
     """
 
     def __init__(

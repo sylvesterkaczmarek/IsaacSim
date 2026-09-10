@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <isaacsim/core/includes/LibraryLoader.h>
-#include <isaacsim/ros2/core/Ros2Distro.h>
+#include <isaacsim/core/includes/LibraryLoader.hpp>
+#include <isaacsim/ros2/core/Ros2Distro.hpp>
 #include <rcl/error_handling.h>
 #include <rcl/rcl.h>
 

@@ -149,10 +149,10 @@ def normalise_quat_in_pose(pose: object) -> object:  # noqa: N802
     """Takes a pose and normalises the quaternion portion of it.
 
     Args:
-        pose: shape N, 7
+        pose: Pose with shape N, 7.
 
     Returns:
-        Pose with normalised quat. Shape N, 7
+        Pose with normalised quat and shape N, 7.
     """
     pos = pose[:, 0:3]
     quat = pose[:, 3:7]

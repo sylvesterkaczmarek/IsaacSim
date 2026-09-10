@@ -38,7 +38,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         await omni.usd.get_context().close_stage_async()
 
     async def test_range_sensor_create_prim_default(self) -> None:
-        """Test creating a range sensor prim with default parameters."""
+        """Test creating a range sensor prim with default parameters.
+
+        Raises:
+            AssertionError: If the range sensor prim, attributes, or transform operations are invalid.
+        """
         path = "/TestSensor"
         parent = ""
         schema_type = RangeSensorSchema.Lidar  # Use Lidar instead of non-existent RangeSensor
@@ -101,7 +105,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertGreater(len(ops), 0)
 
     async def test_range_sensor_create_prim_with_parent(self) -> None:
-        """Test creating a range sensor prim with a parent."""
+        """Test creating a range sensor prim with a parent.
+
+        Raises:
+            AssertionError: If the created range sensor prim is invalid or is not under the parent path.
+        """
         # Create a parent Xform
         parent_path = "/World"
         parent = UsdGeom.Xform.Define(self.stage, parent_path)
@@ -128,7 +136,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertTrue(prim.GetPath().HasPrefix(parent_path))
 
     async def test_range_sensor_create_lidar_default(self) -> None:
-        """Test creating a lidar sensor with default parameters."""
+        """Test creating a lidar sensor with default parameters.
+
+        Raises:
+            AssertionError: If the lidar sensor prim or default attributes are invalid.
+        """
         _, schema_obj = omni.kit.commands.execute("RangeSensorCreateLidar")
 
         self.assertIsNotNone(schema_obj)
@@ -161,7 +173,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(max_range_attr.Get(), 100.0, places=6)
 
     async def test_range_sensor_create_lidar_custom_parameters(self) -> None:
-        """Test creating a lidar sensor with custom parameters including translation and orientation."""
+        """Test creating a lidar sensor with custom parameters including translation and orientation.
+
+        Raises:
+            AssertionError: If the custom lidar sensor prim, transform, or field of view attributes are invalid.
+        """
         custom_translation = Gf.Vec3d(5.0, 10.0, 15.0)
         custom_orientation = Gf.Quatd(0.707, 0.0, 0.707, 0.0)  # 90 degree rotation around Y
         custom_horizontal_fov = 180.0
@@ -221,7 +237,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(vertical_fov_attr.Get(), custom_vertical_fov, places=6)
 
     async def test_range_sensor_create_generic_default(self) -> None:
-        """Test creating a generic range sensor with default parameters."""
+        """Test creating a generic range sensor with default parameters.
+
+        Raises:
+            AssertionError: If the generic range sensor prim or default attributes are invalid.
+        """
         _, schema_obj = omni.kit.commands.execute("RangeSensorCreateGeneric")
 
         self.assertIsNotNone(schema_obj)
@@ -258,7 +278,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertEqual(sampling_rate_attr.Get(), 60)
 
     async def test_range_sensor_create_generic_custom_parameters(self) -> None:
-        """Test creating a generic range sensor with custom parameters including translation and orientation."""
+        """Test creating a generic range sensor with custom parameters including translation and orientation.
+
+        Raises:
+            AssertionError: If the custom generic range sensor prim, transform, or sampling rate attribute is invalid.
+        """
         custom_translation = Gf.Vec3d(-3.0, 7.0, -12.0)
         custom_orientation = Gf.Quatd(0.5, 0.5, 0.5, 0.5)  # Complex rotation
         custom_sampling_rate = 120
@@ -311,7 +335,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertEqual(sampling_rate_attr.Get(), custom_sampling_rate)
 
     async def test_isaac_sensor_create_light_beam_sensor_default(self) -> None:
-        """Test creating a light beam sensor with default parameters."""
+        """Test creating a light beam sensor with default parameters.
+
+        Raises:
+            AssertionError: If the light beam sensor prim or default attributes are invalid.
+        """
         _, schema_obj = omni.kit.commands.execute("IsaacSensorCreateLightBeamSensor")
 
         self.assertIsNotNone(schema_obj)
@@ -343,7 +371,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         # These are only available on RangeSensor schemas
 
     async def test_isaac_sensor_create_light_beam_sensor_custom_parameters(self) -> None:
-        """Test creating a light beam sensor with custom parameters."""
+        """Test creating a light beam sensor with custom parameters.
+
+        Raises:
+            AssertionError: If the custom light beam sensor prim or attributes are invalid.
+        """
         _, schema_obj = omni.kit.commands.execute(
             "IsaacSensorCreateLightBeamSensor",
             path="/CustomLightBeam",
@@ -388,7 +420,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         # These are only available on RangeSensor schemas
 
     async def test_isaac_sensor_create_light_beam_sensor_multiple_rays(self) -> None:
-        """Test creating a light beam sensor with multiple rays and curtain length."""
+        """Test creating a light beam sensor with multiple rays and curtain length.
+
+        Raises:
+            AssertionError: If the light beam sensor is not created or its ray attributes do not match expected values.
+        """
         _, schema_obj = omni.kit.commands.execute(
             "IsaacSensorCreateLightBeamSensor",
             path="/MultiRayLightBeam",
@@ -415,7 +451,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertEqual(curtain_length_attr.Get(), 5.0)
 
     async def test_isaac_sensor_create_light_beam_sensor_invalid_rays(self) -> None:
-        """Test creating a light beam sensor with invalid ray configuration."""
+        """Test creating a light beam sensor with invalid ray configuration.
+
+        Raises:
+            AssertionError: If the invalid light beam sensor configuration returns a schema object.
+        """
         _, schema_obj = omni.kit.commands.execute(
             "IsaacSensorCreateLightBeamSensor",
             path="/InvalidLightBeam",
@@ -429,7 +469,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertIsNone(schema_obj)
 
     async def test_sensor_undo_functionality(self) -> None:
-        """Test that sensor creation commands support undo operations."""
+        """Test that sensor creation commands support undo operations.
+
+        Raises:
+            AssertionError: If the sensor is not created or undo does not remove its prim.
+        """
         # Create a sensor
         _, schema_obj = omni.kit.commands.execute("RangeSensorCreateLidar")
 
@@ -449,7 +493,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertFalse(prim.IsValid())
 
     async def test_sensor_with_parent_undo(self) -> None:
-        """Test undo functionality when creating sensor with parent."""
+        """Test undo functionality when creating sensor with parent.
+
+        Raises:
+            AssertionError: If the parented sensor is not created under the parent or undo does not remove its prim.
+        """
         # Create a parent Xform
         parent_path = "/World"
         parent = UsdGeom.Xform.Define(self.stage, parent_path)
@@ -475,7 +523,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertFalse(prim.IsValid())
 
     async def test_multiple_sensors_creation(self) -> None:
-        """Test creating multiple sensors of different types."""
+        """Test creating multiple sensors of different types.
+
+        Raises:
+            AssertionError: If any sensor is not created or the created sensors do not have different prim paths.
+        """
         # Create a lidar sensor
         _, lidar_schema = omni.kit.commands.execute("RangeSensorCreateLidar")
 
@@ -514,7 +566,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertNotEqual(generic_prim.GetPath(), light_beam_prim.GetPath())
 
     async def test_sensor_attributes_consistency(self) -> None:
-        """Test that sensor attributes are consistently set across different sensor types."""
+        """Test that sensor attributes are consistently set across different sensor types.
+
+        Raises:
+            AssertionError: If any sensor is not created or its base attributes do not match expected values.
+        """
         # Create different types of sensors
         _, range_schema = omni.kit.commands.execute(
             "RangeSensorCreatePrim",
@@ -576,7 +632,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
             self.assertEqual(draw_lines_attr.Get(), False, f"{name} drawLines mismatch")
 
     async def test_isaac_sensor_create_light_beam_sensor_custom_transform(self) -> None:
-        """Test creating a light beam sensor with custom translation and orientation."""
+        """Test creating a light beam sensor with custom translation and orientation.
+
+        Raises:
+            AssertionError: If the light beam sensor transform or light beam attributes do not match expected values.
+        """
         custom_translation = Gf.Vec3d(2.5, -5.0, 8.0)
         custom_orientation = Gf.Quatd(0.866, 0.0, 0.5, 0.0)  # 60 degree rotation around Y
         custom_num_rays = 5
@@ -636,7 +696,11 @@ class TestPhysXSensorCommands(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(curtain_length_attr.Get(), custom_curtain_length, places=6)
 
     async def test_range_sensor_create_prim_custom_parameters(self) -> None:
-        """Test creating a range sensor prim with custom parameters including translation and orientation."""
+        """Test creating a range sensor prim with custom parameters including translation and orientation.
+
+        Raises:
+            AssertionError: If the range sensor prim, transform, or custom attributes do not match expected values.
+        """
         path = "/CustomTestSensor"
         parent = ""
         schema_type = RangeSensorSchema.Lidar

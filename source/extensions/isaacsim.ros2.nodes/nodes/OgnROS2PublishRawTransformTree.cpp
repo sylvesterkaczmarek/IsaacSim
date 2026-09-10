@@ -14,12 +14,14 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include <isaacsim/ros2/core/Ros2Node.h>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
+#include <isaacsim/ros2/nodes/TfAggregationManager.h>
 
 #include <OgnROS2PublishRawTransformTreeDatabase.h>
+#include <vector>
 
 using namespace isaacsim::ros2::core;
 
@@ -58,8 +60,8 @@ public:
             }
         }
 
-        // Either publisher was not valid, create a new one
-        if (!state.m_publisher)
+        // Either publisher was not valid, create a new direct publisher or aggregation contributor.
+        if (!state.m_publisher && !state.m_tfAggregationHandle)
         {
             // Setup ROS TF publisher
             const std::string& topicName = db.inputs.topicName();
@@ -69,8 +71,6 @@ public:
                 db.logError("Unable to create ROS2 publisher, invalid topic name");
                 return false;
             }
-
-            state.m_message = state.m_factory->createRawTfTreeMessage();
 
             Ros2QoSProfile qos;
             const std::string& qosProfile = db.inputs.qosProfile();
@@ -91,11 +91,28 @@ public:
                 }
             }
 
+            state.m_parentFrameId = db.inputs.parentFrameId();
+            state.m_childFrameId = db.inputs.childFrameId();
+
+            auto* tfAggregationManager = isaacsim::ros2::nodes::getEnabledTfAggregationManager();
+            if (tfAggregationManager)
+            {
+                state.m_tfAggregationHandle = tfAggregationManager->registerContributor(
+                    std::string(nodeObj.iNode->getPrimPath(nodeObj)), state.m_factory, state.m_nodeHandle,
+                    state.m_contextHandle ? state.m_contextHandle->get() : nullptr, fullTopicName,
+                    db.inputs.staticPublisher(), qos, state.m_publishWithoutVerification);
+                if (!state.m_tfAggregationHandle)
+                {
+                    db.logError("Unable to register ROS2 TF aggregation contributor");
+                    return false;
+                }
+                return true;
+            }
+
+            state.m_message = state.m_factory->createRawTfTreeMessage();
             state.m_publisher = state.m_factory->createPublisher(
                 state.m_nodeHandle.get(), fullTopicName.c_str(), state.m_message->getTypeSupportHandle(), qos);
 
-            state.m_parentFrameId = db.inputs.parentFrameId();
-            state.m_childFrameId = db.inputs.childFrameId();
             return true;
         }
 
@@ -110,8 +127,9 @@ public:
         // The message will persist as long as the simulation is playing.
         // If we're not a static publisher, we publish every tick only if
         // we have subscribers or m_publishWithoutVerification is true.
+        const bool useAggregation = static_cast<bool>(state.m_tfAggregationHandle);
         bool isStaticPublisher = db.inputs.staticPublisher();
-        if (isStaticPublisher)
+        if (!useAggregation && isStaticPublisher)
         {
             if (!state.m_firstIteration)
             {
@@ -119,7 +137,7 @@ public:
             }
             state.m_firstIteration = false;
         }
-        else
+        else if (!useAggregation)
         {
             // Check if subscription count is 0
             if (!m_publishWithoutVerification && !state.m_publisher.get()->getSubscriptionCount())
@@ -130,6 +148,32 @@ public:
 
         auto& translation = db.inputs.translation();
         auto& rotation = db.inputs.rotation();
+
+        if (useAggregation)
+        {
+            TfTransformStamped transform;
+            transform.timeStamp = db.inputs.timeStamp();
+            transform.parentFrame = state.m_parentFrameId;
+            transform.childFrame = state.m_childFrameId;
+            transform.translationX = translation[0];
+            transform.translationY = translation[1];
+            transform.translationZ = translation[2];
+
+            const pxr::GfVec3d& imaginary = rotation.GetImaginary();
+            transform.rotationX = imaginary[0];
+            transform.rotationY = imaginary[1];
+            transform.rotationZ = imaginary[2];
+            transform.rotationW = rotation.GetReal();
+
+            auto* tfAggregationManager = isaacsim::ros2::nodes::getTfAggregationManager();
+            if (!tfAggregationManager)
+            {
+                db.logError("ROS2 TF aggregation manager is unavailable");
+                return false;
+            }
+
+            return tfAggregationManager->submit(state.m_tfAggregationHandle, transform.timeStamp, { transform });
+        }
 
         state.m_message->writeData(
             db.inputs.timeStamp(), state.m_parentFrameId, state.m_childFrameId, translation, rotation);
@@ -147,6 +191,14 @@ public:
 
     void reset() override
     {
+        if (m_tfAggregationHandle)
+        {
+            if (auto* tfAggregationManager = isaacsim::ros2::nodes::getTfAggregationManager())
+            {
+                tfAggregationManager->unregisterContributor(m_tfAggregationHandle);
+            }
+            m_tfAggregationHandle = {};
+        }
         m_publisher.reset(); // Publisher should be reset before we reset the handle.
         Ros2Node::reset();
         m_firstIteration = true;
@@ -155,6 +207,7 @@ public:
 private:
     std::shared_ptr<Ros2Publisher> m_publisher = nullptr;
     std::shared_ptr<Ros2RawTfTreeMessage> m_message = nullptr;
+    isaacsim::ros2::nodes::TfAggregationManager::ContributorHandle m_tfAggregationHandle;
 
     bool m_firstIteration = true;
 

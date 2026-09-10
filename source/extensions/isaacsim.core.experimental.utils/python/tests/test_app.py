@@ -20,6 +20,7 @@ import unittest
 from typing import Any
 
 import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
 import omni.timeline
 
@@ -32,6 +33,7 @@ class TestApp(omni.kit.test.AsyncTestCase):
     async def setUp(self) -> None:
         """Method called to prepare the test fixture."""
         super().setUp()
+        await stage_utils.create_new_stage_async()
 
     async def tearDown(self) -> None:
         """Method called immediately after the test method has been called."""

@@ -26,18 +26,18 @@ from isaacsim.robot.manipulators.examples.universal_robots import UR10
 
 
 class FollowTarget(tasks.FollowTarget):
-    """UR10 robot follow target task.
+    """UR10 robot follow-target task.
 
     Args:
         name: Task name.
-        target_prim_path: USD path for target.
+        target_prim_path: USD path for the target.
         target_name: Target name.
         target_position: Initial target position.
         target_orientation: Initial target orientation.
         offset: Task offset.
-        ur10_prim_path: USD path for UR10 robot.
+        ur10_prim_path: USD path for the UR10 robot.
         ur10_robot_name: Robot name.
-        attach_gripper: Whether to attach gripper.
+        attach_gripper: Whether to attach the gripper.
     """
 
     def __init__(

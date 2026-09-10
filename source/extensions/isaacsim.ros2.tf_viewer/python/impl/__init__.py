@@ -13,4 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .extension import *
+from .extension import Extension as Extension
+
+__all__ = []

@@ -29,7 +29,7 @@ import omni.physics.tensors as tensors
 import warp as wp
 from pxr import Gf
 
-from .test_helpers import NewtonTensorTestBase, run_on_device_configs, warp_utils
+from .test_helpers import NewtonTensorTestBase, parameterize, run_on_device_configs, warp_utils
 
 # ---------------------------------------------------------------------------
 # TestRigidBodyView
@@ -354,6 +354,15 @@ class TestRigidBodyApplyForces(NewtonTensorTestBase):
     def _ball_sphere_inertia(self, mass: float, radius: float) -> float:
         return (2.0 / 5.0) * mass * radius * radius
 
+    def _get_body_wrenches(self, body_paths: list[str]) -> np.ndarray:
+        from isaacsim.physics.newton.impl.extension import acquire_stage as acquire_newton_stage
+
+        newton_stage = acquire_newton_stage()
+        self.assertIsNotNone(newton_stage)
+        body_labels = [str(label) for label in newton_stage.model.body_label]
+        body_forces = newton_stage.state_0.body_f.numpy().reshape(-1, 6)
+        return np.stack([body_forces[body_labels.index(path)] for path in body_paths])
+
     async def test_apply_forces_global_linear_velocity(self) -> None:
         """Upward global force on zero-velocity body: vz = (F/m) * dt after one step."""
         self.setup_ball_grid(num_envs=4, radius=self.BALL_RADIUS)
@@ -432,6 +441,65 @@ class TestRigidBodyApplyForces(NewtonTensorTestBase):
         np.testing.assert_allclose(vels[:, 0:3], 0.0, atol=5e-3)
         np.testing.assert_allclose(vels[:, 3:5], 0.0, atol=5e-3)
 
+    async def test_apply_force_at_position_adds_moment(self) -> None:
+        """Apply the moment from a world-frame force acting away from the center of mass."""
+        self.setup_ball_grid(num_envs=4, radius=self.BALL_RADIUS)
+        sim = await self.create_sim()
+        self.start_playing()
+
+        balls = sim.create_rigid_body_view("/envs/*/ball")
+        all_indices = warp_utils.arange(balls.count, device=self.DEVICE)
+        transforms = balls.get_transforms().numpy().reshape(balls.count, 7)
+
+        forces = np.zeros((balls.count, 3), dtype=np.float32)
+        forces[:, 2] = 50.0
+        positions = transforms[:, :3].copy()
+        positions[:, 0] += 2.0
+
+        from isaacsim.physics.newton.impl.extension import acquire_stage as acquire_newton_stage
+
+        acquire_newton_stage().state_0.body_f.zero_()
+        balls.apply_forces_and_torques_at_position(
+            self.to_warp(forces), None, self.to_warp(positions), all_indices, is_global=True
+        )
+
+        wrenches = self._get_body_wrenches(balls.prim_paths)
+        np.testing.assert_allclose(wrenches[:, :3], forces, atol=1e-5)
+        expected_torques = np.tile(np.array([0.0, -100.0, 0.0]), (balls.count, 1))
+        np.testing.assert_allclose(wrenches[:, 3:], expected_torques, atol=1e-5)
+
+    async def test_apply_local_wrench_at_position_rotates_to_world(self) -> None:
+        """Rotate a body-local wrench and application position into the world frame."""
+        self.setup_ball_grid(num_envs=4, radius=self.BALL_RADIUS)
+        sim = await self.create_sim()
+        self.start_playing()
+
+        balls = sim.create_rigid_body_view("/envs/*/ball")
+        all_indices = warp_utils.arange(balls.count, device=self.DEVICE)
+        transforms = balls.get_transforms().numpy().reshape(balls.count, 7)
+        transforms[:, 3:7] = np.array([0.0, 0.0, np.sqrt(0.5), np.sqrt(0.5)], dtype=np.float32)
+        balls.set_transforms(self.to_warp(transforms), all_indices)
+
+        forces = np.zeros((balls.count, 3), dtype=np.float32)
+        forces[:, 0] = 50.0
+        torques = np.zeros((balls.count, 3), dtype=np.float32)
+        torques[:, 0] = 25.0
+        positions = np.zeros((balls.count, 3), dtype=np.float32)
+        positions[:, 1] = 2.0
+
+        from isaacsim.physics.newton.impl.extension import acquire_stage as acquire_newton_stage
+
+        acquire_newton_stage().state_0.body_f.zero_()
+        balls.apply_forces_and_torques_at_position(
+            self.to_warp(forces), self.to_warp(torques), self.to_warp(positions), all_indices, is_global=False
+        )
+
+        wrenches = self._get_body_wrenches(balls.prim_paths)
+        expected_forces = np.tile(np.array([0.0, 50.0, 0.0]), (balls.count, 1))
+        expected_torques = np.tile(np.array([0.0, 25.0, -100.0]), (balls.count, 1))
+        np.testing.assert_allclose(wrenches[:, :3], expected_forces, atol=1e-5)
+        np.testing.assert_allclose(wrenches[:, 3:], expected_torques, atol=1e-5)
+
     async def test_apply_force_accumulates_over_steps(self) -> None:
         """Re-applying the same force each step produces velocity growing linearly with steps."""
         self.setup_ball_grid(num_envs=4, radius=self.BALL_RADIUS)
@@ -491,7 +559,11 @@ class TestRigidBodySpatialLayout(NewtonTensorTestBase):
                 mass_api = UsdPhysics.MassAPI.Apply(prim)
             mass_api.CreateMassAttr().Set(float(mass_value))
 
-    async def test_freefall_velocity_is_linear_z(self) -> None:
+    # Parameterize currently parameterize only through different newton solvers
+    # We pick just one test to test all solvers for test time reasons,
+    # Free fall is a good test as all solver should handle free falls reasonably the same
+    @parameterize()
+    async def test_freefall_velocity_is_linear_z(self, solver) -> None:
         """Free-falling body under gravity should only have velocity in z (slots 0-2)."""
         self.setup_ball_grid(num_envs=4, radius=self.BALL_RADIUS, position=Gf.Vec3f(0, 0, 5.0))
         self._set_ball_masses(self.BALL_MASS)
@@ -508,6 +580,15 @@ class TestRigidBodySpatialLayout(NewtonTensorTestBase):
         np.testing.assert_allclose(vels[:, 2], vz_expected, rtol=5e-2, atol=1e-2)
         np.testing.assert_allclose(vels[:, 0:2], 0.0, atol=1e-3)
         np.testing.assert_allclose(vels[:, 3:6], 0.0, atol=1e-3)
+
+        # While we are at it, also check the correct solver has been created
+        from isaacsim.physics.newton.impl.extension import acquire_stage as acquire_newton_stage
+
+        self.assertEqual(acquire_newton_stage().cfg.solver_cfg.solver_type, solver)
+
+        # clean up the scene for the next solver
+        await self.tearDown()
+        await self.setUp()
 
     async def test_set_linear_velocity_produces_translation(self) -> None:
         """Setting velocity [vx,0,0,0,0,0] should translate the body in +x."""

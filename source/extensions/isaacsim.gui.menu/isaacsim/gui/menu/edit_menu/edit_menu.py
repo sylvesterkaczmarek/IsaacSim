@@ -281,11 +281,37 @@ class EditMenuExtension:
             """Execute a recent selection on the next update."""
             await omni.kit.app.get_app().next_update_async()
             do_recent = self._select_recent[index]
-            omni.kit.commands.execute("SelectListCommand", selection=do_recent.selection)
+            await self._apply_stored_selection(do_recent)
             do_recent.touch()
             self._build_recent_menu()
 
         asyncio.ensure_future(select_func())
+
+    @staticmethod
+    async def _apply_stored_selection(stored: Selection) -> None:
+        """Apply a stored selection and report the paths it could not restore.
+
+        The result is read back from the selection rather than inferred from prim
+        validity, which does not predict selectability either way: a deactivated
+        prim is valid but is not selected, and one under an unloaded payload is
+        not valid but may be.
+
+        Args:
+            stored: Saved selection to apply.
+        """
+        omni.kit.commands.execute("SelectListCommand", selection=stored.selection)
+        await omni.kit.app.get_app().next_update_async()
+
+        applied = set(omni.usd.get_context().get_selection().get_selected_prim_paths())
+        dropped = [path for path in stored.selection if path not in applied]
+
+        if dropped:
+            listed = ", ".join(dropped[:3])
+            if len(dropped) > 3:
+                listed += f", and {len(dropped) - 3} more"
+            EditMenuExtension.post_notification(
+                f"'{stored.description}': could not select {len(dropped)} of {len(stored.selection)} prims ({listed})"
+            )
 
     def _add_to_selection_set(self, description: str) -> None:
         """Add the current selection to the named selection set.
@@ -331,8 +357,7 @@ class EditMenuExtension:
         async def select_func() -> None:
             """Execute a selection set action on the next update."""
             await omni.kit.app.get_app().next_update_async()
-            do_select = self._selection_set[index]
-            omni.kit.commands.execute("SelectListCommand", selection=do_select.selection)
+            await self._apply_stored_selection(self._selection_set[index])
 
         asyncio.ensure_future(select_func())
 
@@ -1246,9 +1271,9 @@ class EditMenuExtension:
             success = False
             with contextlib.suppress(ImportError):
                 if not capture_viewport:
-                    import omni.renderer_capture
+                    import omni.kit.renderer.capture
 
-                    renderer_capture = omni.renderer_capture.acquire_renderer_capture_interface()
+                    renderer_capture = omni.kit.renderer.capture.acquire_renderer_capture_interface()
                     renderer_capture.capture_next_frame_swapchain(capture_filename)
                     success = True
                 else:

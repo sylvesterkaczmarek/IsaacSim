@@ -33,6 +33,12 @@ The following table summarizes the available classes.
     SingleViewDepthCameraSensor
     TiledCameraSensor
 
+.. rubric:: sensor processing graphs (SPG)
+.. autosummary::
+    :nosignatures:
+
+    SPGNode
+
 .. rubric:: utils
 .. autosummary::
     :nosignatures:
@@ -110,6 +116,19 @@ Sensors
     :members:
     :undoc-members:
     :show-inheritance:
+
+Sensor processing graphs (SPG)
+------------------------------
+
+Author custom GPU post-processing passes on RTX sensor outputs with
+:meth:`RtxCamera.author_spg <isaacsim.sensors.experimental.rtx.RtxCamera.author_spg>`
+(inherited from the authoring base class) and :class:`SPGNode`. See the
+``omni.rtx.spg`` documentation for the underlying framework:
+https://docs.omniverse.nvidia.com/kit/docs/omni.rtx.spg/0.2.0/Overview.html
+
+.. autoclass:: isaacsim.sensors.experimental.rtx.SPGNode
+    :members:
+    :undoc-members:
 
 Utils
 -----

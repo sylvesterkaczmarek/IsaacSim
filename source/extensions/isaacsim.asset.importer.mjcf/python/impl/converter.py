@@ -24,13 +24,8 @@ import shutil
 import tempfile
 from typing import Any
 
-from isaacsim.asset.importer.utils.impl import (
-    asset_utils,
-    importer_utils,
-    merge_mesh_utils,
-    mjc_to_physx_conversion_utils,
-    stage_utils,
-)
+from isaacsim.asset.importer.utils import asset_utils, importer_utils, merge_mesh_utils, stage_utils
+from isaacsim.asset.importer.utils.impl import mjc_to_physx_conversion_utils
 from isaacsim.asset.transformer.rules import DEFAULT_PROFILE_PATH
 from pxr import Sdf
 

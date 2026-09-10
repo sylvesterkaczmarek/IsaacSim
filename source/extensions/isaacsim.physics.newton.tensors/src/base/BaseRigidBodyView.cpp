@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "BaseRigidBodyView.h"
+#include "BaseRigidBodyView.hpp"
 
-#include "utils/TensorOps.h"
-#include "utils/WarpInterop.h"
+#include "utils/TensorOps.hpp"
+#include "utils/WarpInterop.hpp"
 
 #include <carb/logging/Log.h>
 

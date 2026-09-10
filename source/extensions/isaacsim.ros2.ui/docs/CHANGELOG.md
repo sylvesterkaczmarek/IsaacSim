@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.9.2] - 2026-08-04
+### Fixed
+- `ROS 2 OmniGraphs > Joint States` now creates the migrated joint-state publisher graph.
+
+## [1.9.1] - 2026-07-22
+### Changed
+- ROS 2 graph shortcut dialogs now import the public graph construction helpers from `isaacsim.ros2.nodes`.
+- Removed the `isaacsim.ros2.ui` graph helper API; use `isaacsim.ros2.nodes` instead.
+- Sensor graph shortcut dialogs reuse option and warning constants from `isaacsim.ros2.nodes`.
+
+### Fixed
+- `TestMenuROS2RadarGraph.test_radar_data_flow` now validates RTX Radar menu graph wiring without running the GPU radar render loop, avoiding CI timeouts after RTX/CUDA render errors.
+
+## [1.9.0] - 2026-07-22
+### Added
+- Optional render product prim selection in the ROS 2 camera, RTX lidar, and RTX radar graph shortcut dialogs. When specified, the graph uses `IsaacAttachHydraTexture` instead of `IsaacCreateRenderProduct` and reuses the existing render product path without retargeting its camera, resizing it, or authoring RenderVars on it.
+
+### Changed
+- ROS 2 graph shortcut dialogs now delegate graph construction to shared helper code.
+- Camera graphs include a `ROS2CameraInfoHelper` node when creating a new camera graph.
+
+## [1.8.0] - 2026-07-13
+### Changed
+- `ROS2 Camera Graph` shortcut adds an RGB compression dropdown for raw, H.264, and HEVC publishing.
+
+### Fixed
+- `ROS2 Camera Graph` now updates the RGB topic field through the public `ParamWidget.set_value()` API when the compression dropdown changes.
+
+## [1.7.1] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [1.7.0] - 2026-06-25
+### Added
+- New `Tools > Robotics > ROS 2 OmniGraphs > RTX Radar` menu shortcut that builds an OmniGraph publishing RTX Radar detections as `sensor_msgs/PointCloud2` via `ROS2RtxRadarHelper`. Exposes per-point Radial Velocity, Intensity, and Timestamp metadata as checkboxes; warns when Radial Velocity is selected without the OmniRadar prim advertising the `BASIC` auxiliary output channel.
+- `TestMenuROS2RadarGraph` unit tests covering graph creation, the empty-prim null path, helper metadata flag wiring, and end-to-end PointCloud2 data flow on `/radar_point_cloud`.
+- `Graph Shortcut` subsection in the RTX Radar tutorial (`docs/isaacsim/ros2_tutorials/tutorial_ros2_rtx_radar.rst`) describing the new menu entry.
+
+### Fixed
+- Errors in the "Add to an existing graph" checkbox selection flow for `Ros2CameraGraph`, `Ros2RtxLidarGraph`, and the new `Ros2RtxRadarGraph` when the existing graph was missing its `IsaacCreateRenderProduct` node or different camera prim is present for existing `IsaacCreateRenderProduct` node: `stage_utils.generate_next_free_path` was called with two positional arguments, but `prepend_default_prim` is keyword-only. The call now passes `prepend_default_prim=False` explicitly, matching every other callsite in `og_rtx_sensors.py`.
+
 ## [1.6.5] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

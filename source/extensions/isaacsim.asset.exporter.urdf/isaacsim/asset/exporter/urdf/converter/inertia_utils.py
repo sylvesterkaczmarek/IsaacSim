@@ -20,6 +20,8 @@ from dataclasses import dataclass
 
 from pxr import Gf, Usd, UsdPhysics
 
+_NEWTON_INERTIA_ATTR = "newton:inertia"
+
 
 @dataclass
 class InertiaData:
@@ -41,7 +43,7 @@ def reconstruct_inertia_tensor(
 ) -> tuple[float, float, float, float, float, float]:
     """Reconstruct the 3x3 inertia tensor from eigenvalue decomposition.
 
-    I = R * diag(D) * R^T
+    I = R^T * diag(D) * R
 
     Args:
         principal_axes: Quaternion encoding the principal axes rotation.
@@ -54,9 +56,32 @@ def reconstruct_inertia_tensor(
     D = Gf.Matrix3d()
     D.SetDiagonal(Gf.Vec3d(diagonal_inertia[0], diagonal_inertia[1], diagonal_inertia[2]))
 
-    I = R * D * R.GetTranspose()
+    I = R.GetTranspose() * D * R
 
     return (I[0][0], I[0][1], I[0][2], I[1][1], I[1][2], I[2][2])
+
+
+def read_newton_inertia(prim: Usd.Prim) -> tuple[float, float, float, float, float, float] | None:
+    """Read the NewtonMassAPI ``newton:inertia`` tensor if authored.
+
+    The attribute holds the symmetric 3x3 inertia tensor as 6 elements
+    ``[Ixx, Iyy, Izz, Ixy, Ixz, Iyz]`` in the body's local frame, in double
+    precision. When authored it overrides ``physics:diagonalInertia`` and
+    ``physics:principalAxes``.
+
+    Args:
+        prim: USD prim to inspect.
+
+    Returns:
+        (ixx, iyy, izz, ixy, ixz, iyz) or None if not authored or malformed.
+    """
+    attr = prim.GetAttribute(_NEWTON_INERTIA_ATTR)
+    if not attr or not attr.HasAuthoredValue():
+        return None
+    values = attr.Get()
+    if values is None or len(values) != 6:
+        return None
+    return tuple(float(v) for v in values)
 
 
 def read_inertial_from_prim(prim: Usd.Prim) -> InertiaData | None:
@@ -92,7 +117,17 @@ def read_inertial_from_prim(prim: Usd.Prim) -> InertiaData | None:
     diag = diag_attr.Get() if diag_attr and diag_attr.HasAuthoredValue() else None
     axes = axes_attr.Get() if axes_attr and axes_attr.HasAuthoredValue() else None
 
-    if diag is not None and axes is not None:
+    newton_inertia = read_newton_inertia(prim)
+
+    if newton_inertia is not None:
+        ixx, iyy, izz, ixy, ixz, iyz = newton_inertia
+        data.ixx = ixx
+        data.iyy = iyy
+        data.izz = izz
+        data.ixy = ixy
+        data.ixz = ixz
+        data.iyz = iyz
+    elif diag is not None and axes is not None:
         ixx, ixy, ixz, iyy, iyz, izz = reconstruct_inertia_tensor(axes, diag)
         data.ixx = ixx
         data.ixy = ixy

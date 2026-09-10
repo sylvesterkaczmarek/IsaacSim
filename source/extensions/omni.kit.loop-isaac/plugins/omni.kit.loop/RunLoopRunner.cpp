@@ -35,12 +35,12 @@
 #include <omni/kit/IApp.h>
 #include <omni/kit/IRunLoopRunner.h>
 
-#include <RunLoopRunner.h>
+#include <RunLoopRunner.hpp>
 #include <iomanip>
 #include <iostream>
 
 #define FMT_HEADER_ONLY 1
-#include "RunLoopSynchronizer.h"
+#include "RunLoopSynchronizer.hpp"
 #include "fmt/include/fmt/format.h"
 
 static constexpr char kAppRunLoops[] = "/app/runLoops";

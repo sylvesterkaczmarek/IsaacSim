@@ -27,16 +27,16 @@ class AckermannController:
     four-wheel Ackermann robot. Returns plain tuples (no ArticulationAction).
 
     Args:
-        wheel_base: Distance between front and rear axles in m.
+        wheel_base: Finite, non-zero distance between front and rear axles in m.
         track_width: Distance between left and right wheels in m.
         front_wheel_radius: Radius of front wheels in m.
         back_wheel_radius: Radius of back wheels in m.
-        max_wheel_velocity: Maximum angular velocity of wheels in rad/s. Ignored if 0.
+        max_wheel_velocity: Non-negative maximum angular velocity of wheels in rad/s. Ignored if 0.
         invert_steering: True for rear-wheel-steered robots such as forklifts, where the
             rear axle carries the steering joints and the front wheels stay fixed in heading.
-        max_wheel_rotation_angle: Maximum steering angle in rad. Ignored if 0.
-        max_acceleration: Maximum linear acceleration in m/s^2. Ignored if 0.
-        max_steering_angle_velocity: Maximum steering rate in rad/s. Ignored if 0.
+        max_wheel_rotation_angle: Non-negative maximum steering angle in rad. Ignored if 0.
+        max_acceleration: Non-negative maximum linear acceleration in m/s^2. Ignored if 0.
+        max_steering_angle_velocity: Non-negative maximum steering rate in rad/s. Ignored if 0.
     """
 
     def __init__(
@@ -52,15 +52,25 @@ class AckermannController:
         max_acceleration: float = 0.0,
         max_steering_angle_velocity: float = 0.0,
     ) -> None:
+        if not np.isfinite(wheel_base) or wheel_base == 0.0:
+            raise ValueError("wheel_base must be finite and non-zero.")
+        for name, value in (
+            ("max_wheel_velocity", max_wheel_velocity),
+            ("max_wheel_rotation_angle", max_wheel_rotation_angle),
+            ("max_acceleration", max_acceleration),
+            ("max_steering_angle_velocity", max_steering_angle_velocity),
+        ):
+            if value < 0.0:
+                raise ValueError(f"{name} must be >= 0, got {value}")
         self.wheel_base = np.fabs(wheel_base)
         self.track_width = np.fabs(track_width)
         self.front_wheel_radius = np.fabs(front_wheel_radius)
         self.back_wheel_radius = np.fabs(back_wheel_radius)
-        self.max_wheel_velocity = np.fabs(max_wheel_velocity)
+        self.max_wheel_velocity = max_wheel_velocity
         self.invert_steering = invert_steering
-        self.max_wheel_rotation_angle = np.fabs(max_wheel_rotation_angle)
-        self.max_acceleration = np.fabs(max_acceleration)
-        self.max_steering_angle_velocity = np.fabs(max_steering_angle_velocity)
+        self.max_wheel_rotation_angle = max_wheel_rotation_angle
+        self.max_acceleration = max_acceleration
+        self.max_steering_angle_velocity = max_steering_angle_velocity
 
         self.prev_linear_velocity = 0.0
         self.prev_steering_angle = 0.0

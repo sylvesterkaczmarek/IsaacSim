@@ -88,9 +88,9 @@ class RobotRegistry:
 class RobotTemplate(ABC):
     """Abstract base class for robot templates in the Isaac Sim robot setup wizard.
 
-    This class serves as the foundation for defining different types of robots (manipulators, grippers, wheeled robots,
-    etc.) within the wizard framework. It provides a common interface and shared functionality for robot configuration,
-    file management, and property handling.
+    This class serves as the foundation for defining different types of robots (manipulators, grippers, wheeled
+    robots, etc.) within the wizard framework. It provides a common interface and shared functionality for robot
+    configuration, file management, and property handling.
 
     The class automatically registers itself with the RobotRegistry singleton upon instantiation and dynamically adds
     properties for storing robot configuration data such as file paths, link information, and save options. Subclasses
@@ -157,9 +157,13 @@ class RobotTemplate(ABC):
 class CustomRobot(RobotTemplate):
     """A robot template for custom robot types.
 
-    This class extends RobotTemplate to provide a flexible foundation for robots that don't fit into standard categories like manipulators, wheeled robots, or humanoids. It maintains the core robot template functionality while allowing for custom link configurations and specialized properties.
+    This class extends RobotTemplate to provide a flexible foundation for robots that do not fit into standard categories,
+    such as manipulators, wheeled robots, or humanoids. It maintains the core robot template functionality while allowing
+    for custom link configurations and specialized properties.
 
-    The custom robot template initializes with default links and registers itself with the RobotRegistry for tracking within the robot setup wizard. It inherits all standard robot properties including file paths for physics, schema, and robot definitions, as well as stage management capabilities.
+    The custom robot template initializes with default links and registers itself with the RobotRegistry for tracking
+    within the robot setup wizard. It inherits all standard robot properties, including file paths for physics, schema,
+    and robot definitions, as well as stage management capabilities.
 
     Args:
         name: Name identifier for the custom robot instance.

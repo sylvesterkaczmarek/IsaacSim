@@ -35,10 +35,9 @@ class Stacking(ABC, BaseTask):
         name: Task name identifier.
         cube_initial_positions: Initial positions for all cubes.
         cube_initial_orientations: Initial orientations for cubes.
-        stack_target_position: Position to stack cubes at.
+        stack_target_position: Position at which to stack cubes.
         cube_size: Size of each cube.
         offset: Offset for all task objects.
-
     """
 
     def __init__(
@@ -68,11 +67,10 @@ class Stacking(ABC, BaseTask):
         return
 
     def set_up_scene(self, scene: Scene) -> None:
-        """Set up the scene with cubes and robot.
+        """Sets up the scene with cubes and robot.
 
         Args:
-            scene: The scene to populate.
-
+            scene: Scene to populate with task objects.
         """
         super().set_up_scene(scene)
         scene.add_default_ground_plane()
@@ -106,11 +104,10 @@ class Stacking(ABC, BaseTask):
 
     @abstractmethod
     def set_robot(self) -> None:
-        """Create and return the robot for this task.
+        """Creates and returns the robot for this task.
 
         Raises:
             NotImplementedError: Must be implemented by subclass.
-
         """
         raise NotImplementedError
 
@@ -121,14 +118,13 @@ class Stacking(ABC, BaseTask):
         cube_orientation: np.ndarray | None = None,
         stack_target_position: np.ndarray | None = None,
     ) -> None:
-        """Set task parameters.
+        """Sets task parameters.
 
         Args:
             cube_name: Name of cube to modify.
             cube_position: New position for cube.
             cube_orientation: New orientation for cube.
             stack_target_position: New stack target position.
-
         """
         if stack_target_position is not None:
             self._stack_target_position = stack_target_position
@@ -137,11 +133,10 @@ class Stacking(ABC, BaseTask):
         return
 
     def get_params(self) -> dict:
-        """Get task parameters.
+        """Gets task parameters.
 
         Returns:
-            Dictionary of task parameters.
-
+            Dictionary containing stack_target_position and robot_name entries with value and modifiable metadata.
         """
         params_representation = {}
         params_representation["stack_target_position"] = {"value": self._stack_target_position, "modifiable": True}
@@ -149,11 +144,10 @@ class Stacking(ABC, BaseTask):
         return params_representation
 
     def get_observations(self) -> dict:
-        """Get current task observations.
+        """Gets current task observations.
 
         Returns:
-            Dictionary with cube and robot observations.
-
+            Dictionary containing robot joint and end effector data plus cube pose and target position data.
         """
         joints_state = self._robot.get_joints_state()
         end_effector_position, _ = self._robot.end_effector.get_local_pose()
@@ -184,12 +178,11 @@ class Stacking(ABC, BaseTask):
         Args:
             time_step_index: Current simulation step index.
             simulation_time: Current simulation time.
-
         """
         return
 
     def post_reset(self) -> None:
-        """Called after world reset to open gripper."""
+        """Opens the ParallelGripper after a world reset."""
         from isaacsim.robot.manipulators.grippers.parallel_gripper import ParallelGripper
 
         if isinstance(self._robot.gripper, ParallelGripper):
@@ -197,11 +190,10 @@ class Stacking(ABC, BaseTask):
         return
 
     def get_cube_names(self) -> list[str]:
-        """Get the names of all cubes in the task.
+        """Gets the names of all cubes in the task.
 
         Returns:
-            List of cube names.
-
+            Cube names.
         """
         cube_names = []
         for i in range(self._num_of_cubes):
@@ -209,25 +201,23 @@ class Stacking(ABC, BaseTask):
         return cube_names
 
     def calculate_metrics(self) -> dict:
-        """Calculate task metrics.
+        """Calculates task metrics.
+
+        Returns:
+            The computed task metrics.
 
         Raises:
             NotImplementedError: Must be implemented by subclass.
-
-        Returns:
-            Dictionary of task metrics.
-
         """
         raise NotImplementedError
 
     def is_done(self) -> bool:
-        """Check if task is complete.
+        """Checks if task is complete.
+
+        Returns:
+            True if the task is complete, False otherwise.
 
         Raises:
             NotImplementedError: Must be implemented by subclass.
-
-        Returns:
-            True if task is done, False otherwise.
-
         """
         raise NotImplementedError

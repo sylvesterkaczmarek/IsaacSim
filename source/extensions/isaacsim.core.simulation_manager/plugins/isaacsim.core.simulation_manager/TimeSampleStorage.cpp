@@ -17,7 +17,7 @@
 #include <carb/logging/Log.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/core/simulation_manager/TimeSampleStorage.h>
+#include <isaacsim/core/simulation_manager/TimeSampleStorage.hpp>
 #include <omni/fabric/FabricTime.h>
 
 #include <algorithm>

@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.3.0] - 2026-09-01
+### Added
+- `Module.missing_modalities`, `Module.named_missing_modalities`, and `Module.format_missing_modalities`: report the modalities a module could not capture during the last `update_state()`.
+- `clear_replay_outputs`, `discard_step_common`, `format_dropped_steps`, `is_in_place_replay`, and `MAX_RENDER_RETRIES`: the replay output and drop-policy helpers both replay scripts share, exported so they are written and tested once.
+
+### Changed
+- `MobilityGenCamera.update_state`: clear the buffers of a modality whose annotator returned no frame, rather than leave the previous one for the writer to re-serialize as a byte-identical duplicate under a moved pose. Applies to RGB, to an RGB buffer in neither layout the camera reads, and to a camera prim that has gone invalid, which clears its pose along with its images.
+- `replay_directory.py` / `replay_directory_for_nurec.py`: re-render an incomplete step up to 3 times, then drop it whole — images and common `.npz` — so every recorded step keeps exactly one image per modality. Such a replay is shorter than its source recording (a legal index gap, as with `--render_interval` above 1), logs the dropped step indices, and exits non-zero.
+
+## [0.2.14] - 2026-08-31
+### Fixed
+- Keyboard teleoperation: held movement keys stay held instead of stuttering under X11 key auto-repeat.
+
+## [0.2.13] - 2026-08-17
+### Changed
+- `setup_for_replay`: raise when a stage's launch prerequisites are unmet, rather than returning a flag and letting rendering proceed into a native crash. Callers catch it to decide; `replay_directory.py` and `replay_directory_for_nurec.py` skip that recording and exit non-zero.
+
+### Fixed
+- Export `Point2d`, already the parameter and return type of `OccupancyMap.pixel_to_world`.
+- `OccupancyMap`: write the ROS YAML `origin` as a sequence, not a tuple repr that reloaded as a string and broke `pixel_to_world_numpy`. `origin` is now normalized at construction.
+- `MobilityGenRobot.write_replay_data`: name the missing state buffers instead of raising `TypeError`.
+- `OccupancyMap.from_ros_yaml`: name the missing image and the YAML that references it when the map image cannot be opened.
+
+## [0.2.12] - 2026-07-31
+### Changed
+- `adding_a_robot.md`: document the `build_policy()` hook that `PolicyMultiSensorRobot` now requires, replacing the removed `policy_class` attribute and its policy-controller classes.
+
+## [0.2.11] - 2026-07-15
+### Changed
+- Reduce coupling to `pxr`/`omni`/`kit` by routing prim creation, visibility, and path joins (via the new validated `join_prim_paths`) through `isaacsim.core.experimental.utils`, and dropping the unused `omni.kit.usdz_export` and `isaacsim.asset.gen.omap` dependencies (no functional change).
+
 ## [0.2.10] - 2026-06-12
 ### Fixed
 - `occupancy_map`: defer the `cv2` import to first use.

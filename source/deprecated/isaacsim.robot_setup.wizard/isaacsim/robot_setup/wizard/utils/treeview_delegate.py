@@ -24,10 +24,7 @@ import omni.ui as ui
 
 
 class TreeViewIDColumn:
-    """This is the ID (first) column of the TreeView. It's not part of the treeview delegate, because it's cheaper to do.
-
-    item remove in this way. And we don't need to update it when the treeview list is smaller than DEFAULT_ITEM_NUM.
-    """
+    """This is the ID (first) column of the TreeView. It is not part of the TreeView delegate, because it is cheaper to remove items this way. It does not need to be updated when the TreeView list is smaller than DEFAULT_ITEM_NUM."""
 
     DEFAULT_ITEM_NUM = 15
     """Default number of items to display in the ID column."""
@@ -182,7 +179,7 @@ class TreeViewWithPlacerHolderModel(ui.AbstractItemModel):
             item: The parent item to get children for.
 
         Returns:
-            List of child items with applied filters and sorting.
+            Child items with applied filters and sorting, or an empty list for non-root items.
         """
         if item is not None:
             # Since we are doing a flat list, we return the children of root only.
@@ -238,9 +235,6 @@ class TreeViewWithPlacerHolderModel(ui.AbstractItemModel):
         Args:
             item: The item to remove from the model.
             enabled: Whether the removal operation is enabled.
-
-        Returns:
-            None if the removal operation is not enabled.
         """
         if not enabled:
             return
@@ -252,7 +246,7 @@ class TreeViewWithPlacerHolderModel(ui.AbstractItemModel):
             self._item_changed(None)
 
     def edit_item(self, item: object) -> None:
-        """Initiates editing of an item.
+        """Provides an item editing hook.
 
         Args:
             item: The item to edit.
@@ -263,9 +257,6 @@ class TreeViewWithPlacerHolderModel(ui.AbstractItemModel):
 
         Args:
             filter_texts: List of text strings to filter by.
-
-        Returns:
-            None if there are no children or the filter texts have not changed.
         """
         if not self._children:
             return
@@ -322,9 +313,7 @@ class TreeViewWithPlacerHolderModel(ui.AbstractItemModel):
 
 
 class TreeViewWithPlacerHolderDelegate(ui.AbstractItemDelegate):
-    """Delegate is the representation layer. TreeView calls the methods.
-
-    of the delegate to create custom widgets for each item.
+    """Delegate is the representation layer. TreeView calls the methods of the delegate to create custom widgets for each item.
 
     Args:
         headers: Column headers for the tree view.
@@ -348,11 +337,11 @@ class TreeViewWithPlacerHolderDelegate(ui.AbstractItemDelegate):
         self.__name_sort_options_menu = None
 
     def build_branch(self, model: object, item: object, column_id: int, level: int, expanded: bool) -> None:
-        """Create a branch widget that opens or closes subtree.
+        """Leaves branch cells empty for this flat tree view.
 
         Args:
             model: The tree view model.
-            item: The item to create a branch widget for.
+            item: The item to build the branch cell for.
             column_id: The column identifier.
             level: The nesting level of the item.
             expanded: Whether the branch is expanded.
@@ -403,7 +392,7 @@ class TreeViewWithPlacerHolderDelegate(ui.AbstractItemDelegate):
         parent_stack.set_mouse_double_clicked_fn(lambda x, y, b, _: on_mouse_double_clicked(b, label, field))
 
     def build_widget(self, model: object, item: object, column_id: int, level: int, expanded: bool) -> None:
-        """Create a widget per column per item.
+        """Creates a widget per column per item.
 
         Args:
             model: The tree view model.
@@ -411,6 +400,9 @@ class TreeViewWithPlacerHolderDelegate(ui.AbstractItemDelegate):
             column_id: The column identifier.
             level: The nesting level of the item.
             expanded: Whether the item is expanded.
+
+        Raises:
+            ValueError: If a combo box column value is not present in its configured combo list.
         """
         with ui.ZStack(height=30):
             if isinstance(item, SearchableItem):
@@ -459,14 +451,11 @@ class TreeViewWithPlacerHolderDelegate(ui.AbstractItemDelegate):
                                     self.__build_rename_field(item, item_model, label, value, stack)
 
     def sort_button_pressed_fn(self, b: int, column_id: int) -> None:
-        """Handles sort button press events to display sorting options menu.
+        """Handles sort button press events to display the sorting options menu.
 
         Args:
             b: The mouse button that was pressed.
             column_id: The column identifier for the sort button.
-
-        Returns:
-            None if the mouse button is not the primary button.
         """
         if b != 0:
             return

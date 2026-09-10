@@ -121,7 +121,7 @@ from isaacsim.benchmark.services import DEFAULT_RECORDERS, BaseIsaacBenchmark
 
 ROBOT_PRIM_PATH = "/World/robot"
 TARGET_PATH = "/World/TargetCube"
-FRANKA_USD_PATH = "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+FRANKA_USD_PATH = "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 FRANKA_DEFAULT_DOF_POSITIONS = [0.012, -0.568, 0.0, -2.811, 0.0, 3.037, 0.741, 0.04, 0.04]
 
 recorders = list(DEFAULT_RECORDERS) + (["gpu_frametime"] if gpu_frametime else [])
@@ -155,7 +155,7 @@ if assets_root is None:
 stage_utils.add_reference_to_stage(
     usd_path=assets_root + FRANKA_USD_PATH,
     path=ROBOT_PRIM_PATH,
-    variants=[("Gripper", "AlternateFinger"), ("Mesh", "Performance")],
+    variants=[("Gripper", "alternatefinger"), ("Mesh", "performance")],
 )
 articulation = Articulation(ROBOT_PRIM_PATH)
 articulation.set_default_state(dof_positions=FRANKA_DEFAULT_DOF_POSITIONS)
@@ -204,7 +204,14 @@ world_binding = None
 if control == "cumotion":
 
     def get_estimated_state(art: Articulation) -> mg.RobotState:
-        """Build a robot state from the articulation's current joint state."""
+        """Build a robot state from the articulation's current joint state.
+
+        Args:
+            art: Articulation whose joint positions and velocities define the state.
+
+        Returns:
+            Robot state containing the articulation joints in degree-of-freedom order.
+        """
         names = art.dof_names
         return mg.RobotState(
             joints=mg.JointState.from_name(
@@ -215,7 +222,15 @@ if control == "cumotion":
         )
 
     def create_setpoint_state(cr: CumotionRobot, tgt: GeomPrim) -> mg.RobotState:
-        """Build a target robot state from the cuMotion tool frame and target prim."""
+        """Build a target robot state from the cuMotion tool frame and target prim.
+
+        Args:
+            cr: cuMotion robot that defines the tool frame and spatial state layout.
+            tgt: Geometry prim whose world position defines the tool target.
+
+        Returns:
+            Robot state that places the tool frame at each target prim position.
+        """
         tool_frame = cr.robot_description.tool_frame_names()[0]
         site_space = cr.robot_description.tool_frame_names()
         target_positions, _ = tgt.get_world_poses()

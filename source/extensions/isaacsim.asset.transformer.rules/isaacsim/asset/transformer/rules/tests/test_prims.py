@@ -22,6 +22,7 @@ import tempfile
 import omni.kit.test
 from isaacsim.asset.transformer.rules.core.prims import (
     PrimRoutingRule,
+    copy_composed_prim_to_layer,
 )
 from pxr import Sdf, Usd
 
@@ -42,6 +43,28 @@ class TestPrimRoutingRule(omni.kit.test.AsyncTestCase):
         """Remove temporary directory after successful tests."""
         if self._success:
             shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    async def test_copy_composed_prim_to_layer_preserves_relationship_target_order(self) -> None:
+        """Verify relationship targets stay aligned with their indexed attributes."""
+        source_stage = Usd.Stage.CreateInMemory()
+        source_prim = source_stage.DefinePrim("/Robot/turn", "Xform")
+        expected_targets = [
+            Sdf.Path("/Robot/joint_left_wheel"),
+            Sdf.Path("/Robot/joint_right_wheel"),
+        ]
+        expected_coefficients = [-0.5, 0.5]
+
+        source_prim.CreateRelationship("mjc:path").SetTargets(expected_targets)
+        source_prim.CreateAttribute("mjc:path:coef", Sdf.ValueTypeNames.DoubleArray).Set(expected_coefficients)
+
+        output_layer = Sdf.Layer.CreateAnonymous("relationship_order.usda")
+        self.assertTrue(copy_composed_prim_to_layer(source_prim, output_layer, source_prim.GetPath()))
+
+        output_stage = Usd.Stage.Open(output_layer)
+        output_prim = output_stage.GetPrimAtPath(source_prim.GetPath())
+        self.assertEqual(output_prim.GetRelationship("mjc:path").GetTargets(), expected_targets)
+        self.assertEqual(list(output_prim.GetAttribute("mjc:path:coef").Get()), expected_coefficients)
+        self._success = True
 
     async def test_get_configuration_parameters(self) -> None:
         """Verify configuration parameters are exposed."""

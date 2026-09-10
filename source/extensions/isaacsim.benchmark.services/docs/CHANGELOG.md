@@ -1,5 +1,9 @@
 # Changelog
 
+## [4.2.4] - 2026-08-26
+### Fixed
+- Document OmniPerf's scalar-only custom measurements and warn when unsupported types are supplied.
+
 ## [4.2.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

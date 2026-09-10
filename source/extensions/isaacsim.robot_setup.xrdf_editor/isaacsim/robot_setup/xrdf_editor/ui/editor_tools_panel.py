@@ -24,15 +24,18 @@ import carb
 import numpy as np
 import omni.kit.commands
 import omni.ui as ui
-from isaacsim.gui.components.element_wrappers import Button, CheckBox, CollapsableFrame, DropDown
-from isaacsim.gui.components.ui_utils import (
+from isaacsim.gui.components import (
+    Button,
+    CheckBox,
+    CollapsableFrame,
+    DropDown,
     btn_builder,
     color_picker_builder,
     float_builder,
-    get_style,
     state_btn_builder,
     str_builder,
 )
+from isaacsim.gui.components.ui_utils import get_style
 
 from .. import lula_io, xrdf_io
 from ..constants import XRDF_VERSION_1, XRDF_VERSION_2

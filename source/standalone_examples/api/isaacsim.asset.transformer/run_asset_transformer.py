@@ -273,7 +273,11 @@ def run_asset_transformer(
 
 
 def main() -> int:
-    """Main entry point for the standalone asset transformer."""
+    """Run the standalone asset transformer.
+
+    Returns:
+        Zero when all assets transform successfully, otherwise one.
+    """
     global input_path, profile_path, output_path
 
     test_tmpdir = None

@@ -50,7 +50,7 @@ def _extract_gmo_raw(rp_data: Any) -> Any:
         rp_data: Render product data dictionary.
 
     Returns:
-        Raw GMO numpy array or None if unavailable.
+        Raw GMO array, or None if unavailable.
     """
     gmo_raw = rp_data.get("GenericModelOutput")
     if gmo_raw is None:
@@ -77,6 +77,7 @@ class _SarcophagusTestCase(omni.kit.test.AsyncTestCase):
         (20, 20, 13),
         (20, 20, 15),
     ]
+    """Dimensions for the eight sarcophagus octants used to validate sensor return ranges."""
 
     async def setUp(self) -> None:
         """Set up the test environment with a new stage and sarcophagus scene."""
@@ -150,6 +151,14 @@ class TestGenericModelOutput(_SarcophagusTestCase):
             np.seterr(divide="ignore")
 
         def write(self, data: Any) -> None:
+            """Processes GenericModelOutput render products and runs GMO frame validation.
+
+            Args:
+                data: Replicator writer payload containing renderProducts entries.
+
+            Raises:
+                AssertionError: If timestamp cadence or sensor-specific GMO field validation fails.
+            """
             if "renderProducts" not in data:
                 return
             for rp_name, rp_data in data["renderProducts"].items():
@@ -203,12 +212,18 @@ class TestGenericModelOutput(_SarcophagusTestCase):
                 self.valid_frame_count += 1
 
         _OCTANT_TO_CUBE = np.array([0, 0, 3, 3, 1, 1, 2, 2], dtype=int)
+        """Maps each octant index to the cube group used for expected prim path validation."""
 
         def _test_point_cloud(self, gmo: Any) -> None:
             """Tests sensor returns stored in GMO buffer against expected range.
 
+            Stores cube prim path indices for material ID and object ID validation.
+
             Args:
                 gmo: GMO data object with sensor return fields.
+
+            Raises:
+                AssertionError: If too many returns differ from the expected range.
             """
             unit_vecs = np.concatenate(
                 [
@@ -269,26 +284,66 @@ class TestGenericModelOutput(_SarcophagusTestCase):
             self._cube_prim_paths = cube_idx
 
         def _test_intensity(self, gmo: Any) -> None:
+            """Validates GMO scalar intensity values for the configured sensor type.
+
+            Args:
+                gmo: GMO data object with scalar intensity values.
+
+            Raises:
+                AssertionError: If lidar intensities are negative or radar intensities are zero.
+            """
             if self._sensor_type == "lidar":
                 self._test.assertTrue(np.all(gmo.scalar >= 0), "Intensities are not non-negative.")
             elif self._sensor_type == "radar":
                 self._test.assertTrue(np.all(gmo.scalar != 0), "Intensities are not zero.")
 
         def _test_timestamp(self, gmo: Any) -> None:
+            """Validates GMO time offsets for monotonic order and expected maximum spacing.
+
+            Args:
+                gmo: GMO data object with time offset values.
+
+            Raises:
+                AssertionError: If time offsets decrease or exceed the expected maximum spacing.
+            """
             timestamp_diffs = np.diff(gmo.timeOffsetNs)
             self._test.assertTrue(np.all(timestamp_diffs >= 0), "Timestamps are not monotonically increasing.")
             max_timestamp_diff = np.max(timestamp_diffs)
             self._test.assertLessEqual(max_timestamp_diff, self._max_timeOffsetNs_expected)
 
         def _test_emitter_id(self, gmo: Any) -> None:
+            """Validates GMO emitter IDs are within the expected lidar emitter range.
+
+            Args:
+                gmo: GMO data object with emitter ID values.
+
+            Raises:
+                AssertionError: If any emitter ID is negative or greater than or equal to 1024.
+            """
             self._test.assertTrue(np.all(gmo.emitterId >= 0), "Emitter IDs are not non-negative.")
             self._test.assertTrue(np.all(gmo.emitterId < 1024), "Emitter IDs are expected to be less than 1024.")
 
         def _test_channel_id(self, gmo: Any) -> None:
+            """Validates GMO channel IDs are within the expected lidar channel range.
+
+            Args:
+                gmo: GMO data object with channel ID values.
+
+            Raises:
+                AssertionError: If any channel ID is negative or greater than or equal to 1024.
+            """
             self._test.assertTrue(np.all(gmo.channelId >= 0), "Channel IDs are not non-negative.")
             self._test.assertTrue(np.all(gmo.channelId < 1024), "Channel IDs are expected to be less than 1024.")
 
         def _test_material_id(self, gmo: Any) -> None:
+            """Validates GMO material IDs against expected cube material IDs for non-edge returns.
+
+            Args:
+                gmo: GMO data object with material ID values.
+
+            Raises:
+                AssertionError: If material ID count differs from return count or too many material IDs mismatch.
+            """
             self._test.assertEqual(
                 len(gmo.matId),
                 len(self._cube_prim_paths),
@@ -315,9 +370,25 @@ class TestGenericModelOutput(_SarcophagusTestCase):
             )
 
         def _test_velocity(self, gmo: Any) -> None:
+            """Validates GMO velocity vectors are close to zero for the static scene.
+
+            Args:
+                gmo: GMO data object with velocity vectors.
+
+            Raises:
+                AssertionError: If any velocity vector differs from zero beyond tolerance.
+            """
             self._test.assertTrue(np.allclose(gmo.velocities, 0, atol=5e-3), "Velocities are expected to be 0.")
 
         def _test_object_id(self, gmo: Any) -> None:
+            """Validates GMO object IDs resolve to expected cube prim paths for non-edge returns.
+
+            Args:
+                gmo: GMO data object with object ID values.
+
+            Raises:
+                AssertionError: If the stable ID map is empty, object ID count mismatches, or too many paths mismatch.
+            """
             self._test.assertGreater(len(self._stable_id_map), 0, "Expected non-empty stable id map.")
             object_ids = np.array(LidarRtx.get_object_ids(gmo.objId))
             self._test.assertEqual(
@@ -346,17 +417,42 @@ class TestGenericModelOutput(_SarcophagusTestCase):
             )
 
         def _test_echo_id(self, gmo: Any) -> None:
+            """Validates GMO echo IDs are zero for every lidar return.
+
+            Args:
+                gmo: GMO data object with echo ID values.
+
+            Raises:
+                AssertionError: If any echo ID is nonzero.
+            """
             self._test.assertTrue(np.all(gmo.echoId == 0), "Echo IDs are expected to be 0.")
 
         def _test_tick_state(self, gmo: Any) -> None:
+            """Validate that all GMO tick states are zero.
+
+            Args:
+                gmo: GMO data object with the tickStates field.
+
+            Raises:
+                AssertionError: If any tick state is nonzero.
+            """
             self._test.assertTrue(np.all(gmo.tickStates == 0), "Tick states are expected to be 0.")
 
         def _test_radial_velocity(self, gmo: Any) -> None:
+            """Validate that radar GMO radial velocity is close to zero.
+
+            Args:
+                gmo: GMO data object with the rv_ms field.
+
+            Raises:
+                AssertionError: If the maximum absolute radial velocity exceeds 1e-2.
+            """
             self._test.assertLessEqual(
                 np.max(np.abs(gmo.rv_ms)), 1e-2, "Radial velocity is expected to be (close to) 0."
             )
 
     _writer_registered = False
+    """Tracks whether _GmoTestWriter has been registered with rep.WriterRegistry."""
 
     async def setUp(self) -> None:
         """Set up test environment and register GMO writer."""
@@ -366,6 +462,15 @@ class TestGenericModelOutput(_SarcophagusTestCase):
             TestGenericModelOutput._writer_registered = True
 
     async def _test_sensor(self, sensor_type: str, **kwargs: Any) -> None:
+        """Create an RTX sensor, attach the GenericModelOutput test writer, and validate collected GMO frames.
+
+        Args:
+            sensor_type: Sensor type used to create the RTX sensor command and verify the expected Omni prim type.
+            **kwargs: Additional sensor creation keyword arguments passed to omni.kit.commands.execute.
+
+        Raises:
+            AssertionError: If the created sensor type is unexpected or no valid GMO frames are collected.
+        """
         COLLECTION_SECONDS = 3.0
 
         sensor_kwargs = {
@@ -408,7 +513,11 @@ class TestGenericModelOutput(_SarcophagusTestCase):
         self.assertGreater(self._writer.valid_frame_count, 0, "Expected at least one valid GMO frame.")
 
     async def test_lidar(self) -> None:
-        """Test GMO annotator with a lidar sensor."""
+        """Test GMO annotator with a lidar sensor.
+
+        Raises:
+            AssertionError: If the lidar GMO validation fails.
+        """
         kwargs = {
             "omni:sensor:Core:outputFrameOfReference": "WORLD",
             "omni:sensor:Core:auxOutputType": "FULL",
@@ -416,7 +525,11 @@ class TestGenericModelOutput(_SarcophagusTestCase):
         await self._test_sensor("lidar", **kwargs)
 
     async def test_radar(self) -> None:
-        """Test GMO annotator with a radar sensor."""
+        """Test GMO annotator with a radar sensor.
+
+        Raises:
+            AssertionError: If the radar GMO validation fails.
+        """
         kwargs = {
             "omni:sensor:WpmDmat:outputFrameOfReference": "WORLD",
             "omni:sensor:WpmDmat:auxOutputType": "BASIC",
@@ -443,6 +556,7 @@ class TestIsaacCreateRTXLidarScanBuffer(_SarcophagusTestCase):
         "outputEchoId": True,
         "outputTickState": True,
     }
+    """Enables scan buffer output fields validated against GenericModelOutput."""
 
     class _ScanBufferTestWriter(Writer):
         """Custom Writer that validates IsaacCreateRTXLidarScanBuffer against GenericModelOutput.
@@ -467,6 +581,14 @@ class TestIsaacCreateRTXLidarScanBuffer(_SarcophagusTestCase):
             self.valid_frame_count = 0
 
         def write(self, data: Any) -> None:
+            """Buffers valid GenericModelOutput lidar attributes and validates matching IsaacCreateRTXLidarScanBuffer frames.
+
+            Args:
+                data: Render product data from the writer.
+
+            Raises:
+                AssertionError: If scan buffer data fails validation against expected structure or buffered GMO data.
+            """
             if "renderProducts" not in data:
                 return
             for rp_name, rp_data in data["renderProducts"].items():
@@ -516,6 +638,10 @@ class TestIsaacCreateRTXLidarScanBuffer(_SarcophagusTestCase):
 
             Args:
                 sb: Scan buffer data dictionary.
+
+            Raises:
+                AssertionError: If required scan buffer fields, shapes, dtypes, transform, radial velocity, or GMO comparison
+                    are invalid.
             """
             t = self._test
 
@@ -576,6 +702,9 @@ class TestIsaacCreateRTXLidarScanBuffer(_SarcophagusTestCase):
             Args:
                 sb: Scan buffer data dictionary.
                 expected_keys: Dictionary of expected attribute keys with (size, dtype) tuples.
+
+            Raises:
+                AssertionError: If the scan buffer timestamp is not in the GMO buffer or attributes do not match GMO data.
             """
             t = self._test
             ts_key = sb["timestamp"][0]
@@ -619,6 +748,7 @@ class TestIsaacCreateRTXLidarScanBuffer(_SarcophagusTestCase):
                     )
 
     _writer_registered = False
+    """Tracks whether _ScanBufferTestWriter is registered with rep.WriterRegistry."""
 
     async def setUp(self) -> None:
         """Set up test environment and register scan buffer writer."""
@@ -628,6 +758,11 @@ class TestIsaacCreateRTXLidarScanBuffer(_SarcophagusTestCase):
             TestIsaacCreateRTXLidarScanBuffer._writer_registered = True
 
     async def _test_annotator_outputs(self) -> None:
+        """Validate IsaacCreateRTXLidarScanBuffer output from an RTX lidar render product against GenericModelOutput.
+
+        Raises:
+            AssertionError: If the created sensor is not an OmniLidar prim or no valid scan buffer frame is collected.
+        """
         COLLECTION_SECONDS = 3.0
 
         kwargs = {
@@ -669,7 +804,11 @@ class TestIsaacCreateRTXLidarScanBuffer(_SarcophagusTestCase):
         self.assertGreater(self._writer.valid_frame_count, 0, "Expected at least one valid scan buffer frame.")
 
     async def test_3d_lidar(self) -> None:
-        """Test IsaacCreateRTXLidarScanBuffer annotator with a 3D lidar sensor."""
+        """Test IsaacCreateRTXLidarScanBuffer annotator with a 3D lidar sensor.
+
+        Raises:
+            AssertionError: If the 3D lidar scan buffer validation fails.
+        """
         await self._test_annotator_outputs()
 
 
@@ -687,6 +826,7 @@ class TestIsaacComputeRTXLidarFlatScan(_SarcophagusTestCase):
         "numRows",
         "rotationRate",
     ]
+    """Names of fields required in IsaacComputeRTXLidarFlatScan output data."""
 
     class _FlatScanTestWriter(Writer):
         """Custom Writer that validates IsaacComputeRTXLidarFlatScan against GenericModelOutput.
@@ -711,6 +851,14 @@ class TestIsaacComputeRTXLidarFlatScan(_SarcophagusTestCase):
             self.valid_frame_count = 0
 
         def write(self, data: Any) -> None:
+            """Validates IsaacComputeRTXLidarFlatScan render product data against GenericModelOutput frames.
+
+            Args:
+                data: Render product data from the writer.
+
+            Raises:
+                AssertionError: If flat scan validation fails.
+            """
             if "renderProducts" not in data:
                 return
             for rp_name, rp_data in data["renderProducts"].items():
@@ -738,6 +886,15 @@ class TestIsaacComputeRTXLidarFlatScan(_SarcophagusTestCase):
                 self.valid_frame_count += 1
 
         def _validate_flat_scan(self, fs: Any, gmo: Any) -> None:
+            """Validates IsaacComputeRTXLidarFlatScan fields and compares 2D lidar data with GenericModelOutput.
+
+            Args:
+                fs: Flat scan data dictionary.
+                gmo: GenericModelOutput data object used as expected scan source.
+
+            Raises:
+                AssertionError: If expected keys, metadata, dimensions, or scan data do not match expected values.
+            """
             t = self._test
 
             for key in TestIsaacComputeRTXLidarFlatScan._EXPECTED_FLAT_SCAN_KEYS:
@@ -813,6 +970,7 @@ class TestIsaacComputeRTXLidarFlatScan(_SarcophagusTestCase):
             )
 
     _writer_registered = False
+    """Tracks whether _FlatScanTestWriter has been registered with rep.WriterRegistry."""
 
     async def setUp(self) -> None:
         """Set up test environment and register flat scan writer."""
@@ -822,6 +980,15 @@ class TestIsaacComputeRTXLidarFlatScan(_SarcophagusTestCase):
             TestIsaacComputeRTXLidarFlatScan._writer_registered = True
 
     async def _test_annotator_outputs(self, config: str = DEFAULT_CONFIG, variant: str = DEFAULT_VARIANT) -> None:
+        """Creates an RTX lidar sensor and validates IsaacComputeRTXLidarFlatScan output frames.
+
+        Args:
+            config: RTX lidar configuration used to create the OmniLidar sensor.
+            variant: RTX lidar configuration variant used to create the OmniLidar sensor.
+
+        Raises:
+            AssertionError: If the created sensor is not an OmniLidar prim or no valid flat scan frame is produced.
+        """
         COLLECTION_SECONDS = 3.0
 
         kwargs = {
@@ -875,11 +1042,19 @@ class TestIsaacComputeRTXLidarFlatScan(_SarcophagusTestCase):
         self.assertGreater(self._writer.valid_frame_count, 0, "Expected at least one valid flat scan frame.")
 
     async def test_3d_lidar(self) -> None:
-        """Test IsaacComputeRTXLidarFlatScan annotator with a 3D lidar sensor."""
+        """Test IsaacComputeRTXLidarFlatScan annotator with a 3D lidar sensor.
+
+        Raises:
+            AssertionError: If IsaacComputeRTXLidarFlatScan validation fails for the 3D lidar sensor.
+        """
         await self._test_annotator_outputs(config="Example_Rotary", variant=None)
 
     async def test_2d_lidar(self) -> None:
-        """Test IsaacComputeRTXLidarFlatScan annotator with a 2D lidar sensor."""
+        """Test IsaacComputeRTXLidarFlatScan annotator with a 2D lidar sensor.
+
+        Raises:
+            AssertionError: If IsaacComputeRTXLidarFlatScan validation fails for the 2D lidar sensor.
+        """
         await self._test_annotator_outputs(config="SICK_picoScan150", variant="Profile_1")
 
 
@@ -905,6 +1080,14 @@ class TestIsaacCreateRTXRadarPointCloud(_SarcophagusTestCase):
             self.valid_frame_count = 0
 
         def write(self, data: Any) -> None:
+            """Processes IsaacCreateRTXRadarPointCloud render product data and counts valid radar frames.
+
+            Args:
+                data: Writer payload containing render product annotator output.
+
+            Raises:
+                AssertionError: If radar point cloud validation fails.
+            """
             if "renderProducts" not in data:
                 return
             for rp_name, rp_data in data["renderProducts"].items():
@@ -917,6 +1100,14 @@ class TestIsaacCreateRTXRadarPointCloud(_SarcophagusTestCase):
                 self.valid_frame_count += 1
 
         def _validate(self, rd: Any) -> None:
+            """Validates IsaacCreateRTXRadarPointCloud data for point cloud, intensity, and radial velocity.
+
+            Args:
+                rd: Radar point cloud data dictionary.
+
+            Raises:
+                AssertionError: If required radar point cloud fields are missing or values are invalid.
+            """
             t = self._test
             for key in ["data", "intensity", "radialVelocityMS"]:
                 t.assertIn(key, rd, f"Expected {key} in radar point cloud data.")
@@ -929,6 +1120,7 @@ class TestIsaacCreateRTXRadarPointCloud(_SarcophagusTestCase):
             )
 
     _writer_registered = False
+    """Indicates whether _RadarTestWriter has been registered with rep.WriterRegistry."""
 
     async def setUp(self) -> None:
         """Set up test environment and register radar writer."""
@@ -938,7 +1130,11 @@ class TestIsaacCreateRTXRadarPointCloud(_SarcophagusTestCase):
             TestIsaacCreateRTXRadarPointCloud._writer_registered = True
 
     async def test_rtx_radar(self) -> None:
-        """Test IsaacCreateRTXRadarPointCloud annotator with a radar sensor."""
+        """Test IsaacCreateRTXRadarPointCloud annotator with a radar sensor.
+
+        Raises:
+            AssertionError: If the created sensor is not an OmniRadar prim or no valid radar frames are produced.
+        """
         COLLECTION_SECONDS = 3.0
 
         kwargs = {
@@ -979,7 +1175,7 @@ class TestIsaacCreateRTXRadarPointCloud(_SarcophagusTestCase):
 
 
 class TestTimestepVsScanRate(omni.kit.test.AsyncTestCase):
-    """Verify GMO timestamps advance by scan_period across dt / scan-rate combos.
+    """Verify GMO timestamps advance by scan_period across dt / scan-rate combinations.
 
     Exercises all 27 combinations of:
       - physics_dt:    1/30 s, 1/60 s, 1/120 s  (via SimulationManager)
@@ -993,7 +1189,9 @@ class TestTimestepVsScanRate(omni.kit.test.AsyncTestCase):
     """
 
     COLLECTION_SECONDS = 3.0
+    """Duration in seconds to collect frames for each cadence test."""
     TIMESTAMP_TOLERANCE_NS = 10
+    """Allowed timestamp delta tolerance in nanoseconds for scan period comparisons."""
 
     class _CadenceTestWriter(Writer):
         """Writer that collects unique GMO scan timestamps."""
@@ -1006,11 +1204,17 @@ class TestTimestepVsScanRate(omni.kit.test.AsyncTestCase):
             self._last_ts = None
 
         def reset(self) -> None:
+            """Clears collected scan timestamps, warmup count, and last GMO timestamp."""
             self.scans.clear()
             self.warmup_count = 0
             self._last_ts = None
 
         def write(self, data: Any) -> None:
+            """Collects unique valid GenericModelOutput scan timestamps for cadence validation and counts warmup frames.
+
+            Args:
+                data: Render product data containing GenericModelOutput entries.
+            """
             if "renderProducts" not in data:
                 self.warmup_count += 1
                 return
@@ -1035,6 +1239,7 @@ class TestTimestepVsScanRate(omni.kit.test.AsyncTestCase):
                     self._last_ts = ts
 
     _writer_registered = False
+    """Tracks whether _CadenceTestWriter has been registered with rep.WriterRegistry."""
 
     async def setUp(self) -> None:
         """Set up test environment with a new stage and cadence writer."""
@@ -1070,6 +1275,10 @@ class TestTimestepVsScanRate(omni.kit.test.AsyncTestCase):
             physics_dt: Physics simulation time step in seconds.
             timeline_dt: Timeline rendering time step in seconds.
             scan_rate_hz: Lidar scan rate in Hz.
+
+        Raises:
+            AssertionError: If the first valid timestamp exceeds the warmup budget, scan data is invalid, or timestamp
+                deltas do not match the scan period.
         """
         label = f"phys={physics_dt:.6f} tl={timeline_dt:.6f} scan={scan_rate_hz}Hz"
 

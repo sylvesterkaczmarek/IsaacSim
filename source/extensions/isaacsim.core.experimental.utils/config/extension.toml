@@ -1,5 +1,5 @@
 [package]
-version = "0.17.2"
+version = "0.23.0"
 category = "Simulation"
 title = "Isaac Sim Core (Utils)"
 description = "The Core Utils extension provides a set of utility functions."
@@ -16,6 +16,7 @@ writeTarget.kit = true
 "omni.kit.stage_templates" = {}
 "omni.usd" = {}
 "omni.usd.metrics.assembler" = {}
+"omni.usd.schema.physx" = {}
 "omni.warp.core" = {}
 
 [[python.module]]
@@ -84,6 +85,10 @@ args = [
     "--/persistent/omnihydra/useSceneGraphInstancing=true",
 ]
 pythonTests.include = ["isaacsim.core.experimental.utils.tests.*"]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
 
 [documentation]
 pages = ["docs/Overview.md", "docs/CHANGELOG.md"]

@@ -9,6 +9,8 @@
   - def get_operation_log(self) -> list[str]
   - def add_affected_stage(self, stage_identifier: str)
   - def get_affected_stages(self) -> list[str]
+  - def request_deletion(self, path: str)
+  - def get_pending_deletions(self) -> list[str]
   - def get_configuration_parameters(self) -> list[RuleConfigurationParam]
 
 - class RuleSpec

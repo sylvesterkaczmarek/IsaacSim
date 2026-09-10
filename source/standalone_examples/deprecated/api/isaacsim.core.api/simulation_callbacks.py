@@ -43,12 +43,20 @@ simulation_context.play()
 
 
 def step_callback_1(step_size: float) -> None:
-    """Set the target joint position for panda_joint2."""
+    """Set the target joint position for panda_joint2.
+
+    Args:
+        step_size: Duration of the completed physics step. This callback does not use it.
+    """
     art.set_joint_positions([[-1.5]], joint_indices=[dof_ptr])
 
 
 def step_callback_2(step_size: float) -> None:
-    """Print the current joint position and simulation time."""
+    """Print the current joint position and simulation time.
+
+    Args:
+        step_size: Duration of the completed physics step. This callback does not use it.
+    """
     print(
         "Current joint 2 position @ step "
         + str(simulation_context.current_time_step_index)
@@ -59,7 +67,11 @@ def step_callback_2(step_size: float) -> None:
 
 
 def render_callback(event: object) -> None:
-    """Print a message on each render frame."""
+    """Print a message on each render frame.
+
+    Args:
+        event: Render event that triggered the callback. This callback does not inspect it.
+    """
     print("Render Frame")
 
 

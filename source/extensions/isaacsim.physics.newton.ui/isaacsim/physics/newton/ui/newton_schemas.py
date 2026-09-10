@@ -81,6 +81,7 @@ def get_newton_schema_names() -> tuple[set[str], set[str]]:
     not_capabilities = [
         "NewtonSceneAPI",
         "NewtonXpbdSceneAPI",
+        "NewtonVbdSceneAPI",
         "NewtonCollisionAPI",
         "NewtonMeshCollisionAPI",
         "NewtonMaterialAPI",
@@ -94,8 +95,14 @@ def get_newton_schema_names() -> tuple[set[str], set[str]]:
 
 
 # scene widget with hardcoded solver property
+import omni.kit.undo
+from omni.kit.commands import execute
 from omni.kit.property.physics.widgets import ExtensionSchemaWidget, UiProp
 from omni.physics.isaacsimready import get_variant_switcher
+
+from .utils import build_remove_schema_frame_header, request_property_window_refresh
+
+_NEWTON_SCENE_SCHEMA = "NewtonSceneAPI"
 
 
 class ExtendedNewtonSceneWidget(ExtensionSchemaWidget):
@@ -109,6 +116,39 @@ class ExtendedNewtonSceneWidget(ExtensionSchemaWidget):
     "newton:solver" property to the property panel, allowing users to configure the solver
     used by the Newton physics system.
     """
+
+    def on_remove_schema(self) -> None:
+        """Unapply ``NewtonSceneAPI`` from every selected prim that has it."""
+        omni.kit.undo.begin_group()
+        for prim in self._prims_with_schema():
+            execute("UnapplyCodelessAPISchemaCommand", api=_NEWTON_SCENE_SCHEMA, prim=prim)
+        omni.kit.undo.end_group()
+        request_property_window_refresh()
+
+    def _prims_with_schema(self) -> list:
+        """Collect the selected prims that currently have ``NewtonSceneAPI`` applied.
+
+        Returns:
+            The prims in the payload with the schema applied.
+        """
+        if not self._payload:
+            return []
+        prims = [self._get_prim(prim_path) for prim_path in self._payload]
+        return [prim for prim in prims if prim and prim.HasAPI(_NEWTON_SCENE_SCHEMA)]
+
+    def _build_frame_header(self, collapsed: bool, text: str, group_id: str | None = None) -> None:
+        """Build the frame header, matching the remove button of the other Newton schemas.
+
+        ``ExtensionSchemaWidget`` keeps the frame visible whenever the parent ``PhysicsScene``
+        is present, so the button only appears once the API is applied.
+
+        Args:
+            collapsed: Whether the frame is currently collapsed.
+            text: The header label text.
+            group_id: Optional identifier for the header.
+        """
+        on_remove = self.on_remove_schema if self._prims_with_schema() else None
+        build_remove_schema_frame_header(collapsed, text, _NEWTON_SCENE_SCHEMA, on_remove)
 
     def _filter_props_to_build(self, prim: "Usd.Prim") -> list:
         """Filters properties to build for Newton scene widgets.
@@ -124,25 +164,46 @@ class ExtendedNewtonSceneWidget(ExtensionSchemaWidget):
         filtered_props = super()._filter_props_to_build(prim)
         if get_variant_switcher().get_active_simulation()[1] == "Newton":
             filtered_props.append(
-                UiProp().from_custom("newton:solver", "Solver", "", "token", "mjcwarp", "Solver used by Newton")
+                UiProp().from_custom("newton:solver", "Solver", "", "token", "mujoco", "Solver used by Newton")
             )
         return filtered_props
 
 
 # NOTE: omni.physics.physx.ui/omni/physics/physxui/schemas/physxschema.py for reference
 
-from omni.kit.property.physics.builders import PrettyPrintTokenComboBuilder
 from pxr import UsdPhysics
 
-from .utils import DisableByCallbackBuilder, PrimType, make_hide_cb
+from .utils import DisableByCallbackBuilder, PrimType, ValueChangeByCallbackTokenBuilder, make_hide_cb
 
 CallbackBuilder = DisableByCallbackBuilder
+
+import omni.kit.property.physics
+import omni.ui as ui
+from isaacsim.physics.newton import newton_solver_to_api_schema as newton_solver_to_api_schema
+
+from .newton_widgets import ignored_schemas
+
+
+def SolverChangeCallBack(model: ui.AbstractItemModel, dummy: None) -> None:
+    new_solver = model.get_value_as_token()
+    if not model._valid_stage:
+        return
+    for path in model._object_paths:
+        prim = model._valid_stage.GetPrimAtPath(path.GetPrimPath())
+        for solver, api in newton_solver_to_api_schema.items():
+            if new_solver == solver:
+                if not prim.HasAPI(api):
+                    prim.ApplyAPI(api)
+            else:
+                if prim.HasAPI(api):
+                    prim.RemoveAPI(api)
+    omni.kit.property.physics.refresh()
 
 
 class NewtonUiDefinitions:
     """UI definitions (widgets, property builders, ordering) for Newton schemas."""
 
-    ignore = {}
+    ignore = ignored_schemas  # ignore schemas that has its own custom widgets
     """Empty dictionary for properties to ignore in the UI."""
     extensions = {
         UsdPhysics.Scene: ["NewtonSceneAPI"],
@@ -155,7 +216,17 @@ class NewtonUiDefinitions:
     }
     """Maps schema names to their corresponding UI widget classes."""
     property_builders = {
-        "newton:solver": [PrettyPrintTokenComboBuilder, [], [("mjcwarp", "MuJoCo Warp")]],
+        "newton:solver": [
+            ValueChangeByCallbackTokenBuilder,
+            [],
+            [
+                ("mujoco", "MuJoCo Warp"),
+                ("xpbd", "XPBD"),
+                # Disabled VBD until schema release
+                # ("vbd", "VBD"),
+            ],
+            SolverChangeCallBack,
+        ],
         # Common Newton/Mjc properties - hidden when Mjc provides the value and Newton hasn't authored its version.
         # SCENE
         "newton:maxSolverIterations": [

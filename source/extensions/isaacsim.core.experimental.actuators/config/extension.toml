@@ -1,5 +1,5 @@
 [package]
-version = "0.1.2"
+version = "0.1.6"
 category = "Simulation"
 title = "Isaac Sim Core (Actuators)"
 description = "USD authoring and simulation integration for robot actuators."
@@ -82,6 +82,7 @@ args = [
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

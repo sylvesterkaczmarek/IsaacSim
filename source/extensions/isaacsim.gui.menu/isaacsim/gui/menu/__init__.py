@@ -15,6 +15,6 @@
 
 """Menu system for Isaac Sim GUI providing File, Edit, Create, Tools, Help, and other application menus."""
 
-from .extension import *
+from .extension import Extension as Extension
 
-__all__ = ["HookMenuHandler"]
+__all__ = []

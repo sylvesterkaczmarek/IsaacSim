@@ -85,7 +85,9 @@ class FrankaRmpFlowExample:
 
         self._robot_prim_path = _ROBOT_PRIM_PATH
         assets_root = await get_assets_root_path_async()
-        add_reference_to_stage(assets_root + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd", _ROBOT_PRIM_PATH)
+        add_reference_to_stage(
+            assets_root + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda", _ROBOT_PRIM_PATH
+        )
         self._articulation = Articulation(_ROBOT_PRIM_PATH)
 
         self._target = Cube(paths=_TARGET_PRIM_PATH, sizes=0.04, positions=[0.5, 0.0, 0.25])

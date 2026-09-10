@@ -22,7 +22,13 @@ from isaacsim.core.prims import Articulation
 
 
 class RMPFlowController(mg.MotionPolicyController):
-    """RMPflow-based motion policy controller for UR10e robot."""
+    """RMPflow-based motion policy controller for UR10e robot.
+
+    Args:
+        name: Name used to identify the controller.
+        robot_articulation: UR10e articulation to drive with the motion policy.
+        physics_dt: Simulation interval in seconds used to convert policy targets into articulation actions.
+    """
 
     def __init__(self, name: str, robot_articulation: Articulation, physics_dt: float = 1.0 / 60.0) -> None:
 

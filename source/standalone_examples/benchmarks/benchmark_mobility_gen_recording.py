@@ -33,6 +33,10 @@ Example usage (from the Isaac Sim build directory):
 
     ./python.sh ../../../source/standalone_examples/benchmarks/benchmark_mobility_gen_recording.py \\
         --scenario keyboard_teleop --num-steps 200
+
+    # Benchmark the Unitree H1 humanoid instead of the default Nova Carter
+    ./python.sh ../../../source/standalone_examples/benchmarks/benchmark_mobility_gen_recording.py \\
+        --robot h1 --num-steps 200
 """
 
 import argparse
@@ -70,6 +74,13 @@ parser.add_argument(
     default="random_acceleration",
     choices=["random_acceleration", "random_path_following", "keyboard_teleop"],
     help="Scenario to benchmark.",
+)
+parser.add_argument(
+    "--robot",
+    type=str,
+    default="carter",
+    choices=["carter", "h1"],
+    help="Robot to benchmark (carter = Nova Carter wheeled, h1 = Unitree H1 humanoid).",
 )
 parser.add_argument(
     "--num-steps",
@@ -140,6 +151,7 @@ from isaacsim.replicator.experimental.mobility_gen import (
 )
 from isaacsim.replicator.mobility_gen.examples import (
     CarterRobot,
+    H1Robot,
     KeyboardTeleoperationScenario,
     RandomAccelerationScenario,
     RandomPathFollowingScenario,
@@ -150,13 +162,22 @@ from isaacsim.replicator.mobility_gen.examples import (
 # Custom benchmark recorder
 # ─────────────────────────────────────────────────────────────────────────────
 class MobilityGenRecorder(MeasurementDataRecorder):
-    """Records per-phase step timings from the MobilityGen recording loop."""
+    """Records per-phase step timings from the MobilityGen recording loop.
+
+    Args:
+        context: Benchmark context accepted for recorder compatibility. This recorder does not use it.
+        **kwargs: Additional recorder options accepted for compatibility and ignored.
+    """
 
     def __init__(self, context: Any = None, **kwargs: Any) -> None:
         self._results = None
 
     def set_results(self, results: dict) -> None:
-        """Set the timing results to report."""
+        """Set the timing results to report.
+
+        Args:
+            results: Timed step counts, elapsed durations, and reset statistics to summarize.
+        """
         self._results = results
 
     def start_collecting(self) -> None:
@@ -166,7 +187,11 @@ class MobilityGenRecorder(MeasurementDataRecorder):
         """Stop collecting benchmark measurements."""
 
     def get_data(self) -> MeasurementData:
-        """Return the collected benchmark measurements."""
+        """Return the collected benchmark measurements.
+
+        Returns:
+            Per-phase timing, throughput, and reset measurements, or an empty collection before results are set.
+        """
         if not self._results:
             return MeasurementData()
 
@@ -228,10 +253,17 @@ SCENARIO_CLASSES = {
 }
 ScenarioClass = SCENARIO_CLASSES[args.scenario]
 
+ROBOT_CLASSES = {
+    "carter": CarterRobot,
+    "h1": H1Robot,
+}
+RobotClass = ROBOT_CLASSES[args.robot]
+
 carb.log_warn(f"[MobilityGen Bench] Scene URL : {scene_url}")
 carb.log_warn(f"[MobilityGen Bench] Omap path : {omap_path}")
 carb.log_warn(f"[MobilityGen Bench] Output dir: {output_dir}")
 carb.log_warn(f"[MobilityGen Bench] Scenario  : {ScenarioClass.__name__}")
+carb.log_warn(f"[MobilityGen Bench] Robot     : {RobotClass.__name__}")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Set up benchmark
@@ -244,7 +276,8 @@ benchmark = BaseIsaacBenchmark(
             {"name": "num_steps", "data": args.num_steps},
             {"name": "warmup_steps", "data": args.warmup_steps},
             {"name": "async_write", "data": args.async_write},
-            {"name": "physics_dt_ms", "data": round(CarterRobot.physics_dt * 1000, 2)},
+            {"name": "robot", "data": RobotClass.__name__},
+            {"name": "physics_dt_ms", "data": round(RobotClass.physics_dt * 1000, 2)},
         ]
     },
     backend_type=args.backend_type,
@@ -268,14 +301,14 @@ wait_until_stage_is_fully_loaded()
 
 occupancy_map = OccupancyMap.from_ros_yaml(omap_path)
 
-SimulationManager.setup_simulation(dt=CarterRobot.physics_dt)
+SimulationManager.setup_simulation(dt=RobotClass.physics_dt)
 
 ground_plane = GroundPlane("/World/ground_plane", templates=None)
 stage = get_current_stage()
 for mesh_path in ground_plane.meshes.paths:
     UsdGeom.Imageable(stage.GetPrimAtPath(mesh_path)).MakeInvisible()
 
-robot = CarterRobot.build("/World/robot")
+robot = RobotClass.build("/World/robot")
 scenario = ScenarioClass.from_robot_occupancy_map(robot, occupancy_map)
 
 SimulationManager.initialize_physics()
@@ -285,7 +318,7 @@ scenario.reset()
 
 config = Config(
     scenario_type=ScenarioClass.__name__,
-    robot_type=CarterRobot.__name__,
+    robot_type=RobotClass.__name__,
     scene_usd=scene_url,
 )
 writer = MobilityGenWriter(recording_path, async_write=args.async_write)
@@ -296,7 +329,7 @@ save_sensor_overrides(robot.prim_path, recording_path)
 # ─────────────────────────────────────────────────────────────────────────────
 # Warm-up
 # ─────────────────────────────────────────────────────────────────────────────
-step_size = CarterRobot.physics_dt
+step_size = RobotClass.physics_dt
 carb.log_warn(f"[MobilityGen Bench] Warming up ({args.warmup_steps} steps)...")
 for _ in range(args.warmup_steps):
     SimulationManager.step(steps=1)

@@ -1,5 +1,5 @@
 [package]
-version = "0.4.3"
+version = "0.5.1"
 category = "rendering"
 title = "Isaac Sim Core Rendering Manager"
 description = "Core class that provides APIs for managing viewports and controlling rendering."
@@ -28,6 +28,7 @@ name = "isaacsim.core.rendering_manager.tests"
 name = "rendering_manager"
 timeout = 900
 dependencies = [
+    "isaacsim.core.simulation_manager",
     "isaacsim.test.docstring",
 ]
 args = [
@@ -79,6 +80,10 @@ args = [
 ]
 enabled = true
 pythonTests.include = ["isaacsim.core.rendering_manager.tests.test_rendering_manager.*"]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
 
 [[test]]
 name = "viewport_manager"
@@ -136,6 +141,10 @@ args = [
 enabled = true
 pythonTests.include = ["isaacsim.core.rendering_manager.tests.test_viewport_manager.*"]
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 name = "docstrings"
 timeout = 900
@@ -191,6 +200,10 @@ args = [
 ]
 enabled = true
 pythonTests.include = ["isaacsim.core.rendering_manager.tests.test_docstrings.*"]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
 
 [documentation]
 pages = ["docs/Overview.md", "docs/CHANGELOG.md"]

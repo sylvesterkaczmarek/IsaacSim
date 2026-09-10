@@ -29,7 +29,14 @@ from isaacsim.core.experimental.objects import Cone, Cube, GroundPlane, Sphere, 
 from isaacsim.core.experimental.prims import GeomPrim
 from isaacsim.core.experimental.prims.tests.common import check_allclose, cprint
 from isaacsim.core.rendering_manager import ViewportManager
-from isaacsim.sensors.experimental.rtx import TiledCameraSensor, draw_annotator_data_to_image
+from isaacsim.sensors.experimental.rtx import (
+    RtxCamera,
+    SensorRuntime,
+    TiledCameraSensor,
+    draw_annotator_data_to_image,
+)
+
+from .common import FakeAnnotator, normalize_semantics
 
 MAX_NUM_PRIMS = 5
 RESOLUTION = (256, 320)  # following OpenCV/NumPy convention (height, width)
@@ -164,6 +171,26 @@ class TestTiledCameraSensor(omni.kit.test.AsyncTestCase):
 
     # --------------------------------------------------------------------
 
+    async def test_rtx_camera_authored_prim_batching(self) -> None:
+        """Batch RtxCamera-authored prims without removing their sensor schema."""
+        await stage_utils.create_new_stage_async()
+        await ViewportManager.wait_for_viewport_async()
+        paths = [f"/World/RtxCamera_{i}" for i in range(2)]
+        cameras = [RtxCamera(path, tick_rate=30.0) for path in paths]
+
+        with self.assertRaisesRegex(ValueError, "Only one Camera prim is supported"):
+            RtxCamera("/World/RtxCamera_.*")
+
+        sensor = TiledCameraSensor("/World/RtxCamera_.*", resolution=RESOLUTION, annotators=["rgb"])
+        self.assertEqual(sensor.camera.paths, paths)
+        for prim in sensor.camera.prims:
+            self.assertTrue(prim.HasAPI("OmniSensorAPI"))
+            self.assertAlmostEqual(prim.GetAttribute("omni:sensor:tickRate").Get(), 30.0)
+
+        del sensor
+        del cameras
+        await app_utils.update_app_async(steps=3)
+
     @parametrize(
         prim_class=TiledCameraSensor,
         prim_class_kwargs={"resolution": RESOLUTION, "annotators": list(EXPECTED_ANNOTATOR_SPEC.keys())},
@@ -255,7 +282,7 @@ class TestTiledCameraSensor(omni.kit.test.AsyncTestCase):
                             id = key
                             break
                     self.assertIsNotNone(id, f"Label '{expected_label}' not found in idToLabels")
-                    self.assertEqual(idToSemantics[id], expected_semantics)
+                    self.assertEqual(normalize_semantics(idToSemantics[id]), normalize_semantics(expected_semantics))
             elif annotator == "semantic_segmentation":
                 expected_values = [
                     {"class": "BACKGROUND"},
@@ -271,8 +298,13 @@ class TestTiledCameraSensor(omni.kit.test.AsyncTestCase):
                     ["0", "1", "2", "3", "4"],
                     msg=f"Annotator info mismatch for '{annotator}'",
                 )
+                normalized_expected_values = [normalize_semantics(value) for value in expected_values]
                 for value in info["idToLabels"].values():
-                    self.assertIn(value, expected_values, msg=f"Annotator info mismatch for '{annotator}'")
+                    self.assertIn(
+                        normalize_semantics(value),
+                        normalized_expected_values,
+                        msg=f"Annotator info mismatch for '{annotator}'",
+                    )
             else:
                 self.assertDictEqual({}, info, msg=f"Annotator info mismatch for '{annotator}'")
 
@@ -358,7 +390,7 @@ class TestTiledCameraSensor(omni.kit.test.AsyncTestCase):
                         if label == expected_label:
                             break
                     self.assertIsNotNone(id, f"Label '{expected_label}' not found in idToLabels")
-                    self.assertEqual(idToSemantics[id], expected_semantics)
+                    self.assertEqual(normalize_semantics(idToSemantics[id]), normalize_semantics(expected_semantics))
                 cprint(f"  |    |    |-- {info}")
             elif annotator == "semantic_segmentation":
                 expected_values = [
@@ -375,8 +407,13 @@ class TestTiledCameraSensor(omni.kit.test.AsyncTestCase):
                     ["0", "1", "2", "3", "4"],
                     msg=f"Annotator info mismatch for '{annotator}'",
                 )
+                normalized_expected_values = [normalize_semantics(value) for value in expected_values]
                 for value in info["idToLabels"].values():
-                    self.assertIn(value, expected_values, msg=f"Annotator info mismatch for '{annotator}'")
+                    self.assertIn(
+                        normalize_semantics(value),
+                        normalized_expected_values,
+                        msg=f"Annotator info mismatch for '{annotator}'",
+                    )
             else:
                 self.assertDictEqual({}, info, msg=f"Annotator info mismatch for '{annotator}'")
 
@@ -389,3 +426,97 @@ class TestTiledCameraSensor(omni.kit.test.AsyncTestCase):
                 os.makedirs(filedir, exist_ok=True)
                 print(f"Saving image to {filepath}")
                 cv2.imwrite(filepath, image)
+
+    async def test_shared_runtime_lifecycle(self) -> None:
+        """Drive the annotator and render product lifecycle inherited from ``SensorRuntime``."""
+        await populate_stage(3, "wrap")
+        sensor = TiledCameraSensor("/World/A_.*", resolution=RESOLUTION, annotators=["rgb"])
+        try:
+            self.assertIsInstance(sensor, SensorRuntime)
+            # a batched runtime wraps every matched camera instead of rejecting more than one prim
+            self.assertEqual(len(sensor), 3)
+            self.assertIs(sensor.authoring_object, sensor.camera)
+            self.assertTrue(str(sensor.render_product.GetPath()).startswith("/Render"))
+            self.assertEqual(sensor.annotators, ["rgb"])
+            sensor.attach_annotators("normals")
+            self.assertEqual(sensor.annotators, ["normals", "rgb"])
+            sensor.detach_annotators("normals")
+            self.assertEqual(sensor.annotators, ["rgb"])
+            with self.assertRaises(ValueError):
+                sensor.attach_annotators("invalid_annotator_xyz")
+        finally:
+            del sensor
+            await app_utils.update_app_async(steps=3)
+
+    async def test_get_data_returns_none_during_warm_up(self) -> None:
+        """Return ``None`` and preserve info while the annotator has no payload."""
+        sensor = TiledCameraSensor.__new__(TiledCameraSensor)
+        sensor._resolution = RESOLUTION
+        sensor._tiled_resolution = TILED_RESOLUTION
+        sensor._hydra_texture = None
+        sensor._data_ready = False
+        sensor._annotators_spec = {"rgb": {"name": "rgb", "channels": 4, "output_channels": 3, "dtype": wp.uint8}}
+        sensor._annotators = {"rgb": FakeAnnotator({"data": None, "info": {"frameId": 7}})}
+
+        try:
+            self.assertEqual(sensor.get_data("rgb"), (None, {"frameId": 7}))
+            # `has_data()` is gated on the render product, so assert the latch a missing payload drives
+            self.assertFalse(sensor._data_ready)
+        finally:
+            sensor._annotators = {}
+            sensor._hydra_texture = None
+
+    async def test_has_data(self) -> None:
+        """Report completed render data before a frame is fetched."""
+        await populate_stage(2, "wrap")
+        sensor = TiledCameraSensor("/World/A_.*", resolution=RESOLUTION, annotators=["rgb"])
+        try:
+            self.assertFalse(sensor.has_data())
+            app_utils.play(commit=True)
+            for _ in range(20):
+                await app_utils.update_app_async()
+                if sensor.has_data():
+                    break
+            self.assertTrue(sensor.has_data())
+            data, _ = sensor.get_data("rgb")
+            self.assertIsNotNone(data)
+            # the state is scoped to the attached annotators and to owning the render product
+            sensor.detach_annotators("rgb")
+            self.assertFalse(sensor.has_data())
+            sensor._invalidate_sensor()
+            self.assertFalse(sensor.has_data())
+        finally:
+            app_utils.stop(commit=True)
+            await app_utils.update_app_async()
+            del sensor
+            await app_utils.update_app_async(steps=3)
+
+    async def test_get_data_after_warm_up_wait(self) -> None:
+        """Fetch batched frames from plain USD Camera prims after bounding the warm-up wait.
+
+        A missing GPU render engine is not observable at construction time: Replicator returns a valid
+        USD RenderProduct whether or not an engine was bound. So the sensor cannot raise there, and that
+        state is instead detected by waiting for frames and then checking ``has_data``.
+        """
+        resolution = (120, 160)  # following OpenCV/NumPy convention (height, width)
+        await populate_stage(2, "wrap")
+        sensor = TiledCameraSensor("/World/A_.*", resolution=resolution, annotators=["rgb"])
+        try:
+            self.assertFalse(sensor.has_data())
+            app_utils.play(commit=True)
+            for _ in range(20):
+                await app_utils.update_app_async()
+                if sensor.has_data():
+                    break
+            self.assertTrue(sensor.has_data())
+            data, info = sensor.get_data("rgb")
+            self.assertIsNotNone(data)
+            self.assertEqual(tuple(data.shape), (2, *resolution, 3))
+            self.assertIsInstance(info, dict)
+            with self.assertRaises(ValueError):
+                sensor.get_data("invalid_annotator_xyz")
+        finally:
+            app_utils.stop(commit=True)
+            await app_utils.update_app_async()
+            del sensor
+            await app_utils.update_app_async(steps=3)

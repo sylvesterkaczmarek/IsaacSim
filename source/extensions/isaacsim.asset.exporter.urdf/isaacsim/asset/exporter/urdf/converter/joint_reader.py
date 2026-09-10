@@ -119,6 +119,11 @@ def read_joints(
     if axis_flips is None:
         axis_flips = {}
 
+    # Root/ancestor scale to re-apply to joint offsets
+    from .urdf_frames import root_world_scale_matrix
+
+    root_scale_mat = root_world_scale_matrix(desc.root_prim)
+
     joint_name_map: dict[str, str] = {}
     results: list[JointData] = []
     ghost_links: list[LinkData] = []
@@ -130,7 +135,7 @@ def read_joints(
         if _is_world_joint(j, desc):
             continue
 
-        jd = _read_single_joint(j, link_name_map, stage, urdf_frames, axis_flips, actuator_map)
+        jd = _read_single_joint(j, link_name_map, stage, urdf_frames, axis_flips, actuator_map, root_scale_mat)
         if jd:
             if jd.joint_type in ("spherical", "d6"):
                 chain_joints, chain_ghosts = _expand_multi_dof_joint(j, jd)
@@ -295,6 +300,7 @@ def _read_single_joint(
     urdf_frames: dict[str, Gf.Matrix4d] | None,
     axis_flips: dict[str, bool] | None = None,
     actuator_map: dict[str, Usd.Prim] | None = None,
+    root_scale_mat: Gf.Matrix4d | None = None,
 ) -> JointData | None:
     """Read a single joint's data from its USD prim.
 
@@ -305,6 +311,8 @@ def _read_single_joint(
         urdf_frames: Mapping from link prim paths to URDF frames.
         axis_flips: Mapping from joint prim paths to axis flip flags.
         actuator_map: Mapping from joint prim paths to actuator prims.
+        root_scale_mat: Optional root-scale matrix (see :func:`root_world_scale_matrix`)
+            post-applied so an ancestor/root scale reaches the joint offsets.
 
     Returns:
         Joint data, or None if the joint cannot be exported.
@@ -334,7 +342,9 @@ def _read_single_joint(
     if urdf_frames and parent_path and child_path:
         from .urdf_frames import compute_joint_origin_from_frames
 
-        jd.origin_xyz, jd.origin_rpy = compute_joint_origin_from_frames(urdf_frames, parent_path, child_path)
+        jd.origin_xyz, jd.origin_rpy = compute_joint_origin_from_frames(
+            urdf_frames, parent_path, child_path, root_scale_mat
+        )
     else:
         jd.origin_xyz, jd.origin_rpy = compute_joint_origin(joint)
 
@@ -342,7 +352,7 @@ def _read_single_joint(
         flipped = (axis_flips or {}).get(str(joint_prim.GetPath()), False)
         jd.axis = _read_axis(joint_prim, joint, flipped)
 
-    if jd.joint_type in ("revolute", "prismatic"):
+    if jd.joint_type in ("revolute", "continuous", "prismatic"):
         _read_limits(joint_prim, jd, actuator_map)
 
     _read_dynamics(joint_prim, jd, actuator_map)
@@ -370,13 +380,36 @@ def _get_joint_type(prim: Usd.Prim) -> str:
         rev = UsdPhysics.RevoluteJoint(prim)
         lower = rev.GetLowerLimitAttr().Get() if rev.GetLowerLimitAttr() else None
         upper = rev.GetUpperLimitAttr().Get() if rev.GetUpperLimitAttr() else None
-        if lower is None and upper is None:
+        if lower is None or upper is None:
             return "continuous"
-        if lower is not None and upper is not None and lower >= upper:
+        lower_value = float(lower)
+        upper_value = float(upper)
+        if lower_value == -math.inf or upper_value == math.inf:
             return "continuous"
+        if lower_value > upper_value:
+            _logger.warning(
+                "Invalid joint limits at '%s': lower limit (%s) is greater than upper limit (%s). "
+                "Joint will be exported as a fixed joint.",
+                prim.GetPath(),
+                lower_value,
+                upper_value,
+            )
+            return "fixed"
         return "revolute"
 
     if prim.IsA(UsdPhysics.PrismaticJoint):
+        pri = UsdPhysics.PrismaticJoint(prim)
+        lower = pri.GetLowerLimitAttr().Get() if pri.GetLowerLimitAttr() else None
+        upper = pri.GetUpperLimitAttr().Get() if pri.GetUpperLimitAttr() else None
+        if lower is not None and upper is not None and float(lower) > float(upper):
+            _logger.warning(
+                "Invalid joint limits at '%s': lower limit (%s) is greater than upper limit (%s). "
+                "Joint will be exported as a fixed joint.",
+                prim.GetPath(),
+                lower,
+                upper,
+            )
+            return "fixed"
         return "prismatic"
 
     if prim.IsA(UsdPhysics.FixedJoint):
@@ -425,35 +458,40 @@ def _read_axis(joint_prim: Usd.Prim, joint: UsdPhysics.Joint, flipped: bool = Fa
 
 
 def _read_limits(joint_prim: Usd.Prim, jd: JointData, actuator_map: dict[str, Usd.Prim] | None = None) -> None:
-    """Read joint position limits (converting degrees to radians for revolute).
+    """Read joint limits (converting degrees to radians for bounded revolute joints).
 
     Args:
         joint_prim: USD joint prim to read.
         jd: Joint data to populate.
         actuator_map: Mapping from joint prim paths to actuator prims.
     """
-    is_revolute = joint_prim.IsA(UsdPhysics.RevoluteJoint)
+    if jd.joint_type != "continuous":
+        is_revolute = joint_prim.IsA(UsdPhysics.RevoluteJoint)
 
-    if is_revolute:
-        rev = UsdPhysics.RevoluteJoint(joint_prim)
-        lower_attr = rev.GetLowerLimitAttr()
-        upper_attr = rev.GetUpperLimitAttr()
-        if lower_attr and lower_attr.Get() is not None:
-            jd.limit_lower = math.radians(float(lower_attr.Get()))
-        if upper_attr and upper_attr.Get() is not None:
-            jd.limit_upper = math.radians(float(upper_attr.Get()))
-    else:
-        pri = UsdPhysics.PrismaticJoint(joint_prim)
-        lower_attr = pri.GetLowerLimitAttr()
-        upper_attr = pri.GetUpperLimitAttr()
-        if lower_attr and lower_attr.Get() is not None:
-            jd.limit_lower = float(lower_attr.Get())
-        if upper_attr and upper_attr.Get() is not None:
-            jd.limit_upper = float(upper_attr.Get())
+        if is_revolute:
+            rev = UsdPhysics.RevoluteJoint(joint_prim)
+            lower_attr = rev.GetLowerLimitAttr()
+            upper_attr = rev.GetUpperLimitAttr()
+            if lower_attr and lower_attr.Get() is not None:
+                jd.limit_lower = math.radians(float(lower_attr.Get()))
+            if upper_attr and upper_attr.Get() is not None:
+                jd.limit_upper = math.radians(float(upper_attr.Get()))
+        else:
+            pri = UsdPhysics.PrismaticJoint(joint_prim)
+            lower_attr = pri.GetLowerLimitAttr()
+            upper_attr = pri.GetUpperLimitAttr()
+            lower = lower_attr.Get() if lower_attr else None
+            upper = upper_attr.Get() if upper_attr else None
+            # URDF requires a <limit> on prismatic joints; a missing bound is unbounded on that side.
+            jd.limit_lower = float(lower) if lower is not None else -math.inf
+            jd.limit_upper = float(upper) if upper is not None else math.inf
 
-    jd.limit_effort = _get_float_attr(joint_prim, "urdf:limit:effort")
+    effort = _read_drive_max_force(joint_prim)
+    if effort is None or not math.isfinite(effort):
+        effort = _get_float_attr(joint_prim, "urdf:limit:effort")
+    jd.limit_effort = effort
 
-    jd.limit_velocity = _read_urdf_attr_or_physx(joint_prim, "urdf:limit:velocity", _read_physx_max_velocity)
+    jd.limit_velocity = _read_joint_velocity_limit(joint_prim)
 
 
 def _read_dynamics(joint_prim: Usd.Prim, jd: JointData, actuator_map: dict[str, Usd.Prim] | None = None) -> None:
@@ -818,7 +856,10 @@ def _read_urdf_attr_or_physx(
 
 
 def _read_drive_max_force(prim: Usd.Prim) -> float | None:
-    """Read maxForce from DriveAPI.
+    """Read the joint effort limit from DriveAPI maxForce.
+
+    For revolute joints, maxForce is the maximum torque the joint can
+    generate. For prismatic joints, it is the maximum linear force.
 
     Args:
         prim: USD prim to read.
@@ -871,19 +912,46 @@ def _read_drive_target_position(prim: Usd.Prim) -> float | None:
     return None
 
 
-def _read_physx_max_velocity(prim: Usd.Prim) -> float | None:
-    """Read maxJointVelocity from PhysxJointAPI (deg/s -> rad/s).
+def _read_joint_velocity_limit(prim: Usd.Prim) -> float | None:
+    """Read a joint velocity limit in URDF units.
+
+    Prefer the canonical ``newton:velocityLimit`` authored in the composed
+    physics payload. Preserve a finite legacy ``urdf:limit:velocity`` value
+    only when Newton has no authored opinion, so pre-existing assets do not
+    silently lose their velocity constraint during export.
 
     Args:
         prim: USD prim to read.
 
     Returns:
-        Maximum joint velocity, or None if absent.
+        Maximum joint velocity, or None if no finite value is authored.
     """
-    attr = prim.GetAttribute(PhysxAttr.JOINT_MAX_VELOCITY.name)
-    if attr and attr.Get() is not None:
-        return float(attr.Get()) * math.pi / 180.0
-    return None
+    newton_velocity_limit_attr = prim.GetAttribute("newton:velocityLimit")
+    urdf_velocity_limit_attr = prim.GetAttribute("urdf:limit:velocity")
+
+    if newton_velocity_limit_attr.HasAuthoredValue():
+        velocity = newton_velocity_limit_attr.Get()
+        convert_to_radians = prim.IsA(UsdPhysics.RevoluteJoint)
+    elif urdf_velocity_limit_attr.HasAuthoredValue():
+        _logger.warning(
+            f"Joint {prim.GetPath()} uses legacy attribute urdf:limit:velocity. Author newton:velocityLimit instead."
+        )
+        velocity = urdf_velocity_limit_attr.Get()
+        convert_to_radians = False
+    else:
+        return None
+
+    if velocity is None:
+        return None
+
+    velocity = float(velocity)
+    if not math.isfinite(velocity):
+        return None
+
+    if convert_to_radians:
+        velocity = math.radians(velocity)
+
+    return velocity
 
 
 def _read_physx_friction(prim: Usd.Prim) -> float | None:

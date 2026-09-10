@@ -46,7 +46,7 @@ class FrankaRrtExample:
         - Generating and executing motion plans as ArticulationActions
         - Replanning when the target position changes
 
-    The robot will continuously plan paths to reach a movable target frame while avoiding a wall obstacle.
+    The robot continuously plans paths to reach a movable target frame while avoiding a wall obstacle.
     Path replanning occurs every 60 simulation frames when the target has moved beyond a threshold distance.
     """
 

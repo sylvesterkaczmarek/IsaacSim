@@ -1,5 +1,5 @@
 [package]
-version = "0.14.7"
+version = "0.14.8"
 category = "Internal"
 title = "Isaac Sim Test Utils"
 description = "Provides testing utilities including image capture, comparison, and validation functions along with file validation helpers for automated test workflows."
@@ -33,7 +33,15 @@ args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
+
+dependencies = [
+    "omni.hydra.rtx",
+]
 
 args = [
     "--enable",

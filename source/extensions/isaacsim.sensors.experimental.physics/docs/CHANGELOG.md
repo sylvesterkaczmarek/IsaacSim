@@ -1,5 +1,67 @@
 # Changelog
 
+## [3.3.0] - 2026-08-20
+### Changed
+- `EffortSensor.change_buffer_size` validates its size, rejecting `0` and booleans (previously accepted) and accepting numpy integers.
+
+### Deprecated
+- `EffortSensor.update_dof_name` and `EffortSensor.change_buffer_size`, to be removed in Isaac Sim 7.0. Construct a new `EffortSensor` with the target joint path instead.
+
+## [3.2.0] - 2026-08-10
+### Changed
+- `IMUSensor.get_data` and `ContactSensor.get_data` now return a frame independent of later calls; code that fetched the frame once and re-read it every step must call `get_data` each step.
+
+### Deprecated
+- The `read_gravity` argument on `IMUSensor.get_sensor_reading` and `IMUSensor.get_data`, still honored, as the IMU settles on the specific force a real accelerometer reports.
+
+### Fixed
+- `IMUSensor` acceleration now includes the `omega x v` transport term, so a body that rotates while it translates no longer loses its centripetal acceleration.
+- `IMUSensor` now normalizes an authored `gravityDirection` and falls back to the negative stage up axis when it is unauthored, as the USD Physics specification requires; a scene authoring a non-unit direction such as `(0, 0, -2)` previously measured twice gravity and now measures `gravityMagnitude`.
+
+## [3.1.7] - 2026-07-28
+### Fixed
+- Refresh effort and joint state sensor prim-data readers before recreating articulation views.
+
+## [3.1.6] - 2026-07-28
+### Fixed
+- Recreate raycast sensor physics views after pause/resume so raycast and IMU sensors can share an articulation safely.
+
+## [3.1.5] - 2026-07-23
+### Changed
+- Clarify contact sensor requirements for PhysX and Newton.
+
+## [3.1.4] - 2026-07-23
+### Fixed
+- Cache contact-sensor USD configuration for each simulation run instead of rereading it on every physics step.
+
+## [3.1.3] - 2026-07-21
+### Fixed
+- Avoid traversing the entire USD stage after every physics step when no contact sensors are present.
+- Prevent native and Python post-step callbacks from sampling the same contact sensor more than once per simulation step.
+- Query raw contact tensors only for radius filtering or explicit raw-data requests, and copy only the populated contact range to the host instead of the full tensor capacity.
+
+## [3.1.2] - 2026-07-20
+### Added
+- Enable IMU sensor support with the Newton physics engine.
+
+## [3.1.1] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [3.1.0] - 2026-07-15
+### Changed
+- Replace ``IPrimDataReader::getContactReport`` with per-sensor ``IRigidContactView`` from the physics tensor API so the contact sensor works on both PhysX and Newton.
+- Compute radius-filtered sensor position from the parent body's runtime pose plus a cached local offset.
+- Use ``getNetContactForces`` for unfiltered sensors so multi-point contacts report the correct magnitude.
+- Skip ``PhysxContactReportAPI`` when the active engine is Newton.
+- Bind ``IXformDataView`` to the parent rigid body and pass the active engine type.
+- Add Newton-specific test configuration.
+
+### Fixed
+- Convert Newton raw-contact body indices to encoded ``SdfPath`` tokens via ``getOtherActorPathsFromIds``.
+- Report radius-filtered contact readings as invalid when the sensor position cannot be reconstructed instead of silently treating every raw contact as in range or reporting a valid no-contact result.
+- Report effort readings as invalid on Newton, which does not expose projected joint forces, instead of returning a semantically misleading valid zero or commanded actuation force.
+
 ## [3.0.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.
@@ -173,7 +235,7 @@
 
 ## [0.3.23] - 2025-06-18
 ### Changed
-- Track change from isaacsim.core.include Pose.h
+- Track change from isaacsim.core.include Pose.hpp
 
 ## [0.3.22] - 2025-05-31
 ### Changed
@@ -185,7 +247,7 @@
 
 ## [0.3.20] - 2025-05-15
 ### Changed
-- UsdUtilities.h was updated
+- UsdUtilities.hpp was updated
 
 ## [0.3.19] - 2025-05-11
 ### Changed

@@ -23,7 +23,7 @@
 #    pragma GCC diagnostic pop
 #endif
 
-#include <isaacsim/ucx/nodes/UcxPublishImuNodeBase.h>
+#include <isaacsim/ucx/nodes/UcxPublishImuNodeBase.hpp>
 
 #include <OgnUCXPublishImuDatabase.h>
 #include <imu_generated.h>

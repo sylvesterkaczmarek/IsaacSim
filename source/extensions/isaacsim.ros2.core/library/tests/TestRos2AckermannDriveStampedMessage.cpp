@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "TestBase.h"
+#include "TestBase.hpp"
 
 TEST_SUITE("isaacsim.ros2.core.ackermann_drive_stamped_message_tests")
 {

@@ -1,5 +1,51 @@
 # Changelog
 
+## [1.10.8] - 2026-09-01
+### Fixed
+- get_local_scales() returns unit scaling if scaling attribute does not exists
+- adding get_world_scales()
+
+## [1.10.7] - 2026-09-01
+### Fixed
+- Adding stage async to one of the xform_prim test to prevent random crashes.
+
+## [1.10.6] - 2026-08-20
+### Fixed
+- Initialize a physics scene before running Newton prim tests.
+
+## [1.10.5] - 2026-08-18
+### Fixed
+- `XformPrim.reset_xform_op_properties`: preserve poses authored with rotation or transform operations.
+
+## [1.10.4] - 2026-08-07
+### Added
+- Lateral friction-force coverage for tensor contact data.
+
+## [1.10.3] - 2026-08-03
+### Changed
+- Added newton backend for jacobian and mass matrix unit test
+
+## [1.10.2] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [1.10.1] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [1.10.0] - 2026-07-11
+### Added
+- `XformPrim.apply_physics_materials()` for binding physics materials at transform roots while controlling descendant binding precedence.
+
+## [1.9.1] - 2026-06-29
+### Changed
+- Publish only prim domain APIs; keep the Kit lifecycle class import-compatible but out of the supported Python API.
+
+## [1.9.0] - 2026-06-23
+### Added
+- `GeomPrim.remove_collision_apis()` to remove the collision APIs (and, for meshes, the mesh-approximation and PhysX cooked-data APIs) applied by `apply_collision_apis()`. Maintained replacement for `omni.physx.scripts.utils.removeCollider`.
+- `RigidPrim.remove_physics_apis()` to remove the `UsdPhysics.RigidBodyAPI` / `PhysxSchema.PhysxRigidBodyAPI` applied at construction. Maintained replacement for `omni.physx.scripts.utils.removePhysics`.
+
 ## [1.8.9] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.
@@ -42,9 +88,9 @@
 
 ## [1.8.0] - 2026-04-20
 ### Added
-- Add ContactPointData struct, contact event type constants (kContactEventFound/Lost/Persist), ContactEventData struct, ContactReportData struct to IPrimDataReader.h
+- Add ContactPointData struct, contact event type constants (kContactEventFound/Lost/Persist), ContactEventData struct, ContactReportData struct to IPrimDataReader.hpp
 - Add enableContactReporting() and getContactReport() virtual methods to IPrimDataReader interface
-- Add SdfPathToken.h with sdfPathToToken/tokenToSdfPath helpers for PhysX contact body identifiers
+- Add SdfPathToken.hpp with sdfPathToToken/tokenToSdfPath helpers for PhysX contact body identifiers
 - Bump CARB_PLUGIN_INTERFACE version to (2, 2)
 
 ## [1.7.6] - 2026-04-17
@@ -87,7 +133,7 @@
 
 ## [1.4.0] - 2026-03-09
 ### Added
-- `LinkInfo` struct in `IPrimDataReader.h`: per-link descriptor (path, parentPath) returned by articulation traversal
+- `LinkInfo` struct in `IPrimDataReader.hpp`: per-link descriptor (path, parentPath) returned by articulation traversal
 - `getArticulationLinks()` on `IArticulationDataView`: enumerates `UsdPhysicsRigidBodyAPI` descendants of an articulation root, returning parent-child link relationships
 - `getPrimFrameName()` on `IXformDataView`: resolves a prim's frame name, checking `isaac:nameOverride` before falling back to prim name; inherited by all three view types
 - `getPrimWorldTransform()` on `IXformDataView`: computes world transform of an arbitrary prim via Fabric, returning position (float[3]) and orientation (float[4], wxyz); inherited by all three view types

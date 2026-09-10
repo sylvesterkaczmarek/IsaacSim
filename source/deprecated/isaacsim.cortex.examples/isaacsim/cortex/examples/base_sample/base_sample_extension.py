@@ -34,7 +34,8 @@ import omni.ui as ui
 import omni.usd
 from isaacsim.core.api import World
 from isaacsim.core.simulation_manager import SimulationEvent, SimulationManager
-from isaacsim.gui.components.ui_utils import btn_builder, get_style, setup_ui_headers
+from isaacsim.gui.components import btn_builder, setup_ui_headers
+from isaacsim.gui.components.ui_utils import get_style
 
 from .base_sample import BaseSample
 
@@ -42,7 +43,7 @@ from .base_sample import BaseSample
 class BaseSampleUITemplate:
     """Base template class for creating interactive Isaac Sim example UIs.
 
-    This class provides a standardized UI framework for Isaac Sim examples, including world controls,
+    This class provides a standardized UI for Isaac Sim examples, including world controls,
     header information, and extensible frames for custom content. It manages the lifecycle of sample
     execution including loading, resetting, and cleanup operations.
 
@@ -57,8 +58,15 @@ class BaseSampleUITemplate:
 
     Args:
         *args: Variable length argument list passed to the constructor.
-        **kwargs: Keyword arguments for configuring the UI template. Supported keys include ext_id,
-            file_path, title, doc_link, overview, and sample.
+        **kwargs: Keyword arguments for configuring the UI template.
+
+    Keyword Args:
+        ext_id: Extension identifier passed to setup_ui_headers.
+        file_path: File path passed to setup_ui_headers.
+        title: Title displayed in the header section.
+        doc_link: Documentation link displayed in the header section.
+        overview: Overview text displayed in the header section.
+        sample: BaseSample instance associated with this UI template.
     """
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -91,6 +99,11 @@ class BaseSampleUITemplate:
 
     @sample.setter
     def sample(self, sample: Any) -> None:
+        """Sets the sample instance associated with this UI template.
+
+        Args:
+            sample: Sample instance to associate with this UI template.
+        """
         self._sample = sample
 
     def get_world(self) -> World:
@@ -183,8 +196,7 @@ class BaseSampleUITemplate:
     def _on_load_world(self) -> None:
         """Handles the Load World button click event.
 
-        Asynchronously loads the world, sets up event subscriptions for stage and timeline events,
-        and updates button states.
+        Loads the world, sets up event subscriptions for stage and timeline events, and updates button states.
         """
 
         async def _on_load_world_async() -> None:
@@ -214,7 +226,7 @@ class BaseSampleUITemplate:
     def _on_reset(self) -> None:
         """Handles the Reset button click event.
 
-        Asynchronously resets the sample and triggers post-reset button event handling.
+        Resets the sample and triggers post-reset button event handling.
         """
 
         async def _on_reset_async() -> None:
@@ -278,7 +290,8 @@ class BaseSampleUITemplate:
     def on_stage_event(self, event: object) -> None:
         """Stage closed event callback.
 
-        Note: With Events 2.0, this is called only for CLOSED events.
+        Note:
+            With Events 2.0, this is called only for CLOSED events.
 
         Args:
             event: The stage event object containing event details.
@@ -298,7 +311,8 @@ class BaseSampleUITemplate:
     def _reset_on_stop_event(self, event: object) -> None:
         """Timeline stop event callback.
 
-        Note: With Events 2.0, this is called only for STOP events.
+        Note:
+            With Events 2.0, this is called only for STOP events.
 
         Args:
             event: The timeline event object containing event details.

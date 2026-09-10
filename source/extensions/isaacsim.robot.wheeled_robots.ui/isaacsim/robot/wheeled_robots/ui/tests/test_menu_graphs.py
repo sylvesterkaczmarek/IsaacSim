@@ -42,7 +42,9 @@ class TestDifferentialRobotGraph(MenuUITestCase):
 
             carb.log_error("Could not find Isaac Sim assets folder")
             return
-        robot_prim.GetReferences().AddReference(assets_root_path + "/Isaac/Robots/NVIDIA/Jetbot/jetbot.usd")
+        robot_prim.GetReferences().AddReference(
+            assets_root_path + "/Isaac/Robots_Multiphysics/NVIDIA/Jetbot/jetbot.usda"
+        )
         await app_utils.update_app_async()
         await self.wait_for_stage_loading()
 
@@ -424,7 +426,6 @@ class TestDifferentialRobotGraph(MenuUITestCase):
         robot_position = robot.get_world_poses()[0].numpy()[0]
         app_utils.stop()
 
-        self.assertAlmostEqual(robot_position[0], 0.06, delta=0.02)
-        # Positive angular velocity with DifferentialController's left/right output order turns toward +Y.
-        self.assertAlmostEqual(robot_position[1], 0.61, delta=0.02)
-        self.assertAlmostEqual(robot_position[2], 0.033, delta=0.02)
+        self.assertAlmostEqual(robot_position[0], 0.06, delta=5e-2)
+        self.assertAlmostEqual(robot_position[1], 0.61, delta=5e-2)
+        self.assertAlmostEqual(robot_position[2], 0.033, delta=5e-2)

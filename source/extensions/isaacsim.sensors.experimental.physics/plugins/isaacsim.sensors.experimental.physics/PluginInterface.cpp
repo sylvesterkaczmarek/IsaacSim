@@ -14,11 +14,11 @@
 // limitations under the License.
 
 
-#include "ContactSensorImpl.h"
-#include "EffortSensorImpl.h"
-#include "ImuSensorImpl.h"
-#include "JointStateSensorImpl.h"
-#include "RaycastSensorImpl.h"
+#include "ContactSensorImpl.hpp"
+#include "EffortSensorImpl.hpp"
+#include "ImuSensorImpl.hpp"
+#include "JointStateSensorImpl.hpp"
+#include "RaycastSensorImpl.hpp"
 
 #include <carb/PluginUtils.h>
 

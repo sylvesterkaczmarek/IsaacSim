@@ -46,4 +46,4 @@ Name,Index,Description
 "salt_water",44,"Nature, oceans and seas, free from biologics."
 "snow",45,"Nature, frozen water droplets (crystalline)."
 "ice",46,"Nature, frozen water, larger bodies."
-"calibration_lambertion",47,"Special material with defined diffuse reflectance such as target panels with know reflectance."
+"calibration_lambertian",47,"Special material with defined diffuse reflectance such as target panels with know reflectance."

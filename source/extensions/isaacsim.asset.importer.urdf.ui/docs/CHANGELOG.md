@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.6] - 2026-07-29
+### Added
+- Add an option to reference imported USDs into the current stage via `stage_utils.add_reference_to_stage`.
+
+## [1.4.5] - 2026-07-16
+### Changed
+- Added ignore "ui.Menu item failed to become show for File in File/Import" error message in CI
+
+## [1.4.4] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [1.4.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

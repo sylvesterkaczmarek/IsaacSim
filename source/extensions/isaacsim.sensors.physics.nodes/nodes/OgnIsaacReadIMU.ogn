@@ -30,7 +30,8 @@
             "readGravity": {
                 "type": "bool",
                 "description": "True to read gravitational acceleration in the measurement, False to ignore gravitational acceleration",
-                "default": true
+                "default": true,
+                "deprecated": "This input is deprecated and still honored. The IMU is settling on the specific force a real accelerometer measures. IsaacComputeOdometry's globalLinearAcceleration output is gravity-free, but it is not a drop-in replacement: it reports world-frame acceleration of the tracked body rather than sensor-frame acceleration at the IMU prim."
             }
         },
         "outputs": {

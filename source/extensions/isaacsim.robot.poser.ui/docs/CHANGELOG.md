@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.4] - 2026-08-24
+### Fixed
+- Named pose table and property panel no longer log "Widget[] was destroyed during event or draw" errors.
+
+## [1.1.3] - 2026-07-30
+### Changed
+- Use Robot Poser's public kinematics imports.
+
+## [1.1.2] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [1.1.1] - 2026-03-17
 ### Changed
 - Migrate extension implementation to core experimental API

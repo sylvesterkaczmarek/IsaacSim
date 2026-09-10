@@ -27,15 +27,15 @@ from .interface_helper import LulaInterfaceHelper
 
 
 class RRT(LulaInterfaceHelper, PathPlanner):
-    """RRT is a stochastic algorithm for quickly finding a feasible path in cspace to move a robot from a starting pose to a target pose.
+    """RRT is a stochastic algorithm for quickly finding a feasible path in c-space to move a robot from a starting pose to a target pose.
 
-    This class implements the PathPlanner interface, as well as exposing RRT-specific parameters.
+    This class implements the PathPlanner interface and exposes RRT-specific parameters.
 
     Args:
-        robot_description_path: Path to a robot description yaml file.
-        urdf_path: Path to robot urdf.
-        rrt_config_path: Path to an rrt parameter yaml file.
-        end_effector_frame_name: Name of the robot end effector frame (must be present in the robot urdf).
+        robot_description_path: Path to a robot description YAML file.
+        urdf_path: Path to the robot URDF.
+        rrt_config_path: Path to an RRT parameter YAML file.
+        end_effector_frame_name: Name of the robot end effector frame. Must be present in the robot URDF.
     """
 
     def __init__(
@@ -88,6 +88,9 @@ class RRT(LulaInterfaceHelper, PathPlanner):
         Args:
             robot_position: Position of the robot base.
             robot_orientation: Orientation of the robot base.
+
+        Returns:
+            Result of updating the robot base pose.
         """
         return LulaInterfaceHelper.set_robot_base_pose(self, robot_position, robot_orientation)
 
@@ -195,7 +198,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
         """Adds a ground plane obstacle to the RRT world for collision detection.
 
         Args:
-            ground_plane: The ground plane obstacle to add to the world.
+            ground_plane: Ground plane obstacle to add to the world.
 
         Returns:
             True if the ground plane was added successfully.
@@ -206,7 +209,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
         """Disables an obstacle in the RRT world without removing it completely.
 
         Args:
-            obstacle: The obstacle to disable in the world.
+            obstacle: Obstacle to disable in the world.
 
         Returns:
             True if the obstacle was disabled successfully.
@@ -217,7 +220,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
         """Enables a previously disabled obstacle in the RRT world.
 
         Args:
-            obstacle: The obstacle to enable in the world.
+            obstacle: Obstacle to enable in the world.
 
         Returns:
             True if the obstacle was enabled successfully.
@@ -228,7 +231,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
         """Removes an obstacle from the RRT world completely.
 
         Args:
-            obstacle: The obstacle to remove from the world.
+            obstacle: Obstacle to remove from the world.
 
         Returns:
             True if the obstacle was removed successfully.
@@ -239,7 +242,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
         """Updates the RRT world view with changes to obstacles and refreshes collision detection.
 
         Args:
-            updated_obstacles: List of obstacles that have been updated.
+            updated_obstacles: Obstacles that have been updated.
         """
         LulaInterfaceHelper.update_world(self, updated_obstacles)
         self._rrt.update_world_view()
@@ -260,7 +263,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
 
         Args:
             max_iter: Maximum number of iterations of RRT before a failure is returned.
-                The time it takes to return a failure scales quadratically with max_iter
+                The time it takes to return a failure scales quadratically with max_iter.
         """
         self._rrt.set_param("max_iterations", max_iter)
 
@@ -268,7 +271,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
         """Set the random seed that RRT uses to generate a solution.
 
         Args:
-            random_seed: Used to initialize random sampling. random_seed must be positive.
+            random_seed: Value used to initialize random sampling. random_seed must be positive.
         """
         self._seed = random_seed
 
@@ -287,48 +290,49 @@ class RRT(LulaInterfaceHelper, PathPlanner):
             as the L2-norm of the difference between the two configurations.
             -`step_size` must be positive.
 
-        `max_iterations` (int)
+        `max_iterations` (int):
             - Maximum number of iterations of tree extensions that will be attempted.
             - If `max_iterations` is reached without finding a valid path, the `Results` will
               indicate `path_found` is `false` and `path` will be an empty vector.
             - `max_iterations` must be positive.
 
-        `distance_metric_weights` (np.array[np.float64[num_dof,]])
-            - When selecting a node for tree extension, the closest node is defined using a weighted, squared L2-norm:
+        `distance_metric_weights` (np.array[np.float64[num_dof,]]):
+            - When selecting a node for tree extension, the closest node is defined using a weighted,
+              squared L2-norm:
                 distance = (q0 - q1)^T * W * (q0 - q1)
                 where q0 and q1 represent two configurations and W is a diagonal matrix formed from
                 `distance_metric_weights`.
             - The length of the `distance_metric_weights` must be equal to the number of c-space
               coordinates for the robot and each weight must be positive.
 
-        `task_space_frame_name` (string)
+        `task_space_frame_name` (string):
             - Indicate the name (from URDF) of the frame to be used for task space planning.
             - With current implementation, setting a `task_space_frame_name` that is not found in the
               kinematics will throw an exception rather than failing gracefully.
 
-        `task_space_limits` (np.array[np.float64[3,2]])
+        `task_space_limits` (np.array[np.float64[3,2]]):
             - Task space limits define a bounding box used for sampling task space when planning
               a path to a task space target.
-            - The specified `task_space_limits` should be a (3 x 2) matrix.  Rows correspond to the xyz
-              dimensions of the bounding box, and columns 0 and 1 correspond to the lower and upper limit repectively.
+            - The specified `task_space_limits` should be a (3 x 2) matrix. Rows correspond to the xyz
+              dimensions of the bounding box, and columns 0 and 1 correspond to the lower and upper limit
+              respectively.
             - Each upper limit must be >= the corresponding lower limit.
 
-        `c_space_planning_params/exploration_fraction` (float)
+        `c_space_planning_params/exploration_fraction` (float):
             - The c-space planner uses RRT-Connect to try to find a path to a c-space target.
-            - RRT-Connect attempts to iteratively extend two trees (one from the initial configuration and one from the target configuration)
-                until the two trees can be connected. The
-                configuration to which a tree is extended can be either a random sample
-                (i.e., exploration) or a node on the tree to which connection is desired
-                (i.e., exploitation). The `exploration_fraction` controls the fraction of steps that are
-                exploration steps. It is generally recommended to set `exploration_fraction` in range
-                [0.5, 1), where 1 corresponds to a single initial exploitation step followed by only
-                exploration steps. Values of between [0, 0.5) correspond to more exploitation than
-                exploration and are not recommended. If a value outside range [0, 1] is provided, a
-                warning is logged and the value is clamped to range [0, 1].
+            - RRT-Connect attempts to iteratively extend two trees, one from the initial configuration and one
+              from the target configuration, until the two trees can be connected. The configuration to which
+              a tree is extended can be either a random sample (i.e., exploration) or a node on the tree to
+              which connection is desired (i.e., exploitation). The `exploration_fraction` controls the
+              fraction of steps that are exploration steps. It is generally recommended to set
+              `exploration_fraction` in range [0.5, 1), where 1 corresponds to a single initial exploitation
+              step followed by only exploration steps. Values of between [0, 0.5) correspond to more
+              exploitation than exploration and are not recommended. If a value outside range [0, 1] is
+              provided, a warning is logged and the value is clamped to range [0, 1].
             - A default value of 0.5 is recommended as a starting value for initial testing with a given
-                system.
+              system.
 
-        `task_space_planning_params/translation_target_zone_tolerance` (float)
+        `task_space_planning_params/translation_target_zone_tolerance` (float):
             - A configuration has reached the task space translation target when task space position has
               an L2 Norm within `translation_target_zone_tolerance` of the target.
             - It is assumed that a valid configuration within the target tolerance can be moved directly
@@ -338,7 +342,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
               order of magnitude as the translational distance in task-space corresponding to moving the
               robot in configuration space by one step with an L2 norm of `step_size`.
 
-        `task_space_planning_params/orientation_target_zone_tolerance` (float)
+        `task_space_planning_params/orientation_target_zone_tolerance` (float):
             - A configuration has reached the task space pose target when task space orientation is
               within `orientation_target_zone_tolerance` radians and an L2 norm translation
               within `translation_target_zone_tolerance` of the target.
@@ -349,7 +353,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
               order of magnitude as the rotational distance in task-space corresponding to moving the
               robot in configuration space by one step with an L2 norm of `step_size`.
 
-         `task_space_planning_params/translation_target_final_tolerance` (float)
+        `task_space_planning_params/translation_target_final_tolerance` (float):
             - Once a path is found that terminates within `translation_target_zone_tolerance`, an IK
               solver is used to find a configuration space solution corresponding to the task space
               target. This solver terminates when the L2-norm of the corresponding task space position
@@ -362,7 +366,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
             - The recommended default value is 1e-4, but in general this value should be set to a
               positive value that is considered "good enough" precision for the specific system.
 
-         `task_space_planning_params/orientation_target_final_tolerance` (float)
+        `task_space_planning_params/orientation_target_final_tolerance` (float):
             - For pose targets, once a path is found that terminates within
               `orientation_target_zone_tolerance` and `translation_target_zone_tolerance` of the target,
               an IK solver is used to find a configuration space solution corresponding to the task
@@ -376,7 +380,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
             - The recommended default value is 1e-4, but in general this value should be set to a
               positive value that is considered "good enough" precision for the specific system.
 
-         `task_space_planning_params/translation_gradient_weight` (float)
+        `task_space_planning_params/translation_gradient_weight` (float):
             - For pose targets, computed translation and orientation gradients are linearly weighted by
               `translation_gradient_weight` and `orientation_gradient_weight` to compute a combined
               gradient step when using the Jacobian Transpose method to guide tree expansion
@@ -385,7 +389,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
               system.
             - Must be > 0.
 
-         `task_space_planning_params/orientation_gradient_weight` (float)
+        `task_space_planning_params/orientation_gradient_weight` (float):
             - For pose targets, computed translation and orientation gradients are linearly weighted by
               `translation_gradient_weight` and `orientation_gradient_weight` to compute a combined
               gradient step when using the Jacobian Transpose method to guide tree expansion
@@ -394,7 +398,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
               given system.
             - Must be > 0.
 
-         `task_space_planning_params/nn_translation_distance_weight` (float)
+        `task_space_planning_params/nn_translation_distance_weight` (float):
             - For pose targets, nearest neighbor distances are computed by linearly weighting
               translation and orientation distance by `nn_translation_distance_weight` and
               `nn_orientation_distance_weight`.
@@ -404,7 +408,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
               system.
             - Must be > 0.
 
-         `task_space_planning_params/nn_orientation_distance_weight` (float)
+        `task_space_planning_params/nn_orientation_distance_weight` (float):
             - For pose targets, nearest neighbor distances are computed by linearly weighting
               translation and orientation distance by `nn_translation_distance_weight` and
               `nn_orientation_distance_weight`.
@@ -414,14 +418,14 @@ class RRT(LulaInterfaceHelper, PathPlanner):
               given system.
             - Must be > 0.
 
-        `task_space_planning_params/task_space_exploitation_fraction` (float)
+        `task_space_planning_params/task_space_exploitation_fraction` (float):
             - Fraction of iterations for which tree is extended towards target position in task space.
             - Must be in range [0, 1]. Additionally, the sum of `task_space_exploitation_fraction` and
               `task_space_exploration_fraction` must be <= 1.
             - A default value of 0.4 is recommended as a starting value for initial testing with a given
               system.
 
-        `task_space_planning_params/task_space_exploration_fraction` (float)
+        `task_space_planning_params/task_space_exploration_fraction` (float):
             - Fraction of iterations for which tree is extended towards random position in task space.
             - Must be in range [0, 1]. Additionally, the sum of `task_space_exploitation_fraction` and
               `task_space_exploration_fraction` must be <= 1.
@@ -438,7 +442,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
             while more difficult searches will waste time if the exploitation fraction is too high
             and benefit from greater combined exploration fraction.
 
-        `task_space_planning_params/max_extension_substeps_away_from_target` (int)
+        `task_space_planning_params/max_extension_substeps_away_from_target` (int):
             - Maximum number of Jacobian transpose gradient descent substeps that may be taken
               while the end effector is away from the task-space target.
             - The threshold for nearness is determined by the
@@ -446,7 +450,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
             - A default value of 6 is recommended as a starting value for initial testing with a given
               system.
 
-        `task_space_planning_params/max_extension_substeps_near_target` (int)
+        `task_space_planning_params/max_extension_substeps_near_target` (int):
             - Maximum number of Jacobian transpose gradient descent substeps that may be taken
               while the end effector is near the task-space target.
             - The threshold for nearness is determined by the
@@ -454,7 +458,7 @@ class RRT(LulaInterfaceHelper, PathPlanner):
             - A default value of 50 is recommended as a starting value for initial testing with a given
               system.
 
-        `task_space_planning_params/extension_substep_target_region_scale_factor` : (float)
+        `task_space_planning_params/extension_substep_target_region_scale_factor` (float):
             - A scale factor used to determine whether the end effector is close enough to the target
               to change the amount of gradient descent substeps allowed when adding a node in RRT.
             - The `max_extension_substeps_near_target` parameter is used when the distance
@@ -466,11 +470,11 @@ class RRT(LulaInterfaceHelper, PathPlanner):
               system.
 
         Args:
-            param_name: Name of parameter
-            value: value of parameter
+            param_name: Name of parameter.
+            value: Value of parameter.
 
         Returns:
-            True if the parameter was set successfully
+            True if the parameter was set successfully.
         """
         if param_name == "seed":
             self.set_random_seed(value)
@@ -486,9 +490,6 @@ class RRT(LulaInterfaceHelper, PathPlanner):
 
         Args:
             joint_positions: Current joint positions to plan from.
-
-        Returns:
-            None.
         """
         if self._cspace_target is None:
             self._plan = None
@@ -508,9 +509,6 @@ class RRT(LulaInterfaceHelper, PathPlanner):
 
         Args:
             joint_positions: Current joint positions to start planning from.
-
-        Returns:
-            None.
         """
         if self._taskspace_target_position is None:
             self._plan = None

@@ -19,7 +19,7 @@
 #include <carb/Framework.h>
 #include <carb/PluginUtils.h>
 
-#include <isaacsim/core/nodes/ICoreNodes.h>
+#include <isaacsim/core/nodes/ICoreNodes.hpp>
 #include <omni/graph/core/ogn/Registration.h>
 
 

@@ -43,6 +43,7 @@ class MobilityGenCamera(Module):
         self._normals_annotator = None
         self._depth_annotator = None
         self._prim = get_prim_at_path(self._prim_path)
+        self._missing_modalities: list[str] = []
 
         self.rgb_image = Buffer(tags=["rgb"])
         self.segmentation_image = Buffer(tags=["segmentation"])
@@ -149,10 +150,27 @@ class MobilityGenCamera(Module):
         self._normals_annotator = rep.AnnotatorRegistry.get_annotator("normals")
         self._normals_annotator.attach(self._render_product)
 
+    def missing_modalities(self) -> list[str]:
+        """Get the modalities this camera could not capture during the last update_state().
+
+        Returns:
+            The names of the modalities whose annotator produced no frame. "pose" reports that
+                the camera prim itself could not be read.
+        """
+        return list(self._missing_modalities)
+
     def update_state(self) -> None:
         """Update all camera state buffers by reading from annotators and USD."""
+        self._missing_modalities = []
+
         if not self._prim or not self._prim.IsValid():
             carb.log_warn(f"MobilityGenCamera: prim at '{self._prim_path}' is invalid; skipping update")
+            # Nothing is captured this step, not the pose and not a single image, so clear every
+            # buffer. Leaving them would retain the last good step's frames and the pose they were
+            # rendered from, the duplicate _drop_frame() exists to prevent.
+            self._missing_modalities.append("pose")
+            for buffer in self.buffers().values():
+                buffer.set_value(None)
             super().update_state()
             return
 
@@ -160,16 +178,19 @@ class MobilityGenCamera(Module):
         # overwritten each render frame. Without copying, Buffer.value would be silently corrupted.
         if self._rgb_annotator is not None:
             data = self._rgb_annotator.get_data(do_array_copy=True)
-            if data.ndim == 3:
+            if data is None or data.size == 0:
+                self._drop_frame("rgb", self.rgb_image)
+            elif data.ndim == 3:
                 self.rgb_image.set_value(data[:, :, :3])
-            elif data.ndim == 1 and data.size > 0:
+            elif data.ndim == 1:
                 # Replicator returns a flat (H*W*4,) buffer on some builds; reshape to (H, W, 4).
                 w, h = self._resolution
                 self.rgb_image.set_value(data.reshape(h, w, -1)[:, :, :3])
-        # An annotator can briefly return an empty (0,) buffer before the renderer has
-        # produced a frame; writing one to a PNG raises "tile cannot extend outside
-        # image" and aborts the batch (RGB above already guards this). Keep the prior
-        # value rather than clear it — MobilityGenReader expects one image per step.
+            else:
+                # Neither layout the annotator is known to return. Retaining the previous frame
+                # would re-persist it under a moved pose, so drop it and let the caller decide.
+                self._drop_frame("rgb", self.rgb_image, reason=f"unexpected rgb buffer shape {data.shape}")
+
         if self._segmentation_annotator is not None:
             data = self._segmentation_annotator.get_data(do_array_copy=True)
             seg_image = data["data"]
@@ -177,14 +198,14 @@ class MobilityGenCamera(Module):
                 self.segmentation_image.set_value(seg_image)
                 self.segmentation_info.set_value(data["info"])
             else:
-                carb.log_warn(f"MobilityGenCamera: empty segmentation buffer at '{self._prim_path}'; skipping frame")
+                self._drop_frame("segmentation", self.segmentation_image, self.segmentation_info)
 
         if self._depth_annotator is not None:
             depth_data = self._depth_annotator.get_data(do_array_copy=True)
             if depth_data is not None and depth_data.size > 0:
                 self.depth_image.set_value(depth_data)
             else:
-                carb.log_warn(f"MobilityGenCamera: empty depth buffer at '{self._prim_path}'; skipping frame")
+                self._drop_frame("depth", self.depth_image)
 
         if self._instance_id_segmentation_annotator is not None:
             data = self._instance_id_segmentation_annotator.get_data(do_array_copy=True)
@@ -193,14 +214,18 @@ class MobilityGenCamera(Module):
                 self.instance_id_segmentation_image.set_value(id_seg_image)
                 self.instance_id_segmentation_info.set_value(data["info"])
             else:
-                carb.log_warn(f"MobilityGenCamera: empty instance-id buffer at '{self._prim_path}'; skipping frame")
+                self._drop_frame(
+                    "instance_id_segmentation",
+                    self.instance_id_segmentation_image,
+                    self.instance_id_segmentation_info,
+                )
 
         if self._normals_annotator is not None:
             normals_data = self._normals_annotator.get_data(do_array_copy=True)
             if normals_data is not None and normals_data.size > 0:
                 self.normals_image.set_value(normals_data)
             else:
-                carb.log_warn(f"MobilityGenCamera: empty normals buffer at '{self._prim_path}'; skipping frame")
+                self._drop_frame("normals", self.normals_image)
 
         # Use USD directly (no warp tensors) to avoid a CPU-GPU sync every step.
         xform = UsdGeom.Xformable(self._prim)
@@ -212,3 +237,25 @@ class MobilityGenCamera(Module):
         self.orientation.set_value(np.array([r.GetReal(), imag[0], imag[1], imag[2]]))
 
         super().update_state()
+
+    def _drop_frame(self, modality: str, buffer: Buffer, *buffers: Buffer, reason: str | None = None) -> None:
+        """Clear the state of a modality whose annotator produced no frame, and report the miss.
+
+        The writer skips a cleared buffer, so the caller must consult missing_modalities() and
+        drop the whole step; common state without its images leaves MobilityGenReader indexing
+        files that do not exist.
+
+        Args:
+            modality: The name of the modality that produced no frame this step.
+            buffer: A state buffer a captured frame of that modality fills. Reporting a miss
+                without clearing anything is the duplicate frame this exists to prevent, so at
+                least one is required.
+            buffers: Any further state buffers that modality fills.
+            reason: What was wrong with the capture. Defaults to an empty buffer.
+        """
+        carb.log_warn(
+            f"MobilityGenCamera: {reason or f'empty {modality} buffer'} at '{self._prim_path}'; dropping frame"
+        )
+        self._missing_modalities.append(modality)
+        for dropped in (buffer, *buffers):
+            dropped.set_value(None)

@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+cmake_minimum_version = "3.26"
+cmake_policy_maximum_version = "4.3"
+c_standard = 11
+cpp_standard = 17
+python_version = "3.12"

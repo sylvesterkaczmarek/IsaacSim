@@ -1,0 +1,24 @@
+---
+description: CMake coding style and target conventions for Isaac Sim
+globs:
+  - "**/CMakeLists.txt"
+  - "**/*.cmake"
+  - "**/*.cmake.in"
+---
+
+# CMake coding rules
+
+- Use lowercase built-in command names and four-space indentation.
+- Prefer target properties and `target_*` commands over directory-wide include paths, definitions, compile options, or
+  link settings.
+- Declare target sources, public headers, dependencies, and install components explicitly.
+- Use existing project helper APIs instead of reproducing their package, install, or test logic.
+- Keep reusable helper APIs independent of particular package, extension, and module names.
+- Validate helper arguments and fail with an actionable `message(FATAL_ERROR ...)` for contract violations.
+- Quote paths and values that may contain spaces. Leave list expansions unquoted only when list semantics are intended.
+- Use generator expressions for configuration-dependent target behavior.
+- Resolve dependencies through imported targets instead of ambient include or library directories.
+- Use `CONFIGURE_DEPENDS` only when a glob intentionally detects files for validation or staging; do not use source
+  globs in place of an authored target inventory.
+- Keep platform branches narrow and verify every supported platform affected by a change.
+- Format long calls with one logical argument per line and close the call at the original indentation level.

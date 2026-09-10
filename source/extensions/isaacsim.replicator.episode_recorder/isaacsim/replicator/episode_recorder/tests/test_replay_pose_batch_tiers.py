@@ -390,6 +390,7 @@ class ReplayPoseBatchPerTierResetTests(omni.kit.test.AsyncTestCase):
         replayer = _Replayer.__new__(_Replayer)
         replayer._pose_backend = "usd"
         replayer._replay_pose_batch_tiers = list(tier_batches)
+        replayer._replay_pose_batch_tier_paths = [[f"/World/Tier{i}"] for i in range(len(tier_batches))]
         replayer._replay_pose_batch_tier_indices = [np.array([i], dtype=np.int64) for i in range(len(tier_batches))]
         replayer._replay_pose_batch_tier_selectors = [np.array([i], dtype=np.int64) for i in range(len(tier_batches))]
         replayer._replay_pose_batch_reset_tiers = set()
@@ -429,6 +430,19 @@ class ReplayPoseBatchPerTierResetTests(omni.kit.test.AsyncTestCase):
         tier0 = _NonRecoverableBatch(fail_first_n=1)
         replayer = self._seed_replayer([tier0])
         with self.assertRaises(ValueError):
+            replayer._apply_replay_pose_batch()
+        self.assertEqual(tier0.reset_count, 0)
+
+    async def test_singular_matrix_error_reports_replay_context(self) -> None:
+        """Singular transform errors should identify the replay tier and likely bad xform authoring."""
+
+        class _SingularBatch(_RecordingTierBatch):
+            def set_world_poses(self, *, positions: Any, orientations: Any) -> None:  # noqa: ARG002
+                raise RuntimeError("Singular matrix")
+
+        tier0 = _SingularBatch(fail_first_n=0)
+        replayer = self._seed_replayer([tier0])
+        with self.assertRaisesRegex(RuntimeError, "EpisodeReplayer pose batch tier 0.*non-invertible transform"):
             replayer._apply_replay_pose_batch()
         self.assertEqual(tier0.reset_count, 0)
 

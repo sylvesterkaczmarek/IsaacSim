@@ -24,6 +24,7 @@ from collections.abc import Callable
 from typing import Any, Final
 
 import carb
+import isaacsim.core.experimental.utils.app as app_utils
 import isaacsim.core.experimental.utils.prim as prim_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
 import isaacsim.core.experimental.utils.transform as transform_utils
@@ -34,16 +35,10 @@ import omni.ui as ui
 import omni.usd
 from isaacsim.core.experimental.objects import Camera
 from isaacsim.core.rendering_manager import ViewportManager
-from isaacsim.gui.components.element_wrappers import TextBlock
+from isaacsim.gui.components import TextBlock, btn_builder, setup_ui_headers
 from isaacsim.gui.components.menu import make_menu_item_description
 from isaacsim.gui.components.style import COLOR_W, COLOR_X, COLOR_Y, COLOR_Z
-from isaacsim.gui.components.ui_utils import (
-    BUTTON_WIDTH,
-    add_line_rect_flourish,
-    btn_builder,
-    get_style,
-    setup_ui_headers,
-)
+from isaacsim.gui.components.ui_utils import BUTTON_WIDTH, add_line_rect_flourish, get_style
 from omni.kit.menu.utils import MenuItemDescription, add_menu_items, remove_menu_items
 from omni.kit.viewport.window import ViewportWindow, get_viewport_window_instances
 from omni.kit.window.property.templates import LABEL_WIDTH
@@ -118,10 +113,12 @@ class Extension(omni.ext.IExt):
         # Selection
         self._selected_axis_world = SUPPORTED_AXES[0]
         self._selected_axis_local = SUPPORTED_AXES[0]
-        self._selected_camera = None
+        self._selected_camera: Camera | None = None
         self._selected_viewport = None
 
         self._camera_state_subscriber = None
+        self._stage_event_subs: list[Any] = []
+        self._updating_camera_stats = False
 
     def on_shutdown(self) -> None:
         """Clean up extension resources and remove menu items."""
@@ -130,6 +127,7 @@ class Extension(omni.ext.IExt):
         if self._window:
             self._window = None
         self._camera_state_subscriber = None
+        self._stage_event_subs = []
         gc.collect()
 
     def _on_window(self, visible: bool) -> None:
@@ -142,13 +140,13 @@ class Extension(omni.ext.IExt):
             visible: Whether the window is visible.
         """
         if self._window.visible:
-            # Subscribe to Stage and Timeline Events
             self._usd_context = omni.usd.get_context()
-
+            self._subscribe_stage_events()
             self._build_ui()
         else:
             self._usd_context = None
             self._camera_state_subscriber = None
+            self._stage_event_subs = []
 
     def _menu_callback(self) -> None:
         """Toggle the window visibility when the menu item is clicked."""
@@ -166,7 +164,7 @@ class Extension(omni.ext.IExt):
                 self._on_refresh()
 
         async def dock_window() -> None:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
 
             def dock(space: Any, name: str, location: Any, pos: float = 0.5) -> Any:
                 window = omni.ui.Workspace.get_window(name)
@@ -176,7 +174,7 @@ class Extension(omni.ext.IExt):
 
             tgt = ui.Workspace.get_window("Viewport")
             dock(tgt, EXTENSION_NAME, omni.ui.DockPosition.LEFT, 0.33)
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
 
         self._task = asyncio.ensure_future(dock_window())
 
@@ -184,28 +182,58 @@ class Extension(omni.ext.IExt):
     # Callbacks
     ##################################
 
+    def _subscribe_stage_events(self) -> None:
+        """Subscribe to stage open/close events so cached camera wrappers are dropped on a stage swap."""
+        if self._usd_context is None:
+            return
+        dispatcher = carb.eventdispatcher.get_eventdispatcher()
+        self._stage_event_subs = [
+            dispatcher.observe_event(
+                event_name=self._usd_context.stage_event_name(omni.usd.StageEventType.OPENED),
+                on_event=self._on_stage_event,
+                observer_name="CameraInspectorExtension._on_stage_event.OPENED",
+            ),
+            dispatcher.observe_event(
+                event_name=self._usd_context.stage_event_name(omni.usd.StageEventType.CLOSED),
+                on_event=self._on_stage_event,
+                observer_name="CameraInspectorExtension._on_stage_event.CLOSED",
+            ),
+        ]
+
+    def _on_stage_event(self, e: carb.events.IEvent = None) -> None:
+        """Clear cached camera wrappers when the USD stage is opened or closed.
+
+        Args:
+            e: Stage event from the USD context.
+        """
+        self._reset_camera_selection()
+
     def _on_refresh(self, width: object = None) -> None:
         """Get all cameras in the scene and add them to the camera manager.
 
         Args:
             width: Optional width parameter for refresh operation.
         """
+        previous_path = (
+            self._selected_camera.paths[0] if self._selected_camera and self._selected_camera.paths else None
+        )
+
         self._all_cameras = self._get_all_camera_objects()
         self._all_viewports = list(get_viewport_window_instances())
 
         self._update_camera_dropdown()
         self._update_viewport_dropdown()
 
-        if self._all_cameras:
-            if self._selected_camera is None:
-                self._selected_camera = self._all_cameras[0]
+        self._selected_camera = next((camera for camera in self._all_cameras if camera.paths[0] == previous_path), None)
+        if self._selected_camera is None and self._all_cameras:
+            self._selected_camera = self._all_cameras[0]
 
-            if self._camera_state_subscriber is None:
-                self._camera_state_subscriber = carb.eventdispatcher.get_eventdispatcher().observe_event(
-                    event_name=omni.kit.app.GLOBAL_EVENT_UPDATE,
-                    on_event=self._update_camera_stats_ui,
-                    observer_name="CameraInspectorExtension._on_refresh._update_camera_stats_ui",
-                )
+        if self._all_cameras and self._camera_state_subscriber is None:
+            self._camera_state_subscriber = carb.eventdispatcher.get_eventdispatcher().observe_event(
+                event_name=omni.kit.app.GLOBAL_EVENT_UPDATE,
+                on_event=self._update_camera_stats_ui,
+                observer_name="CameraInspectorExtension._on_refresh._update_camera_stats_ui",
+            )
 
     def _on_camera_changed_event(self, option: int) -> None:
         """Handle camera selection changes from the dropdown.
@@ -216,11 +244,15 @@ class Extension(omni.ext.IExt):
             option: The selected option from the camera dropdown.
         """
         option = self._task_ui_elements["Combo Camera"].get_item_value_model().as_int
+        if not self._all_cameras:
+            self._selected_camera = None
+            return
         if option < len(self._all_cameras):
             self._selected_camera = self._all_cameras[option]
         else:
             err = f"Selected option {option} not available; available cameras: {[camera.paths[0] for camera in self._all_cameras]}"
             carb.log_warn(err)
+            return
 
         self._update_camera_stats_ui()
 
@@ -511,24 +543,95 @@ class Extension(omni.ext.IExt):
         for viewport in self._all_viewports:
             self._task_ui_elements["Combo Viewport"].append_child_item(None, ui.SimpleStringModel(viewport.name))
 
+    def _is_selected_camera_stale(self) -> bool:
+        """Return whether the cached selected camera is invalid or bound to a different stage.
+
+        Returns:
+            True if a camera is selected but its wrapper is invalid or not on the current stage.
+        """
+        camera = self._selected_camera
+        if camera is None:
+            return False
+        if not camera.valid:
+            return True
+        try:
+            current_stage = stage_utils.get_current_stage(backend="usd")
+        except ValueError:
+            return True
+        try:
+            prims = camera.prims
+            if not prims:
+                return True
+            prim = prims[0]
+            if not prim.IsValid():
+                return True
+            prim_stage = prim.GetStage()
+        except Exception:
+            return True
+        return prim_stage is None or prim_stage != current_stage
+
+    def _reset_camera_selection(self) -> None:
+        """Drop all cached camera wrappers and show the no-camera-selected UI state."""
+        self._selected_camera = None
+        self._all_cameras = []
+        if "Combo Camera" in self._task_ui_elements:
+            self._update_camera_dropdown()
+        self._set_no_camera_selected_ui()
+
+    def _clear_selected_camera_and_refresh(self) -> None:
+        """Drop the selected camera wrapper and rebuild the camera list from the current stage."""
+        self._selected_camera = None
+        self._on_refresh()
+
+    def _set_no_camera_selected_ui(self) -> None:
+        """Reset pose fields and status text to the empty selection state."""
+        if "World Camera Position" not in self._task_ui_elements:
+            return
+        for i in range(3):
+            self._task_ui_elements["World Camera Position"][i].set_value(0.0)
+            self._task_ui_elements["Local Camera Position"][i].set_value(0.0)
+        for i in range(4):
+            self._task_ui_elements["World Camera Orientation"][i].set_value(0.0)
+            self._task_ui_elements["Local Camera Orientation"][i].set_value(0.0)
+        self._task_ui_elements["CameraTextField"].set_text(
+            "# No camera selected. Please use dropdown to select a camera."
+        )
+
     def _update_camera_stats_ui(self, e: carb.events.IEvent = None) -> None:
         """Updates the camera statistics UI with current transform data from the selected camera.
 
         Args:
             e: Event object from the global update event dispatcher.
         """
-        # if camera prim path has been updated, set self._selected_camera to None
-        if stage_utils.get_current_stage(backend="usd") is None:
+        if self._updating_camera_stats:
             return
+        self._updating_camera_stats = True
+        try:
+            try:
+                stage_utils.get_current_stage(backend="usd")
+            except ValueError:
+                self._reset_camera_selection()
+                return
 
-        if self._selected_camera and not prim_utils.get_prim_at_path(self._selected_camera.paths[0]).IsValid():
-            self._selected_camera = None
-            self._on_refresh()
+            if self._selected_camera is None:
+                self._set_no_camera_selected_ui()
+                return
 
-        # Update the camera translation and rotation
-        if self._selected_camera is not None:
-            world_pos, world_quat = self._get_camera_pose(self._selected_camera, "world", self._selected_axis_world)
-            local_pos, local_quat = self._get_camera_pose(self._selected_camera, "local", self._selected_axis_local)
+            if self._is_selected_camera_stale():
+                self._clear_selected_camera_and_refresh()
+                if self._selected_camera is None:
+                    self._set_no_camera_selected_ui()
+                    return
+
+            try:
+                world_pos, world_quat = self._get_camera_pose(self._selected_camera, "world", self._selected_axis_world)
+                local_pos, local_quat = self._get_camera_pose(self._selected_camera, "local", self._selected_axis_local)
+            except Exception as exc:
+                carb.log_warn(f"Failed to update camera inspector stats: {exc}")
+                self._clear_selected_camera_and_refresh()
+                if self._selected_camera is None:
+                    self._set_no_camera_selected_ui()
+                return
 
             for i in range(3):
                 self._task_ui_elements["World Camera Position"][i].set_value(float(world_pos[i]))
@@ -538,19 +641,24 @@ class Extension(omni.ext.IExt):
                 self._task_ui_elements["World Camera Orientation"][i].set_value(float(world_quat[i]))
                 self._task_ui_elements["Local Camera Orientation"][i].set_value(float(local_quat[i]))
 
-            status = f"# World Axis: {self._selected_axis_world}\nworld_position={world_pos.tolist()}\nworld_quat_wxyz={world_quat.tolist()}\n# Local Axis: {self._selected_axis_local}\nlocal_position={local_pos.tolist()}\nlocal_quat_wxyz={local_quat.tolist()}"
-            self._task_ui_elements["CameraTextField"].set_text(status)
-        else:
-            for i in range(3):
-                self._task_ui_elements["World Camera Position"][i].set_value(0.0)
-                self._task_ui_elements["Local Camera Position"][i].set_value(0.0)
-            for i in range(4):
-                self._task_ui_elements["World Camera Orientation"][i].set_value(0.0)
-                self._task_ui_elements["Local Camera Orientation"][i].set_value(0.0)
-
-            self._task_ui_elements["CameraTextField"].set_text(
-                "# No camera selected. Please use dropdown to select a camera."
+            status = (
+                f"# World Axis: {self._selected_axis_world}\nworld_position={world_pos.tolist()}\n"
+                f"world_quat_wxyz={world_quat.tolist()}\n# Local Axis: {self._selected_axis_local}\n"
+                f"local_position={local_pos.tolist()}\nlocal_quat_wxyz={local_quat.tolist()}"
             )
+            self._task_ui_elements["CameraTextField"].set_text(status)
+        except Exception as exc:
+            carb.log_warn(f"Failed to update camera inspector stats: {exc}")
+            try:
+                stage_utils.get_current_stage(backend="usd")
+            except ValueError:
+                self._reset_camera_selection()
+            else:
+                self._clear_selected_camera_and_refresh()
+                if self._selected_camera is None:
+                    self._set_no_camera_selected_ui()
+        finally:
+            self._updating_camera_stats = False
 
     def _get_all_camera_objects(self, root_prim: str = "/") -> list[Camera]:
         """Retrieve Camera objects for each camera in the scene.

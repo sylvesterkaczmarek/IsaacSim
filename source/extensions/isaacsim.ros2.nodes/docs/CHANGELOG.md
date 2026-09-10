@@ -1,5 +1,107 @@
 # Changelog
 
+## [1.22.7] - 2026-08-27
+### Fixed
+- `SetPrimAttribute` now rejects invalid matrix JSON values without terminating Isaac Sim.
+
+## [1.22.6] - 2026-08-18
+### Fixed
+- Prevent standard ROS 2 GPU image and point-cloud publishers from reading expired inputs or reusing active message buffers.
+- Only signal ROS 2 service responses after receiving them.
+- Preserve nested message arrays in ROS 2 service requests and responses.
+
+## [1.22.5] - 2026-08-13
+### Fixed
+- Update differential-base tests to validate standard `world` -> `odom` -> `base_link` TF publishing without creating an `odom` USD prim.
+- Disable unrelated Nova Carter camera and RTX sensor graph nodes in differential-base tests.
+- Use an explicit render product for 2D and 3D bounding-box publishing coverage.
+
+## [1.22.4] - 2026-08-12
+### Fixed
+- Update compressed RGB camera tests for the Nova Carter asset graph.
+
+## [1.22.3] - 2026-08-06
+### Fixed
+- `create_ros2_joint_states_graph` now creates the migrated `IsaacReadJointState` publisher path.
+
+## [1.22.2] - 2026-08-05
+### Added
+- Example interfaces packages to Windows internal ROS 2 libs.
+
+### Fixed
+- Compressed RGB golden-image tests now use the current Nova Carter left camera publisher path when retargeting image topics.
+
+## [1.22.1] - 2026-08-03
+### Added
+- Test covering how quickly Nova Carter reaches a commanded angular velocity
+
+## [1.22.0] - 2026-07-27
+### Added
+- `ROS2PublishTransformTree` and `ROS2PublishRawTransformTree`: aggregate TF submissions by ROS domain, topic, static/dynamic mode, and QoS so each group publishes one merged `TFMessage` after OmniGraph evaluation.
+- `exts."isaacsim.ros2.nodes".tfAggregation.enabled`: add a setting for toggling the aggregated TF publisher path.
+
+### Fixed
+- Generic ROS 2 service nodes now fail cleanly when requested dynamic service types or native type-support libraries are unavailable instead of dereferencing invalid messages.
+- `TestRos2Service` now skips service cases when the requested dynamic service attributes cannot be created in the active ROS 2 environment.
+- Stereo CameraInfo tests now subscribe with sensor-compatible QoS so image publishers using best-effort reliability are received reliably in CI.
+- Spinning camera golden-image tests now require exact timestamp matches for dynamic camera keyframes and capture an extra rotation when a stream drops a keyframe frame.
+- Update ROS 2 Nova Carter test graph paths for the current scenario asset layout.
+- Update the Carter stereo ROS 2 example for the current Nova Carter camera and CameraInfo graph layout.
+- `set_rotate` now accepts `Gf.Rotation` values for prims that store transforms in `xformOp:transform`.
+
+## [1.21.1] - 2026-07-25
+### Fixed
+- Respect rotary lidar valid-arc and azimuth-offset attributes when publishing ROS 2 LaserScan messages.
+
+## [1.21.0] - 2026-07-22
+### Added
+- Public Python config helpers for creating ROS 2 clock, generic publisher, joint states, TF, odometry, camera, RTX lidar, and RTX radar action graphs.
+- `set_isaac_namespace` and `set_isaac_name_override` helpers for authoring Isaac robot schema names used by TF frame generation.
+- Shared graph shortcut option constants, warning messages, and `radar_supports_basic_aux_output`.
+
+## [1.20.2] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [1.20.1] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [1.20.0] - 2026-07-17
+### Added
+- `interleave_point_cloud` / `fill_point_cloud2_message` helpers and `fill_point_cloud_buffer` binding: build `sensor_msgs/PointCloud2` data from separate per-point arrays with the parallel C++ interleave.
+
+### Changed
+- `fillPointCloudBufferHost`: xyz is now `const float*`, declared in the CUDA-free `FillPointCloudBufferHost.hpp`.
+
+## [1.19.0] - 2026-07-16
+### Added
+- `OgnROS2CameraHelper`: add `rgb_hevc` compressed RGB publishing and pass the selected codec through the compressed image writer.
+- `OgnROS2PublishCompressedImage`: allow `hevc` values for `input_format`.
+
+### Fixed
+- `CompressedImageManager` now includes the codec in every compressed image writer name, avoiding writer reuse across codecs with matching annotator template names.
+
+## [1.18.18] - 2026-07-15
+### Changed
+- Replace fixed ROS 2 message waits in camera-info and waypoint-follower tests with predicate-based waits.
+
+## [1.18.17] - 2026-07-13
+### Fixed
+- Tighten timing checks and clarify failure conditions in some unit tests.
+
+## [1.18.16] - 2026-07-10
+### Added
+- `ROS2ControlManager` OmniGraph node for configuring the in-process ros2_control ControllerManager.
+
+## [1.18.15] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [1.18.14] - 2026-06-29
+### Changed
+- Publish ROS 2 node APIs explicitly and stop publishing the Kit lifecycle class.
+
 ## [1.18.13] - 2026-06-12
 ### Fixed
 - `OgnROS2CameraInfoHelper`: defer the `cv2` import to first use.

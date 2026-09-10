@@ -74,7 +74,7 @@ class LulaWorld(WorldInterface):
         Args:
             updated_obstacles: Obstacles that have been added by add_obstacle() that need to be updated.
                 If not specified, all non-static obstacle positions will be updated.
-                If specified, only the obstacles that have been listed will have their positions updated
+                If specified, only the obstacles that have been listed will have their positions updated.
             robot_pos: Robot position in world coordinates.
             robot_rot: Robot rotation matrix in world coordinates.
             robot_base_moved: Whether the robot base has moved since last update.
@@ -121,7 +121,7 @@ class LulaWorld(WorldInterface):
             robot_rot: Robot rotation matrix in world coordinates.
 
         Returns:
-            Always True, indicating that this adder has been implemented
+            True if the cuboid was added, or False if the cuboid was already added.
         """
         if cuboid in self._static_obstacles or cuboid in self._dynamic_obstacles:
             carb.log_warn(
@@ -166,7 +166,7 @@ class LulaWorld(WorldInterface):
             robot_rot: Robot rotation matrix in world coordinates.
 
         Returns:
-            Always True, indicating that this adder has been implemented
+            True if the sphere was added, or False if the sphere was already added.
         """
         if sphere in self._static_obstacles or sphere in self._dynamic_obstacles:
             carb.log_warn(
@@ -208,7 +208,7 @@ class LulaWorld(WorldInterface):
             robot_rot: Robot rotation matrix in world coordinates.
 
         Returns:
-            Always True, indicating that this function has been implemented
+            True if the capsule was added, or False if the capsule was already added.
         """
         # As of Lula 0.5.0, what Lula calls a "cylinder" is actually a capsule (i.e., the surface
         # defined by the set of all points a fixed distance from a line segment).  This will be
@@ -245,14 +245,14 @@ class LulaWorld(WorldInterface):
         """Add a ground_plane.
 
         Lula does not support ground planes directly, and instead internally creates a cuboid with an
-        expansive face (dimensions 200x200 stage units) coplanar to the ground_plane.
+        expansive face coplanar to the ground_plane.
 
         Args:
             ground_plane: Wrapper object for handling ground_plane Usd Prims.
-            plane_width: The width of the ground plane (in meters) that Lula creates to constrain this robot.
+            plane_width: The width of the ground plane that Lula creates to constrain this robot.
 
         Returns:
-            Always True, indicating that this adder has been implemented
+            True if the ground_plane was added, or False if the ground_plane was already added.
         """
         if ground_plane in self._ground_plane_map:
             carb.log_warn(
@@ -285,10 +285,10 @@ class LulaWorld(WorldInterface):
         """Disable collision avoidance for obstacle.
 
         Args:
-            obstacle: obstacle to be disabled.
+            obstacle: Obstacle to be disabled.
 
         Returns:
-            Return True if obstacle was identified and successfully disabled.
+            True if obstacle was identified and successfully disabled.
         """
         if obstacle in self._dynamic_obstacles:
             obstacle_handle = self._dynamic_obstacles[obstacle]
@@ -305,10 +305,10 @@ class LulaWorld(WorldInterface):
         """Enable collision avoidance for obstacle.
 
         Args:
-            obstacle: obstacle to be enabled.
+            obstacle: Obstacle to be enabled.
 
         Returns:
-            Return True if obstacle was identified and successfully enabled.
+            True if obstacle was identified and successfully enabled.
         """
         if obstacle in self._dynamic_obstacles:
             obstacle_handle = self._dynamic_obstacles[obstacle]
@@ -322,15 +322,13 @@ class LulaWorld(WorldInterface):
         return True
 
     def remove_obstacle(self, obstacle: objects) -> bool:
-        """Remove obstacle from collision avoidance. Obstacle cannot be re-enabled via enable_obstacle() after.
-
-        removal.
+        """Remove obstacle from collision avoidance. Obstacle cannot be re-enabled via enable_obstacle() after removal.
 
         Args:
-            obstacle: obstacle to be removed.
+            obstacle: Obstacle to be removed.
 
         Returns:
-            Return True if obstacle was identified and successfully removed.
+            True if obstacle was identified and successfully removed.
         """
         if obstacle in self._dynamic_obstacles:
             obstacle_handle = self._dynamic_obstacles[obstacle]

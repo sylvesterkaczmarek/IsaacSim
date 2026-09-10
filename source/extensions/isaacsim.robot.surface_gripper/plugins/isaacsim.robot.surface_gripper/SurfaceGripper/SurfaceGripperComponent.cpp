@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
-#include "isaacsim/robot/schema/robot_schema.h"
-#include "isaacsim/robot/surface_gripper/SurfaceGripperComponent.h"
+#include "isaacsim/robot/schema/robot_schema.hpp"
+#include "isaacsim/robot/surface_gripper/SurfaceGripperComponent.hpp"
 
 #include <extensions/PxJoint.h>
 #include <omni/physics/tensors/BodyTypes.h>

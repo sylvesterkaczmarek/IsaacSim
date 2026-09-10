@@ -221,7 +221,7 @@ Alternatively, use the provided helper script which drops into a bash shell insi
 
 ```bash
 # Create cache/log mounts (optional; use uid 1234 to match container user)
-mkdir -p ~/docker/isaac-sim/{cache/main,cache/computecache,config,data,logs,pkg}
+mkdir -p ~/docker/isaac-sim/{cache/main,cache/computecache,cache/kit,config,data,logs,pkg}
 mkdir -p ~/.cache/ov/hub
 sudo chown -R 1234:1234 ~/docker ~/.cache/ov/hub
 
@@ -232,6 +232,7 @@ docker run --name isaac-sim --rm -it --gpus all --network=host \
   -e ISAACSIM_STREAM_PORT=<stream-port> \
   -v ~/docker/isaac-sim/cache/main:/isaac-sim/.cache:rw \
   -v ~/docker/isaac-sim/cache/computecache:/isaac-sim/.nv/ComputeCache:rw \
+  -v ~/docker/isaac-sim/cache/kit:/isaac-sim/kit/cache:rw \
   -v ~/docker/isaac-sim/logs:/isaac-sim/.nvidia-omniverse/logs:rw \
   -v ~/docker/isaac-sim/config:/isaac-sim/.nvidia-omniverse/config:rw \
   -v ~/docker/isaac-sim/data:/isaac-sim/.local/share/ov/data:rw \
@@ -240,6 +241,23 @@ docker run --name isaac-sim --rm -it --gpus all --network=host \
   -u 1234:1234 \
   isaac-sim-docker:latest
 ```
+
+> **Important:** The container runs as user `1234:1234`. The `:rw` mount option does not grant write permission
+> on the host. Before you bind-mount a host directory for writable user data, grant UID 1234 write access.
+>
+> If `setfacl` is unavailable on Ubuntu, install the `acl` package with `sudo apt install acl`.
+>
+> For example, preserve the existing owner of a stage directory and make new files writable by both the host user
+> and the container user with POSIX access control lists (ACLs):
+>
+> ```bash
+> mkdir -p ~/my-stages
+> setfacl -m u:1234:rwx ~/my-stages
+> setfacl -d -m u:1234:rwx ~/my-stages
+> setfacl -d -m u:$(id -u):rwx ~/my-stages
+> ```
+>
+> Add `-v ~/my-stages:/workspace:rw` to the `docker run` command and save stages under `/workspace`.
 
 **`--network=host` is required for WebRTC livestreaming.** The NVIDIA streaming SDK binds its UDP media socket to the `ISAACSIM_HOST` address, which must be a real network interface inside the container. Docker bridge networking (`-p` port publishing) does not satisfy this requirement because the host IP is not available inside the container's network namespace.
 
@@ -286,7 +304,7 @@ A `docker-compose.yml` is provided that launches both Isaac Sim (headless stream
 
 ```bash
 # Create cache/log mounts (use uid 1234 to match container user)
-mkdir -p ~/docker/isaac-sim/{cache/main,cache/computecache,config,data,logs,pkg}
+mkdir -p ~/docker/isaac-sim/{cache/main,cache/computecache,cache/kit,config,data,logs,pkg}
 mkdir -p ~/.cache/ov/hub
 sudo chown -R 1234:1234 ~/docker ~/.cache/ov/hub
 
@@ -364,8 +382,8 @@ You can run multiple Isaac Sim instances on the same host by using Docker Compos
 
 ```bash
 # Prepare separate data directories (one per instance, owned by uid 1234)
-mkdir -p ~/docker/isaac-sim-1/{cache/main,cache/computecache,config,data,logs,pkg}
-mkdir -p ~/docker/isaac-sim-2/{cache/main,cache/computecache,config,data,logs,pkg}
+mkdir -p ~/docker/isaac-sim-1/{cache/main,cache/computecache,cache/kit,config,data,logs,pkg}
+mkdir -p ~/docker/isaac-sim-2/{cache/main,cache/computecache,cache/kit,config,data,logs,pkg}
 mkdir -p ~/.cache/ov/hub
 sudo chown -R 1234:1234 ~/docker ~/.cache/ov/hub
 
@@ -415,13 +433,13 @@ docker compose -p isim2 -f tools/docker/docker-compose.yml down
 
 The Hub Workstation Cache image is public and can be pulled without logging in to `nvcr.io`. If your Docker client is already logged in to `nvcr.io`, NGC checks whether the governing terms have been accepted for your NGC organization before allowing the pull.
 
-Before pulling the Hub image with Docker credentials, open the [Hub Workstation Cache container page](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/omniverse/containers/hub_workstation_cache?version=2.0.0) in a browser, sign in to NGC, select version `2.0.0`, and accept the governing terms. NGC requires terms acceptance once per NGC organization. For the official NGC procedure, see [Accepting Terms Before Downloading](https://docs.nvidia.com/ngc/latest/ngc-catalog-user-guide.html#accepting-terms-before-downloading).
+Before pulling the Hub image with Docker credentials, open the [Hub Workstation Cache container page](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/omniverse/containers/hub_workstation_cache?version=2.2.0) in a browser, sign in to NGC, select version `2.2.0`, and accept the governing terms. NGC requires terms acceptance once per NGC organization. For the official NGC procedure, see [Accepting Terms Before Downloading](https://docs.nvidia.com/ngc/latest/ngc-catalog-user-guide.html#accepting-terms-before-downloading).
 
 If Docker reports `DENIED` with `Please accept license on the browser to be able to download`, either accept the terms in the browser for the same NGC organization used by `docker login nvcr.io`, or log out of `nvcr.io` before pulling this public image anonymously:
 
 ```bash
 docker logout nvcr.io
-docker pull nvcr.io/nvidia/omniverse/hub_workstation_cache:2.0.0
+docker pull nvcr.io/nvidia/omniverse/hub_workstation_cache:2.2.0
 ```
 
 ![Hub Workstation Cache NGC Governing Terms panel with an Accept Terms button](../../docs/isaacsim/images/isim_6.0_full_ref_gui_hub_workstation_cache_accept_terms.png)
@@ -434,7 +452,7 @@ sudo chown -R 1234:1234 ~/.cache/ov/hub
 docker run --name hub-cache --rm -d --network=host \
   -v ~/.cache/ov/hub:/var/cache/hub:rw \
   -u 1234:1234 \
-  nvcr.io/nvidia/omniverse/hub_workstation_cache:2.0.0
+  nvcr.io/nvidia/omniverse/hub_workstation_cache:2.2.0
 ```
 
 Once the container is running, the Hub settings UI is available at `http://localhost:14090/index.html`.
@@ -448,6 +466,15 @@ The Isaac Sim container is already configured to discover Hub at runtime via the
 | `OMNICLIENT_HUB_EXE`     | `/usr/local/bin/hub`  | Path to the Hub executable used for client coordination    |
 
 The `~/.cache/ov/hub` volume mount in the Isaac Sim `docker run` examples maps the same host directory into both containers so they share the cache. `--network=host` is required so the Hub client inside Isaac Sim can reach the Hub service on `localhost`.
+
+> **Note:** Running Isaac Sim without a Hub service is supported. Because the container sets `HUB__ARGS__DETECT_ONLY=true`, the Hub client looks for a Hub service during startup, and when none is listening it logs dozens of warnings over roughly ten seconds:
+>
+> ```text
+> [Warning] [carb.omniclient.plugin] OmniHub: Hub encountered error. Trying to reconnect to Hub.
+> retry_reason="Hub failed to launch: ..."
+> ```
+>
+> The retries then stop and Isaac Sim continues without caching. These warnings are expected in that configuration and do not indicate a failed startup. Start the Hub container shown above to remove them.
 
 For more details, see the [Hub as a Docker Container](https://docs.omniverse.nvidia.com/utilities/latest/cache/hub-workstation.html#hub-as-a-docker-container) documentation.
 
@@ -540,7 +567,7 @@ gcloud compute firewall-rules create allow-isaacsim \
 - **Stale volume mounts causing issues (e.g. crashes, config errors, or livestream failures)**: Old cached data in the Docker volume mount directories can cause unexpected behavior. Remove the existing mounts and recreate them:
   ```bash
   sudo rm -rf ~/docker
-  mkdir -p ~/docker/isaac-sim/{cache/main,cache/computecache,config,data,logs,pkg}
+  mkdir -p ~/docker/isaac-sim/{cache/main,cache/computecache,cache/kit,config,data,logs,pkg}
   sudo rm -rf ~/.cache/ov/hub
   mkdir -p ~/.cache/ov/hub
   sudo chown -R 1234:1234 ~/docker ~/.cache/ov/hub

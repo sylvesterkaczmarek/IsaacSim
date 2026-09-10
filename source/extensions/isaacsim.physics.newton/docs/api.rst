@@ -12,6 +12,8 @@ The following table summarizes the available classes and functions.
 
     acquire_physics_interface
     acquire_stage
+    configure_newton
+    get_newton_config
     get_active_physics_engine
     get_available_physics_engines
 
@@ -24,6 +26,8 @@ Configuration Classes
     :nosignatures:
 
     NewtonConfig
+    CollisionConfig
+    HydroelasticConfig
     XPBDSolverConfig
     MuJoCoSolverConfig
 
@@ -51,6 +55,10 @@ Functions
 
 .. autofunction:: isaacsim.physics.newton.acquire_stage
 
+.. autofunction:: isaacsim.physics.newton.configure_newton
+
+.. autofunction:: isaacsim.physics.newton.get_newton_config
+
 .. autofunction:: isaacsim.physics.newton.get_active_physics_engine
 
 .. autofunction:: isaacsim.physics.newton.get_available_physics_engines
@@ -59,6 +67,16 @@ Configuration Classes
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: isaacsim.physics.newton.NewtonConfig
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: isaacsim.physics.newton.CollisionConfig
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: isaacsim.physics.newton.HydroelasticConfig
     :members:
     :undoc-members:
     :show-inheritance:

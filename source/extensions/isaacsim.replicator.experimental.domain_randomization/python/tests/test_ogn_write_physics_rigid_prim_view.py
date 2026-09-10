@@ -17,6 +17,9 @@
 
 from typing import Any
 
+import carb.settings
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import isaacsim.replicator.experimental.domain_randomization as dr
 import numpy as np
 import omni.graph.core as og
@@ -25,7 +28,6 @@ import omni.timeline
 import omni.usd
 from isaacsim.core.experimental.objects import Cube
 from isaacsim.core.experimental.prims import GeomPrim, RigidPrim
-from isaacsim.core.experimental.utils.stage import create_new_stage_async
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.replicator.experimental.domain_randomization import physics_view as physics
 
@@ -39,16 +41,20 @@ class TestOgnWritePhysicsRigidPrimView(omni.kit.test.AsyncTestCase):
     """
 
     async def setUp(self) -> None:
-        """Set up the test environment with a physics world, rigid body, and OmniGraph nodes."""
-        await create_new_stage_async()
+        """Create a clean stage and save render and physics-device settings changed by the test."""
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
+        self.original_dlss_exec_mode = carb.settings.get_settings().get("rtx/post/dlss/execMode")
+        self.original_physics_sim_device = SimulationManager.get_device()
 
         SimulationManager.setup_simulation()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
 
         physics_scenes = SimulationManager.get_physics_scenes()
         if physics_scenes:
             physics_scenes[0].set_gravity((0, 0, 0))
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
 
         self._stage = omni.usd.get_context().get_stage()
         self._controller = og.Controller()
@@ -68,21 +74,28 @@ class TestOgnWritePhysicsRigidPrimView(omni.kit.test.AsyncTestCase):
         GeomPrim(self._cube_path, apply_collision_apis=True)
         self._rb_view = RigidPrim(self._cube_path, masses=1.0)
 
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
 
         self._iface.play()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
 
         dr.physics_view.register_rigid_prim_view(self._rb_view, name="cube")
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
 
     async def tearDown(self) -> None:
-        """Clean up the test environment by stopping timeline, clearing state, and closing stage."""
+        """Close the stage, wait for pending loads, and restore render and physics-device settings."""
         self._iface.stop()
         dr.physics_view._rigid_prim_views = {}
         dr.physics_view._rigid_prim_views_initial_values = {}
         dr.physics_view._rigid_prim_views_reset_values = {}
-        omni.usd.get_context().close_stage()
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
+        # In some cases the test will end before the asset is loaded, in this case wait for assets to load
+        while omni.usd.get_context().get_stage_loading_status()[2] > 0:
+            await app_utils.update_app_async()
+        carb.settings.get_settings().set("rtx/post/dlss/execMode", self.original_dlss_exec_mode)
+        # Make sure to reset the physics sim device to the original state for the following tests
+        SimulationManager.set_physics_sim_device(self.original_physics_sim_device)
 
     async def _setup_random_attribute(self, attribute_name: Any, value: Any) -> None:
         """Set up a random attribute for the rigid prim view node with specified value.

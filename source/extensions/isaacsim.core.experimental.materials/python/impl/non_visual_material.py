@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import csv
 import pathlib
+from typing import Any
 
 import carb
 import isaacsim.core.experimental.utils.app as app_utils
@@ -33,7 +34,22 @@ from isaacsim.core.experimental.prims.impl.prim import _MSG_PRIM_NOT_VALID
 from pxr import Sdf, Usd, UsdShade
 
 # non-visual material attribute names
-_PREFIX = carb.settings.get_settings().get("/rtx/materialDb/nonVisualMaterialSemantics/prefix")
+_NON_VISUAL_MATERIAL_PREFIX_SETTING = "/rtx/materialDb/nonVisualMaterialSemantics/prefix"
+_DEFAULT_NON_VISUAL_MATERIAL_PREFIX = "omni:simready:nonvisual"
+
+
+def _get_non_visual_material_prefix(settings: Any | None = None) -> str:
+    """Get the USD attribute prefix used for SimReady non-visual material semantics."""
+    if settings is None:
+        settings = carb.settings.get_settings()
+    prefix = settings.get(_NON_VISUAL_MATERIAL_PREFIX_SETTING)
+    if not prefix:
+        prefix = _DEFAULT_NON_VISUAL_MATERIAL_PREFIX
+        settings.set_default_string(_NON_VISUAL_MATERIAL_PREFIX_SETTING, prefix)
+    return prefix
+
+
+_PREFIX = _get_non_visual_material_prefix()
 BASE_ATTR, BASE_SPEC = f"{_PREFIX}:base", {}
 COATING_ATTR, COATING_SPEC = f"{_PREFIX}:coating", {}
 ATTRIBUTE_ATTR, ATTRIBUTE_SPEC = f"{_PREFIX}:attributes", {}
@@ -60,8 +76,36 @@ def _parse_specification(path: str) -> dict[str, int]:
     return spec
 
 
+def _as_attribute_list(value: Any) -> list[str]:
+    """Normalize a non-visual material ``attributes`` value into a list of attribute tokens.
+
+    Handles the SimReady ``token[]`` array type as well as the previous custom ``string``
+    scalar type (for backwards compatibility) and unset attributes.
+
+    Args:
+        value: Attribute value read from a USD attribute (``None``, a scalar string, or an
+            iterable of tokens).
+
+    Returns:
+        List of attribute tokens. Defaults to ``["none"]`` when no attribute is set.
+    """
+    if value is None:
+        return ["none"]
+    if isinstance(value, str):
+        return [value]
+    attributes = [str(item) for item in value]
+    return attributes if attributes else ["none"]
+
+
 class NonVisualMaterial(Prim):
     """High level wrapper for creating/encapsulating non-visual materials.
+
+    Attributes are authored following the SimReady non-visual materials specification
+    (see `Non-Visual Sensor Material Attributes
+    <https://nvidia.github.io/simready-foundation/latest/capabilities/nonvisual_sensors/nonvisual_materials/capability-nonvisual_materials.html>`_):
+    ``base`` and ``coating`` are single ``token`` values, while ``attributes`` is a ``token[]`` array.
+    The set of valid values is defined in the `attributes table
+    <https://nvidia.github.io/simready-foundation/latest/capabilities/nonvisual_sensors/nonvisual_materials/nonvisual_attributes_table.html>`_.
 
     .. note::
 
@@ -79,7 +123,8 @@ class NonVisualMaterial(Prim):
             If the input shape is smaller than expected, data will be broadcasted (following NumPy broadcast rules).
         coatings: Coatings (shape ``(N,)``).
             If the input shape is smaller than expected, data will be broadcasted (following NumPy broadcast rules).
-        attributes: Attributes (shape ``(N,)``).
+        attributes: Attributes. A single string or list of strings is applied to all materials as a shared set of
+            attributes; a list of lists (shape ``(N,)``) assigns a per-prim set of attributes.
             If the input shape is smaller than expected, data will be broadcasted (following NumPy broadcast rules).
 
     Example:
@@ -100,7 +145,7 @@ class NonVisualMaterial(Prim):
         *,
         bases: str | list[str] | None = None,
         coatings: str | list[str] | None = None,
-        attributes: str | list[str] | None = None,
+        attributes: str | list[str] | list[list[str]] | None = None,
     ) -> None:
         # get or create prims
         self._materials = []
@@ -125,6 +170,8 @@ class NonVisualMaterial(Prim):
         super().__init__(paths, resolve_paths=False)
         # apply non-visual material API (create attributes if they don't exist)
         self._apply_non_visual_material_api()
+        # ensure each material has a surface shader (required for the IDs to survive a cold load)
+        self._ensure_surface_shader(stage)
         # initialize instance from arguments
         NonVisualMaterial._parse_specifications()
         if bases is not None:
@@ -202,7 +249,9 @@ class NonVisualMaterial(Prim):
             if prim.HasAttribute(COATING_ATTR):
                 coating_value = COATING_SPEC.get(prim.GetAttribute(COATING_ATTR).Get(), 0)
             if prim.HasAttribute(ATTRIBUTE_ATTR):
-                attribute_value = ATTRIBUTE_SPEC.get(prim.GetAttribute(ATTRIBUTE_ATTR).Get(), 0)
+                # attributes are a bitfield: OR together the flag of each applied attribute
+                for attribute in _as_attribute_list(prim.GetAttribute(ATTRIBUTE_ATTR).Get()):
+                    attribute_value |= ATTRIBUTE_SPEC.get(attribute, 0)
             base_value = base_value & 0xFF  # 8 bits (0-255)
             coating_value = coating_value & 0x7  # 3 bits (0-7)
             attribute_value = attribute_value & 0x1F  # 5 bits (0-31)
@@ -220,8 +269,8 @@ class NonVisualMaterial(Prim):
         return ops_utils.place([_encode(prim) for prim in prims], dtype=wp.uint16, device="cpu").reshape((-1, 1))
 
     @staticmethod
-    def decode_material_ids(ids: int | list | np.ndarray | wp.array) -> list[tuple[str, str, str]]:
-        """Decode material IDs into base, coating, and attribute string values.
+    def decode_material_ids(ids: int | list | np.ndarray | wp.array) -> list[tuple[str, str, list[str]]]:
+        """Decode material IDs into base, coating, and attribute values.
 
         Backends: :guilabel:`usd`.
 
@@ -230,7 +279,8 @@ class NonVisualMaterial(Prim):
                 If the input shape is smaller than expected, data will be broadcasted (following NumPy broadcast rules).
 
         Returns:
-            List of tuples containing (base, coating, attribute) as string values (shape ``(N,)``).
+            List of tuples containing (base, coating, attributes), where ``base`` and ``coating`` are strings
+            and ``attributes`` is a list of strings decoded from the attribute bitfield (shape ``(N,)``).
 
         Example:
 
@@ -239,7 +289,7 @@ class NonVisualMaterial(Prim):
             >>> from isaacsim.core.experimental.materials import NonVisualMaterial
             >>>
             >>> NonVisualMaterial.decode_material_ids(2305)
-            [('aluminum', 'paint', 'emissive')]
+            [('aluminum', 'paint', ['emissive'])]
         """
 
         def _get_first_key_by_value(data: dict, value: int) -> str:
@@ -248,7 +298,12 @@ class NonVisualMaterial(Prim):
                     return k
             return "none"
 
-        def _decode(id: int) -> tuple[str, str, str]:
+        def _decode_attributes(bits: int) -> list[str]:
+            # attributes are a bitfield: collect every attribute flag set in the value
+            attributes = [name for name, flag in ATTRIBUTE_SPEC.items() if flag != 0 and (bits & flag) == flag]
+            return attributes if attributes else ["none"]
+
+        def _decode(id: int) -> tuple[str, str, list[str]]:
             if id < 0 or id > 0xFFFF:
                 raise ValueError(f"The given material ID ({id}) is outside valid unsigned integer 16-bit range")
             base_value = id & 0xFF  # bits 0-7
@@ -257,7 +312,7 @@ class NonVisualMaterial(Prim):
             return (
                 _get_first_key_by_value(BASE_SPEC, base_value),
                 _get_first_key_by_value(COATING_SPEC, coating_value),
-                _get_first_key_by_value(ATTRIBUTE_SPEC, attribute_value),
+                _decode_attributes(attribute_value),
             )
 
         NonVisualMaterial._parse_specifications()
@@ -393,15 +448,23 @@ class NonVisualMaterial(Prim):
         return coatings.tolist()
 
     def set_attributes(
-        self, attributes: str | list[str], *, indices: int | list | np.ndarray | wp.array | None = None
+        self,
+        attributes: str | list[str] | list[list[str]],
+        *,
+        indices: int | list | np.ndarray | wp.array | None = None,
     ) -> None:
         """Set the attributes for the non-visual materials.
+
+        Attributes are stored as a ``token[]`` array, so each material can have multiple attributes applied
+        (following the SimReady non-visual materials spec).
 
         Backends: :guilabel:`usd`.
 
         Args:
-            attributes: Attributes (shape ``(N,)``).
-                If the input shape is smaller than expected, data will be broadcasted (following NumPy broadcast rules).
+            attributes: Attributes to apply. A single string or list of strings is broadcast to all processed
+                prims as a shared set of attributes; a list of lists (shape ``(N,)``) assigns a per-prim set of
+                attributes. If the input shape is smaller than expected, data will be broadcasted (following
+                NumPy broadcast rules).
             indices: Indices of prims to process (shape ``(N,)``). If not defined, all wrapped prims are processed.
 
         Raises:
@@ -413,21 +476,36 @@ class NonVisualMaterial(Prim):
 
             >>> # set the attributes for all prims to 'emissive'
             >>> prims.set_attributes("emissive")
+            >>>
+            >>> # set multiple attributes for all prims
+            >>> prims.set_attributes(["emissive", "retroreflective"])
         """
         assert self.valid, _MSG_PRIM_NOT_VALID
         # USD API
         indices = ops_utils.resolve_indices(indices, count=len(self), device="cpu")
-        attributes = [attributes] if isinstance(attributes, str) else attributes
-        for attribute in attributes:
-            if not attribute in ATTRIBUTE_SPEC:
-                raise ValueError(
-                    f"Invalid attribute: '{attribute}'. Supported attributes: {list(ATTRIBUTE_SPEC.keys())}"
-                )
-        attributes = np.broadcast_to(np.array(attributes, dtype=object), (indices.shape[0],))
+        # normalize the input into a list of per-prim attribute sets
+        if isinstance(attributes, str):
+            attribute_sets = [[attributes]]
+        elif all(isinstance(item, str) for item in attributes):
+            attribute_sets = [list(attributes)]
+        else:
+            attribute_sets = [list(item) for item in attributes]
+        # validate attribute tokens
+        for attribute_set in attribute_sets:
+            for attribute in attribute_set:
+                if not attribute in ATTRIBUTE_SPEC:
+                    raise ValueError(
+                        f"Invalid attribute: '{attribute}'. Supported attributes: {list(ATTRIBUTE_SPEC.keys())}"
+                    )
+        # broadcast the attribute sets to the number of processed prims
+        source = np.empty((len(attribute_sets),), dtype=object)
+        for i, attribute_set in enumerate(attribute_sets):
+            source[i] = attribute_set
+        attribute_sets = np.broadcast_to(source, (indices.shape[0],))
         for i, index in enumerate(indices.numpy()):
-            self.prims[index].GetAttribute(ATTRIBUTE_ATTR).Set(attributes[i])
+            self.prims[index].GetAttribute(ATTRIBUTE_ATTR).Set(list(attribute_sets[i]))
 
-    def get_attributes(self, *, indices: int | list | np.ndarray | wp.array | None = None) -> list[str]:
+    def get_attributes(self, *, indices: int | list | np.ndarray | wp.array | None = None) -> list[list[str]]:
         """Get the attributes for the non-visual materials.
 
         Backends: :guilabel:`usd`.
@@ -436,7 +514,8 @@ class NonVisualMaterial(Prim):
             indices: Indices of prims to process (shape ``(N,)``). If not defined, all wrapped prims are processed.
 
         Returns:
-            List of attributes (shape ``(N,)``).
+            List of per-prim attribute lists (shape ``(N,)``). Materials authored using the previous custom
+            ``string`` attribute type are read as a single-element list for backwards compatibility.
 
         Raises:
             AssertionError: Wrapped prims are not valid.
@@ -447,26 +526,62 @@ class NonVisualMaterial(Prim):
 
             >>> # get the attributes of all prims
             >>> prims.get_attributes()
-            ['none', 'none', 'none']
+            [['none'], ['none'], ['none']]
         """
         assert self.valid, _MSG_PRIM_NOT_VALID
         # USD API
         indices = ops_utils.resolve_indices(indices, count=len(self), device="cpu")
-        attributes = np.empty((indices.shape[0],), dtype=object)
-        for i, index in enumerate(indices.numpy()):
-            attributes[i] = self.prims[index].GetAttribute(ATTRIBUTE_ATTR).Get()
-        return attributes.tolist()
+        attributes = []
+        for index in indices.numpy():
+            attributes.append(_as_attribute_list(self.prims[index].GetAttribute(ATTRIBUTE_ATTR).Get()))
+        return attributes
 
     """
     Internal methods.
     """
 
     def _apply_non_visual_material_api(self) -> None:
-        """Apply non-visual material API to the wrapped prims."""
+        """Apply non-visual material API to the wrapped prims.
+
+        Attributes are authored using the SimReady non-visual materials spec types:
+        ``base`` and ``coating`` are single ``token`` values, while ``attributes`` is a
+        ``token[]`` array. Existing attributes are left untouched to preserve backwards
+        compatibility with prims authored using the previous custom ``string`` types.
+        """
         for prim in self.prims:
-            for attribute_name in [BASE_ATTR, COATING_ATTR, ATTRIBUTE_ATTR]:
-                if not prim.HasAttribute(attribute_name):
-                    prim.CreateAttribute(attribute_name, Sdf.ValueTypeNames.String, custom=True).Set("none")
+            if not prim.HasAttribute(BASE_ATTR):
+                prim.CreateAttribute(BASE_ATTR, Sdf.ValueTypeNames.Token, custom=True).Set("none")
+            if not prim.HasAttribute(COATING_ATTR):
+                prim.CreateAttribute(COATING_ATTR, Sdf.ValueTypeNames.Token, custom=True).Set("none")
+            if not prim.HasAttribute(ATTRIBUTE_ATTR):
+                prim.CreateAttribute(ATTRIBUTE_ATTR, Sdf.ValueTypeNames.TokenArray, custom=True).Set(["none"])
+
+    def _ensure_surface_shader(self, stage: Usd.Stage) -> None:
+        """Ensure each wrapped material has a surface shader connected to its ``outputs:surface``.
+
+        The RTX material database only propagates the non-visual attributes for materials that have
+        a surface shader connected. A shader-less material resolves correctly when authored live (the
+        runtime ``material:binding`` change resyncs the material database), but its non-visual ID
+        collapses to ``0`` ("none") when the stage is exported and cold-loaded. Authoring a minimal
+        ``UsdPreviewSurface`` when no shader exists makes the IDs survive a cold load.
+
+        Materials that already own a shader (for example, a visual material the non-visual material is
+        applied on top of) are left untouched.
+
+        Args:
+            stage: USD stage containing the wrapped materials.
+        """
+        for material in self._materials:
+            material_path = str(material.GetPath())
+            _, shader = self._get_material_and_shader(stage, material_path)
+            # _get_material_and_shader wraps the (possibly missing) shader in a UsdShade.Shader, so
+            # it is never Python None for a valid material; check the underlying prim validity instead.
+            if shader is not None and shader.GetPrim().IsValid():
+                continue
+            shader = UsdShade.Shader.Define(stage, f"{material_path}/Shader")
+            shader.CreateIdAttr("UsdPreviewSurface")
+            shader.CreateOutput("surface", Sdf.ValueTypeNames.Token)
+            material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
 
     """
     Internal static methods.

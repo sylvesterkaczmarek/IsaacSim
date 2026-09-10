@@ -13,11 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "LidarConfigHelper.h"
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "LidarConfigHelper.hpp"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 
 #include <carb/InterfaceUtils.h>
 #include <carb/extras/Path.h>

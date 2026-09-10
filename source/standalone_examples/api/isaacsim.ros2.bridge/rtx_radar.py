@@ -135,7 +135,14 @@ SHEET_SCALES = np.array([0.2, 4.0, 3.0])
 
 
 def _radial_velocities(t: float) -> np.ndarray:
-    """Linear velocities (world frame) for each sheet at simulation time ``t``."""
+    """Linear velocities (world frame) for each sheet at simulation time ``t``.
+
+    Args:
+        t: Simulation time in seconds.
+
+    Returns:
+        World-space XYZ velocity vector for each oscillating sheet.
+    """
     # Radial speed = d/dt [A * sin(omega * t + phase)] = A * omega * cos(...).
     radial_speeds = SHEET_OSC_AMPLITUDES * SHEET_OSC_OMEGAS * np.cos(SHEET_OSC_OMEGAS * t + SHEET_OSC_PHASES)
     return np.stack(

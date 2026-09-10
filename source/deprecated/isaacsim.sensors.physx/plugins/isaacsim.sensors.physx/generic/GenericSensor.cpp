@@ -16,12 +16,12 @@
 #define CARB_EXPORTS
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "GenericSensor.h"
+#include "GenericSensor.hpp"
 
-#include <isaacsim/core/includes/Pose.h>
+#include <isaacsim/core/includes/Pose.hpp>
 #include <omni/physx/IPhysx.h>
 
 #include <chrono>

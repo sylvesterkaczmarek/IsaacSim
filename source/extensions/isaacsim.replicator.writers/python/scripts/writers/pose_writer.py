@@ -35,6 +35,10 @@ __version__ = "0.2.0"
 class PoseWriter(Writer):
     """Pose Writer.
 
+    Object labels come from each bounding-box ``idToLabels`` entry. The ``class`` semantic type is used when
+    present; otherwise the first remaining type (for example ``prim``) is written so non-class semantics do
+    not abort the frame.
+
     Args:
         output_dir:
             Output directory string that indicates the directory to save the results when no backend is supplied.
@@ -250,9 +254,12 @@ class PoseWriter(Writer):
         Returns:
             List of processed object data with pose, keypoints, and visibility information.
         """
-        # Map the ids to class names from the bbox annotator "idToLabels" data
-        # ('idToLabels': {0: {'class': 'cube'}, 1: {'class': 'sphere'}} -> {0: 'cube', 1: 'sphere'})
-        id_to_labels = {k: v["class"] for k, v in bounding_box_3d_data["idToLabels"].items()}
+        # Map instance ids to labels from bbox annotator ``idToLabels`` (prefer ``class``, else any remaining type)
+        id_to_labels = {}
+        for semantic_id, labels in bounding_box_3d_data["idToLabels"].items():
+            label = self._label_from_id_to_labels(labels)
+            if label is not None:
+                id_to_labels[semantic_id] = label
 
         if self._write_debug_images:
             self._debug_frame_data["world_frame_transforms"] = []
@@ -271,10 +278,19 @@ class PoseWriter(Writer):
             if obj_visibility <= self._visibility_threshold:
                 continue
 
+            label = id_to_labels.get(bbox["semanticId"])
+            if label is None:
+                try:
+                    semantic_id = int(bbox["semanticId"])
+                except (TypeError, ValueError):
+                    continue
+                label = id_to_labels.get(semantic_id, id_to_labels.get(str(semantic_id)))
+            if label is None:
+                continue
             if self._format == "dope":
-                obj["class"] = id_to_labels[bbox["semanticId"]]
+                obj["class"] = label
             else:
-                obj["label"] = id_to_labels[bbox["semanticId"]]
+                obj["label"] = label
             obj["prim_path"] = bounding_box_3d_data["primPaths"][i]
             obj["visibility"] = round(obj_visibility, 3)
 
@@ -384,6 +400,29 @@ class PoseWriter(Writer):
             objs.append(obj)
 
         return objs
+
+    @staticmethod
+    def _label_from_id_to_labels(label_dict: dict[Any, Any] | None) -> str | None:
+        """Return the object label from one bounding-box ``idToLabels`` entry.
+
+        Prefers the ``class`` semantic type when present. Otherwise uses the first remaining type so a
+        permissive semantic filter does not abort the frame.
+
+        Args:
+            label_dict: Mapping of semantic type to label for one instance.
+
+        Returns:
+            Label string, or None when no usable value is present.
+        """
+        if not label_dict:
+            return None
+        class_label = label_dict.get("class")
+        if class_label is not None:
+            return str(class_label)
+        for value in label_dict.values():
+            if value is not None and str(value) != "":
+                return str(value)
+        return None
 
     # Get the camera parameters from the annotator data
     def _process_camera_parameters(self, camera_params: Any) -> dict:

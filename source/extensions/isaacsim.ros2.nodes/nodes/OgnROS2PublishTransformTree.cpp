@@ -14,12 +14,13 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include <isaacsim/core/includes/PhysicsEngine.h>
-#include <isaacsim/core/includes/PoseTree.h>
-#include <isaacsim/ros2/core/Ros2Node.h>
+#include <isaacsim/core/includes/PhysicsEngine.hpp>
+#include <isaacsim/core/includes/PoseTree.hpp>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
+#include <isaacsim/ros2/nodes/TfAggregationManager.h>
 #include <omni/fabric/FabricUSD.h>
 #include <omni/physics/tensors/ISimulationView.h>
 #include <omni/physics/tensors/TensorApi.h>
@@ -72,8 +73,8 @@ public:
             }
         }
 
-        // Publisher was not valid, create a new one
-        if (!state.m_publisher)
+        // Publisher was not valid, create a new direct publisher or aggregation contributor.
+        if (!state.m_publisher && !state.m_tfAggregationHandle)
         {
             //  Find our stage
             state.m_stageId = context.iContext->getStageId(context);
@@ -160,8 +161,6 @@ public:
                 return false;
             }
 
-            state.m_message = state.m_factory->createTfTreeMessage();
-
             Ros2QoSProfile qos;
             const std::string& qosProfile = db.inputs.qosProfile();
             if (db.inputs.staticPublisher())
@@ -181,6 +180,22 @@ public:
                 }
             }
 
+            auto* tfAggregationManager = isaacsim::ros2::nodes::getEnabledTfAggregationManager();
+            if (tfAggregationManager)
+            {
+                state.m_tfAggregationHandle = tfAggregationManager->registerContributor(
+                    std::string(nodeObj.iNode->getPrimPath(nodeObj)), state.m_factory, state.m_nodeHandle,
+                    state.m_contextHandle ? state.m_contextHandle->get() : nullptr, fullTopicName,
+                    db.inputs.staticPublisher(), qos, state.m_publishWithoutVerification);
+                if (!state.m_tfAggregationHandle)
+                {
+                    db.logError("Unable to register ROS2 TF aggregation contributor");
+                    return false;
+                }
+                return true;
+            }
+
+            state.m_message = state.m_factory->createTfTreeMessage();
             state.m_publisher = state.m_factory->createPublisher(
                 state.m_nodeHandle.get(), fullTopicName.c_str(), state.m_message->getTypeSupportHandle(), qos);
             return true;
@@ -197,8 +212,9 @@ public:
         // The message will persist as long as the simulation is playing.
         // If we're not a static publisher, we publish every tick only if
         // we have subscribers or m_publishWithoutVerification is true.
+        const bool useAggregation = static_cast<bool>(state.m_tfAggregationHandle);
         bool isStaticPublisher = db.inputs.staticPublisher();
-        if (isStaticPublisher)
+        if (!useAggregation && isStaticPublisher)
         {
             if (!state.m_firstIteration)
             {
@@ -206,7 +222,7 @@ public:
             }
             state.m_firstIteration = false;
         }
-        else
+        else if (!useAggregation)
         {
             // Check if subscription count is 0
             if (!m_publishWithoutVerification && !state.m_publisher.get()->getSubscriptionCount())
@@ -301,6 +317,17 @@ public:
             m_poseTree->processAllFrames(addPoseLambda);
         }
 
+        if (useAggregation)
+        {
+            auto* tfAggregationManager = isaacsim::ros2::nodes::getTfAggregationManager();
+            if (!tfAggregationManager)
+            {
+                db.logError("ROS2 TF aggregation manager is unavailable");
+                return false;
+            }
+            return tfAggregationManager->submit(state.m_tfAggregationHandle, time, transforms);
+        }
+
         state.m_message->writeData(time, transforms);
         state.m_publisher.get()->publish(state.m_message->getPtr());
 
@@ -316,6 +343,14 @@ public:
 
     virtual void reset()
     {
+        if (m_tfAggregationHandle)
+        {
+            if (auto* tfAggregationManager = isaacsim::ros2::nodes::getTfAggregationManager())
+            {
+                tfAggregationManager->unregisterContributor(m_tfAggregationHandle);
+            }
+            m_tfAggregationHandle = {};
+        }
         m_publisher.reset(); // This should be reset before we reset the handle.
         Ros2Node::reset();
         m_poseTree.reset();
@@ -326,6 +361,7 @@ public:
 private:
     std::shared_ptr<Ros2Publisher> m_publisher = nullptr;
     std::shared_ptr<Ros2TfTreeMessage> m_message = nullptr;
+    isaacsim::ros2::nodes::TfAggregationManager::ContributorHandle m_tfAggregationHandle;
 
     bool m_firstIteration = true;
     bool m_useExternalData = false;

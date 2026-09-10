@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.9.1] - 2026-08-07
+### Added
+- Added a dependency on `omni.usd.schema.mujoco`
+- Added `mjcjoint` api to joints
+- PhysX-to-MJC conversion now completes joints that already have `MjcJointAPI` applied (previously skipped): it authors the `mjc:*` attributes and (re)creates the `MjcActuator`, keeping re-runs idempotent.
+- `MjcActuator` names no longer collide when joints share a leaf name across the hierarchy (for example `/robot/arm/joint1` and `/robot/leg/joint1`). The colliding actuator is now given a unique full-path-based name with a warning instead of being silently dropped or overwritten.
+
+### Changed
+- Load `isaacsim.asset.importer.utils` from its own projected prebundle of the shared `isaacsim-asset` wheel.
+
+### Removed
+- Removed deprecated `urdf:limit:velocity` to `physxJoint:maxJointVelocity` conversion. The upstream converter now authors `newton:velocityLimit` directly.
+
+## [1.9.0] - 2026-08-06
+### Changed
+- Support the Scene Optimizer Core 110.2.1 update when merging mesh
+- Pip wheel now depends on usd-optimize=1.1, kit free
+- Update import names from omni.scene.optimizer to usd_optimize
+
+## [1.8.4] - 2026-07-28
+### Fixed
+- Preserve inherited collision purposes during mesh merging and use world-anchoring joints (any physics joint type) as fixed-base articulation roots.
+- Fixed-base detection treats a joint as a world anchor when `body1` is an articulation rigid body and `body0` is unset or non-rigid; joints with `body1` empty are ignored.
+
+## [1.8.3] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [1.8.2] - 2026-07-07
+### Changed
+- Update the generated Python API inventory.
+
 ## [1.8.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

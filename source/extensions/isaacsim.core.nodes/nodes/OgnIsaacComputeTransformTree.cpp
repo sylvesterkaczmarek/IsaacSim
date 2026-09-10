@@ -14,21 +14,21 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/logging/Log.h>
 #include <carb/profiler/Profile.h>
 
-#include <isaacsim/core/experimental/prims/IPrimDataReader.h>
-#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.h>
-#include <isaacsim/core/includes/BaseResetNode.h>
-#include <isaacsim/core/includes/PhysicsEngine.h>
-#include <isaacsim/core/includes/UsdUtilities.h>
-#include <isaacsim/core/simulation_manager/ISimulationManager.h>
-#include <isaacsim/robot/schema/robot_schema.h>
-#include <isaacsim/robot/schema/sensor_tokens.h>
-#include <isaacsim/robot/schema/utils.h>
+#include <isaacsim/core/experimental/prims/IPrimDataReader.hpp>
+#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.hpp>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
+#include <isaacsim/core/includes/PhysicsEngine.hpp>
+#include <isaacsim/core/includes/UsdUtilities.hpp>
+#include <isaacsim/core/simulation_manager/ISimulationManager.hpp>
+#include <isaacsim/robot/schema/robot_schema.hpp>
+#include <isaacsim/robot/schema/sensor_tokens.hpp>
+#include <isaacsim/robot/schema/utils.hpp>
 #include <omni/fabric/FabricUSD.h>
 #include <pxr/base/gf/matrix4d.h>
 #include <pxr/base/gf/quatd.h>

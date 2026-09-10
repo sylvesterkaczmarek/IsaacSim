@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.3.5] - 2026-08-20
+### Fixed
+- Reference count the scripting interface so one holder's release no longer invalidates others.
+- Re-resolve the physics scene on each `generate2d`/`generate3d` call so a generator survives stage replacement.
+- Log an error instead of crashing when generating a map or updating the visualization with no stage attached.
+- Raise a Python error instead of crashing when constructing a `Generator` with an unknown stage id.
+- Clear the octree before the generation guards so a failed run cannot return the previous run's data.
+
+## [2.3.4] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [2.3.3] - 2026-06-12
+### Fixed
+- Preserve positive lower Z bounds in 2D occupancy-map generation so callers can exclude floor collision geometry at `z=0` without increasing the lower bound by a full cell.
+
 ## [2.3.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

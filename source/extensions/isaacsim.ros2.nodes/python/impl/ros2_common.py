@@ -25,7 +25,7 @@ import carb
 import omni.replicator.core as rep
 import omni.syntheticdata
 import omni.usd
-from isaacsim.core.nodes.scripts.utils import register_node_writer_with_telemetry
+from isaacsim.core.nodes import register_node_writer_with_telemetry
 from pxr import Sdf, Usd
 
 # Nodes extension constants
@@ -445,15 +445,19 @@ def cleanup_srtx_state(state: object) -> None:
 
 
 class CompressedImageManager:
-    """Manage per-camera H.264 compression annotators and writers.
+    """Manage per-camera compressed image annotators and writers.
 
-    Each render product gets its own annotator instance (unique rendervar hash)
-    so encoder pipelines and writers are fully independent across cameras.
-    Annotator instances are cached so the hash stays stable across stop/play cycles.
+    Each render product and codec pair gets its own annotator instance (unique
+    rendervar hash) so encoder pipelines and writers are fully independent
+    across cameras. Annotator instances are cached so the hash stays stable
+    across stop/play cycles.
     """
 
     _annotators: dict = {}
-    #: Per-render-product annotator instances keyed by render product path.
+    #: Per-render-product and codec annotator instances.
+
+    _supported_compression_types = {"h264", "hevc"}
+    #: Supported compressed image codec identifiers.
 
     @classmethod
     def reset(cls) -> None:
@@ -461,38 +465,44 @@ class CompressedImageManager:
         cls._annotators.clear()
 
     @classmethod
-    def attach(cls, render_product_path: str) -> None:
-        """Attach the H.264 encoder pipeline to a render product.
+    def attach(cls, render_product_path: str, compression_type: str = "h264") -> None:
+        """Attach a compressed image encoder pipeline to a render product.
 
         Creates the annotator on first call for this render product, then attaches it.
         This activates the POST_RENDER encoder templates and the ON_DEMAND Ptr template.
 
         Args:
             render_product_path: Path to the render product.
+            compression_type: Codec identifier for the compressed image stream.
 
         """
+        cls._validate_compression_type(compression_type)
+        annotator_key = cls._get_annotator_key(render_product_path, compression_type)
         stage = omni.usd.get_context().get_stage()
         with Usd.EditContext(stage, stage.GetSessionLayer()):
-            if render_product_path not in cls._annotators:
-                cls._annotators[render_product_path] = rep.AnnotatorRegistry.get_annotator(
-                    "LdrColor", init_params={"compression": "h264"}
+            if annotator_key not in cls._annotators:
+                cls._annotators[annotator_key] = rep.AnnotatorRegistry.get_annotator(
+                    "LdrColor", init_params={"compression": compression_type}
                 )
-            cls._annotators[render_product_path].attach([render_product_path])
+            cls._annotators[annotator_key].attach([render_product_path])
 
     @classmethod
-    def detach(cls, render_product_path: str) -> None:
-        """Detach the H.264 encoder pipeline from a specific render product.
+    def detach(cls, render_product_path: str, compression_type: str = "h264") -> None:
+        """Detach a compressed image encoder pipeline from a specific render product.
 
-        Only detaches from the specified render product — other cameras are not affected.
+        Only detaches from the specified render product. Other cameras are not affected.
 
         Args:
             render_product_path: Path to the render product.
+            compression_type: Codec identifier for the compressed image stream.
 
         """
+        cls._validate_compression_type(compression_type)
+        annotator_key = cls._get_annotator_key(render_product_path, compression_type)
         stage = omni.usd.get_context().get_stage()
         with Usd.EditContext(stage, stage.GetSessionLayer()):
 
-            annotator = cls._annotators.get(render_product_path)
+            annotator = cls._annotators.get(annotator_key)
             if annotator is not None:
                 try:
                     annotator.detach([render_product_path])
@@ -500,7 +510,9 @@ class CompressedImageManager:
                     pass
 
     @classmethod
-    def get_writer(cls, render_product_path: str, use_system_time: bool = False) -> rep.Writer:
+    def get_writer(
+        cls, render_product_path: str, use_system_time: bool = False, compression_type: str = "h264"
+    ) -> rep.Writer:
         """Get a compressed image writer for a specific render product.
 
         Registers the writer on first call (unique name per annotator hash).
@@ -509,18 +521,21 @@ class CompressedImageManager:
         Args:
             render_product_path: Path to the render product.
             use_system_time: If True, use system time for timestamps.
+            compression_type: Codec identifier for the compressed image stream.
 
         Returns:
             The replicator writer instance for this render product.
 
         """
+        cls._validate_compression_type(compression_type)
+        annotator_key = cls._get_annotator_key(render_product_path, compression_type)
         stage = omni.usd.get_context().get_stage()
         with Usd.EditContext(stage, stage.GetSessionLayer()):
 
-            annotator = cls._annotators.get(render_product_path)
+            annotator = cls._annotators.get(annotator_key)
             if annotator is None:
                 raise RuntimeError(
-                    f"H.264 annotator not attached for render product '{render_product_path}'. "
+                    f"{compression_type} annotator not attached for render product '{render_product_path}'. "
                     "Call CompressedImageManager.attach() first."
                 )
 
@@ -528,7 +543,8 @@ class CompressedImageManager:
             time_type = "SystemTime" if use_system_time else ""
             time_source = "systemTime" if use_system_time else "simulationTime"
 
-            writer_name = f"{rv}{BRIDGE_PREFIX}{time_type}PublishCompressedImage_{annotator.template_name}"
+            writer_suffix = f"{compression_type}_{annotator.template_name}"
+            writer_name = f"{rv}{BRIDGE_PREFIX}{time_type}PublishCompressedImage_{writer_suffix}"
             if writer_name not in rep.WriterRegistry.get_writers():
                 register_node_writer_with_telemetry(
                     name=writer_name,
@@ -546,8 +562,35 @@ class CompressedImageManager:
                             attributes_mapping={f"outputs:{time_source}": "inputs:timeStamp"},
                         ),
                     ],
-                    input_format="h264",
+                    input_format=compression_type,
                     category=BRIDGE_NAME,
                 )
 
             return rep.writers.get(writer_name)
+
+    @classmethod
+    def _get_annotator_key(cls, render_product_path: str, compression_type: str) -> tuple[str, str]:
+        """Get the cache key for a render product and codec.
+
+        Args:
+            render_product_path: Path to the render product.
+            compression_type: Codec identifier for the compressed image stream.
+
+        Returns:
+            Cache key for the annotator.
+        """
+        return render_product_path, compression_type
+
+    @classmethod
+    def _validate_compression_type(cls, compression_type: str) -> None:
+        """Validate that the requested compressed image codec is supported.
+
+        Args:
+            compression_type: Codec identifier for the compressed image stream.
+
+        Raises:
+            ValueError: If the codec is not supported.
+        """
+        if compression_type not in cls._supported_compression_types:
+            supported = ", ".join(sorted(cls._supported_compression_types))
+            raise ValueError(f"Unsupported compressed image codec '{compression_type}'. Supported codecs: {supported}")

@@ -24,19 +24,36 @@ set SCRIPT_DIR=%SCRIPT_DIR:~0,-1%
 set ISAAC_SIM_ROOT=%SCRIPT_DIR%
 
 set DEFAULT_ROS_DISTRO=jazzy
+set DEFAULT_RMW_IMPLEMENTATION=rmw_zenoh_cpp
 
 set BRIDGE_EXT_PATH=%ISAAC_SIM_ROOT%\exts\isaacsim.ros2.core
 
 REM Set ROS_DISTRO if not already set
+set USE_BUNDLED_ROS=false
 if "%ROS_DISTRO%"=="" (
     set ROS_DISTRO=%DEFAULT_ROS_DISTRO%
-
-    REM Update PATH to include ROS2 bridge libraries
-    set "PATH=%PATH%;%BRIDGE_EXT_PATH%\%DEFAULT_ROS_DISTRO%\lib"
-    
+    set USE_BUNDLED_ROS=true
 )
 
-REM Set RMW implementation to Fast DDS if not already set
+set BUNDLED_ROS_PREFIX=%BRIDGE_EXT_PATH%\%ROS_DISTRO%
+
+if "%USE_BUNDLED_ROS%"=="true" (
+    REM Prefer the bundled ROS2 libraries over unrelated DLLs already on PATH
+    set "PATH=%BUNDLED_ROS_PREFIX%\lib;%PATH%"
+
+    REM Keep custom workspace overlays first and add the bundled ROS2 package index
+    if defined AMENT_PREFIX_PATH (
+        if "%AMENT_PREFIX_PATH:~-1%"==";" (
+            set "AMENT_PREFIX_PATH=%AMENT_PREFIX_PATH%%BUNDLED_ROS_PREFIX%"
+        ) else (
+            set "AMENT_PREFIX_PATH=%AMENT_PREFIX_PATH%;%BUNDLED_ROS_PREFIX%"
+        )
+    ) else (
+        set "AMENT_PREFIX_PATH=%BUNDLED_ROS_PREFIX%"
+    )
+)
+
+REM Set RMW implementation to Zenoh if not already set
 if "%RMW_IMPLEMENTATION%"=="" (
-    set RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+    set RMW_IMPLEMENTATION=%DEFAULT_RMW_IMPLEMENTATION%
 )

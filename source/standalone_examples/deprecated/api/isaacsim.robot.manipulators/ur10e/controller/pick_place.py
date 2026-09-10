@@ -23,7 +23,15 @@ from .rmpflow import RMPFlowController
 
 
 class PickPlaceController(manipulators_controllers.PickPlaceController):
-    """Pick-and-place controller for UR10e using RMPflow."""
+    """Pick-and-place controller for UR10e using RMPflow.
+
+    Args:
+        name: Controller name used by the controller registry.
+        gripper: Gripper command interface used for grasp and release phases.
+        robot_articulation: UR10e articulation controlled by the motion policy.
+        events_dt: Progress increments for the pick-and-place event phases, or ``None`` to use the controller's
+            built-in phase sequence.
+    """
 
     def __init__(
         self,

@@ -86,6 +86,18 @@ if ready:
 
 The extension supports creating and managing multiple viewport windows simultaneously. Viewport windows can be filtered, destroyed, and configured independently, enabling complex multi-view applications and debugging scenarios.
 
+### Multi-GPU Camera Allocation
+
+After creating all camera render products, applications can opt in to resolution-weighted GPU allocation:
+
+```python
+from isaacsim.core.rendering_manager import ViewportManager
+
+assignments = ViewportManager.optimize_render_products()
+```
+
+The method pins each eligible camera render product to one active GPU and can be called again after cameras are added or resolutions change. Viewport, RTX lidar/radar, and other non-camera render products remain unchanged. If fewer cameras than GPUs are available, it preserves the renderer's default multi-GPU behavior instead of pinning them.
+
 ### USD Integration
 
 Deep integration with USD render products and camera prims enables seamless interaction with the USD stage pipeline. The system automatically handles USD prim relationships and maintains proper render product configurations.

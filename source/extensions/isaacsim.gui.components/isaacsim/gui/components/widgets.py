@@ -221,6 +221,19 @@ class ParamWidget:
         """
         return get_field_value(self._field)
 
+    def set_value(self, value: Any) -> None:
+        """Set the current value of the parameter field.
+
+        Args:
+            value: Value to assign to the underlying field model.
+
+        Raises:
+            AttributeError: If the underlying field model does not support value assignment.
+        """
+        if self._field is None or "set_value" not in dir(self._field.model):
+            raise AttributeError("ParamWidget field model does not support set_value")
+        self._field.model.set_value(value)
+
     def destroy(self) -> None:
         """Cleans up the parameter widget by releasing the field reference."""
         self._field = None

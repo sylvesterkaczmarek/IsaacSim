@@ -20,7 +20,7 @@
 #include <carb/PluginUtils.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/sensors/rtx/IIsaacSimSensorsRtx.h>
+#include <isaacsim/sensors/rtx/IIsaacSimSensorsRtx.hpp>
 #include <omni/fabric/IToken.h>
 #include <omni/graph/core/ogn/Registration.h>
 

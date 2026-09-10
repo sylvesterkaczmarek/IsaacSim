@@ -19,22 +19,68 @@ from typing import Any
 
 import numpy as np
 import omni.graph.core as og
+import omni.replicator.core as rep
 import omni.usd
 from pxr import Sdf, UsdGeom
+
+
+def sample_points_on_sphere(radius: float, count: int, rng: np.random.Generator) -> np.ndarray:
+    """Sample random 3D points on the surface of a sphere.
+
+    Args:
+        radius: Positive sphere radius. The node validates this precondition before calling the helper.
+        count: Nonnegative number of points to sample.
+        rng: Random number generator used for sampling.
+
+    Returns:
+        Cartesian point coordinates with shape ``(count, 3)``.
+    """
+    phi = rng.uniform(0, 2 * np.pi, count)
+    costheta = rng.uniform(-1, 1, count)
+    theta = np.arccos(costheta)
+    x = radius * np.sin(theta) * np.cos(phi)
+    y = radius * np.sin(theta) * np.sin(phi)
+    z = radius * np.cos(theta)
+    return np.stack([x, y, z], axis=1)
+
+
+class OgnSampleOnSphereInternalState:
+    """Store a Replicator-aware random number generator across node evaluations."""
+
+    def __init__(self) -> None:
+        self.rng = rep.rng.ReplicatorRNG()
 
 
 class OgnSampleOnSphere:
     """Replicator OmniGraph node that writes random positions at a fixed radius."""
 
     @staticmethod
+    def internal_state() -> OgnSampleOnSphereInternalState:
+        """Create the node's persistent internal state.
+
+        Returns:
+            Persistent state for the node.
+        """
+        return OgnSampleOnSphereInternalState()
+
+    @staticmethod
+    def release(node: og.Node) -> None:
+        """Release subscriptions owned by the node's random number generator.
+
+        Args:
+            node: OmniGraph node whose subscriptions are released.
+        """
+        rep.rng.release(node.get_prim_path())
+
+    @staticmethod
     def compute(db: Any) -> bool:
-        """Move each input Xformable prim to a uniformly sampled point on a sphere surface.
+        """Move each input prim to a uniformly sampled point on a sphere surface.
 
         The node reads target prim paths from ``inputs:prims`` and the fixed radius from
         ``inputs:radius``. It samples spherical directions by uniform azimuth and uniform
-        ``cos(theta)`` so the surface distribution is not biased toward the poles. A missing
-        ``xformOp:translate`` is created before writing; empty prim inputs, non-Xformable prims, or a
-        non-positive radius disable ``outputs:execOut`` and return ``False``.
+        ``cos(theta)`` so the surface distribution is not biased toward the poles. Positions
+        are written to ``xformOp:translate`` on each target prim. Empty prim inputs, invalid
+        prim paths, or a non-positive radius disable ``outputs:execOut`` and return ``False``.
 
         Args:
             db: OmniGraph database object containing node inputs and outputs.
@@ -47,46 +93,42 @@ class OgnSampleOnSphere:
             db.outputs.execOut = og.ExecutionAttributeState.DISABLED
             return False
 
+        radius = db.inputs.radius
+        if radius <= 0:
+            db.log_error(f"Radius must be positive, got {radius}")
+            db.outputs.execOut = og.ExecutionAttributeState.DISABLED
+            return False
+
         stage = omni.usd.get_context().get_stage()
         prims = [stage.GetPrimAtPath(str(path)) for path in prim_paths]
 
-        radius = db.inputs.radius
-
         try:
             for prim in prims:
+                if not prim.IsValid():
+                    raise ValueError(f"Invalid prim path: {prim.GetPath()}")
                 if not UsdGeom.Xformable(prim):
-                    prim_type = prim.GetTypeName()
                     raise ValueError(
-                        f"Expected prim at {prim.GetPath()} to be an Xformable prim but got type {prim_type}"
+                        f"Expected prim at {prim.GetPath()} to be an Xformable prim but got type "
+                        f"{prim.GetTypeName()}"
                     )
                 if not prim.HasAttribute("xformOp:translate"):
                     UsdGeom.Xformable(prim).AddTranslateOp()
-            if radius <= 0:
-                raise ValueError(f"Radius must be positive, got {radius}")
-
         except Exception as error:
             db.log_error(str(error))
             db.outputs.execOut = og.ExecutionAttributeState.DISABLED
             return False
 
-        samples = []
-        for _ in range(len(prims)):
-            # Generate a random direction by spherical coordinates (phi, theta)
-            phi = np.random.uniform(0, 2 * np.pi)
-            # Sample costheta to ensure uniform distribution of points on the sphere (surface is proportional to sin(theta))
-            costheta = np.random.uniform(-1, 1)
-            theta = np.arccos(costheta)
+        state = db.shared_state
+        if state.rng.seed != db.inputs.seed:
+            node_id = (
+                db.node.get_attribute("inputs:nodeId").get() if db.node.get_attribute_exists("inputs:nodeId") else 0
+            )
+            state.rng.initialize(db.inputs.seed, db.node, node_id)
 
-            # Convert from spherical to Cartesian coordinates
-            x = radius * np.sin(theta) * np.cos(phi)
-            y = radius * np.sin(theta) * np.sin(phi)
-            z = radius * np.cos(theta)
-
-            samples.append((x, y, z))
-
+        positions = sample_points_on_sphere(radius, len(prims), state.rng.generator)
         with Sdf.ChangeBlock():
-            for prim, sample in zip(prims, samples):
-                prim.GetAttribute("xformOp:translate").Set(sample)
+            for prim, position in zip(prims, positions):
+                prim.GetAttribute("xformOp:translate").Set(tuple(position))
 
         db.outputs.execOut = og.ExecutionAttributeState.ENABLED
         return True

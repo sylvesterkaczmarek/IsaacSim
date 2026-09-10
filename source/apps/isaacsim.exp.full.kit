@@ -1,7 +1,7 @@
 [package]
 title = "Isaac Sim Full"
 description = "Full Omniverse Isaac Sim Application"
-version = "6.0.1"
+version = "6.1.0"
 execFile = "isaac-sim"
 keywords = ["experience", "app", "usd", "isaacsim"] # That makes it browsable in UI with "experience" filter
 
@@ -20,6 +20,7 @@ keywords = ["experience", "app", "usd", "isaacsim"] # That makes it browsable in
 "isaacsim.asset.exporter.urdf.ui" = {}
 "isaacsim.asset.transformer.ui" = {}
 "isaacsim.asset.validation" = {}
+"isaacsim.asset.validation.ui" = {}
 "isaacsim.cortex.examples" = {}
 "isaacsim.examples.extension" = {}
 "isaacsim.examples.interactive" = {}
@@ -29,15 +30,19 @@ keywords = ["experience", "app", "usd", "isaacsim"] # That makes it browsable in
 "isaacsim.replicator.episode_recorder.ui" = {}
 "isaacsim.replicator.grasping.ui" = {}
 "isaacsim.replicator.synthetic_recorder" = {}
-"isaacsim.robot.experimental.manipulators.examples" = {}
-"isaacsim.robot.manipulators.examples" = {}
 "isaacsim.robot.manipulators.ui" = {}
 "isaacsim.robot.schema.ui" = {}
 "isaacsim.robot.surface_gripper.ui" = {}
 "isaacsim.robot.wheeled_robots.ui" = {}
+"isaacsim.robot_motion.cumotion.examples" = {}
+"isaacsim.robot_motion.examples" = {}
 "isaacsim.robot_setup.assembler" = {}
+"isaacsim.robot_setup.virtual_gantry_schema" = {}
+"isaacsim.robot_setup.virtual_gantry" = {}
+"isaacsim.robot_setup.virtual_gantry.ui" = {}
 "isaacsim.robot_setup.collision_detector" = {}
 "isaacsim.robot_setup.gain_tuner" = {}
+"isaacsim.robot_setup.gain_tuner.ui" = {}
 "isaacsim.robot.poser.ui" = {}
 "isaacsim.robot_setup.grasp_editor" = {}
 "isaacsim.robot_setup.xrdf_editor" = {}
@@ -108,6 +113,7 @@ keywords = ["experience", "app", "usd", "isaacsim"] # That makes it browsable in
 "omni.kit.widget.filebrowser" = {}
 "omni.kit.widget.layers" = {}
 "omni.kit.widget.live" = {}
+"omni.kit.widget.schema_api" = {}
 "omni.kit.widget.timeline" = {}
 "omni.kit.widget.versioning" = {}
 "omni.kit.widgets.custom" = {}
@@ -132,13 +138,16 @@ keywords = ["experience", "app", "usd", "isaacsim"] # That makes it browsable in
 "omni.usd.metrics.assembler.physics" = {}
 "omni.usd.metrics.assembler.usdgeom" = {}
 "omni.usd.schema.scene.visualization" = {}
-"omni.kit.converter.cad" = {order = 200, version = "~209.4"}
+"omni.kit.converter.cad" = {order = 200, version = "~209.5"}
 "omni.kit.converter.gsplat" = {}
 
-[dependencies."filter:platform"."linux-x86_64"]
 "isaacsim.replicator.teleop.ui" = {}
 
+[dependencies."filter:platform"."linux-x86_64"]
+"isaacsim.robot_motion.pink.examples" = {}
+
 [settings]
+rtx.spg.enabled = true # Enable RTX Sensor Processing Graphs feature
 # default internal ros2 bridge distro to use if no ros2 distro is sourced
 exts."isaacsim.ros2.bridge".ros_distro = "system_default"
 # keep Test Runner populated with Isaac tests even if dependency extensions set narrower filters
@@ -150,7 +159,7 @@ exts."isaacsim.core.throttling".enable_manualmode = true
 
 [settings.app]
 name = "Isaac-Sim Full"
-version = "6.0.1"
+version = "6.1.0"
 file.ignoreUnsavedStage = false
 window.title = "Isaac Sim Full"
 vulkan = true                          # Explicitly enable Vulkan
@@ -175,9 +184,4 @@ isaac.startup.ros_bridge_extension = "isaacsim.ros2.bridge"
     "${app}/../extscache",
     "${app}/../extsUser",
     "${app}/../extsDeprecated",
-]
-
-[settings.exts."omni.kit.registry.nucleus".registries]
-++ = [
-    { name = "isaacsim/prod/6.0", url = "https://ovextensionsprod.blob.core.windows.net/exts/isaacsim/prod/6.0/shared" },
 ]

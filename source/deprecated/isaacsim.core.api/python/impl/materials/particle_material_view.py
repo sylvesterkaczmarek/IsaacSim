@@ -34,13 +34,14 @@ torch = import_module("torch")
 class ParticleMaterialView:
     """The view class to deal with particle material prims.
 
-    Provides high level functions to deal with particle material (1 or more particle materials)
-    as well as its attributes/ properties. This object wraps all matching materials found at the regex provided at the prim_paths_expr.
-    This object wraps all matching materials Prims found at the regex provided at the prim_paths_expr.
+    Provides high-level functions to deal with particle material (1 or more particle materials)
+    as well as its attributes/properties. This object wraps all matching materials found at the regex provided
+    at prim_paths_expr.
+    This object wraps all matching material prims found at the regex provided at prim_paths_expr.
 
     Args:
         prim_paths_expr: Prim paths regex to encapsulate all prims that match it.
-        name: Shortname to be used as a key by Scene class.
+        name: Short name to be used as a key by Scene class.
         frictions: The friction coefficient tensor, shape is (N, ).
         particle_friction_scales: The coefficient that scales friction for
             solid particle-particle interactions, shape is (N, ).
@@ -52,14 +53,16 @@ class ParticleMaterialView:
         adhesions: The adhesion tensor for interaction between particles (solid or fluid),
             and rigid or deformable objects, shape is (N, ).
         particle_adhesion_scales: The coefficient tensor that scales adhesion for solid
-            particle-particle iterations, shape is (N, ).
-        adhesion_offset_scales: The offset scale tensor defines at which adhesion ceases
+            particle-particle interactions, shape is (N, ).
+        adhesion_offset_scales: The offset scale tensor defines where adhesion ceases
             to take effect, shape is (N, ).
         gravity_scales: The gravitational acceleration scaling tensor. It can be used
             to approximate lighter-than-air inflatables, shape is (N, ).
         lifts: The lift coefficient tensor for cloth and inflatable particle objects, shape is (N, ).
         drags: The drag coefficient tensor for cloth and inflatable particle objects, shape is (N, ).
 
+    Raises:
+        Exception: If prim_paths_expr does not match any prims.
     """
 
     def __init__(
@@ -144,7 +147,6 @@ class ParticleMaterialView:
 
         Returns:
             Number of particle material prims in the view.
-
         """
         return self._count
 
@@ -154,7 +156,6 @@ class ParticleMaterialView:
 
         Returns:
             Name given to the view when instantiating it.
-
         """
         return self._name
 
@@ -163,7 +164,6 @@ class ParticleMaterialView:
 
         Args:
             index: Index of the prim to apply the material API to.
-
         """
         if self._material_apis[index] is None:
             if self._prims[index].HasAPI(PhysxSchema.PhysxPBDMaterialAPI):
@@ -176,8 +176,7 @@ class ParticleMaterialView:
         """Checks if the physics handle of the view is valid.
 
         Returns:
-            True if the physics handle of the view is valid (i.e physics is initialized for the view). Otherwise False.
-
+            True if the physics handle of the view is valid, i.e., physics is initialized for the view. Otherwise False.
         """
         return self._physics_view is not None
 
@@ -185,13 +184,11 @@ class ParticleMaterialView:
         """Checks if all prim paths specified in the view correspond to valid prims in the stage.
 
         Args:
-            indices: indices to specify which prims to query. Shape (M,).
+            indices: Indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
 
         Returns:
             True if all prim paths specified in the view correspond to a valid prim in stage. False otherwise.
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         result = True
@@ -204,11 +201,10 @@ class ParticleMaterialView:
         return
 
     def initialize(self, physics_sim_view: omni.physics.tensors.SimulationView = None) -> None:
-        """Create a physics simulation view if not passed and creates a rigid body view in physX.
+        """Creates a physics simulation view if not passed and initializes particle material USD attribute access.
 
         Args:
-            physics_sim_view: current physics simulation view.
-
+            physics_sim_view: Current physics simulation view.
         """
         if physics_sim_view is None:
             physics_sim_view = omni.physics.tensors.create_simulation_view(self._backend)
@@ -230,11 +226,9 @@ class ParticleMaterialView:
         """Sets the friction for the material prims indicated by the indices.
 
         Args:
-            values: material friction tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material friction tensor with the shape (M, ).
+            indices: Indices to specify which material prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, device=self._device)
         if not omni.timeline.get_timeline_interface().is_stopped() and self._physics_view is not None:
@@ -260,14 +254,12 @@ class ParticleMaterialView:
         """Gets the friction of materials indicated by the indices.
 
         Args:
-            indices: indices to specify which material prims to query. Shape (M,).
+            indices: Indices to specify which material prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
             Friction tensor with shape (M, ).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         if not omni.timeline.get_timeline_interface().is_stopped() and self._physics_view is not None:
@@ -297,11 +289,9 @@ class ParticleMaterialView:
         """Sets the dampings for the material prims indicated by the indices.
 
         Args:
-            values: material damping tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material damping tensor with the shape (M, ).
+            indices: Indices to specify which material prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, device=self._device)
         if not omni.timeline.get_timeline_interface().is_stopped() and self._physics_view is not None:
@@ -327,13 +317,12 @@ class ParticleMaterialView:
         """Gets the dampings of materials indicated by the indices.
 
         Args:
-            indices: indices to specify which material prims to query. Shape (M,).
+            indices: Indices to specify which material prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
             Dampings tensor with shape (M, ).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         if not omni.timeline.get_timeline_interface().is_stopped() and self._physics_view is not None:
@@ -363,10 +352,9 @@ class ParticleMaterialView:
         """Sets the gravity scale for the material prims indicated by the indices.
 
         Args:
-            values: material gravity scale tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material gravity scale tensor with the shape (M, ).
+            indices: Indices to specify which material prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, device=self._device)
         if not omni.timeline.get_timeline_interface().is_stopped() and self._physics_view is not None:
@@ -391,13 +379,12 @@ class ParticleMaterialView:
         """Gets the gravity scale of materials indicated by the indices.
 
         Args:
-            indices: indices to specify which material prims to query. Shape (M,).
+            indices: Indices to specify which material prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
             Gravity scale tensor with shape (M, ).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         if not omni.timeline.get_timeline_interface().is_stopped() and self._physics_view is not None:
@@ -424,13 +411,15 @@ class ParticleMaterialView:
         values: np.ndarray | torch.Tensor | None,
         indices: np.ndarray | list | torch.Tensor | None = None,
     ) -> None:
-        """Sets the lifts for the material prims indicated by the indices.
+        """Keeps compatibility for setting lifts on material prims indicated by the indices.
+
+        Note:
+            lift attribute was removed from PhysxPBDMaterialAPI. This is a no-op.
 
         Args:
-            values: material lift tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material lift tensor with the shape (M, ) (ignored).
+            indices: Indices to specify which material prims to manipulate. Shape (M,) (ignored).
                 Where M <= size of the encapsulated prims in the view.
-
         """
         # lift attribute was removed from PhysxPBDMaterialAPI — no-op for compatibility
         carb.log_warn("physxPBDMaterial:lift has been removed; set_lifts is a no-op.")
@@ -440,16 +429,15 @@ class ParticleMaterialView:
     ) -> np.ndarray | torch.Tensor:
         """Gets the lifts of materials indicated by the indices.
 
-        Note: lift attribute was removed from PhysxPBDMaterialAPI. Always returns zeros.
+        Note:
+            lift attribute was removed from PhysxPBDMaterialAPI. Always returns zeros.
 
         Args:
             indices: Indices to specify which material prims to query.
-                Defaults to None (i.e: all prims in the view).
-            clone: True to return a clone of the internal buffer. Otherwise False.
+            clone: Accepted for API compatibility.
 
         Returns:
             Tensor of zeros with shape (M, ).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         return self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -459,15 +447,14 @@ class ParticleMaterialView:
         values: np.ndarray | torch.Tensor | None,
         indices: np.ndarray | list | torch.Tensor | None = None,
     ) -> None:
-        """Sets the drags for the material prims indicated by the indices.
+        """Keeps compatibility for setting drags on material prims indicated by the indices.
 
-        Note: drag attribute was removed from PhysxPBDMaterialAPI. This is a no-op.
+        Note:
+            drag attribute was removed from PhysxPBDMaterialAPI. This is a no-op.
 
         Args:
             values: Material drag tensor with the shape (M, ) (ignored).
-            indices: Indices to specify which material prims to manipulate.
-                Defaults to None (i.e: all prims in the view).
-
+            indices: Indices to specify which material prims to manipulate (ignored).
         """
         # drag attribute was removed from PhysxPBDMaterialAPI — no-op for compatibility
         carb.log_warn("physxPBDMaterial:drag has been removed; set_drags is a no-op.")
@@ -477,16 +464,15 @@ class ParticleMaterialView:
     ) -> np.ndarray | torch.Tensor:
         """Gets the drags of materials indicated by the indices.
 
-        Note: drag attribute was removed from PhysxPBDMaterialAPI. Always returns zeros.
+        Note:
+            drag attribute was removed from PhysxPBDMaterialAPI. Always returns zeros.
 
         Args:
             indices: Indices to specify which material prims to query.
-                Defaults to None (i.e: all prims in the view).
-            clone: True to return a clone of the internal buffer. Otherwise False.
+            clone: Accepted for API compatibility.
 
         Returns:
             Tensor of zeros with shape (M, ).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         return self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -499,10 +485,9 @@ class ParticleMaterialView:
         """Sets the particle viscosity for the material prims indicated by the indices.
 
         Args:
-            values: material particle viscosity scale tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material particle viscosity scale tensor with the shape (M, ).
+            indices: Indices to specify which material prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, device=self._device)
         idx_count = 0
@@ -520,13 +505,12 @@ class ParticleMaterialView:
         """Gets the viscosity of materials indicated by the indices.
 
         Args:
-            indices: indices to specify which material prims to query. Shape (M,).
+            indices: Indices to specify which material prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
             Viscosity tensor with shape (M, ).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         result = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -548,10 +532,9 @@ class ParticleMaterialView:
         """Sets the particle cohesion for the material prims indicated by the indices.
 
         Args:
-            values: material particle cohesion scale tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material particle cohesion scale tensor with the shape (M, ).
+            indices: Indices to specify which material prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, device=self._device)
         idx_count = 0
@@ -569,14 +552,12 @@ class ParticleMaterialView:
         """Gets the cohesion of materials indicated by the indices.
 
         Args:
-            indices: indices to specify which material prims to query. Shape (M,).
+            indices: Indices to specify which material prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-            clone: True to return a clone of the internal buffer. Otherwise False.
+            clone: Unused compatibility argument.
 
         Returns:
-            cohesion tensor with shape (M, )
-
+            Cohesion tensor with shape (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         result = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -598,11 +579,9 @@ class ParticleMaterialView:
         """Sets the particle adhesion for the material prims indicated by the indices.
 
         Args:
-            values: material particle adhesion scale tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material particle adhesion scale tensor with the shape (M, ).
+            indices: Indices to specify which material prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, device=self._device)
         idx_count = 0
@@ -620,14 +599,12 @@ class ParticleMaterialView:
         """Gets the adhesion of materials indicated by the indices.
 
         Args:
-            indices: indices to specify which material prims to query. Shape (M,).
+            indices: Indices to specify which material prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-            clone: True to return a clone of the internal buffer. Otherwise False.
+            clone: Unused compatibility argument.
 
         Returns:
-            adhesion tensor with shape (M, )
-
+            Adhesion tensor with shape (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         result = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -646,14 +623,12 @@ class ParticleMaterialView:
         values: np.ndarray | torch.Tensor | None,
         indices: np.ndarray | list | torch.Tensor | None = None,
     ) -> None:
-        """Sets the particle adhesion for the material prims indicated by the indices.
+        """Sets the particle adhesion scale for the material prims indicated by the indices.
 
         Args:
-            values: material particle adhesion scale tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material particle adhesion scale tensor with the shape (M, ).
+            indices: Indices to specify which material prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, device=self._device)
         idx_count = 0
@@ -671,14 +646,12 @@ class ParticleMaterialView:
         """Gets the adhesion scale of materials indicated by the indices.
 
         Args:
-            indices: indices to specify which material prims to query. Shape (M,).
+            indices: Indices to specify which material prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-            clone: True to return a clone of the internal buffer. Otherwise False.
+            clone: Unused compatibility argument.
 
         Returns:
-            adhesion scale tensor with shape (M, )
-
+            Adhesion scale tensor with shape (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         result = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -700,11 +673,9 @@ class ParticleMaterialView:
         """Sets the adhesion offset scale for the material prims indicated by the indices.
 
         Args:
-            values: material adhesion offset scale tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material adhesion offset scale tensor with the shape (M, ).
+            indices: Indices to specify which material prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, device=self._device)
         idx_count = 0
@@ -722,14 +693,12 @@ class ParticleMaterialView:
         """Gets the adhesion offset scale of materials indicated by the indices.
 
         Args:
-            indices: indices to specify which material prims to query. Shape (M,).
+            indices: Indices to specify which material prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-            clone: True to return a clone of the internal buffer. Otherwise False.
+            clone: Unused compatibility argument.
 
         Returns:
-            adhesion offset scale tensor with shape (M, )
-
+            Adhesion offset scale tensor with shape (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         result = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -751,11 +720,9 @@ class ParticleMaterialView:
         """Sets the particle surface tension for the material prims indicated by the indices.
 
         Args:
-            values: material particle surface tension scale tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material particle surface tension scale tensor with the shape (M, ).
+            indices: Indices to specify which material prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, device=self._device)
         idx_count = 0
@@ -773,14 +740,12 @@ class ParticleMaterialView:
         """Gets the surface tension of materials indicated by the indices.
 
         Args:
-            indices: indices to specify which material prims to query. Shape (M,).
+            indices: Indices to specify which material prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-            clone: True to return a clone of the internal buffer. Otherwise False.
+            clone: Unused compatibility argument.
 
         Returns:
-            surface tension tensor with shape (M, )
-
+            Surface tension tensor with shape (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         result = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -802,11 +767,9 @@ class ParticleMaterialView:
         """Sets the vorticity confinement for the material prims indicated by the indices.
 
         Args:
-            values: material particle vorticity confinement scale tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material particle vorticity confinement scale tensor with the shape (M, ).
+            indices: Indices to specify which material prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, device=self._device)
         idx_count = 0
@@ -824,13 +787,12 @@ class ParticleMaterialView:
         """Gets the vorticity confinement of materials indicated by the indices.
 
         Args:
-            indices: indices to specify which material prims to query. Shape (M,).
+            indices: Indices that specify which material prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-            clone: True to return a clone of the internal buffer. Otherwise False.
+            clone: Unused.
 
         Returns:
-            vorticity confinement tensor with shape (M, )
-
+            Vorticity confinement tensor with shape (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         result = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)
@@ -852,10 +814,9 @@ class ParticleMaterialView:
         """Sets the particle friction scale for the material prims indicated by the indices.
 
         Args:
-            values: material particle friction scale tensor with the shape (M, ).
-            indices: indices to specify which material prims to manipulate. Shape (M,).
+            values: Material particle friction scale tensor with the shape (M, ).
+            indices: Indices that specify which material prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, device=self._device)
         idx_count = 0
@@ -873,13 +834,12 @@ class ParticleMaterialView:
         """Gets the particle friction scale of materials indicated by the indices.
 
         Args:
-            indices: indices to specify which material prims to query. Shape (M,).
+            indices: Indices that specify which material prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-            clone: True to return a clone of the internal buffer. Otherwise False.
+            clone: Unused.
 
         Returns:
-            particle friction scale tensor with shape (M, )
-
+            Particle friction scale tensor with shape (M, ).
         """
         indices = self._backend_utils.resolve_indices(indices, self.count, self._device)
         result = self._backend_utils.create_zeros_tensor([indices.shape[0]], dtype="float32", device=self._device)

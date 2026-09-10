@@ -19,7 +19,7 @@ from typing import Any
 
 import carb.eventdispatcher
 import omni.ext
-from isaacsim.replicator.behavior.global_variables import EXPOSED_ATTR_NS, EXPOSED_VARS_CHANGED_EVENT
+from isaacsim.replicator.behavior import EXPOSED_ATTR_NS, EXPOSED_VARS_CHANGED_EVENT
 
 from .exposed_variables_widget import ExposedVariablesPropertyWidget
 from .global_variables import WIDGET_NAME, WIDGET_TITLE

@@ -113,8 +113,16 @@ class InterfaceConnectionRule(RuleInterface):
                 display_name="Default Variant Selections",
                 param_type=dict,
                 description="Dictionary mapping variant set names to default variant selection names. "
-                "If a variant set is not specified, defaults to 'None'.",
+                "Unspecified variant sets default to 'None', unless listed in 'clear_default_variant_sets'.",
                 default_value={},
+            ),
+            RuleConfigurationParam(
+                name="clear_default_variant_sets",
+                display_name="Clear Default Variant Sets",
+                param_type=list,
+                description="List of variant set names whose default selection is left empty (unselected) "
+                "unless an explicit default is provided in 'default_variant_selections'.",
+                default_value=[],
             ),
         ]
 
@@ -144,6 +152,7 @@ class InterfaceConnectionRule(RuleInterface):
         payloads_folder = params.get("payloads_folder") or _DEFAULT_PAYLOADS_FOLDER
         custom_connections = params.get("connections") or []
         default_variant_selections = params.get("default_variant_selections") or {}
+        clear_default_variant_sets = params.get("clear_default_variant_sets") or []
 
         # Get interface asset name from args (passed by manager)
         interface_asset_name = self.args.get("interface_asset_name")
@@ -222,7 +231,11 @@ class InterfaceConnectionRule(RuleInterface):
         # Generate variant sets from folder structure
         if generate_folder_variants:
             self._generate_folder_variants(
-                interface_layer, default_prim_path, payloads_folder, default_variant_selections
+                interface_layer,
+                default_prim_path,
+                payloads_folder,
+                default_variant_selections,
+                clear_default_variant_sets,
             )
 
         # Apply custom connections
@@ -321,6 +334,7 @@ class InterfaceConnectionRule(RuleInterface):
         default_prim_path: str,
         payloads_folder: str,
         default_variant_selections: dict[str, str],
+        clear_default_variant_sets: list[str],
     ) -> None:
         """Generate variant sets from folder structure in payloads directory.
 
@@ -333,8 +347,11 @@ class InterfaceConnectionRule(RuleInterface):
             default_prim_path: Path to the default prim.
             payloads_folder: Relative path to the payloads folder.
             default_variant_selections: Mapping of variant set names to default variant selection.
+            clear_default_variant_sets: Variant set names whose default selection is left empty
+                (unselected) unless an explicit default is provided in ``default_variant_selections``.
 
         """
+        clear_default_variant_sets = set(clear_default_variant_sets or [])
         payloads_abs_path = os.path.join(self.package_root, payloads_folder)
         if not os.path.isdir(payloads_abs_path):
             self.log_operation(f"Payloads folder not found: {payloads_abs_path}")
@@ -404,9 +421,22 @@ class InterfaceConnectionRule(RuleInterface):
                 payload = Sdf.Payload(asset_rel_path)
                 variant_prim_spec.payloadList.Prepend(payload)
 
-            # Set default variant selection from configuration or fall back to "None"
-            default_selection = default_variant_selections.get(variant_set_name, _NONE_VARIANT_NAME)
-            prim_spec.variantSelections[variant_set_name] = default_selection
+            # Sets in clear_default_variant_sets stay unselected unless an explicit default is given.
+            if variant_set_name in default_variant_selections:
+                default_selection = default_variant_selections[variant_set_name]
+            elif variant_set_name in clear_default_variant_sets:
+                default_selection = None
+            else:
+                default_selection = _NONE_VARIANT_NAME
+
+            if default_selection is not None:
+                if default_selection in variant_set_spec.variants:
+                    prim_spec.variantSelections[variant_set_name] = default_selection
+                else:
+                    self.log_operation(
+                        f"Requested default variant '{default_selection}' not found in variant set "
+                        f"'{variant_set_name}', leaving selection unset"
+                    )
 
             self.log_operation(f"Created variant set '{variant_set_name}' with {len(variant_assets)} variants + None")
 

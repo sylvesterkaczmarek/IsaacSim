@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.2] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [1.6.1] - 2026-07-07
+### Changed
+- Update the generated Python API inventory.
+
 ## [1.6.0] - 2026-04-09
 ### Removed
 - Removed `set_next_simulation_time` API and `SWHExternalSimulationTime` event parameter. Multi-tick simulation time is now communicated via the `/ExternalSimulationTime` Fabric prim instead.

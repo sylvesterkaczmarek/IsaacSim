@@ -14,4 +14,6 @@
 # limitations under the License.
 
 from .bindings import _transform_listener  # noqa: F401
-from .impl import *
+from .impl.extension import Extension as Extension
+
+__all__ = []

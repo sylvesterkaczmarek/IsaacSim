@@ -14,12 +14,12 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/logging/Log.h>
 
-#include <isaacsim/hsb/core/RGBToVB1940Kernels.h>
+#include <isaacsim/hsb/core/RGBToVB1940Kernels.hpp>
 
 #include <OgnRGBToVB1940Database.h>
 #include <cstdint>

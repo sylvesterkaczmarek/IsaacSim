@@ -25,6 +25,7 @@ import warp as wp
 from isaacsim.core.experimental.prims import XformPrim
 from isaacsim.core.experimental.utils.backend import use_backend
 from isaacsim.core.simulation_manager import IsaacEvents
+from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
 from .common import (
     check_allclose,
@@ -54,8 +55,44 @@ async def populate_stage(max_num_prims: int, operation: Literal["wrap", "create"
     stage_utils.define_prim(f"/World", "Xform")
     stage_utils.define_prim(f"/World/PhysicsScene", "PhysicsScene")
     for i in range(max_num_prims):
-        stage_utils.define_prim(f"/World/A_{i}", "Xform")
+        xform_prim = stage_utils.define_prim(f"/World/A_{i}", "Xform")
         stage_utils.define_prim(f"/World/A_{i}/B", "Cube")
+        UsdPhysics.RigidBodyAPI.Apply(xform_prim)
+        mass_api = UsdPhysics.MassAPI.Apply(xform_prim)
+        mass_api.GetMassAttr().Set(1.0)
+
+
+async def populate_stage_with_rotation(
+    max_num_prims: int,
+    operation: Literal["wrap", "create"],
+    *,
+    xform_op: Literal["orient", "rotateZYX", "transform"],
+    **kwargs: Any,
+) -> None:
+    """Populate stage with prims whose rotation is authored using the given xformOp.
+
+    Args:
+        max_num_prims: Maximum number of prims to create for a test case.
+        operation: Stage population operation to use.
+        xform_op: Name of the xformOp used to author each prim's rotation.
+        **kwargs: Additional keyword arguments.
+    """
+    await populate_stage(max_num_prims, operation, **kwargs)
+    stage = stage_utils.get_current_stage(backend="usd")
+    translation = Gf.Vec3d(1.0, 2.0, 3.0)
+    rotation = Gf.Rotation(Gf.Vec3d(0.0, 0.0, 1.0), 45.0) * Gf.Rotation(Gf.Vec3d(0.0, 1.0, 0.0), 30.0)
+    for i in range(max_num_prims):
+        xformable = UsdGeom.Xformable(stage.GetPrimAtPath(f"/World/A_{i}"))
+        if xform_op == "orient":
+            xformable.AddTranslateOp().Set(translation)
+            xformable.AddOrientOp().Set(Gf.Quatf(rotation.GetQuat()))
+        elif xform_op == "rotateZYX":
+            xformable.AddTranslateOp().Set(translation)
+            xformable.AddRotateZYXOp().Set(Gf.Vec3f(30.0, 45.0, 60.0))
+        elif xform_op == "transform":
+            xformable.AddTransformOp().Set(Gf.Matrix4d().SetRotate(rotation) * Gf.Matrix4d().SetTranslate(translation))
+        else:
+            raise ValueError(f"Unsupported xformOp: {xform_op}")
 
 
 class TestXformPrim(omni.kit.test.AsyncTestCase):
@@ -195,6 +232,37 @@ class TestXformPrim(omni.kit.test.AsyncTestCase):
         prim_class=XformPrim,
         populate_stage_func=populate_stage,
     )
+    async def test_world_scales(self, prim: Any, num_prims: Any, device: Any, backend: Any) -> None:
+        """Test world scales.
+
+        Args:
+            prim: Prim or prim wrapper under test.
+            num_prims: Number of prims under test.
+            device: Device under test.
+            backend: Backend name under test.
+        """
+        # check backend
+        if backend in ["usdrt", "fabric"]:
+            await omni.kit.app.get_app().next_update_async()
+        else:
+            prim.reset_xform_op_properties()
+        # test cases
+        for indices, expected_count in draw_indices(count=num_prims, step=2):
+            cprint(f"  |    |-- indices: {type(indices).__name__}, expected_count: {expected_count}")
+            for v0, expected_v0 in draw_sample(shape=(expected_count, 3), dtype=wp.float32):
+                with use_backend(backend, raise_on_unsupported=True, raise_on_fallback=True):
+                    # we set local scales, when we get the global scale, we should get the same scale
+                    prim.set_local_scales(v0, indices=indices)
+                    output = prim.get_world_scales(indices=indices)
+                check_array(output, shape=(expected_count, 3), dtype=wp.float32, device=device)
+                check_allclose(expected_v0, output, given=(v0,))
+
+    @parametrize(
+        backends=["usd", "usdrt", "fabric"],
+        operations=["wrap"],
+        prim_class=XformPrim,
+        populate_stage_func=populate_stage,
+    )
     async def test_local_scales(self, prim: Any, num_prims: Any, device: Any, backend: Any) -> None:
         """Test local scales.
 
@@ -299,6 +367,36 @@ class TestXformPrim(omni.kit.test.AsyncTestCase):
             number_of_materials == count
         ), f"{count} materials should have been applied. Applied: {number_of_materials}"
 
+    @parametrize(
+        backends=["usd"],
+        instances=["one"],
+        operations=["wrap"],
+        prim_class=XformPrim,
+        populate_stage_func=populate_stage,
+    )
+    async def test_physics_materials(self, prim: Any, num_prims: Any, device: Any, backend: Any) -> None:
+        """Test physics material binding on an Xform prim.
+
+        Args:
+            prim: Prim wrapper under test.
+            num_prims: Number of prims under test.
+            device: Device under test.
+            backend: Backend name under test.
+        """
+        from isaacsim.core.experimental.materials import RigidBodyMaterial
+        from pxr import UsdShade
+
+        material = RigidBodyMaterial("/materials/physics", static_frictions=[0.9])
+        with use_backend(backend, raise_on_unsupported=True, raise_on_fallback=True):
+            prim.apply_physics_materials(material, weaker_than_descendants=True)
+
+        binding = UsdShade.MaterialBindingAPI(prim.prims[0]).GetDirectBinding(materialPurpose="physics")
+        self.assertEqual(binding.GetMaterialPath(), material.materials[0].GetPath())
+        self.assertEqual(
+            binding.GetBindingRel().GetMetadata(UsdShade.Tokens.bindMaterialAs),
+            UsdShade.Tokens.weakerThanDescendants,
+        )
+
     @parametrize(backends=["usd"], operations=["wrap"], prim_class=XformPrim, populate_stage_func=populate_stage)
     async def test_events(self, prim: Any, num_prims: Any, device: Any, backend: Any) -> None:
         """Test events.
@@ -309,6 +407,7 @@ class TestXformPrim(omni.kit.test.AsyncTestCase):
             device: Device under test.
             backend: Backend name under test.
         """
+        await omni.kit.app.get_app().next_update_async()
         prim.reset_xform_op_properties()
         # trigger events automatically
         timeline = omni.timeline.get_timeline_interface()
@@ -317,6 +416,7 @@ class TestXformPrim(omni.kit.test.AsyncTestCase):
             for _ in range(2):
                 await omni.kit.app.get_app().next_update_async()
             timeline.stop()
+            await omni.kit.app.get_app().next_update_async()
         # trigger events manually
         event_dispatcher = carb.eventdispatcher.get_eventdispatcher()
         event_dispatcher.dispatch_event(IsaacEvents.PHYSICS_WARMUP.value, payload={})
@@ -327,3 +427,88 @@ class TestXformPrim(omni.kit.test.AsyncTestCase):
         event_dispatcher.dispatch_event(IsaacEvents.PRE_PHYSICS_STEP.value, payload={})
         event_dispatcher.dispatch_event(IsaacEvents.POST_PHYSICS_STEP.value, payload={})
         event_dispatcher.dispatch_event(IsaacEvents.TIMELINE_STOP.value, payload={})
+
+    # -- reset_xform_op_properties: world pose preservation --
+
+    async def _check_world_transforms_after_reset(self, prim: XformPrim) -> None:
+        """Reset the transformation operation attributes of the wrapped prims and compare world transforms.
+
+        Args:
+            prim: Prim wrapper under test.
+        """
+        # let the app tick so that graph execution on the newly opened stage settles before it is replaced
+        await omni.kit.app.get_app().next_update_async()
+        compute_transforms = lambda: [
+            np.array(UsdGeom.Xformable(p).ComputeLocalToWorldTransform(Usd.TimeCode.Default()), dtype=np.float64)
+            for p in prim.prims
+        ]
+        expected = compute_transforms()
+        prim.reset_xform_op_properties()
+        output = compute_transforms()
+        check_allclose(expected, output)
+        for p in prim.prims:
+            cprint(f"  |    |-- xformOpOrder: {list(p.GetAttribute('xformOpOrder').Get())}")
+            check_lists(
+                ["xformOp:translate", "xformOp:orient", "xformOp:scale"],
+                list(p.GetAttribute("xformOpOrder").Get()),
+            )
+
+    @parametrize(
+        backends=["usd"],
+        operations=["wrap"],
+        prim_class=XformPrim,
+        populate_stage_func=populate_stage_with_rotation,
+        populate_stage_func_kwargs={"xform_op": "orient"},
+    )
+    async def test_reset_xform_op_properties_from_orient(
+        self, prim: Any, num_prims: Any, device: Any, backend: Any
+    ) -> None:
+        """Test world pose preservation when resetting prims authored with 'xformOp:orient'.
+
+        Args:
+            prim: Prim or prim wrapper under test.
+            num_prims: Number of prims under test.
+            device: Device under test.
+            backend: Backend name under test.
+        """
+        await self._check_world_transforms_after_reset(prim)
+
+    @parametrize(
+        backends=["usd"],
+        operations=["wrap"],
+        prim_class=XformPrim,
+        populate_stage_func=populate_stage_with_rotation,
+        populate_stage_func_kwargs={"xform_op": "rotateZYX"},
+    )
+    async def test_reset_xform_op_properties_from_rotate_zyx(
+        self, prim: Any, num_prims: Any, device: Any, backend: Any
+    ) -> None:
+        """Test world pose preservation when resetting prims authored with 'xformOp:rotateZYX'.
+
+        Args:
+            prim: Prim or prim wrapper under test.
+            num_prims: Number of prims under test.
+            device: Device under test.
+            backend: Backend name under test.
+        """
+        await self._check_world_transforms_after_reset(prim)
+
+    @parametrize(
+        backends=["usd"],
+        operations=["wrap"],
+        prim_class=XformPrim,
+        populate_stage_func=populate_stage_with_rotation,
+        populate_stage_func_kwargs={"xform_op": "transform"},
+    )
+    async def test_reset_xform_op_properties_from_transform(
+        self, prim: Any, num_prims: Any, device: Any, backend: Any
+    ) -> None:
+        """Test world pose preservation when resetting prims authored with 'xformOp:transform'.
+
+        Args:
+            prim: Prim or prim wrapper under test.
+            num_prims: Number of prims under test.
+            device: Device under test.
+            backend: Backend name under test.
+        """
+        await self._check_world_transforms_after_reset(prim)

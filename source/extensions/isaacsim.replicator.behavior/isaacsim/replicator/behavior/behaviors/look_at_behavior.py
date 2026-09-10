@@ -20,6 +20,11 @@ from __future__ import annotations
 from typing import Any
 
 import carb
+import isaacsim.core.experimental.utils.prim as prim_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
+import isaacsim.core.experimental.utils.xform as xform_utils
+import numpy as np
+import omni.replicator.core as rep
 from isaacsim.replicator.behavior.global_variables import EXPOSED_ATTR_NS
 from isaacsim.replicator.behavior.utils.behavior_utils import (
     check_if_exposed_variables_should_be_removed,
@@ -27,15 +32,8 @@ from isaacsim.replicator.behavior.utils.behavior_utils import (
     get_exposed_variable,
     remove_exposed_variables,
 )
-from isaacsim.replicator.behavior.utils.scene_utils import (
-    calculate_look_at_rotation,
-    get_rotation_op_and_value,
-    get_world_location,
-    set_rotation_op_and_value,
-    set_rotation_with_ops,
-)
 from omni.behavior.scripting.core import BehaviorScript
-from pxr import Gf, Sdf, Usd, UsdGeom
+from pxr import Gf, Sdf, UsdGeom
 
 
 class LookAtBehavior(BehaviorScript):
@@ -146,18 +144,26 @@ class LookAtBehavior(BehaviorScript):
             return
 
         # Get the prims to apply the behavior to
-        if self._include_children:
-            self._valid_prims = [prim for prim in Usd.PrimRange(self.prim) if prim.IsA(UsdGeom.Xformable)]
-        elif self.prim.IsA(UsdGeom.Xformable):
-            self._valid_prims = [self.prim]
+        if self.prim and self.prim.IsValid():
+            if self._include_children:
+                self._valid_prims = prim_utils.get_all_matching_child_prims(
+                    self.prim,
+                    predicate=lambda prim, _: prim.IsValid() and prim.IsA(UsdGeom.Xformable),
+                    include_self=True,
+                )
+            elif self.prim.IsA(UsdGeom.Xformable):
+                self._valid_prims = [self.prim]
+            else:
+                self._valid_prims = []
         else:
             self._valid_prims = []
+        if not self._valid_prims:
             carb.log_warn(f"[{self.prim_path}] No valid prims found.")
 
-        # Save the initial rotation op and value of the prims (create xformOp:orient if none present)
+        # Save the initial local orientations of the prims.
         for prim in self._valid_prims:
-            rotation_data = get_rotation_op_and_value(prim)
-            self._initial_rotations[prim] = rotation_data
+            _, orientation = xform_utils.get_local_pose(prim, device="cpu")
+            self._initial_rotations[prim] = orientation.numpy().tolist()
 
         # Check if targetPrimPath is specified and retrieve the target prim
         if target_prim_path:
@@ -165,7 +171,8 @@ class LookAtBehavior(BehaviorScript):
                 carb.log_warn(f"[{self.prim_path}] Stage is not valid to access target prim '{target_prim_path}'.")
                 self._target_prim = None
             else:  # Stage is valid
-                fetched_prim = self.stage.GetPrimAtPath(Sdf.Path(target_prim_path))
+                with stage_utils.use_stage(self.stage):
+                    fetched_prim = prim_utils.get_prim_at_path(target_prim_path)
                 if fetched_prim and fetched_prim.IsValid() and fetched_prim.IsA(UsdGeom.Xformable):
                     self._target_prim = fetched_prim
                 else:
@@ -176,33 +183,41 @@ class LookAtBehavior(BehaviorScript):
 
     def _reset(self) -> None:
         # Set prims back to their initial rotations
-        for prim, rotation_data in self._initial_rotations.items():
-            rotation_op_name, rotation_value = rotation_data
-            set_rotation_op_and_value(prim, rotation_op_name, rotation_value)
+        for prim, orientation in self._initial_rotations.items():
+            if prim_utils.is_prim_valid(prim):
+                quaternion = Gf.Quatd(orientation[0], Gf.Vec3d(*orientation[1:]))
+                with stage_utils.use_stage(self.stage):
+                    rep.functional.modify.rotation(prim, quaternion, write_to_usd=True)
         # Clear cached values
         self._valid_prims.clear()
         self._initial_rotations.clear()
+        self._target_prim = None
         self._interval = 0
         self._update_counter = 0
 
     def _apply_behavior(self) -> None:
-        target_location = self._get_target_location()
-
+        target = (
+            self._target_prim
+            if self._target_prim is not None and prim_utils.is_prim_valid(self._target_prim)
+            else self._target_location
+        )
+        if isinstance(target, Gf.Vec3d):
+            target_position = np.asarray(target)
+        else:
+            target_position, _ = xform_utils.get_world_pose(target, device="cpu")
+            target_position = target_position.numpy()
         for prim in self._valid_prims:
-            # Get the world position of the current prim (camera) we want to orient towards the target
-            eye = get_world_location(prim)
-
-            # Calculate the look-at rotation
-            look_at_rotation = calculate_look_at_rotation(eye, target_location, self._up_axis)
-
-            # Set the rotation using and existing xformOp (orient, rotate, transform) or create a new default xformOp:orient
-            set_rotation_with_ops(prim, look_at_rotation)
-
-    def _get_target_location(self) -> Gf.Vec3d:
-        # Fetches the target location from the prim or stored location
-        if self._target_prim:
-            return get_world_location(self._target_prim)
-        return self._target_location
+            if prim_utils.is_prim_valid(prim):
+                eye_position, _ = xform_utils.get_world_pose(prim, device="cpu")
+                if np.linalg.norm(target_position - eye_position.numpy()) < 1e-6:
+                    continue
+                with stage_utils.use_stage(self.stage):
+                    rep.functional.modify.look_at(
+                        prim,
+                        target,
+                        look_at_up_axis=self._up_axis,
+                        write_to_usd=True,
+                    )
 
     def _get_exposed_variable(self, attr_name: str) -> Any:
         full_attr_name = f"{EXPOSED_ATTR_NS}:{self.BEHAVIOR_NS}:{attr_name}"

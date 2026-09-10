@@ -19,6 +19,7 @@ These tests validate JSON and debug image output for pinhole, fisheye, OpenCV
 pinhole, and generalized projection cameras against golden data.
 """
 
+import glob
 import json
 import os
 import tempfile
@@ -28,6 +29,7 @@ import numpy as np
 import omni.kit
 import omni.replicator.core as rep
 import omni.usd
+from isaacsim.replicator.writers import PoseWriter
 from isaacsim.test.utils.file_validation import validate_folder_contents
 from isaacsim.test.utils.image_comparison import compare_images_in_directories
 
@@ -51,6 +53,9 @@ def compare_nested_structures_with_tolerance(
     if isinstance(data1, (list, tuple)) and isinstance(data2, (list, tuple)):
         if len(data1) != len(data2):
             return f"Length mismatch at {path}: {len(data1)} != {len(data2)}"
+        if data1 and data2 and all(isinstance(item, dict) and "prim_path" in item for item in (*data1, *data2)):
+            data1 = sorted(data1, key=lambda item: item["prim_path"])
+            data2 = sorted(data2, key=lambda item: item["prim_path"])
         if any(isinstance(x, float) for x in data1 + data2):
             try:
                 np.testing.assert_allclose(data1, data2, rtol=rtol, atol=atol)
@@ -400,3 +405,77 @@ class TestPoseWriter(omni.kit.test.AsyncTestCase):
             os.path.dirname(os.path.realpath(__file__)), "data", "golden", "_out_test_pose_writer_generalizedProjection"
         )
         self._validate_and_compare_output(out_dir, golden_dir)
+
+    async def test_label_from_id_to_labels_prefers_class_and_falls_back(self) -> None:
+        """Test label extraction prefers class and uses other semantic types as fallback."""
+        self.assertEqual(PoseWriter._label_from_id_to_labels({"class": "cube_a"}), "cube_a")
+        self.assertEqual(PoseWriter._label_from_id_to_labels({"prim": "my_cube"}), "my_cube")
+        self.assertEqual(PoseWriter._label_from_id_to_labels({"class": "cube_a", "prim": "cube_b"}), "cube_a")
+        self.assertEqual(PoseWriter._label_from_id_to_labels({"class": 0, "prim": "cube_b"}), "0")
+        self.assertIsNone(PoseWriter._label_from_id_to_labels({}))
+        self.assertIsNone(PoseWriter._label_from_id_to_labels(None))
+
+    async def test_pose_writer_writes_non_class_semantic_type(self) -> None:
+        """Test PoseWriter writes a frame when the only semantic type is not class."""
+        await omni.usd.get_context().new_stage_async()
+        rep.functional.create.xform(name="World")
+        rep.functional.create.dome_light(intensity=500, parent="/World", name="DomeLight")
+        cube = rep.functional.create.cube(position=(0, 0, 0), parent="/World", name="Cube")
+        rep.functional.modify.semantics(cube, {"prim": "my_cube"}, mode="add")
+        cam = rep.functional.create.camera(position=(0, 0, 8), look_at=(0, 0, 0), parent="/World", name="Cam")
+        rp = rep.create.render_product(cam, (512, 512), name="rp_pose_non_class")
+        out_dir = tempfile.mkdtemp(prefix="test_pose_writer_non_class_")
+
+        backend = rep.backends.get("DiskBackend")
+        backend.initialize(output_dir=out_dir)
+        writer = rep.writers.get("PoseWriter")
+        writer.initialize(backend=backend, skip_empty_frames=False)
+        writer.attach([rp])
+        await rep.orchestrator.step_async(rt_subframes=8)
+        await rep.orchestrator.wait_until_complete_async()
+        writer.detach()
+        rp.destroy()
+
+        json_frames = sorted(glob.glob(os.path.join(out_dir, "**", "*.json"), recursive=True))
+        self.assertGreaterEqual(len(json_frames), 1, f"No PoseWriter JSON frames written under {out_dir}")
+        labels = []
+        for path in json_frames:
+            with open(path) as file:
+                frame = json.load(file)
+            for obj in frame.get("objects", []):
+                labels.append(obj.get("label", obj.get("class")))
+        self.assertIn("my_cube", labels)
+
+    async def test_pose_writer_writes_mixed_semantic_types(self) -> None:
+        """Test PoseWriter writes class-labeled objects when another prim uses a different type."""
+        await omni.usd.get_context().new_stage_async()
+        rep.functional.create.xform(name="World")
+        rep.functional.create.dome_light(intensity=500, parent="/World", name="DomeLight")
+        cube_a = rep.functional.create.cube(position=(-1.2, 0, 0), parent="/World", name="CubeA")
+        cube_b = rep.functional.create.cube(position=(1.2, 0, 0), parent="/World", name="CubeB")
+        rep.functional.modify.semantics(cube_a, {"class": "cube_a"}, mode="add")
+        rep.functional.modify.semantics(cube_b, {"prim": "cube_b"}, mode="add")
+        cam = rep.functional.create.camera(position=(0, 0, 8), look_at=(0, 0, 0), parent="/World", name="Cam")
+        rp = rep.create.render_product(cam, (512, 512), name="rp_pose_mixed")
+        out_dir = tempfile.mkdtemp(prefix="test_pose_writer_mixed_")
+
+        backend = rep.backends.get("DiskBackend")
+        backend.initialize(output_dir=out_dir)
+        writer = rep.writers.get("PoseWriter")
+        writer.initialize(backend=backend, skip_empty_frames=False)
+        writer.attach([rp])
+        await rep.orchestrator.step_async(rt_subframes=8)
+        await rep.orchestrator.wait_until_complete_async()
+        writer.detach()
+        rp.destroy()
+
+        json_frames = sorted(glob.glob(os.path.join(out_dir, "**", "*.json"), recursive=True))
+        self.assertGreaterEqual(len(json_frames), 1, f"No PoseWriter JSON frames written under {out_dir}")
+        labels = []
+        for path in json_frames:
+            with open(path) as file:
+                frame = json.load(file)
+            for obj in frame.get("objects", []):
+                labels.append(obj.get("label", obj.get("class")))
+        self.assertIn("cube_a", labels)
+        self.assertIn("cube_b", labels)

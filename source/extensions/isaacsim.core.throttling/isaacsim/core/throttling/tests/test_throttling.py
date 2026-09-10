@@ -19,6 +19,7 @@ import contextlib
 import sys
 import types
 from collections.abc import Generator
+from unittest import mock
 
 import carb
 import carb.settings
@@ -202,6 +203,46 @@ class TestIsaacThrottling(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
         self.assertEqual(self._settings.get("/rtx/ecoMode/enabled"), True)
         self.assertEqual(self._settings.get("/exts/omni.kit.hydra_texture/gizmos/enabled"), True)
+
+    async def test_on_play_warns_when_stage_has_no_usable_time_code_range(self) -> None:
+        """Warn that a degenerate time range collapses playback to one frame."""
+        extension = get_instance()
+        self.assertIsNotNone(extension)
+        assert extension is not None
+
+        with (
+            mock.patch(
+                "isaacsim.core.throttling.extension.stage_utils.get_stage_time_code",
+                return_value=(0.0, 0.0, 24.0),
+            ),
+            mock.patch("isaacsim.core.throttling.extension.carb.log_warn") as log_warn,
+        ):
+            extension._on_play(None)
+
+        matching_warnings = [
+            call.args[0] for call in log_warn.call_args_list if "no usable time-code range" in call.args[0]
+        ]
+        self.assertEqual(len(matching_warnings), 1)
+
+    async def test_on_play_does_not_warn_when_stage_has_usable_time_code_range(self) -> None:
+        """Do not emit the time-range warning for a stage with valid playback bounds."""
+        extension = get_instance()
+        self.assertIsNotNone(extension)
+        assert extension is not None
+
+        with (
+            mock.patch(
+                "isaacsim.core.throttling.extension.stage_utils.get_stage_time_code",
+                return_value=(0.0, 1_000_000.0, 24.0),
+            ),
+            mock.patch("isaacsim.core.throttling.extension.carb.log_warn") as log_warn,
+        ):
+            extension._on_play(None)
+
+        matching_warnings = [
+            call.args[0] for call in log_warn.call_args_list if "no usable time-code range" in call.args[0]
+        ]
+        self.assertEqual(matching_warnings, [])
 
     async def test_play_defers_async_rendering_disable(self) -> None:
         """Verify play defers async rendering shutdown until after the play callback returns."""

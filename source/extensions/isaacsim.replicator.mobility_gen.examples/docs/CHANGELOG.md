@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.4.1] - 2026-08-31
+### Fixed
+- Robot classes no longer resolve the Isaac assets root at import time, so an unreachable assets server no longer makes the extension (and the MobilityGen UI) fail to load.
+
+## [0.4.0] - 2026-08-10
+### Changed
+- `PolicyMultiSensorRobot.build_sensor_rig`: mount the configured `front_camera_type` before building the rig, since the H1 and Spot assets carry no cameras to bind.
+- `h1.yaml`, `spot.yaml`: capture a stereo pair, renaming their sensors to `front_camera_left` and `front_camera_right`; `jetbot.yaml`'s is `front_camera`.
+
+### Fixed
+- `jetbot.yaml`, `h1.yaml`, `spot.yaml`: point each sensor rig at camera prims that exist. The old paths did not, so those robots attached no cameras and recorded no images.
+
+## [0.3.8] - 2026-07-27
+### Changed
+- Run the H1 and Spot policy robots through `RobotPolicyRunner`; correct Spot's physics timestep to 0.002 seconds.
+
+## [0.3.7] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [0.3.6] - 2026-07-15
+### Changed
+- Replace the local `_join_sdf_paths` helper (and the direct `pxr` import) with `join_prim_paths` from `isaacsim.core.experimental.utils`
+
+## [0.3.5] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+- Migrate sensor-rig generation to the current stage utilities.
+
 ## [0.3.4] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

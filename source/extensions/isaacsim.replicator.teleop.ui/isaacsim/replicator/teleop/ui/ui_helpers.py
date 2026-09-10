@@ -39,7 +39,11 @@ GLYPHS = {
     "plus": ui.get_custom_glyph_code("${glyphs}/plus.svg"),
     "delete": ui.get_custom_glyph_code("${glyphs}/menu_delete.svg"),
     "open_folder": ui.get_custom_glyph_code("${glyphs}/folder_open.svg"),
+    "reset": ui.get_custom_glyph_code("${glyphs}/menu_refresh.svg"),
 }
+
+# Snap bipolar debug thumbsticks to zero when dragged within this band of center.
+DEBUG_SLIDER_ZERO_SNAP_THRESHOLD = 0.05
 
 
 # =========================================================================
@@ -151,3 +155,87 @@ def _set_field_from_selection(model: object) -> None:
         model.set_value(path)
     else:
         print("[Teleop][UI] No prim selected.")
+
+
+def snap_debug_slider_value(
+    value: float,
+    minimum: float,
+    maximum: float,
+    *,
+    threshold: float = DEBUG_SLIDER_ZERO_SNAP_THRESHOLD,
+) -> float:
+    """Snap a debug slider reading to its neutral value when near zero.
+
+    Bipolar sliders (``minimum < 0``) snap to ``0.0``. Unipolar sliders snap to
+    ``minimum`` (typically ``0.0`` for grasp triggers).
+
+    Args:
+        value: Raw slider value.
+        minimum: Slider minimum.
+        maximum: Slider maximum.
+        threshold: Distance from neutral within which values are snapped.
+
+    Returns:
+        Snapped slider value.
+    """
+    neutral = 0.0 if minimum < 0.0 else minimum
+    if abs(value - neutral) < threshold:
+        return neutral
+    return value
+
+
+def build_debug_slider(
+    *,
+    minimum: float,
+    maximum: float,
+    step: float = 0.01,
+    default: float = 0.0,
+    tooltip: str = "",
+    on_value_changed: Callable[[float], None],
+    snap_threshold: float = DEBUG_SLIDER_ZERO_SNAP_THRESHOLD,
+    widgets_out: list | None = None,
+) -> ui.FloatSlider:
+    """Create a debug FloatSlider with snap-to-neutral and a reset button.
+
+    Args:
+        minimum: Slider minimum.
+        maximum: Slider maximum.
+        step: Slider step size.
+        default: Value applied by the reset button and initial slider position.
+        tooltip: Tooltip for the slider and reset button.
+        on_value_changed: Callback invoked with the snapped value on drag or reset.
+        snap_threshold: Neutral snap band (see :func:`snap_debug_slider_value`).
+        widgets_out: If provided, appends the slider and reset button for enable/disable.
+
+    Returns:
+        The created ``ui.FloatSlider``.
+    """
+    slider = ui.FloatSlider(
+        min=minimum,
+        max=maximum,
+        step=step,
+        width=ui.Fraction(1),
+        tooltip=tooltip,
+    )
+    slider.model.set_value(default)
+
+    def _apply_value(raw: float, *, force: bool = False) -> None:
+        snapped = snap_debug_slider_value(raw, minimum, maximum, threshold=snap_threshold)
+        if force or snapped != raw:
+            slider.model.set_value(snapped)
+        on_value_changed(snapped)
+
+    slider.model.add_value_changed_fn(lambda model: _apply_value(model.get_value_as_float()))
+
+    reset_tooltip = f"Reset to {default:g}"
+    if tooltip:
+        reset_tooltip = f"{reset_tooltip}\n{tooltip}"
+    reset_btn = ui.Button(
+        f"{GLYPHS['reset']}",
+        width=22,
+        clicked_fn=lambda: _apply_value(default, force=True),
+        tooltip=reset_tooltip,
+    )
+    if widgets_out is not None:
+        widgets_out.extend((slider, reset_btn))
+    return slider

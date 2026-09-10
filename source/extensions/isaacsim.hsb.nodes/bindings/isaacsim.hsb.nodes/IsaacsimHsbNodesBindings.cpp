@@ -15,7 +15,7 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/hsb/nodes/IHsbNodes.h>
+#include <isaacsim/hsb/nodes/IHsbNodes.hpp>
 
 CARB_BINDINGS("isaacsim.hsb.nodes.python")
 

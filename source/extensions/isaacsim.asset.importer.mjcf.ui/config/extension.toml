@@ -1,5 +1,5 @@
 [package]
-version = "1.4.4"
+version = "1.4.7"
 category = "Simulation"
 title = "Omniverse MJCF Importer UI"
 description = "UI components for the MJCF Importer - provides the graphical interface for importing MuJoCo MJCF files into Omniverse USD scenes."
@@ -38,6 +38,7 @@ dependencies = [
 
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
+    '*ui.Menu item failed to become show for File*',
 ]
 
 args = [

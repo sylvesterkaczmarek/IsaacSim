@@ -35,7 +35,11 @@ class TestSingleViewDepthSensorAsset(omni.kit.test.AsyncTestCase):
         self.assets_root_path = get_assets_root_path()
 
     async def test_valid_asset_path_initialization_and_depth_sensor_access(self) -> None:
-        """Test valid asset path initialization and depth sensor access."""
+        """Test valid asset path initialization and depth sensor access.
+
+        Raises:
+            AssertionError: If the asset path, depth sensor lookup, or enabled state does not match the expected result.
+        """
         # Create SingleViewDepthSensorAsset with valid asset path
         depth_sensor_asset = SingleViewDepthSensorAsset(
             prim_path="/sensor", asset_path=f"{self.assets_root_path}/Isaac/Sensors/RealSense/D455/rsd455.usd"
@@ -62,7 +66,11 @@ class TestSingleViewDepthSensorAsset(omni.kit.test.AsyncTestCase):
         self.assertTrue(depth_sensor.get_enabled())
 
     async def test_add_template_render_product_static_method(self) -> None:
-        """Test the add_template_render_product static method."""
+        """Test the add_template_render_product static method.
+
+        Raises:
+            AssertionError: If RenderProduct creation, API application, camera relationship, or prim path is incorrect.
+        """
         stage = omni.usd.get_context().get_stage()
 
         # Create a Camera on the stage at prim path "/camera"

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-asset_path: /Isaac/Robots/NVIDIA/Jetbot/jetbot.usd
+asset_path: /Isaac/Robots_Multiphysics/NVIDIA/Jetbot/jetbot.usda
 physics_dt: 0.005
 z_offset: 0.1
 
@@ -60,8 +60,8 @@ wheel:
 
 sensor_rig:
   sensors:
-    - name: front_hawk
+    - name: front_camera
       type: camera
-      sensor_prim_path: chassis/rgb_camera/front_hawk
+      sensor_prim_path: chassis/rgb_camera/jetbot_camera
       width_px: 1920
       height_px: 1200

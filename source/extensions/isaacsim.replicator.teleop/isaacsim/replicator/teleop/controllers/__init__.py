@@ -39,7 +39,7 @@ from .grasp import (
     resolve_grasp_config_path,
 )
 from .lm_ik import LMIKController
-from .locomotion import LocomotionController
+from .locomotion import LocomotionController, LocomotionDriveMode
 from .pink_ik import PinkIKController
 from .position_ik import PositionBasedIKController
 from .robot_ik import (
@@ -68,6 +68,7 @@ __all__ = [
     "IKValidationResult",
     "LMIKController",
     "LocomotionController",
+    "LocomotionDriveMode",
     "PinkIKController",
     "PositionBasedIKController",
     "RobotIKController",

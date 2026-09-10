@@ -1,6 +1,6 @@
 {
     "OgnSampleBetweenSpheres": {
-        "version": 1,
+        "version": 2,
         "description": "Assigns uniformly sampled between two spheres",
         "language": "Python",
         "categoryDefinitions": "config/CategoryDefinition.json",
@@ -29,6 +29,11 @@
                 "type": "float",
                 "description": "outer sphere radius",
                 "default": 1.0
+            },
+            "seed": {
+                "type": "int",
+                "description": "Random number generator seed. A negative value uses the Replicator global seed.",
+                "default": -1
             }
         },
         "outputs": {

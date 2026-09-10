@@ -49,10 +49,10 @@ def set_prim_variants(prim: str | Usd.Prim, *, variants: list[tuple[str, str]]) 
         >>> from isaacsim.storage.native import get_assets_root_path
         >>>
         >>> stage_utils.open_stage(
-        ...     get_assets_root_path() + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        ...     get_assets_root_path() + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
         ... )  # doctest: +NO_CHECK
         >>>
-        >>> prim_utils.set_prim_variants("/panda", variants=[("Mesh", "Quality"), ("Gripper", "AlternateFinger")])
+        >>> prim_utils.set_prim_variants("/panda", variants=[("Mesh", "quality"), ("Gripper", "alternatefinger")])
     """
     prim = stage_utils.get_current_stage(backend="usd").GetPrimAtPath(prim) if isinstance(prim, str) else prim
     available_variant_sets = prim.GetVariantSets().GetNames()
@@ -88,11 +88,11 @@ def get_prim_variants(prim: str | Usd.Prim) -> list[tuple[str, str]]:
         >>> from isaacsim.storage.native import get_assets_root_path
         >>>
         >>> stage_utils.open_stage(
-        ...     get_assets_root_path() + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        ...     get_assets_root_path() + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
         ... )  # doctest: +NO_CHECK
         >>>
         >>> prim_utils.get_prim_variants("/panda")
-        [('Gripper', 'Default'), ('Mesh', 'Performance')]
+        [('Gripper', 'default'), ('Mesh', 'performance'), ('Physics', 'physx')]
     """
     prim = stage_utils.get_current_stage(backend="usd").GetPrimAtPath(prim) if isinstance(prim, str) else prim
     return [
@@ -121,11 +121,11 @@ def get_prim_variant_collection(prim: str | Usd.Prim) -> dict[str, list[str]]:
         >>> from isaacsim.storage.native import get_assets_root_path
         >>>
         >>> stage_utils.open_stage(
-        ...     get_assets_root_path() + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        ...     get_assets_root_path() + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
         ... )  # doctest: +NO_CHECK
         >>>
         >>> prim_utils.get_prim_variant_collection("/panda")
-        {'Mesh': ['Performance', 'Quality'], 'Gripper': ['AlternateFinger', 'Default', 'None', 'Robotiq_2F_85']}
+        {'Gripper': ['alternatefinger', 'default', 'none', 'robotiq_2f_85'], 'Mesh': ['performance', 'quality'], 'Physics': ['none', 'physics', 'physx']}
     """
     prim = stage_utils.get_current_stage(backend="usd").GetPrimAtPath(prim) if isinstance(prim, str) else prim
     return {
@@ -203,6 +203,48 @@ def get_prim_path(prim: Usd.Prim | usdrt.Usd.Prim | Usd.SchemaBase | usdrt.Usd.S
     elif isinstance(prim, usdrt.Usd.SchemaBase):  # USDRT SchemaBase uses `GetPrimPath` instead of `GetPath`
         return prim.GetPrimPath().pathString
     return prim.GetPath().pathString
+
+
+def join_prim_paths(*paths: str) -> str:
+    """Join one or more prim path segments into a single (validated) prim path.
+
+    Backends: :guilabel:`usd`, :guilabel:`usdrt`, :guilabel:`fabric`.
+
+    Leading and trailing path separators (``/``) in each segment are ignored, and empty segments are skipped.
+    The joined path is validated to ensure it is a valid (USD-compatible) prim path.
+
+    Args:
+        paths: Prim path segments to join.
+
+    Returns:
+        Joined prim path.
+
+    Raises:
+        ValueError: If a path segment is not a valid prim path (e.g.: it contains invalid characters).
+
+    Example:
+
+    .. code-block:: python
+
+        >>> import isaacsim.core.experimental.utils.prim as prim_utils
+        >>>
+        >>> prim_utils.join_prim_paths("/World", "robot", "camera_left")
+        '/World/robot/camera_left'
+        >>> prim_utils.join_prim_paths("/World/", "", "/robot/camera_left/")
+        '/World/robot/camera_left'
+    """
+    base = paths[0].rstrip("/") if paths else ""
+    if base and not (Sdf.Path.IsValidPathString(base) and Sdf.Path(base).IsPrimPath()):
+        raise ValueError(f"Invalid prim path segment: '{paths[0]}'")
+    result = Sdf.Path(base) if base else Sdf.Path.absoluteRootPath
+    for path in paths[1:]:
+        path = path.strip("/")
+        if not path:
+            continue
+        if not (Sdf.Path.IsValidPathString(path) and Sdf.Path(path).IsPrimPath()):
+            raise ValueError(f"Invalid prim path segment: '{path}'")
+        result = result.AppendPath(path)
+    return result.pathString
 
 
 def find_matching_prim_paths(path: str, *, traverse: bool = False) -> list[str]:
@@ -431,7 +473,11 @@ def get_first_matching_parent_prim(
 
 
 def has_api(
-    prim: str | Usd.Prim, api: str | type | list[str | type], *, test: Literal["all", "any", "none"] = "all"
+    prim: str | Usd.Prim,
+    api: str | type | list[str | type],
+    *,
+    instance_name: str | None = None,
+    test: Literal["all", "any", "none"] = "all",
 ) -> bool:
     """Check if a prim has or not the given API schema(s) applied.
 
@@ -440,6 +486,7 @@ def has_api(
     Args:
         prim: Prim path or prim instance.
         api: API schema name or type, or a list of them.
+        instance_name: Optional instance name for multi-apply API schemas.
         test: Checking operation to test for. Supported values are:
 
             - ``"all"``: All APIs must be present.
@@ -470,9 +517,10 @@ def has_api(
     applied_schemas = prim.GetAppliedSchemas()
     for item in api if isinstance(api, (list, tuple)) else [api]:
         if isinstance(item, str):
-            status.append(item in applied_schemas)
+            schema_name = f"{item}:{instance_name}" if instance_name is not None else item
+            status.append(schema_name in applied_schemas)
         else:
-            status.append(prim.HasAPI(item))
+            status.append(prim.HasAPI(item, instance_name) if instance_name is not None else prim.HasAPI(item))
     # test condition
     if test == "all":
         return all(status)
@@ -599,6 +647,72 @@ def get_prim_attribute_value(prim: str | Usd.Prim | usdrt.Usd.Prim, attribute_na
     return attr.Get()
 
 
+def set_prim_attribute_value(prim: str | Usd.Prim | usdrt.Usd.Prim, attribute_name: str, value: Any) -> None:
+    """Set the value of a prim attribute.
+
+    Backends: :guilabel:`usd`, :guilabel:`usdrt`, :guilabel:`fabric`.
+
+    Args:
+        prim: Prim path or prim instance.
+        attribute_name: Name of the attribute to set.
+        value: Value to set on the attribute.
+
+    Raises:
+        ValueError: If the prim does not have the specified attribute.
+
+    Example:
+
+    .. code-block:: python
+
+        >>> import isaacsim.core.experimental.utils.prim as prim_utils
+        >>> import isaacsim.core.experimental.utils.stage as stage_utils
+        >>>
+        >>> stage_utils.define_prim("/World/Cube", "Cube")  # doctest: +NO_CHECK
+        >>> prim_utils.set_prim_attribute_value("/World/Cube", "size", 1.0)
+        >>> prim_utils.get_prim_attribute_value("/World/Cube", "size")
+        1.0
+    """
+    prim = stage_utils.get_current_stage().GetPrimAtPath(prim) if isinstance(prim, str) else prim
+    if not prim.HasAttribute(attribute_name):
+        raise ValueError(f"Prim at path '{prim.GetPath()}' does not have attribute '{attribute_name}'")
+    prim.GetAttribute(attribute_name).Set(value)
+
+
+def delete_prim_attribute(prim: str | Usd.Prim | usdrt.Usd.Prim, attribute_name: str) -> bool:
+    """Delete an attribute from a prim.
+
+    Backends: :guilabel:`usd`, :guilabel:`usdrt`, :guilabel:`fabric`.
+
+    Args:
+        prim: Prim path or prim instance.
+        attribute_name: Name of the attribute to delete.
+
+    Returns:
+        Whether the attribute was deleted successfully.
+
+    Raises:
+        ValueError: If the prim does not have the specified attribute.
+
+    Example:
+
+    .. code-block:: python
+
+        >>> import isaacsim.core.experimental.utils.prim as prim_utils
+        >>> import isaacsim.core.experimental.utils.stage as stage_utils
+        >>> from pxr import Sdf
+        >>>
+        >>> stage_utils.define_prim("/World/Cube", "Cube")  # doctest: +NO_CHECK
+        >>> _ = prim_utils.create_prim_attribute("/World/Cube", name="tag", type_name=Sdf.ValueTypeNames.String)
+        >>> prim_utils.delete_prim_attribute("/World/Cube", "tag")
+        True
+        >>> _ = stage_utils.delete_prim("/World/Cube")
+    """
+    prim = stage_utils.get_current_stage().GetPrimAtPath(prim) if isinstance(prim, str) else prim
+    if not prim.HasAttribute(attribute_name):
+        raise ValueError(f"Prim at path '{prim.GetPath()}' does not have attribute '{attribute_name}'")
+    return prim.RemoveProperty(attribute_name)
+
+
 def get_prim_attribute_names(prim: str | Usd.Prim | usdrt.Usd.Prim) -> list[str]:
     """Get all valid attribute names for a prim.
 
@@ -624,6 +738,34 @@ def get_prim_attribute_names(prim: str | Usd.Prim | usdrt.Usd.Prim) -> list[str]
     """
     prim = stage_utils.get_current_stage().GetPrimAtPath(prim) if isinstance(prim, str) else prim
     return [attr.GetName() for attr in prim.GetAttributes()]
+
+
+def is_prim_valid(prim: str | Usd.Prim | usdrt.Usd.Prim) -> bool:
+    """Check whether a prim is valid on the current stage.
+
+    Backends: :guilabel:`usd`, :guilabel:`usdrt`, :guilabel:`fabric`.
+
+    Args:
+        prim: Prim path or prim instance.
+
+    Returns:
+        Whether the prim is valid.
+
+    Example:
+
+    .. code-block:: python
+
+        >>> import isaacsim.core.experimental.utils.prim as prim_utils
+        >>>
+        >>> prim_utils.is_prim_valid("/World/Missing")
+        False
+    """
+    if isinstance(prim, str):
+        return get_prim_at_path(prim).IsValid()
+    if not prim.IsValid():
+        return False
+    current_prim = get_prim_at_path(get_prim_path(prim))
+    return current_prim.IsValid() and current_prim == prim
 
 
 def is_prim_non_root_articulation_link(prim: str | Usd.Prim | usdrt.Usd.Prim) -> bool:
@@ -657,7 +799,7 @@ def is_prim_non_root_articulation_link(prim: str | Usd.Prim | usdrt.Usd.Prim) ->
         >>> from isaacsim.storage.native import get_assets_root_path
         >>>
         >>> stage_utils.open_stage(
-        ...     get_assets_root_path() + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        ...     get_assets_root_path() + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
         ... )  # doctest: +NO_CHECK
         >>>
         >>> prim_utils.is_prim_non_root_articulation_link("/panda")

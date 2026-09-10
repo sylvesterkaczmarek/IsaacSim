@@ -85,7 +85,19 @@ global_stress_range = [np.inf, 0.0]
 def set_vertex_display_colors(
     deformable_prim: DeformablePrim, *, stress_range: tuple[float, float] | None = None
 ) -> None:
-    """Compute and visualize per-vertex von Mises stress as a color gradient."""
+    """Compute and visualize per-vertex von Mises stress as a color gradient.
+
+    Each call expands the module-wide stress bounds used by subsequent calls whose
+    ``stress_range`` is None. An explicit range controls the current colors but does not skip
+    this accumulation.
+
+    Args:
+        deformable_prim: Deformable body whose simulation mesh receives vertex colors.
+        stress_range: Minimum and maximum stress used for color normalization, or None to use the accumulated range.
+
+    Raises:
+        RuntimeError: If the deformable simulation mesh has no points.
+    """
     geom_prim = UsdGeom.TetMesh(prim_utils.get_prim_at_path(deformable_prim.simulation_mesh_paths[0]))
     surface_indices = UsdGeom.TetMesh.ComputeSurfaceFaces(geom_prim)
     geom_prim.CreateSurfaceFaceVertexIndicesAttr().Set(surface_indices)

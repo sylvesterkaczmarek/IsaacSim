@@ -259,7 +259,7 @@ def get_material_id(prim: Usd.Prim) -> int:
         prim: USD prim that must be a material prim with nonvisual material attributes.
 
     Returns:
-        Computed material ID as an integer. Returns 0 if attributes are not found
+        Computed material ID. Returns 0 if attributes are not found
         or if prim is invalid.
 
     Note:
@@ -342,7 +342,7 @@ def decode_material_id(material_id: int) -> tuple[str, str, str]:
         material_id: Material ID as computed by get_material_id function.
 
     Returns:
-        Tuple containing (base_name, coating_name, attribute_name) as strings.
+        A tuple containing (base_name, coating_name, attribute_name).
         Returns ("none", "none", "none") if any component cannot be decoded.
 
     Raises:

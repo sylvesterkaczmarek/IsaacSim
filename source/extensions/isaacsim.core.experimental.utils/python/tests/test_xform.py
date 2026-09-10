@@ -68,6 +68,23 @@ class TestXform(omni.kit.test.AsyncTestCase):
             # get local poses
             _check_pose(xform_utils.get_local_pose(path_b), [3.0, 3.0, -3.0], [0.0, 0.0, 0.7071, 0.7071])
 
+    async def test_set_local_pose_usd(self) -> None:
+        """Test USD local pose authoring while preserving unspecified components."""
+        path = "/World/UsdPose"
+        stage_utils.define_prim(path)
+
+        with backend_utils.use_backend("usd"):
+            xform_utils.set_local_pose(
+                path,
+                translation=[1.0, 2.0, 3.0],
+                orientation=[0.7071, 0.7071, 0.0, 0.0],
+            )
+            xform_utils.set_local_pose(path, translation=[4.0, 5.0, 6.0])
+            translation, orientation = xform_utils.get_local_pose(path)
+
+        np.testing.assert_allclose(translation.numpy(), [4.0, 5.0, 6.0], atol=1e-4)
+        np.testing.assert_allclose(orientation.numpy(), [0.7071, 0.7071, 0.0, 0.0], atol=1e-4)
+
     async def test_get_relative_transform(self) -> None:
         """Verify get_relative_transform resolves USD prims and returns a valid 4x4 matrix."""
         path_a = "/World/A"

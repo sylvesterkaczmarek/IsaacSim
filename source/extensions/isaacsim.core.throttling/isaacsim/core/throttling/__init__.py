@@ -15,6 +15,7 @@
 
 """Isaac Sim extension that throttles rendering behavior based on timeline state."""
 
-from .extension import *
+from .extension import Extension as Extension
+from .extension import get_instance as get_instance
 
 __all__ = []

@@ -13,14 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include "GenericModelOutput.h"
-#include "LidarConfigHelper.h"
+#include "LidarConfigHelper.hpp"
 #include "OgnIsaacComputeRTXLidarFlatScanDatabase.h"
-#include "isaacsim/core/includes/BaseResetNode.h"
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "isaacsim/core/includes/BaseResetNode.hpp"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 
 #include <cstddef>
 #include <math.h>

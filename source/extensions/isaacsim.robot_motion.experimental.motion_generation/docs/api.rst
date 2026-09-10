@@ -10,9 +10,9 @@ Python API
     :nosignatures:
 
     BaseController
-    ControllerContainer
-    ParallelController
-    SequentialController
+    SelectableController
+    CombinedController
+    ChainedController
     TrajectoryFollower
 
 .. rubric:: *State Types*
@@ -67,19 +67,19 @@ Controllers
     :inherited-members:
     :show-inheritance:
 
-.. autoclass:: isaacsim.robot_motion.experimental.motion_generation.ControllerContainer
+.. autoclass:: isaacsim.robot_motion.experimental.motion_generation.SelectableController
     :members:
     :undoc-members:
     :inherited-members:
     :show-inheritance:
 
-.. autoclass:: isaacsim.robot_motion.experimental.motion_generation.ParallelController
+.. autoclass:: isaacsim.robot_motion.experimental.motion_generation.CombinedController
     :members:
     :undoc-members:
     :inherited-members:
     :show-inheritance:
 
-.. autoclass:: isaacsim.robot_motion.experimental.motion_generation.SequentialController
+.. autoclass:: isaacsim.robot_motion.experimental.motion_generation.ChainedController
     :members:
     :undoc-members:
     :inherited-members:

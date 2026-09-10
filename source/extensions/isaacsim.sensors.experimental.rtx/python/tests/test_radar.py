@@ -16,9 +16,11 @@
 """Verify Radar authoring for RTX radar prim wrapping, creation, attributes, Motion BVH, and invalid paths."""
 
 import carb
+import isaacsim.core.experimental.utils.prim as prim_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
 from isaacsim.sensors.experimental.rtx import Radar
+from pxr import Gf, UsdGeom
 
 
 class TestRadar(omni.kit.test.AsyncTestCase):
@@ -55,11 +57,13 @@ class TestRadar(omni.kit.test.AsyncTestCase):
         with self.assertRaises(ValueError):
             Radar("/World/xform")
 
-    async def test_wrap_missing_schema_raises(self) -> None:
-        """Reject wrapping an OmniRadar prim that lacks the radar WPM DMAT schema."""
-        stage_utils.define_prim("/World/radar", "OmniRadar")
-        with self.assertRaises(ValueError):
-            Radar("/World/radar")
+    async def test_wrap_missing_schema_applies_schema(self) -> None:
+        """Apply the radar WPM DMAT schema when wrapping an OmniRadar prim that lacks it."""
+        prim = stage_utils.define_prim("/World/radar", "OmniRadar")
+        self.assertFalse(prim.HasAPI("OmniSensorGenericRadarWpmDmatAPI"))
+        radar = Radar("/World/radar")
+        self.assertEqual(radar.paths[0], "/World/radar")
+        self.assertTrue(radar.prims[0].HasAPI("OmniSensorGenericRadarWpmDmatAPI"))
 
     async def test_wrap_with_tick_rate(self) -> None:
         """Apply a tick rate override while wrapping an existing RTX radar prim."""
@@ -109,6 +113,20 @@ class TestRadar(omni.kit.test.AsyncTestCase):
         )
         self.assertAlmostEqual(radar.prims[0].GetAttribute("omni:sensor:tickRate").Get(), 20.0)
         self.assertEqual(radar.prims[0].GetAttribute("omni:sensor:WpmDmat:cfarMode").Get(), "4D")
+
+    # -- asset transforms --
+
+    async def test_create_nested_asset_transforms_reference_root(self) -> None:
+        """Author transforms on the reference root and keep the vendor's mounting offset."""
+        radar = Radar.create(path="/World/radar", config="IWRL6432AOP", translations=[[1.0, 2.0, 3.0]])
+        self.assertNotEqual(radar.paths[0], "/World/radar")
+        self.assertEqual(radar.asset_root_path, "/World/radar")
+        root = prim_utils.get_prim_at_path("/World/radar")
+        root_world = UsdGeom.Xformable(root).ComputeLocalToWorldTransform(0).ExtractTranslation()
+        self.assertTrue(Gf.IsClose(root_world, Gf.Vec3d(1.0, 2.0, 3.0), 1e-6))
+        # The asset offsets the antenna origin from the housing origin on all three axes.
+        sensor_world = UsdGeom.Xformable(radar.prims[0]).ComputeLocalToWorldTransform(0).ExtractTranslation()
+        self.assertFalse(Gf.IsClose(sensor_world, root_world, 1e-6))
 
     # -- errors --
 

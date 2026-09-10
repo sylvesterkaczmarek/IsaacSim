@@ -60,7 +60,7 @@ class SelectionWatch:
 
     This class provides functionality to watch for selection changes in a stage tree view, apply type-based
     filtering to selected prims, enforce selection limits, and trigger callbacks when valid selections occur.
-    It integrates with Omniverse Kit's stage widget system to provide controlled selection behavior.
+    It integrates with the Omniverse Kit SDK stage widget system to provide controlled selection behavior.
 
     Args:
         stage: The USD stage to monitor for prim selections.
@@ -103,11 +103,7 @@ class SelectionWatch:
         self._last_selected_prim_paths = None
 
     def clear_selection(self) -> None:
-        """Clear the current selection in the tree view.
-
-        Returns:
-            None if the tree view is not set.
-        """
+        """Clear the current selection in the tree view."""
         if not self._tree_view:
             return
 
@@ -121,9 +117,6 @@ class SelectionWatch:
 
         Args:
             selection: The new selection from the tree view.
-
-        Returns:
-            None if the stage is not available or the selection has not changed.
         """
         stage = self._stage()
         if not stage:
@@ -153,11 +146,9 @@ class SelectionWatch:
             self._on_selection_changed_fn(self._last_selected_prim_paths)
 
     def enable_filtering_checking(self, enable: bool) -> None:
-        """It is used to prevent selecting the prims that are filtered out but.
+        """Prevent selecting prims that are filtered out but still displayed when such prims have filtered children.
 
-            still displayed when such prims have filtered children. When `enable`
-            is True, SelectionWatch should consider filtering when changing Kit's
-            selection.
+        When `enable` is True, SelectionWatch should consider filtering when changing Kit's selection.
 
         Args:
             enable: Whether to enable filtering checking during selection changes.
@@ -253,9 +244,6 @@ class RobotAssetPicker:
 
         Args:
             visible: Whether the window is visible.
-
-        Returns:
-            None if the stage widget has not been built yet.
         """
         # the _stage_widget not build yet, will call again in build frame
         if not self._stage_widget:
@@ -288,9 +276,6 @@ class RobotAssetPicker:
 
         Args:
             weak_self: Weak reference to the RobotAssetPicker instance.
-
-        Returns:
-            None if the weak reference is no longer valid.
         """
         # pylint: disable=protected-access
         weak_self = weak_self()
@@ -334,6 +319,11 @@ class RobotAssetPicker:
 
     @visible.setter
     def visible(self, visible: bool) -> None:
+        """Sets the window visibility state of the robot asset picker.
+
+        Args:
+            visible: Whether the picker window is visible.
+        """
         self._window.visible = visible
 
     def _on_selection_changed(self, paths: list[str]) -> None:
@@ -342,7 +332,7 @@ class RobotAssetPicker:
         Updates the UI elements and internal state based on the selected asset paths.
 
         Args:
-            paths: List of selected asset paths.
+            paths: Selected asset paths.
         """
         self._selected_paths = paths
         if self._button:

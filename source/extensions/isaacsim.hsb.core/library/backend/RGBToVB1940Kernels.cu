@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <isaacsim/hsb/core/RGBToVB1940Kernels.h>
+#include <isaacsim/hsb/core/RGBToVB1940Kernels.hpp>
 #include <cstdint>
 
 namespace isaacsim::hsb::core {

@@ -44,6 +44,20 @@
                 "memoryType": "cpu",
                 "default": [],
                 "optional": true
+            },
+            "calibrationIntrinsics": {
+                "type": "double[]",
+                "description": "Stereo intrinsics packed as [L_fx, L_fy, L_cx, L_cy, R_fx, R_fy, R_cx, R_cy]. Programmed into the emulated rig EEPROM at I2C peripheral 0x51 so the live receiver (hololink::NativeVb1940Sensor) reads them via the standard I2C path. Empty = no calibration set; downstream cuVSLAM will then reject with 'Focal length must be > 0'. Driven from the USDA Camera prim via OgnHSBCameraHelper.",
+                "memoryType": "cpu",
+                "default": [],
+                "optional": true
+            },
+            "calibrationTranslation": {
+                "type": "double[3]",
+                "description": "Stereo rig translation (Tx, Ty, Tz) in meters, written verbatim to the EEPROM's T field. For Eagle hardware (physical baseline of +0.088 m along +x), the value programmed here is (-0.088, 0, 0) — the receiver reconstructs base_T_cam via Pose3d{q, calib.T}.inverse() so the sign is inverted relative to the physical baseline. Programming (+0.088, 0, 0) will silently mirror pose estimates in cuVSLAM. Programmed into the emulated rig EEPROM alongside calibrationIntrinsics.",
+                "memoryType": "cpu",
+                "default": [0.0, 0.0, 0.0],
+                "optional": true
             }
         },
         "outputs": {

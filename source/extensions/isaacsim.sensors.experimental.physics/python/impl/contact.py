@@ -24,6 +24,7 @@ import omni.isaac.IsaacSensorSchema as IsaacSensorSchema
 import omni.usd
 import warp as wp
 from isaacsim.core.experimental.utils import prim as prim_utils
+from isaacsim.core.simulation_manager import SimulationManager
 from pxr import Gf, PhysxSchema, UsdPhysics
 
 from ._sensor_base import _PhysicsSensorAuthoring
@@ -188,11 +189,12 @@ class Contact(_PhysicsSensorAuthoring):
         prim.CreateColorAttr().Set(color)
         prim.CreateRadiusAttr().Set(radius)
 
-        # Apply PhysxContactReportAPI to the parent body so contacts are reported.
-        stage = omni.usd.get_context().get_stage()
-        parent_prim = stage.GetPrimAtPath(physics_parent_path)
-        contact_report = PhysxSchema.PhysxContactReportAPI.Apply(parent_prim)
-        contact_report.CreateThresholdAttr(min_threshold)
+        # PhysX requires PhysxContactReportAPI on the parent body for contact reporting.
+        if (SimulationManager.get_active_physics_engine() or "physx").lower() != "newton":
+            stage = omni.usd.get_context().get_stage()
+            parent_prim = stage.GetPrimAtPath(physics_parent_path)
+            contact_report = PhysxSchema.PhysxContactReportAPI.Apply(parent_prim)
+            contact_report.CreateThresholdAttr(min_threshold)
 
         return prim
 

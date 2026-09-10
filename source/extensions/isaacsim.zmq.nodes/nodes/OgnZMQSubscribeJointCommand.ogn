@@ -1,0 +1,51 @@
+{
+    "ZMQSubscribeJointCommand": {
+        "version": 1,
+        "icon": "icons/isaac-sim.svg",
+        "description": "Receives computed joint position and velocity commands from an external ZMQ server. Performs a non-blocking receive on each tick. Fires execOut only when a command is available.",
+        "metadata": {
+            "uiName": "ZMQ Subscribe Joint Command"
+        },
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": "isaacZmq",
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "Tick"
+            },
+            "ip": {
+                "type": "string",
+                "description": "IP address of the external ZMQ server",
+                "default": "localhost"
+            },
+            "port": {
+                "type": "uint",
+                "description": "Port on which the external ZMQ server is publishing joint commands",
+                "default": 5557
+            },
+            "topicName": {
+                "type": "string",
+                "description": "ZMQ topic subscribed to (first multipart frame); defaults to the message type. Set a unique value (e.g. \"robot_0/joint_command\") to distinguish multiple data sources.",
+                "default": "joint_command"
+            }
+        },
+        "outputs": {
+            "execOut": {
+                "type": "execution",
+                "description": "Fires when a joint command is received"
+            },
+            "jointNames": {
+                "type": "token[]",
+                "description": "Joint names matching the positions and velocities arrays"
+            },
+            "positions": {
+                "type": "double[]",
+                "description": "Target joint positions in radians"
+            },
+            "velocities": {
+                "type": "double[]",
+                "description": "Target joint velocities in radians per second"
+            }
+        }
+    }
+}

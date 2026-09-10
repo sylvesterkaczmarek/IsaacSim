@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.4] - 2026-08-17
+### Fixed
+- Avoid accessing invalidated prims while migrating deprecated OmniGraph nodes.
+
+## [0.4.3] - 2026-06-26
+### Added
+- Add a public `deprecated` decorator for Python API compatibility shims.
+
 ## [0.4.2] - 2026-04-20
 ### Fixed
 - Fix `import_module` issue where the module was not properly stubbed when the optional dependency (e.g. torch) was missing

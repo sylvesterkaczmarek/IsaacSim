@@ -62,7 +62,11 @@ class NullspaceShiftState(DfState):
         print("[%f] <enter> sampling posture config" % (self.entry_time - self.construction_time))
 
     def step(self) -> DfState | None:
-        """Wait for two seconds before transitioning to the next state."""
+        """Wait for two seconds before transitioning to the next state.
+
+        Returns:
+            This state while the delay is active; otherwise ``None`` to transition onward.
+        """
         if time.time() - self.entry_time < 2.0:
             return self
         return None

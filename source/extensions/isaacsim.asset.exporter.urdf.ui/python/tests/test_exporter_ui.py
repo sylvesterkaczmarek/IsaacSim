@@ -20,6 +20,7 @@ from __future__ import annotations
 import gc
 import os
 import tempfile
+import xml.etree.ElementTree as ET
 
 import omni.kit.app
 import omni.kit.ui_test as ui_test
@@ -29,6 +30,7 @@ from isaacsim.asset.exporter.urdf.ui.impl.option_widget import OptionWidget
 from isaacsim.core.experimental.utils import stage as stage_utils
 from isaacsim.storage.native import get_assets_root_path
 from isaacsim.test.utils import MenuUITestCase
+from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
 
 class TestExporterUI(MenuUITestCase):
@@ -100,6 +102,7 @@ class TestExporterUI(MenuUITestCase):
         self.assertFalse(w.visualize_collision_meshes)
         self.assertEqual(w.package_name, "")
         self.assertTrue(w.use_physx_inertia)
+        self.assertFalse(w.export_duplicate_ghost_links)
 
     async def test_option_widget_mesh_dir_fallback(self) -> None:
         """mesh_dir_name should fall back to 'meshes' when internal value is empty."""
@@ -121,18 +124,23 @@ class TestExporterUI(MenuUITestCase):
         w._on_value_changed("visualize_collision_meshes", True)
         self.assertTrue(w.visualize_collision_meshes)
 
+        w._on_value_changed("export_duplicate_ghost_links", True)
+        self.assertTrue(w.export_duplicate_ghost_links)
+
     async def test_option_widget_cleanup(self) -> None:
         """cleanup() should reset mutable state."""
         w = OptionWidget()
         w._on_value_changed("root", "/World/robot")
         w._on_value_changed("mesh_dir", "custom")
         w._on_value_changed("visualize_collision_meshes", True)
+        w._on_value_changed("export_duplicate_ghost_links", True)
 
         w.cleanup()
         self.assertEqual(w.mesh_dir_name, "meshes")
         self.assertEqual(w.mesh_path_prefix, "")
         self.assertIsNone(w.root_prim_path)
         self.assertFalse(w.visualize_collision_meshes)
+        self.assertFalse(w.export_duplicate_ghost_links)
 
     # ------------------------------------------------------------------
     # Export options panel rendering
@@ -146,10 +154,12 @@ class TestExporterUI(MenuUITestCase):
         mesh_folder = ui_test.find("Export As ...//Frame/**/Label[*].text=='Mesh Folder Name'")
         root_prim = ui_test.find("Export As ...//Frame/**/Label[*].text=='Root Prim Path'")
         vis_collision = ui_test.find("Export As ...//Frame/**/Label[*].text=='Visualize Collisions'")
+        duplicate_ghost_links = ui_test.find("Export As ...//Frame/**/Label[*].text=='Export Duplicate Ghost Links'")
 
         self.assertIsNotNone(mesh_folder, "Mesh Folder Name label not found")
         self.assertIsNotNone(root_prim, "Root Prim Path label not found")
         self.assertIsNotNone(vis_collision, "Visualize Collisions label not found")
+        self.assertIsNotNone(duplicate_ghost_links, "Export Duplicate Ghost Links label not found")
 
     # ------------------------------------------------------------------
     # Package name sanitization (logic in UrdfExporterDelegate._do_export)
@@ -189,7 +199,7 @@ class TestExporterUI(MenuUITestCase):
             self.skipTest("Assets root not available")
             return
 
-        robot_usd = f"{assets_root}/Isaac/Robots/UniversalRobots/ur10e/ur10e.usd"
+        robot_usd = f"{assets_root}/Isaac/Robots_Multiphysics/UniversalRobots/ur10e/ur10e.usda"
         await stage_utils.open_stage_async(robot_usd)
         stage = stage_utils.get_current_stage()
         if stage is None:
@@ -210,3 +220,61 @@ class TestExporterUI(MenuUITestCase):
         self.assertGreater(os.path.getsize(urdf_path), 0, "URDF file is empty")
 
         delegate.cleanup()
+
+    async def test_delegate_export_uses_physx_inertia(self) -> None:
+        """Verify PhysX-computed inertia remains composed until the converter reads it."""
+        await omni.usd.get_context().new_stage_async()
+        stage = omni.usd.get_context().get_stage()
+
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        world = UsdGeom.Xform.Define(stage, "/World")
+        stage.SetDefaultPrim(world.GetPrim())
+
+        robot = UsdGeom.Xform.Define(stage, "/World/Robot")
+        UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+
+        def make_link(path: str, x: float) -> Usd.Prim:
+            """Create a rigid link with cube collision geometry."""
+            link = UsdGeom.Xform.Define(stage, path)
+            link.AddTranslateOp().Set(Gf.Vec3d(x, 0.0, 0.0))
+            UsdPhysics.RigidBodyAPI.Apply(link.GetPrim())
+
+            collider = UsdGeom.Cube.Define(stage, f"{path}/geom")
+            collider.GetSizeAttr().Set(0.2)
+            UsdPhysics.CollisionAPI.Apply(collider.GetPrim())
+            return link.GetPrim()
+
+        base = make_link("/World/Robot/base_link", 0.0)
+        moving = make_link("/World/Robot/link_1", 0.5)
+        mass_api = UsdPhysics.MassAPI.Apply(moving)
+        mass_api.GetMassAttr().Set(3.0)
+        self.assertFalse(mass_api.GetDiagonalInertiaAttr().HasAuthoredValue())
+
+        joint = UsdPhysics.RevoluteJoint.Define(stage, "/World/Robot/joint_1")
+        joint.CreateBody0Rel().SetTargets([base.GetPath()])
+        joint.CreateBody1Rel().SetTargets([moving.GetPath()])
+        joint.CreateAxisAttr().Set("Z")
+
+        await self.wait_n_frames(10)
+
+        session_sublayers = list(stage.GetSessionLayer().subLayerPaths)
+        edit_target = stage.GetEditTarget()
+        delegate = urdf_ui_ext.UrdfExporterDelegate()
+        delegate._option_widget._use_physx_inertia = True
+        delegate._option_widget._root = "/World/Robot"
+
+        try:
+            result = delegate._do_export(self._tmpdir, "physx_inertia")
+        finally:
+            delegate.cleanup()
+
+        self.assertTrue(result, "Export returned False")
+        self.assertEqual(list(stage.GetSessionLayer().subLayerPaths), session_sublayers)
+        self.assertEqual(stage.GetEditTarget(), edit_target)
+
+        urdf_path = os.path.join(self._tmpdir, "physx_inertia.urdf")
+        inertia = ET.parse(urdf_path).find("./link[@name='link_1']/inertial/inertia")
+        self.assertIsNotNone(inertia, "link_1 has no <inertia> element")
+
+        diagonal = tuple(float(inertia.get(name, "0")) for name in ("ixx", "iyy", "izz"))
+        self.assertTrue(all(value > 0.0 for value in diagonal), f"Expected positive PhysX inertia, got {diagonal}")

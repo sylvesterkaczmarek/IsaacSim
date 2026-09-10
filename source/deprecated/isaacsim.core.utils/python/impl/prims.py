@@ -41,11 +41,12 @@ def get_prim_at_path(prim_path: str, fabric: bool = False) -> Usd.Prim | usdrt.U
     """Get the USD or Fabric Prim at a given path string.
 
     Args:
-        prim_path: path of the prim in the stage.
+        prim_path: Path of the prim in the stage.
         fabric: True for fabric stage and False for USD stage.
 
     Returns:
         USD or Fabric Prim object at the given path in the current stage.
+        If no current stage exists, None is returned.
 
     Example:
 
@@ -64,14 +65,14 @@ def get_prim_at_path(prim_path: str, fabric: bool = False) -> Usd.Prim | usdrt.U
 
 
 def is_prim_path_valid(prim_path: str, fabric: bool = False) -> bool:
-    """Check if a path has a valid USD Prim at it.
+    """Check whether a path has a valid USD or Fabric Prim in the current stage.
 
     Args:
-        prim_path: path of the prim in the stage
-        fabric: True for fabric stage and False for USD stage.
+        prim_path: Path of the prim in the stage.
+        fabric: True for Fabric stage and False for USD stage.
 
     Returns:
-        True if the path points to a valid prim
+        True if the path points to a valid prim.
 
     Example:
 
@@ -84,7 +85,7 @@ def is_prim_path_valid(prim_path: str, fabric: bool = False) -> bool:
         True
         >>> prims_utils.is_prim_path_valid("/World/Cube/")
         False
-        >>> prims_utils.is_prim_path_valid("/World/Sphere")  # it doesn't exist
+        >>> prims_utils.is_prim_path_valid("/World/Sphere")  # it does not exist
         False
     """
     prim = get_prim_at_path(prim_path, fabric=fabric)
@@ -95,17 +96,17 @@ def is_prim_path_valid(prim_path: str, fabric: bool = False) -> bool:
 
 
 def get_prim_attribute_names(prim_path: str, fabric: bool = False) -> list[str]:
-    """Get all the attribute names of a prim at the path.
+    """Get all attribute names of a prim at the path.
 
     Args:
-        prim_path: path of the prim in the stage
+        prim_path: Path of the prim in the stage.
         fabric: True for fabric stage and False for USD stage.
 
     Raises:
-        Exception: If there is not a valid prim at the given path
+        ValueError: If there is not a valid prim at the given path.
 
     Returns:
-        List of the prim attribute names
+        List of the prim attribute names.
 
     Example:
 
@@ -127,24 +128,23 @@ def get_prim_attribute_value(prim_path: str, attribute_name: str, fabric: bool =
     """Get a prim attribute value.
 
     Args:
-        prim_path: path of the prim in the stage
-        attribute_name: name of the attribute to get
+        prim_path: Path of the prim in the stage.
+        attribute_name: Name of the attribute to get.
         fabric: True for fabric stage and False for USD stage.
 
     Raises:
-        Exception: If there is not a valid prim at the given path
+        Exception: If there is not a valid prim at the given path.
 
     Returns:
-        Prim attribute value
+        Prim attribute value.
 
     Example:
+        .. code-block:: python
 
-    .. code-block:: python
-
-        >>> import isaacsim.core.utils.prims as prims_utils
-        >>>
-        >>> prims_utils.get_prim_attribute_value("/World/Cube", attribute_name="size")
-        1.0
+            >>> import isaacsim.core.utils.prims as prims_utils
+            >>>
+            >>> prims_utils.get_prim_attribute_value("/World/Cube", attribute_name="size")
+            1.0
     """
     attr = get_prim_at_path(prim_path=prim_path, fabric=fabric).GetAttribute(attribute_name)
     if fabric:
@@ -161,10 +161,10 @@ def set_prim_attribute_value(prim_path: str, attribute_name: str, value: typing.
     """Set a prim attribute value.
 
     Args:
-        prim_path: path of the prim in the stage
-        attribute_name: name of the attribute to set
-        value: value to set the attribute to
-        fabric: True for fabric stage and False for USD stage.
+        prim_path: Path of the prim in the stage.
+        attribute_name: Name of the attribute to set.
+        value: Value to set the attribute to.
+        fabric: True for Fabric stage and False for USD stage.
 
     Example:
 
@@ -205,12 +205,12 @@ def define_prim(prim_path: str, prim_type: str = "Xform", fabric: bool = False) 
         load an USD file while creating the prim use the ``create_prim`` function.
 
     Args:
-        prim_path: path of the prim in the stage
+        prim_path: Path of the prim in the stage.
         prim_type: The type of the prim to create.
         fabric: True for fabric stage and False for USD stage.
 
     Raises:
-        Exception: If there is already a prim at the prim_path
+        ValueError: If there is already a prim at the prim_path.
 
     Returns:
         The created USD prim.
@@ -233,23 +233,22 @@ def get_prim_type_name(prim_path: str, fabric: bool = False) -> str:
     """Get the TypeName of the USD Prim at the path if it is valid.
 
     Args:
-        prim_path: path of the prim in the stage
+        prim_path: Path of the prim in the stage.
         fabric: True for fabric stage and False for USD stage.
 
     Raises:
-        Exception: If there is not a valid prim at the given path
+        Exception: If there is not a valid prim at the given path.
 
     Returns:
-        The TypeName of the USD Prim at the path string
+        The TypeName of the USD Prim at the path string.
 
     Example:
+        .. code-block:: python
 
-    .. code-block:: python
-
-        >>> import isaacsim.core.utils.prims as prims_utils
-        >>>
-        >>> prims_utils.get_prim_type_name("/World/Cube")
-        Cube
+            >>> import isaacsim.core.utils.prims as prims_utils
+            >>>
+            >>> prims_utils.get_prim_type_name("/World/Cube")
+            Cube
     """
     if not is_prim_path_valid(prim_path, fabric=fabric):
         raise Exception(f"A prim does not exist at prim path: {prim_path}")
@@ -261,11 +260,11 @@ def get_prim_type_name(prim_path: str, fabric: bool = False) -> str:
 
 
 def move_prim(path_from: str, path_to: str) -> None:
-    """Run the Move command to change a prims USD Path in the stage.
+    """Run the Move command to change a prims USD path in the stage.
 
     Args:
-        path_from: Path of the USD Prim you wish to move
-        path_to: Final destination of the prim
+        path_from: Path of the USD Prim to move.
+        path_to: Destination path of the prim.
 
     Example:
 
@@ -285,12 +284,13 @@ def get_first_matching_child_prim(
     """Recursively get the first USD Prim at the path string that passes the predicate function.
 
     Args:
-        prim_path: path of the prim in the stage
-        predicate: Function to test the prims against
+        prim_path: Path of the prim in the stage.
+        predicate: Function to test the prims against.
         fabric: True for fabric stage and False for USD stage.
 
     Returns:
-         The first prim or child of the prim, as defined by GetChildren, that passes the predicate
+        The first prim or child of the prim, as defined by GetChildren, that passes the predicate.
+        If no prim matches, None is returned.
 
     Example:
 
@@ -320,11 +320,12 @@ def get_first_matching_parent_prim(prim_path: str, predicate: typing.Callable[[s
     """Recursively get the first USD Prim at the parent path string that passes the predicate function.
 
     Args:
-        prim_path: path of the prim in the stage
-        predicate: Function to test the prims against
+        prim_path: Path of the prim in the stage.
+        predicate: Function to test the prims against.
 
     Returns:
-        The first prim on the parent path, as defined by GetParent, that passes the predicate
+        The first prim on the parent path, as defined by GetParent, that passes the predicate.
+        If no parent prim matches, None is returned.
 
     Example:
 
@@ -348,16 +349,15 @@ def get_first_matching_parent_prim(prim_path: str, predicate: typing.Callable[[s
 def get_all_matching_child_prims(
     prim_path: str, predicate: typing.Callable[[str], bool] = lambda x: True, depth: int | None = None
 ) -> list[Usd.Prim]:
-    """Performs a breadth-first search starting from the root and returns all the prims matching the predicate.
+    """Perform a breadth-first search starting from the root and return all prims matching the predicate.
 
     Args:
-        prim_path: root prim path to start traversal from.
-        predicate: predicate that checks the prim path of a prim and returns a boolean.
-        depth: maximum depth for traversal, should be bigger than zero if specified.
-            Defaults to None (i.e: traversal till the end of the tree).
+        prim_path: Root prim path to start traversal from.
+        predicate: Predicate that checks the prim path of a prim and returns a boolean.
+        depth: Maximum depth for traversal, should be bigger than zero if specified.
 
     Returns:
-        A list containing the root and children prims matching specified predicate.
+        A list containing the root and children prims matching the specified predicate.
 
     Example:
 
@@ -391,7 +391,7 @@ def get_all_matching_child_prims(
 
 
 def find_matching_prim_paths(prim_path_regex: str, prim_type: str | None = None) -> list[str]:
-    """Find all the matching prim paths in the stage based on Regex expression.
+    """Find all matching prim paths in the stage based on a Regex expression.
 
     .. note::
         Only ``.*`` is supported as a regex wildcard (converted to glob ``*`` internally).
@@ -402,7 +402,7 @@ def find_matching_prim_paths(prim_path_regex: str, prim_type: str | None = None)
         prim_type: The type of the prims to filter, only supports articulation and rigid_body currently.
 
     Returns:
-        List of prim paths that match input expression.
+        List of prim paths that match the input expression.
 
     Example:
 
@@ -425,22 +425,21 @@ def get_prim_children(prim: Usd.Prim) -> list[Usd.Prim]:
     """Return the call of the USD Prim's GetChildren member function.
 
     Args:
-        prim: The parent USD Prim
+        prim: The parent USD Prim.
 
     Returns:
         A list of the prim's children.
 
     Example:
+        .. code-block:: python
 
-    .. code-block:: python
-
-        >>> import isaacsim.core.utils.prims as prims_utils
-        >>>
-        >>> # given the stage: /World/Cube, /World/Cube_01, /World/Cube_02.
-        >>> # Get all prims under the prim World
-        >>> prim = prims_utils.get_prim_at_path("/World")
-        >>> prims_utils.get_prim_children(prim)
-        [Usd.Prim(</World/Cube>), Usd.Prim(</World/Cube_01>), Usd.Prim(</World/Cube_02>)]
+            >>> import isaacsim.core.utils.prims as prims_utils
+            >>>
+            >>> # given the stage: /World/Cube, /World/Cube_01, /World/Cube_02.
+            >>> # Get all prims under the prim World
+            >>> prim = prims_utils.get_prim_at_path("/World")
+            >>> prims_utils.get_prim_children(prim)
+            [Usd.Prim(</World/Cube>), Usd.Prim(</World/Cube_01>), Usd.Prim(</World/Cube_02>)]
     """
     return prim.GetChildren()
 
@@ -449,34 +448,33 @@ def get_prim_parent(prim: Usd.Prim) -> Usd.Prim:
     """Return the call of the USD Prim's GetParent member function.
 
     Args:
-        prim: The USD Prim to call GetParent on
+        prim: The USD Prim to call GetParent on.
 
     Returns:
-        The prim's parent returned from GetParent
+        The prim's parent returned from GetParent.
 
     Example:
+        .. code-block:: python
 
-    .. code-block:: python
-
-        >>> import isaacsim.core.utils.prims as prims_utils
-        >>>
-        >>> # given the stage: /World/Cube. Get the prim Cube's parent
-        >>> prim = prims_utils.get_prim_at_path("/World/Cube")
-        >>> prims_utils.get_prim_parent(prim)
-        Usd.Prim(</World>)
+            >>> import isaacsim.core.utils.prims as prims_utils
+            >>>
+            >>> # given the stage: /World/Cube. Get the prim Cube's parent
+            >>> prim = prims_utils.get_prim_at_path("/World/Cube")
+            >>> prims_utils.get_prim_parent(prim)
+            Usd.Prim(</World>)
     """
     return prim.GetParent()
 
 
 def query_parent_path(prim_path: str, predicate: typing.Callable[[str], bool]) -> bool:
-    """Check if one of the ancestors of the prim at the prim_path can pass the predicate.
+    """Check whether one of the ancestors of the prim at the prim path passes the predicate.
 
     Args:
-        prim_path: path to the USD Prim for which to check the ancestors
-        predicate: The condition that must be True about the ancestors
+        prim_path: Path to the USD Prim for which to check ancestors.
+        predicate: Condition that must be True for an ancestor path.
 
     Returns:
-        True if there is an ancestor that can pass the predicate, False otherwise
+        True if an ancestor passes the predicate, False otherwise.
 
     Example:
 
@@ -484,7 +482,7 @@ def query_parent_path(prim_path: str, predicate: typing.Callable[[str], bool]) -
 
         >>> import isaacsim.core.utils.prims as prims_utils
         >>>
-        >>> # given the stage: /World/Cube. Check is the prim Cube has an ancestor of type Xform
+        >>> # given the stage: /World/Cube. Check if the prim Cube has an ancestor of type Xform
         >>> predicate = lambda path: prims_utils.get_prim_type_name(path) == "Xform"
         >>> prims_utils.query_parent_path("/World/Cube", predicate)
         True
@@ -500,7 +498,7 @@ def query_parent_path(prim_path: str, predicate: typing.Callable[[str], bool]) -
 
 
 def is_prim_ancestral(prim_path: str) -> bool:
-    """Check if any of the prims ancestors were brought in as a reference.
+    """Check if any of the prim's ancestors were brought in as a reference.
 
     Args:
         prim_path: The path to the USD prim.
@@ -509,31 +507,30 @@ def is_prim_ancestral(prim_path: str) -> bool:
         True if prim is part of a referenced prim, false otherwise.
 
     Example:
+        .. code-block:: python
 
-    .. code-block:: python
-
-        >>> import isaacsim.core.utils.prims as prims_utils
-        >>>
-        >>> # /World/Cube is a prim created
-        >>> prims_utils.is_prim_ancestral("/World/Cube")
-        False
-        >>> # /World/panda is an USD file loaded (as reference) under that path
-        >>> prims_utils.is_prim_ancestral("/World/panda")
-        False
-        >>> prims_utils.is_prim_ancestral("/World/panda/panda_link0")
-        True
+            >>> import isaacsim.core.utils.prims as prims_utils
+            >>>
+            >>> # /World/Cube is a prim created
+            >>> prims_utils.is_prim_ancestral("/World/Cube")
+            False
+            >>> # /World/panda is an USD file loaded as reference under that path
+            >>> prims_utils.is_prim_ancestral("/World/panda")
+            False
+            >>> prims_utils.is_prim_ancestral("/World/panda/panda_link0")
+            True
     """
     return omni.usd.check_ancestral(get_prim_at_path(prim_path))
 
 
 def is_prim_root_path(prim_path: str) -> bool:
-    """Checks if the input prim path is root or not.
+    """Check whether the input prim path is the root path.
 
     Args:
-        prim_path: The path to the USD prim.
+        prim_path: Path to the USD prim.
 
     Returns:
-        True if the prim path is "/", False otherwise
+        True if the prim path is "/", False otherwise.
 
     Example:
 
@@ -568,20 +565,19 @@ def is_prim_no_delete(prim_path: str) -> bool:
         prim_path: The path to the USD prim.
 
     Returns:
-        True if prim cannot be deleted, False if it can
+        True if prim cannot be deleted, False if it can.
 
     Example:
+        .. code-block:: python
 
-    .. code-block:: python
-
-        >>> import isaacsim.core.utils.prims as prims_utils
-        >>>
-        >>> # prim without the 'no_delete' metadata
-        >>> prims_utils.is_prim_no_delete("/World/Cube")
-        False
-        >>> # prim with the 'no_delete' metadata set to True
-        >>> prims_utils.is_prim_no_delete("/World/Cube")
-        True
+            >>> import isaacsim.core.utils.prims as prims_utils
+            >>>
+            >>> # prim without the 'no_delete' metadata
+            >>> prims_utils.is_prim_no_delete("/World/Cube")
+            False
+            >>> # prim with the 'no_delete' metadata set to True
+            >>> prims_utils.is_prim_no_delete("/World/Cube")
+            True
     """
     return bool(get_prim_at_path(prim_path).GetMetadata("no_delete"))
 
@@ -601,17 +597,16 @@ def is_prim_hidden_in_stage(prim_path: str) -> bool:
         True if prim is hidden from stage window, False if not hidden.
 
     Example:
+        .. code-block:: python
 
-    .. code-block:: python
-
-        >>> import isaacsim.core.utils.prims as prims_utils
-        >>>
-        >>> # prim without the 'hide_in_stage_window' metadata
-        >>> prims_utils.is_prim_hidden_in_stage("/World/Cube")
-        False
-        >>> # prim with the 'hide_in_stage_window' metadata set to True
-        >>> prims_utils.is_prim_hidden_in_stage("/World/Cube")
-        True
+            >>> import isaacsim.core.utils.prims as prims_utils
+            >>>
+            >>> # prim without the 'hide_in_stage_window' metadata
+            >>> prims_utils.is_prim_hidden_in_stage("/World/Cube")
+            False
+            >>> # prim with the 'hide_in_stage_window' metadata set to True
+            >>> prims_utils.is_prim_hidden_in_stage("/World/Cube")
+            True
     """
     return bool(get_prim_at_path(prim_path).GetMetadata("hide_in_stage_window"))
 
@@ -626,14 +621,13 @@ def get_prim_path(prim: Usd.Prim) -> str | None:
         The path to the input prim.
 
     Example:
+        .. code-block:: python
 
-    .. code-block:: python
-
-        >>> import isaacsim.core.utils.prims as prims_utils
-        >>>
-        >>> prim = prims_utils.get_prim_at_path("/World/Cube")  # Usd.Prim(</World/Cube>)
-        >>> prims_utils.get_prim_path(prim)
-        /World/Cube
+            >>> import isaacsim.core.utils.prims as prims_utils
+            >>>
+            >>> prim = prims_utils.get_prim_at_path("/World/Cube")  # Usd.Prim(</World/Cube>)
+            >>> prims_utils.get_prim_path(prim)
+            /World/Cube
     """
     if prim:
         if isinstance(prim, Usd.Prim):
@@ -645,15 +639,15 @@ def get_prim_path(prim: Usd.Prim) -> str | None:
 
 
 def set_prim_visibility(prim: Usd.Prim, visible: bool) -> None:
-    """Sets the visibility of the prim in the opened stage.
+    """Set the visibility of the prim in the opened stage.
 
     .. note::
 
         The method does this through the USD API.
 
     Args:
-        prim: the USD prim
-        visible: flag to set the visibility of the usd prim in stage.
+        prim: USD prim to set.
+        visible: Flag to set the visibility of the USD prim in the stage.
 
     Example:
 
@@ -684,24 +678,24 @@ def create_prim(
     semantic_type: str = "class",
     attributes: dict | None = None,
 ) -> Usd.Prim:
-    """Create a prim into current USD stage.
+    """Create a prim in the current USD stage.
 
-    The method applies specified transforms, the semantic label and set specified attributes.
+    Applies specified transforms, the semantic label, and specified attributes.
 
     Args:
         prim_path: The path of the new prim.
-        prim_type: Prim type name
-        position: prim position (applied last)
-        translation: prim translation (applied last)
-        orientation: prim rotation as quaternion
-        scale: scaling factor in x, y, z.
+        prim_type: Prim type name.
+        position: Prim position applied last.
+        translation: Prim translation applied last.
+        orientation: Prim rotation as a quaternion.
+        scale: Scaling factor in x, y, z.
         usd_path: Path to the USD that this prim will reference.
         semantic_label: Semantic label.
-        semantic_type: set to "class" unless otherwise specified.
+        semantic_type: Semantic instance name.
         attributes: Key-value pairs of prim attributes to set.
 
     Raises:
-        Exception: If there is already a prim at the prim_path
+        ValueError: If there is already a prim at the prim_path.
 
     Returns:
         The created USD prim.
@@ -782,7 +776,7 @@ def delete_prim(prim_path: str) -> None:
     """Remove the USD Prim and its descendants from the scene if able.
 
     Args:
-        prim_path: path of the prim in the stage
+        prim_path: Path of the prim in the stage.
 
     Example:
 
@@ -799,32 +793,31 @@ def get_prim_property(prim_path: str, property_name: str) -> typing.Any:
     """Get the attribute of the USD Prim at the given path.
 
     Args:
-        prim_path: path of the prim in the stage
-        property_name: name of the attribute to get
+        prim_path: Path of the prim in the stage.
+        property_name: Name of the attribute to get.
 
     Returns:
-        The attribute if it exists, None otherwise
+        The attribute value if it exists, None otherwise.
 
     Example:
+        .. code-block:: python
 
-    .. code-block:: python
-
-        >>> import isaacsim.core.utils.prims as prims_utils
-        >>>
-        >>> prims_utils.get_prim_property("/World/Cube", property_name="size")
-        1.0
+            >>> import isaacsim.core.utils.prims as prims_utils
+            >>>
+            >>> prims_utils.get_prim_property("/World/Cube", property_name="size")
+            1.0
     """
     prim = get_prim_at_path(prim_path=prim_path)
     return prim.GetAttribute(property_name).Get()
 
 
 def set_prim_property(prim_path: str, property_name: str, property_value: typing.Any) -> None:
-    """Set the attribute of the USD Prim at the path.
+    """Set an attribute of the USD Prim at the path.
 
     Args:
-        prim_path: path of the prim in the stage
-        property_name: name of the attribute to set
-        property_value: value to set the attribute to
+        prim_path: Path of the prim in the stage.
+        property_name: Name of the attribute to set.
+        property_value: Value to set the attribute to.
 
     Example:
 
@@ -842,12 +835,12 @@ def set_prim_property(prim_path: str, property_name: str, property_value: typing
 def get_prim_object_type(prim_path: str) -> str | None:
     """Get the dynamic control object type of the USD Prim at the given path.
 
-    If the prim at the path is of Dynamic Control type e.g.: rigid_body, joint, dof, articulation, attractor, d6joint,
-    then the corresponding string returned. If is an Xformable prim, then "xform" is returned. Otherwise None
-    is returned.
+    If the prim at the path is of Dynamic Control type, such as rigid_body, joint, dof, articulation, attractor,
+    or d6joint, the corresponding string is returned. If it is an Xformable prim, "xform" is returned.
+    Otherwise None is returned.
 
     Args:
-        prim_path: path of the prim in the stage
+        prim_path: Path of the prim in the stage.
 
     Raises:
         Exception: If the USD Prim is not a supported type.
@@ -856,13 +849,12 @@ def get_prim_object_type(prim_path: str) -> str | None:
         String corresponding to the object type.
 
     Example:
+        .. code-block:: python
 
-    .. code-block:: python
-
-        >>> import isaacsim.core.utils.prims as prims_utils
-        >>>
-        >>> prims_utils.get_prim_object_type("/World/Cube")
-        xform
+            >>> import isaacsim.core.utils.prims as prims_utils
+            >>>
+            >>> prims_utils.get_prim_object_type("/World/Cube")
+            xform
     """
     prim = get_prim_at_path(prim_path)
     if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
@@ -882,14 +874,13 @@ def get_prim_object_type(prim_path: str) -> str | None:
 
 
 def is_prim_non_root_articulation_link(prim_path: str) -> bool:
-    """Used to query if the prim_path corresponds to a link in an articulation which is a non root link.
+    """Query whether a prim path corresponds to a non-root link in an articulation.
 
     Args:
-        prim_path: prim_path to query
+        prim_path: Prim path to query.
 
     Returns:
-        True if the prim path corresponds to a link in an articulation which is a non root link
-        and can't have a transformation applied to it.
+        True if the prim path corresponds to a non-root articulation link that cannot have a transformation applied to it.
 
     Example:
 
@@ -936,11 +927,11 @@ def set_prim_hide_in_stage_window(prim: Usd.Prim, hide: bool) -> None:
     .. warning ::
 
         This metadata is unrelated to the visibility of the prim.
-        Use the ``set_prim_visibility`` function for the latter purpose
+        Use the ``set_prim_visibility`` function for the latter purpose.
 
     Args:
-        prim: Prim to set
-        hide: True to hide in stage window, false to show
+        prim: USD Prim to set.
+        hide: True to hide the prim in the stage window, false to show it.
 
     Example:
 
@@ -963,8 +954,8 @@ def set_prim_no_delete(prim: Usd.Prim, no_delete: bool) -> None:
         the context menu, or by calling the ``delete_prim`` function, for example.
 
     Args:
-        prim: Prim to set
-        no_delete: True to make prim undeletable in stage window, false to allow deletion
+        prim: USD Prim to set.
+        no_delete: True to make the prim undeletable in the stage window, false to allow deletion.
 
     Example:
 
@@ -982,9 +973,9 @@ def set_targets(prim: Usd.Prim, attribute: str, target_prim_paths: list) -> None
     """Set targets for a prim relationship attribute.
 
     Args:
-        prim: Prim to create and set attribute on.
+        prim: Prim to create and set the relationship attribute on.
         attribute: Relationship attribute to create.
-        target_prim_paths: List of targets to set.
+        target_prim_paths: List of target prim paths to set.
 
     Example:
 
@@ -1010,14 +1001,14 @@ def get_articulation_root_api_prim_path(prim_path: str) -> str:
 
     .. note::
 
-        This function assumes that all prims defined by a regular expression correspond to the same articulation type
+        This function assumes that all prims defined by a regular expression correspond to the same articulation type.
 
     Args:
-        prim_path: path or regex of the prim(s) on which to search for the prim containing the API
+        prim_path: Path or regex of the prims on which to search for the prim containing the API.
 
     Returns:
-        path or regex of the prim(s) that has the Articulation Root API.
-             If no prim has been found, the same input value is returned
+        Path or regex of the prim that has the Articulation Root API.
+        If no prim has been found, the same input value is returned.
 
     Example:
 

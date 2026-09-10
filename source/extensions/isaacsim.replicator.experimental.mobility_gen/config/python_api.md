@@ -62,6 +62,7 @@
   - def enable_instance_id_segmentation_rendering(self)
   - def enable_depth_rendering(self)
   - def enable_normals_rendering(self)
+  - def missing_modalities(self) -> list[str]
   - def update_state(self)
 
 - class MobilityGenMultiSensorRobot(MobilityGenRobot)
@@ -169,13 +170,16 @@
   - def disable_rendering(self)
   - def write_replay_data(self)
   - def update_state(self)
+  - def missing_modalities(self) -> list[str]
+  - def named_missing_modalities(self, prefix: str = '') -> dict[str, list[str]]
+  - def format_missing_modalities(self, prefix: str = '') -> str
   - def load_state_dict(self, state_dict: dict)
 
 - class OccupancyMap
   - ROS_IMAGE_FILENAME: str
   - ROS_YAML_FILENAME: str
   - ROS_YAML_TEMPLATE: str
-  - def __init__(self, data: np.ndarray, resolution: int, origin: tuple[int, int, int])
+  - def __init__(self, data: np.ndarray, resolution: float, origin: tuple[float, float, float])
   - def freespace_mask(self) -> np.ndarray
   - def unknown_mask(self) -> np.ndarray
   - def occupied_mask(self) -> np.ndarray
@@ -207,6 +211,10 @@
   - def get_point_by_distance(self, distance: float) -> np.ndarray
   - def find_nearest(self, point: np.ndarray) -> tuple[np.ndarray, float, tuple[int, int], float]
 
+- class Point2d
+  - x: float
+  - y: float
+
 - class Pose2d(Point2d)
   - theta: float
 
@@ -227,23 +235,29 @@
 
 ## Functions
 
-- def apply_nurec_replay_overrides(args: argparse.Namespace, stage: Usd.Stage | None) -> bool
 - def apply_sensor_overrides(robot_prim_path: str, recording_path: str, stage: Usd.Stage | None = None)
+- def clear_replay_outputs(output_path: str, recording_path: str)
 - async def collect_input(input_path: str, dest_dir: str) -> str
 - def compress_path(path: np.ndarray, eps: float = 0.001) -> tuple[np.ndarray, np.ndarray]
+- def discard_step_common(output_path: str, step: int)
+- def ensure_nurec_replay_flags(args: argparse.Namespace)
+- def format_dropped_steps(dropped_steps: list[int], max_listed: int = 20) -> str
 - def generate_paths(start: tuple[int, int], freespace: np.ndarray) -> GeneratePathsOutput
 - def is_complete(output_path: str, expected_config: dict[str, Any]) -> bool
-- def is_nurec_stage(stage: Usd.Stage | None) -> bool
+- def is_in_place_replay(output_path: str, recording_path: str) -> bool
 - def load_scenario(path: str) -> MobilityGenScenario
 - def log_camera_properties(stage: Usd.Stage, robot_prim_path: str)
 - def mark_replay_complete(output_path: str, frames_rendered: int)
 - def replay_config_from_args(source_recording: str, args: argparse.Namespace) -> dict[str, Any]
+- def route_chase_through_ppisp(stage: Any, chase_camera_path: str) -> str | None
 - def save_sensor_overrides(robot_prim_path: str, output_dir: str, root_layer: Sdf.Layer | None = None, stage: Usd.Stage | None = None)
+- def setup_for_replay(args: argparse.Namespace, stage: Usd.Stage | None) -> tuple[bool, bool, bool, list[str]]
 - def write_replay_config(output_path: str, replay_config: dict[str, Any])
 
 ## Variables
 
 - COMPLETE_MARKER_NAME: str
+- MAX_RENDER_RETRIES: int
 - REPLAY_CONFIG_NAME: str
 - ROBOTS: Unknown
 - SCENARIOS: Unknown

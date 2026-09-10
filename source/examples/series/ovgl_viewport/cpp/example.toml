@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id = "ovgl_viewport.cpp"
+title = "OVGL Viewport"
+summary = "Load a USD stage into OVStage and inspect it interactively with the OVGL renderer."
+owners = [
+    "isaacsim.foundation.objects",
+    "isaacsim.ovgl_viewport.debug",
+]
+topics = ["cpp", "rendering", "usd", "viewport"]
+
+[build]
+adapter = "cmake"
+targets = ["ovgl_viewport_cpp"]
+
+[run]
+adapter = "executable"
+target = "ovgl_viewport_cpp"
+
+[[test]]
+name = "headless"
+arguments = ["--headless", "--frames", "1"]
+stdout_contains = ["Viewport rendered 1 frame(s)."]
+timeout_seconds = 60
+
+[requirements]
+system = ["cmake", "cpp", "python", "python_development"]
+
+[[requirements.modules]]
+name = "isaacsim_foundation"
+surfaces = ["native_sdk"]
+
+[[requirements.modules]]
+name = "isaacsim_ovgl_viewport"
+surfaces = ["native_sdk"]

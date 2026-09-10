@@ -22,12 +22,11 @@ panel can be embedded into other windows if needed.
 
 from __future__ import annotations
 
-from .episode_recorder_extension import EpisodeRecorderUIExtension
+from .episode_recorder_extension import EpisodeRecorderUIExtension as EpisodeRecorderUIExtension
 from .episode_recorder_panel import EpisodeRecorderPanel
 from .episode_recorder_window import EpisodeRecorderWindow
 
 __all__ = [
     "EpisodeRecorderPanel",
-    "EpisodeRecorderUIExtension",
     "EpisodeRecorderWindow",
 ]

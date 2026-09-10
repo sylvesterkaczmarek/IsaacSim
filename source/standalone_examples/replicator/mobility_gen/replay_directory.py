@@ -33,7 +33,6 @@ simulation_app = SimulationApp(launch_config={"headless": True, "multi_gpu": Fal
 import argparse
 import glob
 import os
-import shutil
 import time
 
 import carb
@@ -49,11 +48,13 @@ app_utils.enable_extension("isaacsim.replicator.mobility_gen.examples")
 simulation_app.update()
 
 from isaacsim.replicator.experimental.mobility_gen import (
-    COMPLETE_MARKER_NAME,
-    REPLAY_CONFIG_NAME,
+    MAX_RENDER_RETRIES,
     MobilityGenReader,
     MobilityGenWriter,
     apply_sensor_overrides,
+    clear_replay_outputs,
+    discard_step_common,
+    format_dropped_steps,
     is_complete,
     load_scenario,
     log_camera_properties,
@@ -67,27 +68,6 @@ if "MOBILITY_GEN_DATA" in os.environ:
     DATA_DIR = os.environ["MOBILITY_GEN_DATA"]
 else:
     DATA_DIR = os.path.expanduser("~/MobilityGenData")
-
-
-# Rendered-sensor state subdirs a replay (re)generates. state/common (recorded
-# poses) is excluded: it is the replay's input, not a regenerated output.
-_RENDERED_STATE_DIRS = ("rgb", "segmentation", "depth", "normals")
-
-
-def clear_replay_outputs(output_path: str) -> None:
-    """Remove the files a replay regenerates, leaving any source data in place.
-
-    Lets --output equal --input: the recorded poses, scene, and config survive
-    while the rendered sensor outputs and manifest are refreshed.
-    """
-    targets = [os.path.join(output_path, "state", name) for name in _RENDERED_STATE_DIRS]
-    targets.append(os.path.join(output_path, REPLAY_CONFIG_NAME))
-    targets.append(os.path.join(output_path, COMPLETE_MARKER_NAME))
-    for target in targets:
-        if os.path.isdir(target):
-            shutil.rmtree(target)
-        elif os.path.isfile(target):
-            os.remove(target)
 
 
 if __name__ == "__main__":
@@ -211,6 +191,9 @@ if __name__ == "__main__":
         if os.path.isdir(p) and os.path.isfile(os.path.join(p, "config.json")) and os.path.abspath(p) != output_abs
     )
 
+    skipped_recordings = []
+    recordings_with_dropped_steps = []
+
     for i, recording_path in enumerate(recording_paths, start=1):
         # Per-iteration copy of the CLI namespace: ensure_nurec_replay_flags
         # mutates this in place when a NuRec stage is detected. Without a fresh
@@ -225,8 +208,22 @@ if __name__ == "__main__":
         scenario = load_scenario(recording_path)
 
         # Set up the loaded stage for replay: NuRec render overrides + RGB-only replay flags
-        # (no-op on non-NuRec stages).
-        setup_for_replay(args, get_current_stage())
+        # (no-op on non-NuRec stages).  Rendering a NuRec stage whose launch prerequisites are
+        # unmet crashes Kit natively, so skip that recording and replay the rest of the batch.
+        # Nothing has been created for this iteration yet, so there is nothing to tear down.
+        stage = get_current_stage()
+        try:
+            _, nurec, _, _ = setup_for_replay(args, stage)
+        except RuntimeError as exc:
+            # Only a NuRec stage has launch prerequisites, so this is always a NuRec recording.
+            carb.log_error(f"{name}: {exc} To replay NuRec recordings, use replay_directory_for_nurec.py.")
+            skipped_recordings.append(name)
+            continue
+        if nurec:
+            carb.log_warn(
+                f"{name}: NuRec stage, so only RGB is replayed. replay_directory_for_nurec.py develops "
+                "sensor RGB through the scene's PPISP graph, which looks considerably better on splats."
+            )
 
         replay_config = replay_config_from_args(recording_path, args)
         if args.skip_completed and is_complete(
@@ -274,7 +271,7 @@ if __name__ == "__main__":
         reader = MobilityGenReader(recording_path)
         num_steps = len(reader)
 
-        clear_replay_outputs(output_path)
+        clear_replay_outputs(output_path, recording_path)
 
         writer = MobilityGenWriter(output_path)
         if args.self_contained:
@@ -308,6 +305,7 @@ if __name__ == "__main__":
 
         t0 = time.perf_counter()
         count = 0
+        dropped_steps = []
         for step in range(0, num_steps, args.render_interval):
             if args.max_frames is not None and count >= args.max_frames:
                 break
@@ -315,21 +313,46 @@ if __name__ == "__main__":
             carb.log_warn(f"{step} / {num_steps}")
             state_dict_original = reader.read_state_dict(index=step)
 
-            scenario.load_state_dict(state_dict_original)
-            scenario.write_replay_data()
+            # Render the step, retrying while any enabled modality comes back without a frame.
+            # Every attempt re-asserts the recorded state first, so a frame recovered by a retry is
+            # still rendered from the pose written to disk for this step.
+            missing_modalities = ""
+            for attempt in range(MAX_RENDER_RETRIES + 1):
+                if attempt:
+                    carb.log_warn(
+                        f"Step {step}: incomplete capture ({missing_modalities}); "
+                        f"re-rendering (attempt {attempt} / {MAX_RENDER_RETRIES})"
+                    )
 
-            # Propagate tensor-API pose/joint writes to USD before rendering.
-            # set_world_poses() / set_dof_positions() write into PhysX tensor buffers; PhysX
-            # only syncs these back to USD during simulate() + fetch_results().
-            # SimulationManager.initialize_physics() does not start the Kit timeline, so
-            # simulation_app.update() does not tick physics here — a direct step() call is needed.
-            SimulationManager.step(steps=1)
+                scenario.load_state_dict(state_dict_original)
+                scenario.write_replay_data()
 
-            simulation_app.update()
+                # Propagate tensor-API pose/joint writes to USD before rendering.
+                # set_world_poses() / set_dof_positions() write into PhysX tensor buffers; PhysX
+                # only syncs these back to USD during simulate() + fetch_results().
+                # SimulationManager.initialize_physics() does not start the Kit timeline, so
+                # simulation_app.update() does not tick physics here — a direct step() call is needed.
+                SimulationManager.step(steps=1)
 
-            rep.orchestrator.step(rt_subframes=args.render_rt_subframes, delta_time=0.00, pause_timeline=False)
+                simulation_app.update()
 
-            scenario.update_state()
+                rep.orchestrator.step(rt_subframes=args.render_rt_subframes, delta_time=0.00, pause_timeline=False)
+
+                scenario.update_state()
+
+                missing_modalities = scenario.format_missing_modalities()
+                if not missing_modalities:
+                    break
+
+            if missing_modalities:
+                # Drop the whole step, common state included. Writing the recorded pose without the
+                # images it describes would leave MobilityGenReader indexing a step whose image
+                # files do not exist. Index gaps are already part of the format: --render_interval
+                # greater than 1 produces them.
+                carb.log_warn(f"Step {step}: dropped, no rendered frame for {missing_modalities}")
+                discard_step_common(output_path, step)
+                dropped_steps.append(step)
+                continue
 
             state_dict = scenario.state_dict_common()
 
@@ -355,6 +378,13 @@ if __name__ == "__main__":
         if count:
             carb.log_warn(f"Process time per frame: {(t1 - t0) / count:.4f} s")
 
+        if dropped_steps:
+            carb.log_error(
+                f"{name}: dropped {len(dropped_steps)} of {count + len(dropped_steps)} step(s) that produced no "
+                f"rendered frame after {MAX_RENDER_RETRIES} retries: {format_dropped_steps(dropped_steps)}"
+            )
+            recordings_with_dropped_steps.append(name)
+
         rep.orchestrator.wait_until_complete()
         # Stop the timeline before disable_rendering()/the next load_scenario();
         # leaving it playing across teardown crashes Kit natively.
@@ -363,8 +393,19 @@ if __name__ == "__main__":
         writer.close()
         mark_replay_complete(output_path, count)
 
+    if skipped_recordings:
+        carb.log_error(f"Skipped {len(skipped_recordings)} recording(s): {', '.join(skipped_recordings)}")
+
+    if recordings_with_dropped_steps:
+        carb.log_error(
+            f"Dropped un-rendered steps in {len(recordings_with_dropped_steps)} recording(s): "
+            f"{', '.join(recordings_with_dropped_steps)}. Those replays are shorter than their source recordings."
+        )
+
     # Stop the timeline so Kit's shutdown sequence receives the stop event and
     # can clean up physics properly.  Without this, the timeline is left paused
     # and simulation_app.close() hangs for 120 s waiting for physics teardown.
     omni.timeline.get_timeline_interface().stop()
-    simulation_app.close()
+    # Pass the status through close(): under fast shutdown the app exits the process itself,
+    # so a bare sys.exit() here would still report success.
+    simulation_app.close(exit_code=1 if skipped_recordings or recordings_with_dropped_steps else 0)

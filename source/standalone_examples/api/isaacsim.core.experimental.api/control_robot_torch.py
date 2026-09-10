@@ -94,7 +94,15 @@ See https://pytorch.org/get-started/locally.
 
 
 def quat_mul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """Multiply two batched quaternions."""
+    """Multiply two batched quaternions.
+
+    Args:
+        a: Left quaternion batch in scalar-first order.
+        b: Right quaternion batch in scalar-first order.
+
+    Returns:
+        Hamilton product for each pair of input quaternions.
+    """
     w1, x1, y1, z1 = a[:, 0], a[:, 1], a[:, 2], a[:, 3]
     w2, x2, y2, z2 = b[:, 0], b[:, 1], b[:, 2], b[:, 3]
     ww = (z1 + x1) * (x2 + y2)
@@ -110,7 +118,14 @@ def quat_mul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 
 
 def quat_conjugate(q: torch.Tensor) -> torch.Tensor:
-    """Compute the conjugate of batched quaternions."""
+    """Compute the conjugate of batched quaternions.
+
+    Args:
+        q: Quaternion batch in scalar-first order.
+
+    Returns:
+        Quaternion batch with each vector component negated.
+    """
     return torch.cat((q[:, :1], -q[:, 1:]), dim=-1)
 
 
@@ -123,7 +138,25 @@ def differential_inverse_kinematics(
     method: str = "damped-least-squares",
     method_cfg: dict[str, float] | None = None,
 ) -> torch.Tensor:
-    """Compute delta DOF positions via differential inverse kinematics."""
+    """Compute delta DOF positions via differential inverse kinematics.
+
+    Args:
+        jacobian_end_effector: Batched end-effector Jacobian matrices.
+        current_position: Current Cartesian positions for the end effectors.
+        current_orientation: Current scalar-first orientation quaternions.
+        goal_position: Desired Cartesian positions for the end effectors.
+        goal_orientation: Desired scalar-first orientation quaternions, or None to preserve the current orientations.
+        method: Solver name: ``singular-value-decomposition``, ``pseudoinverse``, ``transpose``, or
+            ``damped-least-squares``.
+        method_cfg: Solver coefficients for ``scale``, ``damping``, and ``min_singular_value``, or None to use
+            the example's coefficients.
+
+    Returns:
+        Joint-position updates for each articulation in the batch.
+
+    Raises:
+        ValueError: If ``method`` does not identify a supported solver.
+    """
     method_cfg = {"scale": 1.0, "damping": 0.05, "min_singular_value": 1e-5} if method_cfg is None else method_cfg
     scale = method_cfg.get("scale", 1.0)
     # Compute velocity error
@@ -167,9 +200,9 @@ simulation_app.update()  # allow configuration to take effect
 stage_utils.create_new_stage(template="sunlight")
 # - Add robot (Franka Panda)
 robot_prim = stage_utils.add_reference_to_stage(
-    usd_path=get_assets_root_path() + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+    usd_path=get_assets_root_path() + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
     path="/World/robot",
-    variants=[("Gripper", "AlternateFinger"), ("Mesh", "Performance")],
+    variants=[("Gripper", "alternatefinger"), ("Mesh", "performance")],
 )
 # - Add red sphere
 visual_material = PreviewSurfaceMaterial("/Visual_materials/red")

@@ -1,5 +1,5 @@
 [package]
-version = "1.5.4"
+version = "1.6.2"
 category = "SyntheticData"
 title = "Isaac Sim Replicator Behavior Scripts"
 description = "The extension provides various randomization and event scripts for Synthetic Data Generation (SDG) workflows. The scripts can be attached to prims providing modular, persitent, and shareable behaviors. The scripts use exposed variables as custom USD properties which can be modified throught the UI or programmatically."
@@ -11,11 +11,16 @@ icon = "data/icon.png"
 writeTarget.kit = true
 
 [dependencies]
+"isaacsim.core.experimental.materials" = {}
+"isaacsim.core.experimental.objects" = {}
+"isaacsim.core.experimental.prims" = {}
+"isaacsim.core.experimental.utils" = {}
 "isaacsim.storage.native" = {}
 "omni.behavior.scripting.core" = {}
 "omni.physics" = {}
 "omni.physics.physx" = {}
 "omni.physx" = {}
+"omni.replicator.core" = {}
 "omni.usd" = {}
 
 [[python.module]]
@@ -27,15 +32,16 @@ args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 timeout = 900
 dependencies = [
-    "isaacsim.core.experimental.utils",
     "isaacsim.test.utils",
     "omni.hydra.rtx",
-    "omni.kit.test",
     "omni.kit.viewport.window",
-    "omni.replicator.core"
 ]
 
 args = [
@@ -84,6 +90,10 @@ args = [
     "--/rtx/newDenoiser/enabled=1",
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [documentation]

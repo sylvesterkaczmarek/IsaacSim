@@ -13,5 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .impl.extension import RTSPStreamingExtension  # noqa: F401
-from .impl.rtsp_writer import RTSPStreamWriter  # noqa: F401
+from .impl.extension import RTSPStreamingExtension as RTSPStreamingExtension
+from .impl.rtsp_writer import RTSPStreamWriter as RTSPStreamWriter
+
+__all__ = ["RTSPStreamWriter"]

@@ -14,7 +14,7 @@
 // limitations under the License.
 
 #include <flatbuffers/flatbuffers.h>
-#include <isaacsim/ucx/nodes/UcxPublishClockNodeBase.h>
+#include <isaacsim/ucx/nodes/UcxPublishClockNodeBase.hpp>
 
 #include <OgnUCXPublishClockDatabase.h>
 #include <time_generated.h>

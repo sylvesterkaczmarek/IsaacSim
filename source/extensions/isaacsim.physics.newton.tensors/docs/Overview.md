@@ -126,6 +126,7 @@ Provides contact force queries between sensor bodies and filter bodies:
 - **Net contact forces**: Aggregated force per sensor body.
 - **Contact force matrix**: Force per sensor-filter pair.
 - **Contact data**: Per-contact point forces, positions, normals, and separation distances.
+- **Friction data**: Tangential contact forces and their application points.
 - **Raw contact data**: Per-contact data with other-actor identification.
 
 Contact pointers are refreshed lazily using the Newton stage's `simulation_timestamp`,
@@ -140,6 +141,17 @@ contact_view = sim_view.create_rigid_contact_view(
 net_forces = contact_view.get_net_contact_forces(dt)
 force_matrix = contact_view.get_contact_force_matrix(dt)
 ```
+
+#### Friction-data compatibility
+
+Newton and PhysX use different internal friction representations. PhysX reports friction-patch anchor records, while
+Newton reports the tangential projection of each raw contact force. Counts, points, and record topology are therefore
+not backend-compatible, even when both backends represent the same net interaction.
+
+To compare friction results across backends, sum the friction-force vectors over each sensor-filter pair by using its
+count and start index. Compare the resulting aggregate vector, its direction relative to motion or applied force, and
+its magnitude relative to the measured normal load. Do not compare individual record counts, record ordering, or
+contact points between Newton and PhysX.
 
 ### ArticulationMetatype
 
@@ -192,4 +204,4 @@ Run a specific test class:
 - **pybind11**: Accessing Python Newton objects from C++
 - **pxr (USD)**: `SdfPath`, `UsdStage`, `UsdPrim` for pattern matching
 - **CUDA runtime**: Kernel launch, `cudaMemcpy`, device memory management
-- **Warp** (runtime): Python arrays accessed via `WarpInterop`; `WarpCompat.h` for compile-time type definitions
+- **Warp** (runtime): Python arrays accessed via `WarpInterop`; `WarpCompat.hpp` for compile-time type definitions

@@ -94,7 +94,7 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
 
     async def advance_frames(self, render_product_path: Any, num_frames: int = 1) -> None:
-        """Helper method to advance frames.
+        """Advance render frames for a LidarRtx sensor.
 
         Args:
             render_product_path: Path of render product for the sensor.
@@ -104,7 +104,7 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
             await omni.kit.app.get_app().next_update_async()
 
     def verify_annotators_added(self, lidar: Any, annotator_names: Any) -> None:
-        """Helper method to verify annotators are correctly added.
+        """Verify that the expected annotators are attached to a LidarRtx instance.
 
         Args:
             lidar: LidarRtx instance to check.
@@ -115,7 +115,7 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
             self.assertIn(name, annotators)
 
     def attach_all_annotators(self, lidar: Any) -> None:
-        """Helper method to attach all annotators to a lidar.
+        """Attach all allowed annotators to a LidarRtx instance.
 
         Args:
             lidar: LidarRtx instance to attach annotators to.
@@ -179,12 +179,12 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
         )
 
     async def test_constructor_with_xform_prim(self) -> None:
-        """Test constructor with Xform prim (should raise Exception)."""
+        """Test constructor with Xform prim and expect an Exception."""
         with self.assertRaises(Exception):
             lidar = LidarRtx(prim_path=self.xform_prim_path, name="xform_lidar_instance")
 
     async def test_constructor_with_invalid_lidar_prim(self) -> None:
-        """Test constructor with OmniLidar prim without required API schema (should raise Exception)."""
+        """Test constructor with OmniLidar prim without required API schema and expect an Exception."""
         with self.assertRaises(Exception):
             lidar = LidarRtx(prim_path=self.invalid_lidar_prim_path, name="invalid_lidar_instance")
 
@@ -234,7 +234,11 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
         )
 
     async def test_get_render_product_path(self) -> None:
-        """Test get_render_product_path returns a valid path with correct prim type."""
+        """Tests that get_render_product_path returns a valid RenderProduct prim path.
+
+        Raises:
+            AssertionError: If the render product path is missing, is not a string, or does not point to a RenderProduct prim.
+        """
         lidar = LidarRtx(prim_path=self.lidar_prim_path, name="render_path_test")
 
         # Get the render product path
@@ -250,7 +254,11 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
         self.assertEqual(render_product_prim.GetTypeName(), "RenderProduct")
 
     async def test_annotator_methods(self) -> None:
-        """Test attach_annotator, detach_annotator, get_annotators, and detach_all_annotators."""
+        """Tests attach_annotator, detach_annotator, get_annotators, and detach_all_annotators.
+
+        Raises:
+            AssertionError: If annotator attachment state does not match the expected get_annotators output.
+        """
         lidar = LidarRtx(prim_path=self.lidar_prim_path, name="annotator_test")
 
         # Test each annotator individually
@@ -284,7 +292,11 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
         self.assertEqual(len(annotators), 0)
 
     async def test_annotator_kwarg_initialization(self) -> None:
-        """Test that annotators can be initialized with kwargs."""
+        """Tests that annotators can be initialized with kwargs.
+
+        Raises:
+            AssertionError: If IsaacCreateRTXLidarScanBuffer is not attached after initialization with kwargs.
+        """
         lidar = LidarRtx(prim_path=self.lidar_prim_path, name="kwarg_test")
 
         # Test IsaacCreateRTXLidarScanBuffer with specific kwargs
@@ -313,7 +325,11 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
         self.assertIn("IsaacCreateRTXLidarScanBuffer", annotators)
 
     async def test_writer_methods(self) -> None:
-        """Test get_writers, attach_writer, detach_writer, and detach_all_writers."""
+        """Tests get_writers, attach_writer, detach_writer, and detach_all_writers.
+
+        Raises:
+            AssertionError: If writer attachment state does not match the expected get_writers output.
+        """
         lidar = LidarRtx(prim_path=self.lidar_prim_path, name="writer_test")
 
         # Use RtxLidarDebugDrawPointCloud as the test writer
@@ -365,7 +381,11 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
             await update_stage_async()
 
     async def test_timeline_and_get_current_frame(self) -> None:
-        """Test timeline events and get_current_frame method."""
+        """Tests timeline events and get_current_frame method.
+
+        Raises:
+            AssertionError: If frame data keys, annotator data, or pause state do not match the expected LidarRtx state.
+        """
         # Create a LidarRtx object with config_file_name set to "Example_Rotary"
         lidar = LidarRtx(
             prim_path="/World/timeline_test_lidar", name="timeline_test_lidar", config_file_name="Example_Rotary"
@@ -436,11 +456,14 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
         # self.verify_frame_data(lidar, current_frame)
 
     def verify_frame_data(self, lidar: Any, current_frame: Any) -> None:
-        """Helper method to verify frame data.
+        """Verifies current frame data, flat scan data, and deprecated LidarRtx getter values.
 
         Args:
             lidar: LidarRtx instance to check.
             current_frame: The current frame dictionary to verify.
+
+        Raises:
+            AssertionError: If annotator data, expected frame keys, flat scan data, or getter values are invalid.
         """
         # Verify each annotator value is a non-empty dictionary
         for annotator_name in self.ALLOWED_ANNOTATORS:
@@ -465,10 +488,14 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
         self.verify_getter_methods(lidar, current_frame)
 
     def verify_point_cloud_data(self, current_frame: Any) -> None:
-        """Helper method to verify point cloud data.
+        """Verifies point_cloud_data against IsaacExtractRTXSensorPointCloud data.
 
         Args:
             current_frame: The current frame dictionary to verify.
+
+        Raises:
+            AssertionError: If point_cloud_data does not match IsaacExtractRTXSensorPointCloud data.
+            KeyError: If required point cloud frame data keys are missing.
         """
         # Point cloud data check
         np.testing.assert_array_equal(
@@ -478,10 +505,14 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
         )
 
     def verify_flat_scan_data(self, current_frame: Any) -> None:
-        """Helper method to verify flat scan data.
+        """Verifies flat scan frame fields against IsaacComputeRTXLidarFlatScan data.
 
         Args:
             current_frame: The current frame dictionary to verify.
+
+        Raises:
+            AssertionError: If flat scan frame fields do not match IsaacComputeRTXLidarFlatScan data.
+            KeyError: If required flat scan frame data keys are missing.
         """
         np.testing.assert_array_equal(
             current_frame["linear_depth_data"],
@@ -508,11 +539,15 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
         )
 
     def verify_getter_methods(self, lidar: Any, current_frame: Any) -> None:
-        """Helper method to verify getter methods.
+        """Verifies deprecated LidarRtx getter methods against IsaacComputeRTXLidarFlatScan data.
 
         Args:
             lidar: LidarRtx instance to check.
             current_frame: The current frame dictionary to verify.
+
+        Raises:
+            AssertionError: If a getter value is None or does not match IsaacComputeRTXLidarFlatScan data.
+            KeyError: If IsaacComputeRTXLidarFlatScan data is missing from the current frame dictionary.
         """
         # Test get_horizontal_resolution
         horizontal_resolution = lidar.get_horizontal_resolution()
@@ -553,7 +588,11 @@ class TestLidarRtx(omni.kit.test.AsyncTestCase):
         self.assertEqual(azimuth_range, current_frame["IsaacComputeRTXLidarFlatScan"].get("azimuthRange"))
 
     async def test_getter_methods_after_detach(self) -> None:
-        """Test getter methods after detaching annotator."""
+        """Tests getter methods after detaching annotator.
+
+        Raises:
+            AssertionError: If getters do not return values before detach or do not return None after detach.
+        """
         # Create a LidarRtx object
         lidar = LidarRtx(
             prim_path="/World/annotator_detach_test_lidar",

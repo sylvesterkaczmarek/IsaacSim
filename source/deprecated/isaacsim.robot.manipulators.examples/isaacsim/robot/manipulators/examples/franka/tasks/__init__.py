@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Defines task modules for Franka manipulator examples."""
+
 from isaacsim.robot.manipulators.examples.franka.tasks.follow_target import FollowTarget as FollowTarget
 from isaacsim.robot.manipulators.examples.franka.tasks.pick_place import PickPlace as PickPlace
 from isaacsim.robot.manipulators.examples.franka.tasks.stacking import Stacking as Stacking

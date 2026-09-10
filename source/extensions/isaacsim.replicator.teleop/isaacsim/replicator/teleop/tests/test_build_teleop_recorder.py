@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import tempfile
 
-import omni.kit.app
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
 import omni.usd
 from isaacsim.replicator.teleop import build_teleop_recorder
@@ -69,16 +70,16 @@ class TestBuildTeleopRecorder(omni.kit.test.AsyncTestCase):
 
     async def setUp(self) -> None:
         """Set up the test fixture."""
-        await omni.kit.app.get_app().next_update_async()
-        omni.usd.get_context().new_stage()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
 
     async def tearDown(self) -> None:
         """Tear down the test fixture."""
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
-        while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+        if stage_utils.is_stage_set() or omni.usd.get_context().get_stage() is not None:
+            stage_utils.close_stage()
+            await app_utils.update_app_async()
+        while stage_utils.is_stage_loading():
+            await app_utils.update_app_async()
 
     async def test_composes_expected_recordables(self) -> None:
         """Run the composes expected recordables test."""

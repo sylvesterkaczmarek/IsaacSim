@@ -22,7 +22,6 @@ repo_build.prebuild_link {
     { "python/tests", ext.target_dir .. "/isaacsim/asset/importer/mjcf/tests" },
     { "docs", ext.target_dir .. "/docs" },
     { "data", ext.target_dir .. "/data" },
-    { "icons", ext.target_dir .. "/icons" },
 }
 
 -- Copy Python module files

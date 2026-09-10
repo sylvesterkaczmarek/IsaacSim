@@ -28,7 +28,7 @@ import numpy as np
 import omni.timeline
 import omni.ui as ui
 from isaacsim.core.experimental.prims import Articulation, RigidPrim
-from isaacsim.gui.components.element_wrappers import (
+from isaacsim.gui.components import (
     Button,
     CheckBox,
     CollapsableFrame,

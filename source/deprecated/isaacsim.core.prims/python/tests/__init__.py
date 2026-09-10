@@ -13,4 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides the scan_for_test_modules flag for isaacsim.core.prims.tests."""
+
 scan_for_test_modules = True

@@ -82,44 +82,11 @@ class TestUtilitySnippets(omni.kit.test.AsyncTestCase):
 
         ### Code End
 
-    async def test_enable_physics_collision_convex(self) -> None:
-        """Test enabling physics collision with convex hull approximation."""
-        ###
-        import omni
-        from omni.physx.scripts import utils
-
-        # Create a cube mesh in the stage
-        stage = omni.usd.get_context().get_stage()
-        result, path = omni.kit.commands.execute("CreateMeshPrimCommand", prim_type="Cube")
-        # Get the prim
-        cube_prim = stage.GetPrimAtPath(path)
-        # Enable physics on prim
-        # If a tighter collision approximation is desired use convexDecomposition instead of convexHull
-        utils.setRigidBody(cube_prim, "convexHull", False)
-
-        ###
-
-    async def test_enable_physics_collision_decomp(self) -> None:
-        """Test enabling physics collision with convex decomposition."""
-        ###
-        import omni
-        from omni.physx.scripts import utils
-
-        # Create a cube mesh in the stage
-        stage = omni.usd.get_context().get_stage()
-        result, path = omni.kit.commands.execute("CreateMeshPrimCommand", prim_type="Cube")
-        # Get the prim
-        cube_prim = stage.GetPrimAtPath(path)
-        # Enable physics on prim
-        # If a tighter collision approximation is desired use convexDecomposition instead of convexHull
-        utils.setRigidBody(cube_prim, "convexDecomposition", False)
-        ###
-
     async def test_mass_properties(self) -> None:
         """Test setting mass and density properties on rigid bodies."""
         ###
+        import isaacsim.core.experimental.utils.physics as physics_utils
         import omni
-        from omni.physx.scripts import utils
         from pxr import UsdPhysics
 
         stage = omni.usd.get_context().get_stage()
@@ -127,52 +94,12 @@ class TestUtilitySnippets(omni.kit.test.AsyncTestCase):
         # Get the prim
         cube_prim = stage.GetPrimAtPath(path)
         # Make it a rigid body
-        utils.setRigidBody(cube_prim, "convexHull", False)
+        physics_utils.apply_rigid_body(cube_prim, approximation="convexHull", kinematic=False)
 
         mass_api = UsdPhysics.MassAPI.Apply(cube_prim)
         mass_api.CreateMassAttr(10)
         ### Alternatively set the density
         mass_api.CreateDensityAttr(1000)
-
-    async def test_traverse_assign_collision(self) -> None:
-        """Test traversing stage and assigning collision to all meshes."""
-        import omni
-        from omni.physx.scripts import utils
-        from pxr import Gf, Usd, UsdGeom
-
-        stage = omni.usd.get_context().get_stage()
-
-        def add_cube(stage: object, path: object, size: float = 10, offset: Gf.Vec3d = Gf.Vec3d(0, 0, 0)) -> None:
-            cubeGeom = UsdGeom.Cube.Define(stage, path)
-            cubeGeom.CreateSizeAttr(size)
-            cubeGeom.AddTranslateOp().Set(offset)
-
-        ### The following prims are added for illustrative purposes
-        result, path = omni.kit.commands.execute("CreateMeshPrimCommand", prim_type="Torus")
-        # all prims under AddCollision will get collisons assigned
-        add_cube(stage, "/World/Cube_0", offset=Gf.Vec3d(100, 100, 0))
-        # create a prim nested under without a parent
-        add_cube(stage, "/World/Nested/Cube", offset=Gf.Vec3d(100, 0, 100))
-        ###
-
-        # Traverse all prims in the stage starting at this path
-        curr_prim = stage.GetPrimAtPath("/")
-
-        for prim in Usd.PrimRange(curr_prim):
-            # only process shapes and meshes
-            if (
-                prim.IsA(UsdGeom.Cylinder)
-                or prim.IsA(UsdGeom.Capsule)
-                or prim.IsA(UsdGeom.Cone)
-                or prim.IsA(UsdGeom.Sphere)
-                or prim.IsA(UsdGeom.Cube)
-            ):
-                # use a ConvexHull for regular prims
-                utils.setCollider(prim, approximationShape="convexHull")
-            elif prim.IsA(UsdGeom.Mesh):
-                # "None" will use the base triangle mesh if available
-                # Can also use "convexDecomposition", "convexHull", "boundingSphere", "boundingCube"
-                utils.setCollider(prim, approximationShape="none")
 
     async def test_material(self) -> None:
         """Test creating and binding MDL material to a prim."""
@@ -227,7 +154,7 @@ class TestUtilitySnippets(omni.kit.test.AsyncTestCase):
         omni.usd.create_material_input(
             mtl_prim,
             "diffuse_texture",
-            assets_root_path + "/Isaac/Samples/DR/Materials/Textures/marble_tile.png",
+            assets_root_path + "/Isaac/Materials/AprilTag/Textures/tag16h5.png",
             Sdf.ValueTypeNames.Asset,
         )
         # Create a prim to apply the material to

@@ -15,8 +15,8 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/core/experimental/prims/IPrimDataReader.h>
-#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.h>
+#include <isaacsim/core/experimental/prims/IPrimDataReader.hpp>
+#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.hpp>
 #include <pybind11/functional.h>
 #include <pybind11/stl.h>
 

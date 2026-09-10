@@ -171,7 +171,7 @@ class Extension(omni.ext.IExt):
         """Clear all per-file import state."""
         self._per_file_state.clear()
 
-    async def _start_import(self, path: str | None = None, **kargs: object) -> str | None:
+    def _start_import(self, path: str | None = None, **kargs: object) -> str | None:
         """Start the URDF import process.
 
         Args:
@@ -213,13 +213,31 @@ class Extension(omni.ext.IExt):
         config.urdf_path = path
         config.usd_path = export_folder
 
-        stage_utils.create_new_stage()
+        add_reference_to_stage = (
+            models["add_reference_to_stage"].get_value_as_bool() if models.get("add_reference_to_stage") else False
+        )
+
+        if not add_reference_to_stage:
+            stage_utils.create_new_stage()
         importer = URDFImporter(config)
 
         output_path = importer.import_urdf()
         if not output_path:
             carb.log_error(f"Failed to import URDF at path: {path}")
             return None
+
+        if add_reference_to_stage:
+            try:
+                prim_path = stage_utils.generate_next_free_path(
+                    f"/{Path(output_path).stem}",
+                    prepend_default_prim=False,
+                )
+                stage_utils.add_reference_to_stage(usd_path=output_path, path=prim_path)
+            except Exception as exc:
+                carb.log_error(f"Failed to add imported URDF to the current stage: {exc}")
+                return None
+            self._last_config = copy.deepcopy(config)
+            return output_path
 
         result, _ = stage_utils.open_stage(output_path)
         self._last_config = copy.deepcopy(config)
@@ -380,7 +398,7 @@ class UrdfImporterDelegate(ai.AbstractImporterDelegate):
             carb.log_warn("URDF Importer: Importer not initialized, cannot import assets")
             return None
         for path in paths:
-            await self._importer._start_import(path=path, **kargs)
+            self._importer._start_import(path=path, **kargs)
         return {}
 
 

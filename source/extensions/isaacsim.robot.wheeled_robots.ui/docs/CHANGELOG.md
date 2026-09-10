@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.3.5] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+### Fixed
+- `test_differential_drive_golden`: corrected the golden Jetbot Y position sign (`+0.61`); positive angular velocity turns the robot toward `+Y`.
+
+## [2.3.4] - 2026-06-26
+### Changed
+- Remove the lifecycle `Extension` class from the documented public Python API.
+
 ## [2.3.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

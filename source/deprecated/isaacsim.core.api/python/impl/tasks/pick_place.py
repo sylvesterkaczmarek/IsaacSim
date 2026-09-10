@@ -38,7 +38,6 @@ class PickPlace(ABC, BaseTask):
         target_position: Target position for placing.
         cube_size: Size of the cube.
         offset: Offset for all task objects.
-
     """
 
     def __init__(
@@ -71,11 +70,10 @@ class PickPlace(ABC, BaseTask):
         return
 
     def set_up_scene(self, scene: Scene) -> None:
-        """Set up the scene with cube and robot.
+        """Sets up the scene with a ground plane, cube, and robot.
 
         Args:
-            scene: The scene to populate.
-
+            scene: Scene to populate with the ground plane, cube, and robot.
         """
         super().set_up_scene(scene)
         scene.add_default_ground_plane()
@@ -103,7 +101,11 @@ class PickPlace(ABC, BaseTask):
 
     @abstractmethod
     def set_robot(self) -> None:
-        """Create and configure the robot for the task."""
+        """Creates and configures the robot for the task.
+
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
+        """
         raise NotImplementedError
 
     def set_params(
@@ -112,13 +114,12 @@ class PickPlace(ABC, BaseTask):
         cube_orientation: np.ndarray | None = None,
         target_position: np.ndarray | None = None,
     ) -> None:
-        """Set task parameters for cube position, orientation, and target position.
+        """Sets task parameters for cube position, orientation, and target position.
 
         Args:
-            cube_position: New position for the cube.
-            cube_orientation: New orientation for the cube.
-            target_position: New target position for placing.
-
+            cube_position: Cube local position to set when provided.
+            cube_orientation: Cube local orientation to set when provided.
+            target_position: Target position for placing the cube.
         """
         if target_position is not None:
             self._target_position = target_position
@@ -127,11 +128,10 @@ class PickPlace(ABC, BaseTask):
         return
 
     def get_params(self) -> dict:
-        """Get current task parameters including cube and robot states.
+        """Gets current task parameters including cube and robot states.
 
         Returns:
-            Dictionary containing task parameters with values and modifiability flags.
-
+            Task parameter entries with values and modifiability flags.
         """
         params_representation = {}
         position, orientation = self._cube.get_local_pose()
@@ -143,11 +143,11 @@ class PickPlace(ABC, BaseTask):
         return params_representation
 
     def get_observations(self) -> dict:
-        """Get current task observations.
+        """Gets current task observations for the cube and robot.
 
         Returns:
-            Dictionary with cube and robot observations.
-
+            Observations keyed by cube name and robot name, including cube pose, target position, robot joint positions,
+            and end effector position when available.
         """
         joints_state = self._robot.get_joints_state()
         cube_position, cube_orientation = self._cube.get_local_pose()
@@ -167,17 +167,16 @@ class PickPlace(ABC, BaseTask):
         }
 
     def pre_step(self, time_step_index: int, simulation_time: float) -> None:
-        """Called before each physics step.
+        """Runs before each physics step.
 
         Args:
             time_step_index: Current simulation step index.
             simulation_time: Current simulation time.
-
         """
         return
 
     def post_reset(self) -> None:
-        """Reset the robot gripper to open position after task reset."""
+        """Resets the robot ParallelGripper to its opened joint positions after task reset."""
         from isaacsim.robot.manipulators.grippers.parallel_gripper import ParallelGripper
 
         if isinstance(self._robot.gripper, ParallelGripper):
@@ -185,19 +184,23 @@ class PickPlace(ABC, BaseTask):
         return
 
     def calculate_metrics(self) -> dict:
-        """Calculate task metrics.
+        """Calculates task metrics.
 
         Returns:
-            Dictionary containing calculated task metrics.
+            Task metrics.
 
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
         """
         raise NotImplementedError
 
     def is_done(self) -> bool:
-        """Check if task is complete.
+        """Checks if the task is complete.
 
         Returns:
-            Whether the task is complete.
+            True if the task is complete.
 
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
         """
         raise NotImplementedError

@@ -62,18 +62,13 @@ profiler = cProfile.Profile()
 
 
 def _load_franka_rmpflow_world(simulation_app: Any) -> FrankaRmpFlowExample:
-    """Load the legacy Lula Franka example without ``UIBuilder._load_world_async``.
+    """Create a headless Lula Franka RMPflow scenario on a fresh stage.
 
-    The deprecated UI builds ``World`` before ``create_new_stage()``; opening a stage invalidates that
-    ``World``, so headless runs fail with ``World.instance()`` being ``None``. This path creates the
-    stage and assets first, then constructs ``World`` and registers prims — same end state as the UI
-    after a successful load, without modifying the extension.
+    Args:
+        simulation_app: Running application used to advance stage and physics initialization.
 
-    ``SimulationApp.run_coroutine`` must not be used for long ``async`` loaders: monopolizing Kit's
-    asyncio loop triggers Python 3.12 ``RuntimeError: Cannot enter into task ... while another task``
-    spam from unrelated extensions. Standalone scripts also skip automatic ``SimulationContext``
-    setup when ``ISAAC_LAUNCHED_FROM_TERMINAL`` is set, so we mirror ``initialize_simulation_context_async``
-    with synchronous ``World`` APIs and ``simulation_app.update()`` flushes.
+    Returns:
+        Initialized scenario containing the Franka, target, and obstacle.
     """
     import carb.eventdispatcher
     import omni.usd
@@ -163,7 +158,15 @@ class _PhysicsStepTimingRecorder:
 def _make_physics_pre_step(
     scenario: FrankaRmpFlowExample, recorder: _PhysicsStepTimingRecorder
 ) -> Callable[[float, object], None]:
-    """Build callback for SimulationManager.register_callback(PHYSICS_PRE_STEP)."""
+    """Build callback for SimulationManager.register_callback(PHYSICS_PRE_STEP).
+
+    Args:
+        scenario: Lula scenario to update before each physics step.
+        recorder: Timing buffer in which to store measured scenario-update durations.
+
+    Returns:
+        Physics pre-step callback that updates the scenario and records its duration.
+    """
 
     def on_physics_pre_step(step_dt: float, context: object) -> None:
         # Legacy ``isaacsim.core.prims.SingleArticulation`` uses ``handles_initialized`` (not experimental
@@ -183,7 +186,12 @@ def _make_physics_pre_step(
 
 
 def _store_physics_step_timing_custom_measurements(phase_name: str, samples: np.ndarray) -> None:
-    """Emit SingleMeasurement rows so the Summary Report includes them (DictMeasurement is not rendered)."""
+    """Emit SingleMeasurement rows so the Summary Report includes them (DictMeasurement is not rendered).
+
+    Args:
+        phase_name: Benchmark phase to associate with the measurements.
+        samples: Scenario-update durations in milliseconds.
+    """
     prefix = "physics_pre_step scenario_update"
     if samples.size == 0:
         benchmark.store_custom_measurement(

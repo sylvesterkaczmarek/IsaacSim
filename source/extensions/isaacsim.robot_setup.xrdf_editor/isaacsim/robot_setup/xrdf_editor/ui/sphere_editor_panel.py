@@ -22,16 +22,10 @@ from typing import TYPE_CHECKING
 import carb
 import numpy as np
 import omni.ui as ui
-from isaacsim.gui.components.ui_utils import (
-    add_line_rect_flourish,
-    btn_builder,
-    float_builder,
-    get_style,
-    int_builder,
-    state_btn_builder,
-    xyz_builder,
-)
+from isaacsim.gui.components import btn_builder, float_builder, int_builder, state_btn_builder, xyz_builder
+from isaacsim.gui.components.ui_utils import add_line_rect_flourish, get_style
 from isaacsim.gui.components.widgets import DynamicComboBoxModel
+from omni.kit.notification_manager import NotificationStatus, post_notification
 from omni.kit.window.property.templates import LABEL_WIDTH
 
 from .. import sphere_generation
@@ -472,7 +466,7 @@ class SphereEditorPanel:
         if link_path is None:
             return
         factor = self._scale_factor_field.get_value_as_float()
-        self._state.collision_sphere_editor.scale_spheres(link_path, factor)
+        self._state.collision_sphere_editor.scale_link_spheres(link_path, factor)
 
     def _on_clear_link_spheres(self) -> None:
         link_path = self.get_selected_link_path()
@@ -498,10 +492,12 @@ class SphereEditorPanel:
             return
         mesh_list = self._state.link_to_meshes.get(link_name, [])
         if not mesh_list:
-            carb.log_warn(
+            message = (
                 f"Could not generate spheres for any meshes in link {link_name}.  This is likely "
                 f"due to all meshes nested under {link_name} being instanceable"
             )
+            carb.log_warn(message)
+            post_notification(message, status=NotificationStatus.WARNING)
             return
 
         if self._mesh_model is None:

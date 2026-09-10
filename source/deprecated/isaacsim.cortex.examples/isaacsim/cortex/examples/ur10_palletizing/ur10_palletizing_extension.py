@@ -24,7 +24,7 @@ from isaacsim.cortex.examples.base_sample import BaseSampleUITemplate
 from isaacsim.cortex.examples.ur10_palletizing.ur10_palletizing import BinStacking
 from isaacsim.cortex.framework.cortex_world import CortexWorld
 from isaacsim.examples.browser import get_instance as get_browser_instance
-from isaacsim.gui.components.ui_utils import btn_builder, cb_builder, str_builder
+from isaacsim.gui.components import btn_builder, cb_builder, str_builder
 
 
 class BinStackingExtension(omni.ext.IExt):
@@ -102,7 +102,7 @@ class BinStackingUI(BaseSampleUITemplate):
     def build_extra_frames(self) -> None:
         """Builds additional UI frames for task control and diagnostics.
 
-        Creates two collapsible frames: Task Control and Diagnostic frames with their respective UI elements.
+        Creates Task Control and Diagnostic collapsible frames with their UI elements.
         """
         extra_stacks = self.get_extra_frames_handle()
         self.task_ui_elements = {}
@@ -136,11 +136,12 @@ class BinStackingUI(BaseSampleUITemplate):
     def on_diagnostics(self, diagnostic: object, decision_stack: str) -> None:
         """Handles diagnostic updates from the bin stacking task.
 
-        Updates the UI with current bin selection, decision stack, and various diagnostic states including grasp status and attachment information.
+        Updates the UI with current bin selection, decision stack, and diagnostic states including grasp status and
+        attachment information.
 
         Args:
             diagnostic: Diagnostic information containing bin details and current states.
-            decision_stack: String representation of the current decision making stack.
+            decision_stack: String representation of the current decision-making stack.
         """
         if self.decision_stack != decision_stack:
             self.decision_stack = decision_stack
@@ -166,7 +167,7 @@ class BinStackingUI(BaseSampleUITemplate):
             self.needs_flip.set_value(False)
 
     def get_world(self) -> CortexWorld:
-        """Get the Cortex World instance.
+        """CortexWorld singleton instance used by the UI.
 
         Returns:
             The current CortexWorld singleton instance.
@@ -176,7 +177,7 @@ class BinStackingUI(BaseSampleUITemplate):
     def _on_start_button_event(self) -> None:
         """Handles the start button click event.
 
-        Starts the palletizing task asynchronously and disables the start button to prevent multiple starts.
+        Starts the palletizing task and disables the Start Palletizing button to prevent multiple starts.
         """
         asyncio.ensure_future(self.sample.on_event_async())
         self.task_ui_elements["Start Palletizing"].enabled = False
@@ -185,7 +186,7 @@ class BinStackingUI(BaseSampleUITemplate):
     def post_reset_button_event(self) -> None:
         """Handles the post-reset button event.
 
-        Re-enables the start palletizing button after the scene has been reset.
+        Re-enables the Start Palletizing button after the scene has been reset.
         """
         self.task_ui_elements["Start Palletizing"].enabled = True
         return
@@ -193,7 +194,7 @@ class BinStackingUI(BaseSampleUITemplate):
     def post_load_button_event(self) -> None:
         """Handles the post-load button event.
 
-        Re-enables the start palletizing button after the scene has been loaded.
+        Re-enables the Start Palletizing button after the scene has been loaded.
         """
         self.task_ui_elements["Start Palletizing"].enabled = True
         return
@@ -201,7 +202,7 @@ class BinStackingUI(BaseSampleUITemplate):
     def post_clear_button_event(self) -> None:
         """Handles the post-clear button event.
 
-        Disables the start palletizing button after the scene has been cleared.
+        Disables the Start Palletizing button after the scene has been cleared.
         """
         self.task_ui_elements["Start Palletizing"].enabled = False
         return
@@ -209,7 +210,7 @@ class BinStackingUI(BaseSampleUITemplate):
     def build_task_controls_ui(self) -> None:
         """Builds the task controls UI elements.
 
-        Creates the start palletizing button within a vertical stack layout. The button is initially disabled.
+        Creates the Start Palletizing button within a vertical stack layout and disables it initially.
         """
         with ui.VStack(spacing=5):
 
@@ -227,7 +228,8 @@ class BinStackingUI(BaseSampleUITemplate):
     def build_diagnostic_ui(self) -> None:
         """Builds the diagnostic UI elements.
 
-        Creates UI components to display decision stack, selected bin information, bin base path, and various boolean states like grasp reached, attachment status, and flip requirement.
+        Creates UI components for the decision stack, selected bin, bin base, grasp reached, attachment status, and
+        flip requirement.
         """
         with ui.VStack(spacing=5):
             ui.Label("Decision Stack", height=20)

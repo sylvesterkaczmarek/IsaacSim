@@ -16,6 +16,7 @@
 """Verifies ViewportManager camera, viewport, render product, and resolution utilities against live USD viewport state. The tests cover camera selection and pose updates, viewport window discovery, and render product lookup."""
 
 from typing import Any
+from unittest import mock
 
 import isaacsim.core.experimental.utils.prim as prim_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
@@ -23,7 +24,7 @@ import isaacsim.core.experimental.utils.xform as xform_utils
 import numpy as np
 import omni.kit.test
 from isaacsim.core.rendering_manager import ViewportManager
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdRender
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdRender, Vt
 
 _SETTING_RATE_LIMIT_ENABLED = "/app/runLoops/main/rateLimitEnabled"
 
@@ -46,6 +47,33 @@ class TestViewportManager(omni.kit.test.AsyncTestCase):
         super().tearDown()
 
     # --------------------------------------------------------------------
+
+    @staticmethod
+    def _define_render_product(
+        path: str,
+        *,
+        target_path: str | None = None,
+        resolution: tuple[int, int] = (1, 1),
+        device_ids: list[int] | None = None,
+    ) -> UsdRender.Product:
+        stage = stage_utils.get_current_stage()
+        render_product = UsdRender.Product.Define(stage, path)
+        render_product.GetResolutionAttr().Set(Gf.Vec2i(*resolution))
+        if target_path is not None:
+            render_product.GetCameraRel().SetTargets([target_path])
+        if device_ids is not None:
+            render_product.GetPrim().CreateAttribute("deviceIds", Sdf.ValueTypeNames.UIntArray).Set(
+                Vt.UIntArray(device_ids)
+            )
+        return render_product
+
+    @staticmethod
+    def _get_device_ids(render_product: UsdRender.Product) -> list[int]:
+        attribute = render_product.GetPrim().GetAttribute("deviceIds")
+        if not attribute.IsValid():
+            return []
+        device_ids = attribute.Get()
+        return [] if device_ids is None else [int(device_id) for device_id in device_ids]
 
     async def test_00_wait_for_viewport(self) -> None:  # 00 ensures that this test is run first
         """Test waiting for viewport readiness."""
@@ -178,6 +206,138 @@ class TestViewportManager(omni.kit.test.AsyncTestCase):
         # exception
         with self.assertRaisesRegex(ValueError, "Unable to get resolution: unknown"):
             resolution = ViewportManager.get_resolution("/Invalid/Source")
+
+    async def test_optimize_render_products_balances_and_reallocates_cameras(self) -> None:
+        """Balance camera render products and update assignments after their resolutions change."""
+        root_path = "/Render/OmniverseKit/HydraTextures/TestOptimize"
+        root = stage_utils.define_prim(root_path, "Scope")
+        stage_utils.define_prim("/World/CameraHigh", "Camera")
+        stage_utils.define_prim("/World/CameraLowA", "Camera")
+        stage_utils.define_prim("/World/CameraLowB", "Camera")
+        high_render_product = self._define_render_product(
+            f"{root_path}/CameraHigh",
+            target_path="/World/CameraHigh",
+            resolution=(200, 100),
+        )
+        low_render_product_a = self._define_render_product(
+            f"{root_path}/CameraLowA",
+            target_path="/World/CameraLowA",
+            resolution=(100, 100),
+        )
+        low_render_product_b = self._define_render_product(
+            f"{root_path}/CameraLowB",
+            target_path="/World/CameraLowB",
+            resolution=(100, 100),
+        )
+
+        with mock.patch.object(ViewportManager, "_get_gpu_count", return_value=2):
+            assignments = ViewportManager.optimize_render_products(root)
+
+        self.assertDictEqual(
+            assignments,
+            {
+                f"{root_path}/CameraHigh": [0],
+                f"{root_path}/CameraLowA": [1],
+                f"{root_path}/CameraLowB": [1],
+            },
+        )
+        self.assertListEqual(self._get_device_ids(high_render_product), [0])
+        self.assertListEqual(self._get_device_ids(low_render_product_a), [1])
+        self.assertListEqual(self._get_device_ids(low_render_product_b), [1])
+
+        high_render_product.GetResolutionAttr().Set(Gf.Vec2i(50, 50))
+        low_render_product_a.GetResolutionAttr().Set(Gf.Vec2i(300, 100))
+        with mock.patch.object(ViewportManager, "_get_gpu_count", return_value=2):
+            assignments = ViewportManager.optimize_render_products(root)
+
+        self.assertDictEqual(
+            assignments,
+            {
+                f"{root_path}/CameraHigh": [1],
+                f"{root_path}/CameraLowA": [0],
+                f"{root_path}/CameraLowB": [1],
+            },
+        )
+        self.assertListEqual(self._get_device_ids(high_render_product), [1])
+        self.assertListEqual(self._get_device_ids(low_render_product_a), [0])
+        self.assertListEqual(self._get_device_ids(low_render_product_b), [1])
+
+    async def test_optimize_render_products_preserves_fixed_and_viewport_products(self) -> None:
+        """Account for explicit fixed loads without moving non-camera or viewport render products."""
+        root_path = "/Render/OmniverseKit/HydraTextures/TestFixed"
+        stage_utils.define_prim(root_path, "Scope")
+        legacy_lidar = stage_utils.define_prim("/World/LegacyLidar", "Camera")
+        legacy_lidar.CreateAttribute("cameraSensorType", Sdf.ValueTypeNames.Token).Set("lidar")
+        stage_utils.define_prim("/World/ViewportCamera", "Camera")
+        stage_utils.define_prim("/World/CameraHigh", "Camera")
+        stage_utils.define_prim("/World/CameraLow", "Camera")
+        fixed_render_product = self._define_render_product(
+            f"{root_path}/FixedLidar",
+            target_path="/World/LegacyLidar",
+            resolution=(100, 100),
+            device_ids=[0],
+        )
+        viewport_render_product = self._define_render_product(
+            f"{root_path}/omni_kit_widget_viewport_ViewportTexture_0",
+            target_path="/World/ViewportCamera",
+            resolution=(200, 100),
+            device_ids=[0],
+        )
+        high_render_product = self._define_render_product(
+            f"{root_path}/CameraHigh",
+            target_path="/World/CameraHigh",
+            resolution=(100, 100),
+        )
+        low_render_product = self._define_render_product(
+            f"{root_path}/CameraLow",
+            target_path="/World/CameraLow",
+            resolution=(10, 10),
+        )
+
+        with mock.patch.object(ViewportManager, "_get_gpu_count", return_value=2):
+            assignments = ViewportManager.optimize_render_products(root_path)
+
+        self.assertDictEqual(
+            assignments,
+            {
+                f"{root_path}/CameraHigh": [1],
+                f"{root_path}/CameraLow": [1],
+            },
+        )
+        self.assertListEqual(self._get_device_ids(fixed_render_product), [0])
+        self.assertListEqual(self._get_device_ids(viewport_render_product), [0])
+        self.assertListEqual(self._get_device_ids(high_render_product), [1])
+        self.assertListEqual(self._get_device_ids(low_render_product), [1])
+
+    async def test_optimize_render_products_validates_root_and_no_op_conditions(self) -> None:
+        """Reject invalid roots and preserve renderer defaults when allocation would not help."""
+        with self.assertRaisesRegex(ValueError, "is not a valid USD prim"):
+            ViewportManager.optimize_render_products("/Render/Missing")
+
+        root_path = "/Render/OmniverseKit/HydraTextures/TestNoOp"
+        stage_utils.define_prim(root_path, "Scope")
+        stage_utils.define_prim("/World/CameraA", "Camera")
+        stage_utils.define_prim("/World/CameraB", "Camera")
+        render_product_a = self._define_render_product(
+            f"{root_path}/CameraA",
+            target_path="/World/CameraA",
+            resolution=(200, 100),
+        )
+        render_product_b = self._define_render_product(
+            f"{root_path}/CameraB",
+            target_path="/World/CameraB",
+            resolution=(100, 100),
+        )
+
+        with mock.patch.object(ViewportManager, "_get_gpu_count", return_value=1):
+            self.assertDictEqual(ViewportManager.optimize_render_products(root_path), {})
+        with mock.patch.object(ViewportManager, "_get_gpu_count", return_value=4):
+            self.assertDictEqual(ViewportManager.optimize_render_products(root_path), {})
+        with mock.patch.object(ViewportManager, "_get_gpu_count", return_value=2):
+            self.assertDictEqual(ViewportManager.optimize_render_products(render_product_a), {})
+
+        self.assertFalse(render_product_a.GetPrim().GetAttribute("deviceIds").IsValid())
+        self.assertFalse(render_product_b.GetPrim().GetAttribute("deviceIds").IsValid())
 
     async def test_set_resolution(self) -> None:
         """Set and verify viewport resolution through each supported source type."""

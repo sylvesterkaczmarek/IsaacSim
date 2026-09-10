@@ -8,8 +8,15 @@
   - kinematics: cumotion.Kinematics
   - controlled_joint_names: list[str]
 
+- class CumotionDebugVisualizer(Protocol)
+  - def create_sphere(self, source_prim_path: str, geometry_index: int, radius: float, enabled: bool) -> str
+  - def create_cube(self, source_prim_path: str, geometry_index: int, side_lengths: np.ndarray, enabled: bool) -> str
+  - def create_capsule(self, source_prim_path: str, geometry_index: int, radius: float, height: float, enabled: bool) -> str
+  - def update_poses(self, paths: list[str], positions: np.ndarray, orientations: np.ndarray)
+  - def set_enabled(self, path: str, enabled: bool)
+
 - class CumotionWorldInterface(mg.WorldInterface)
-  - def __init__(self, world_to_robot_base: tuple[wp.array, wp.array] | None = None, visualize_debug_prims: bool = False, visual_debug_enabled_prim_rgb: list[float] | None = None, visual_debug_disabled_prim_rgb: list[float] | None = None, visual_debug_prim_alpha: float = 0.3, device: wp.DeviceLike = None)
+  - def __init__(self, world_to_robot_base: tuple[wp.array, wp.array] | None = None, debug_visualizer: CumotionDebugVisualizer | None = None, device: wp.DeviceLike = None)
   - [property] def world_view(self) -> cumotion.WorldView
   - def add_spheres(self, prim_paths: list[str], radii: wp.array, scales: wp.array, safety_tolerances: wp.array, poses: tuple[wp.array, wp.array], enabled_array: wp.array)
   - def add_cubes(self, prim_paths: list[str], sizes: wp.array, scales: wp.array, safety_tolerances: wp.array, poses: tuple[wp.array, wp.array], enabled_array: wp.array)

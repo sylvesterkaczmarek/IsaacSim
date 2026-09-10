@@ -16,9 +16,10 @@
 """Internal implementation classes and functions for the robot motion generation system."""
 
 from .base_controller import BaseController as BaseController
-from .controller_structures import ControllerContainer as ControllerContainer
-from .controller_structures import ParallelController as ParallelController
-from .controller_structures import SequentialController as SequentialController
+from .controller_structures import ChainedController as ChainedController
+from .controller_structures import CombinedController as CombinedController
+from .controller_structures import SelectableController as SelectableController
+from .extension import Extension as Extension
 from .obstacle_strategy import ObstacleConfiguration as ObstacleConfiguration
 from .obstacle_strategy import ObstacleRepresentation as ObstacleRepresentation
 from .obstacle_strategy import ObstacleStrategy as ObstacleStrategy

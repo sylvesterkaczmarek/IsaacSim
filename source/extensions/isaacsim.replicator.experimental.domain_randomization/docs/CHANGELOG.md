@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.2.10] - 2026-08-19
+### Fixed
+- `get_reset_inds`: raise `RuntimeError` when the domain-randomization context is not initialized.
+
+## [1.2.9] - 2026-08-14
+### Fixed
+- Export the extension `IExt` so stage close clears physics-view registries and the randomization context.
+- Connect `numSamples` only when the distribution node exposes that input so sequence distributions can author graphs.
+
+## [1.2.8] - 2026-08-13
+### Fixed
+- Skip tendon attribute randomization on reset for articulations with no fixed tendons so later writes on the same view still apply.
+
+## [1.2.7] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [1.2.6] - 2026-07-07
+### Changed
+- Update the generated Python API inventory.
+
 ## [1.2.5] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

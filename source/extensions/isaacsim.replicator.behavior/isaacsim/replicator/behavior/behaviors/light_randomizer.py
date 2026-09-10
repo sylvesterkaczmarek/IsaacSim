@@ -20,16 +20,21 @@ from __future__ import annotations
 from typing import Any
 
 import carb
+import isaacsim.core.experimental.utils.prim as prim_utils
 import numpy as np
+import omni.replicator.core as rep
 from isaacsim.replicator.behavior.global_variables import EXPOSED_ATTR_NS
 from isaacsim.replicator.behavior.utils.behavior_utils import (
+    apply_behavior_seed,
     check_if_exposed_variables_should_be_removed,
     create_exposed_variables,
     get_exposed_variable,
+    order_range_vectors,
+    order_scalar_range,
     remove_exposed_variables,
 )
 from omni.behavior.scripting.core import BehaviorScript
-from pxr import Gf, Sdf, Usd, UsdLux
+from pxr import Gf, Sdf, UsdLux
 
 
 class LightRandomizer(BehaviorScript):
@@ -53,31 +58,33 @@ class LightRandomizer(BehaviorScript):
             "attr_name": "range:minColor",
             "attr_type": Sdf.ValueTypeNames.Color3f,
             "default_value": Gf.Vec3f(0.1, 0.1, 0.1),
-            "doc": "Minimum RGB values for the light color randomization.",
+            "doc": "Minimum RGB values for the light color randomization. Inverted channels are swapped.",
         },
         {
             "attr_name": "range:maxColor",
             "attr_type": Sdf.ValueTypeNames.Color3f,
             "default_value": Gf.Vec3f(0.9, 0.9, 0.9),
-            "doc": "Maximum RGB values for the light color randomization.",
+            "doc": "Maximum RGB values for the light color randomization. Inverted channels are swapped.",
         },
         {
             "attr_name": "range:intensity",
             "attr_type": Sdf.ValueTypeNames.Float2,
             "default_value": Gf.Vec2f(1000.0, 20000.0),
-            "doc": "Range for the light intensity as (min, max).",
+            "doc": "Range for the light intensity as (min, max). Inverted bounds are swapped.",
         },
         {
             "attr_name": "seed",
             "attr_type": Sdf.ValueTypeNames.Int,
             "default_value": -1,
-            "doc": "Random seed for reproducible randomization. Use -1 for non-deterministic behavior.",
+            "doc": "Random seed for reproducible randomization. Use -1 for non-deterministic behavior. Changes apply on the next play or resume.",
         },
     ]
 
     def on_init(self) -> None:
         """Called when the script is assigned to a prim."""
         self._rng = None
+        self._last_seed = None
+        self._rng_injected = False
         self._update_counter = 0
         self._interval = 0
         self._valid_prims = []
@@ -127,25 +134,35 @@ class LightRandomizer(BehaviorScript):
         self._interval = self._get_exposed_variable("interval")
         self._min_color = self._get_exposed_variable("range:minColor")
         self._max_color = self._get_exposed_variable("range:maxColor")
-        self._intensity_range = self._get_exposed_variable("range:intensity")
+        self._min_color, self._max_color = order_range_vectors(
+            self._min_color, self._max_color, labels=("r", "g", "b"), owner=self.prim_path
+        )
+        self._intensity_range = order_scalar_range(
+            self._get_exposed_variable("range:intensity"), owner=self.prim_path, label="range:intensity"
+        )
         seed = self._get_exposed_variable("seed")
+        apply_behavior_seed(self, seed)
 
         # Skip the one-shot setup if already initialized (e.g. a play/pause/play loop). Re-caching here
         # would store the current randomized color/intensity as the "initial" and break restoration on stop.
         if self._valid_prims:
             return
 
-        # Initialize the random number generator (use seed if valid, otherwise non-deterministic)
-        if self._rng is None:
-            self._rng = np.random.default_rng(seed if seed >= 0 else None)
-
         # Get the valid prims (light prims)
-        if include_children:
-            self._valid_prims = [prim for prim in Usd.PrimRange(self.prim) if prim.HasAPI(UsdLux.LightAPI)]
-        elif self.prim.HasAPI(UsdLux.LightAPI):
-            self._valid_prims = [self.prim]
+        if self.prim and self.prim.IsValid():
+            if include_children:
+                self._valid_prims = prim_utils.get_all_matching_child_prims(
+                    self.prim,
+                    predicate=lambda prim, _: prim.IsValid() and prim_utils.has_api(prim, UsdLux.LightAPI),
+                    include_self=True,
+                )
+            elif prim_utils.has_api(self.prim, UsdLux.LightAPI):
+                self._valid_prims = [self.prim]
+            else:
+                self._valid_prims = []
         else:
             self._valid_prims = []
+        if not self._valid_prims:
             carb.log_warn(f"[{self.prim_path}] No valid light prims found.")
 
         # Cache original attributes to restore after randomization
@@ -156,36 +173,40 @@ class LightRandomizer(BehaviorScript):
     def _reset(self) -> None:
         # Restore original attributes
         for prim, attrs in self._initial_attributes.items():
+            if not prim_utils.is_prim_valid(prim):
+                continue
             for attr_name, attr_value in attrs.items():
                 if attr_value is None:
                     continue
-                prim.GetAttribute(attr_name).Set(attr_value)
+                rep.functional.modify.attribute(prim, attr_name, attr_value)
 
         # Clear cached values
         self._valid_prims.clear()
         self._initial_attributes.clear()
         self._update_counter = 0
         self._rng = None
+        self._last_seed = None
+        self._rng_injected = False
 
     def _apply_behavior(self) -> None:
         for prim in self._valid_prims:
+            if not prim_utils.is_prim_valid(prim) or not prim_utils.has_api(prim, UsdLux.LightAPI):
+                continue
             rand_color = (
                 self._rng.uniform(self._min_color[0], self._max_color[0]),
                 self._rng.uniform(self._min_color[1], self._max_color[1]),
                 self._rng.uniform(self._min_color[2], self._max_color[2]),
             )
-            prim.GetAttribute("inputs:color").Set(rand_color)
+            rep.functional.modify.attribute(prim, "inputs:color", rand_color)
 
             rand_intensity = self._rng.uniform(self._intensity_range[0], self._intensity_range[1])
-            prim.GetAttribute("inputs:intensity").Set(rand_intensity)
+            rep.functional.modify.attribute(prim, "inputs:intensity", rand_intensity)
 
-    def _cache_initial_attributes(self, prim: Usd.Prim) -> None:
-        if not prim.HasAttribute("inputs:intensity"):
-            prim.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float)
-        if not prim.HasAttribute("inputs:color"):
-            prim.CreateAttribute("inputs:color", Sdf.ValueTypeNames.Color3f)
-        intensity = prim.GetAttribute("inputs:intensity").Get()
-        color = prim.GetAttribute("inputs:color").Get()
+    def _cache_initial_attributes(self, prim: Any) -> None:
+        prim_utils.create_prim_attribute(prim, name="inputs:intensity", type_name=Sdf.ValueTypeNames.Float)
+        prim_utils.create_prim_attribute(prim, name="inputs:color", type_name=Sdf.ValueTypeNames.Color3f)
+        intensity = prim_utils.get_prim_attribute_value(prim, "inputs:intensity")
+        color = prim_utils.get_prim_attribute_value(prim, "inputs:color")
         if intensity is None:
             carb.log_warn(
                 f"[LightRandomizer] {prim.GetPath()}.inputs:intensity has no authored value and will be skipped on reset."
@@ -206,7 +227,10 @@ class LightRandomizer(BehaviorScript):
     def set_rng(self, rng: np.random.Generator | None = None) -> None:
         """Set the random number generator, overriding the USD seed attribute.
 
+        The injected generator is kept until the USD seed changes or the behavior resets.
+
         Args:
             rng: Numpy random generator. If None, creates a new default generator.
         """
         self._rng = rng if rng is not None else np.random.default_rng()
+        self._rng_injected = True

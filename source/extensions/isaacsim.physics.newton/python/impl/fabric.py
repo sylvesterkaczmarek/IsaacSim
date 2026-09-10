@@ -31,22 +31,29 @@ if TYPE_CHECKING:
 def set_fabric_transforms(
     fabric_transforms: wp.fabricarray(dtype=wp.mat44d),  # type: ignore[valid-type]
     newton_indices: wp.fabricarray(dtype=wp.uint32),  # type: ignore[valid-type]
+    body_scales: wp.array(ndim=1, dtype=wp.vec3f),  # type: ignore[valid-type]
     newton_body_q: wp.array(ndim=1, dtype=wp.transformf),  # type: ignore[valid-type]
     body_count: int,
+    scene_scale: float,
 ) -> None:
     """Write Newton body transforms to Fabric world matrices.
 
     Args:
         fabric_transforms: Output Fabric world matrices.
         newton_indices: Newton body indices to read from.
+        body_scales: Local scales authored on the USD bodies.
         newton_body_q: Newton body transforms.
         body_count: Number of valid bodies in newton_body_q for bounds checking.
+        scene_scale: Scale factor from Newton meters to USD units.
     """
     i = int(wp.tid())  # type: ignore[arg-type]
     idx = int(newton_indices[i])
     if idx < body_count:
         transform = newton_body_q[idx]
-        fabric_transforms[i] = wp.transpose(wp.mat44d(wp.transform_to_matrix(transform)))  # type: ignore[call-overload]
+        position = transform.p * scene_scale
+        rotation = transform.q
+        scale = body_scales[idx]
+        fabric_transforms[i] = wp.mat44d(wp.transpose(wp.transform_compose(position, rotation, scale)))  # type: ignore[call-overload]
 
 
 class FabricManager:
@@ -61,6 +68,16 @@ class FabricManager:
         self.newton_index_attr = "newton:index"
         self._first_update_done = False
         self._no_prims_warning_logged = False
+        self._body_scales: wp.array | None = None
+
+    def set_body_scales(self, scales: list[tuple[float, float, float]], device: str) -> None:
+        """Set the composed USD world scales for Newton bodies.
+
+        Args:
+            scales: Body scales in Newton body index order.
+            device: Warp device on which to store the scales.
+        """
+        self._body_scales = wp.array(scales, dtype=wp.vec3f, device=device)
 
     def cleanup_stale_newton_index(self, valid_paths: set[str], device: str) -> None:
         """Remove newton:index from Fabric prims that are no longer dynamic bodies.
@@ -91,7 +108,7 @@ class FabricManager:
         Args:
             model: Newton Model object.
             state: Newton State object containing body_q transforms.
-            scene_scale: Scene scale factor (unused but kept for API compatibility).
+            scene_scale: Scale factor from Newton meters to USD units.
             device: Device string.
         """
         # Select all prims that have both the world matrix and newton index
@@ -135,11 +152,14 @@ class FabricManager:
         if newton_indices.shape[0] == 0 or state is None or state.body_q is None:
             return
 
+        if self._body_scales is None or self._body_scales.shape[0] != body_count:
+            self._body_scales = wp.array([(1.0, 1.0, 1.0)] * body_count, dtype=wp.vec3f, device=device)
+
         try:
             wp.launch(
                 set_fabric_transforms,
                 dim=newton_indices.shape[0],
-                inputs=[fabric_transforms, newton_indices, state.body_q, body_count],
+                inputs=[fabric_transforms, newton_indices, self._body_scales, state.body_q, body_count, scene_scale],
                 device=device,
             )
             wp.synchronize_device(device)

@@ -280,7 +280,6 @@ SUPPORTED_LIDAR_CONFIGS: dict[str, "set[str] | list[dict[str, str]]"] = {
         ]
         for profile in profiles
     ],
-    "/Isaac/Sensors/SICK/TIM781/SICK_TIM781.usd": set(),
     "/Isaac/Sensors/Slamtec/RPLIDAR_S2E/Slamtec_RPLIDAR_S2E.usd": set(),
     "/Isaac/Sensors/ZVISION/ZVISION_ML30S.usda": set(),
     "/Isaac/Sensors/ZVISION/ZVISION_MLXS.usda": set(),

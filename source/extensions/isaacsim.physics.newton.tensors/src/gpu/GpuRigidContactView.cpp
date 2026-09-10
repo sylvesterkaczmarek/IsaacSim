@@ -13,14 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "GpuRigidContactView.h"
+#include "GpuRigidContactView.hpp"
 
-#include "CudaCommon.h"
-#include "CudaKernels.h"
-#include "utils/TensorOps.h"
+#include "CudaCommon.hpp"
+#include "CudaKernels.hpp"
+#include "utils/TensorOps.hpp"
 
 #include <carb/logging/Log.h>
 
+#include <algorithm>
 #include <cstring>
 
 namespace isaacsim
@@ -323,6 +324,88 @@ bool GpuRigidContactView::getContactData(const TensorDesc* contactForceTensor,
     return true;
 }
 
+bool GpuRigidContactView::getFrictionData(const TensorDesc* frictionForceTensor,
+                                          const TensorDesc* contactPointTensor,
+                                          const TensorDesc* contactCountTensor,
+                                          const TensorDesc* contactStartIndicesTensor,
+                                          float dt) const
+{
+    if (!frictionForceTensor || !contactPointTensor || !contactCountTensor || !contactStartIndicesTensor)
+        return false;
+    if (!frictionForceTensor->data || !contactPointTensor->data || !contactCountTensor->data ||
+        !contactStartIndicesTensor->data)
+    {
+        return false;
+    }
+    if (m_sensorCount == 0 || m_filterCount == 0 || m_rigidContactMax <= 0)
+        return false;
+
+    const uint32_t maxCount = m_maxContactDataCount;
+    const uint32_t pairCount = m_sensorCount * m_filterCount;
+    if (!checkTensorDevice(*frictionForceTensor, m_deviceOrdinal, "friction force", __FUNCTION__) ||
+        !checkTensorFloat32(*frictionForceTensor, "friction force", __FUNCTION__) ||
+        !checkTensorSizeExact(*frictionForceTensor, maxCount * 3u, "friction force", __FUNCTION__))
+    {
+        return false;
+    }
+    if (!checkTensorDevice(*contactPointTensor, m_deviceOrdinal, "friction point", __FUNCTION__) ||
+        !checkTensorFloat32(*contactPointTensor, "friction point", __FUNCTION__) ||
+        !checkTensorSizeExact(*contactPointTensor, maxCount * 3u, "friction point", __FUNCTION__))
+    {
+        return false;
+    }
+    if (!checkTensorDevice(*contactCountTensor, m_deviceOrdinal, "friction count", __FUNCTION__) ||
+        !checkTensorInt32(*contactCountTensor, "friction count", __FUNCTION__) ||
+        !checkTensorSizeExact(*contactCountTensor, pairCount, "friction count", __FUNCTION__))
+    {
+        return false;
+    }
+    if (!checkTensorDevice(*contactStartIndicesTensor, m_deviceOrdinal, "friction start indices", __FUNCTION__) ||
+        !checkTensorInt32(*contactStartIndicesTensor, "friction start indices", __FUNCTION__) ||
+        !checkTensorSizeExact(*contactStartIndicesTensor, pairCount, "friction start indices", __FUNCTION__))
+    {
+        return false;
+    }
+
+    _refreshContactPointers();
+    const float* force = _resolveContactForce();
+    if (!force)
+        return false;
+
+    const size_t countBytes = pairCount * sizeof(uint32_t);
+    auto* outCounts = static_cast<uint32_t*>(contactCountTensor->data);
+    auto* outStartIndices = static_cast<uint32_t*>(contactStartIndicesTensor->data);
+    cudaMemset(outCounts, 0, countBytes);
+    launchCountContactsPerPair(m_cachedContactCount, m_cachedShape0, m_cachedShape1, m_cachedShapeBody,
+                               m_deviceBodySensorMap, m_bodyCount, m_deviceBodyFilterMap, m_bodyCount,
+                               static_cast<int>(m_filterCount), m_worldBodyIndex, outCounts, m_rigidContactMax);
+    cudaDeviceSynchronize();
+    cudaMemcpy(m_scratchCounts.data(), outCounts, countBytes, cudaMemcpyDeviceToHost);
+
+    uint32_t remainingCount = maxCount;
+    for (uint32_t i = 0; i < pairCount; ++i)
+    {
+        m_scratchStartIndices[i] = maxCount - remainingCount;
+        m_scratchCounts[i] = std::min(m_scratchCounts[i], remainingCount);
+        remainingCount -= m_scratchCounts[i];
+    }
+    cudaMemcpy(outStartIndices, m_scratchStartIndices.data(), countBytes, cudaMemcpyHostToDevice);
+
+    cudaMemset(frictionForceTensor->data, 0, maxCount * 3 * sizeof(float));
+    cudaMemset(contactPointTensor->data, 0, maxCount * 3 * sizeof(float));
+    cudaMemset(outCounts, 0, countBytes);
+    const bool ok = launchFrictionData(
+        m_cachedContactCount, m_cachedShape0, m_cachedShape1, _getContactPoint0(), _getContactPoint1(),
+        m_cachedContactNormal, force, _getThickness0(), _getThickness1(), m_cachedShapeBody, m_cachedBodyQ,
+        m_deviceBodySensorMap, m_bodyCount, m_deviceBodyFilterMap, m_bodyCount, static_cast<int>(m_filterCount),
+        m_worldBodyIndex, _getPhysicsDtScale(dt), maxCount, static_cast<float*>(frictionForceTensor->data),
+        static_cast<float*>(contactPointTensor->data), outCounts, outStartIndices, static_cast<int>(pairCount),
+        m_rigidContactMax, m_contactPointsInWorldSpace);
+    cudaDeviceSynchronize();
+    cudaMemcpy(outCounts, m_scratchCounts.data(), countBytes, cudaMemcpyHostToDevice);
+    return ok;
+}
+
 bool GpuRigidContactView::getRawContactData(const TensorDesc* contactForceTensor,
                                             const TensorDesc* contactPointTensor,
                                             const TensorDesc* contactNormalTensor,
@@ -389,13 +472,22 @@ bool GpuRigidContactView::getRawContactData(const TensorDesc* contactForceTensor
 
     _refreshContactPointers();
     const float* force = _resolveContactForce();
-    if (!force)
-        return false;
-
     float dtScale = _getPhysicsDtScale(dt);
     size_t sensorBytes = m_sensorCount * sizeof(uint32_t);
     auto* outCounts = static_cast<uint32_t*>(contactCountTensor->data);
     auto* outStartIdx = static_cast<uint32_t*>(contactStartIndicesTensor->data);
+
+    if (!force || m_rigidContactMax <= 0)
+    {
+        cudaMemset(outCounts, 0, sensorBytes);
+        cudaMemset(outStartIdx, 0, sensorBytes);
+        cudaMemset(contactForceTensor->data, 0, maxCount * sizeof(float));
+        cudaMemset(contactPointTensor->data, 0, maxCount * 3 * sizeof(float));
+        cudaMemset(contactNormalTensor->data, 0, maxCount * 3 * sizeof(float));
+        cudaMemset(contactSeparationTensor->data, 0, maxCount * sizeof(float));
+        cudaMemset(otherActorIdsTensor->data, 0, maxCount * sizeof(uint64_t));
+        return true;
+    }
 
     cudaMemset(outCounts, 0, sensorBytes);
     launchCountRawContactsPerSensor(m_cachedContactCount, m_cachedShape0, m_cachedShape1, m_cachedShapeBody,

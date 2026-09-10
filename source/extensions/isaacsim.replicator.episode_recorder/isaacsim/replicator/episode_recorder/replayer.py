@@ -51,7 +51,7 @@ from pxr import Sdf
 from ._pose_backend import PoseBackend, normalize_pose_backend, pose_backend_ctx
 from .base import Recordable, ReplayPolicy
 from .manifest import SessionManifest
-from .recordables._utils import is_missing_xform_ops_error
+from .recordables._utils import is_missing_xform_ops_error, is_singular_matrix_error, singular_matrix_pose_message
 from .registry import rehydrate
 from .storage import SessionReader
 
@@ -104,6 +104,7 @@ class EpisodeReplayer:
         # before children compute local poses (otherwise children lag a frame on
         # nested articulations).
         self._replay_pose_batch_tiers: list[Any] = []
+        self._replay_pose_batch_tier_paths: list[list[str]] = []
         self._replay_pose_batch_tier_indices: list[np.ndarray] = []
         # Per-tier ``positions[sel]`` selector: ``slice`` for contiguous full
         # ranges (zero-copy view), ``np.ndarray`` otherwise (fancy indexing).
@@ -635,10 +636,32 @@ class EpisodeReplayer:
                     _write()
                 except Exception as exc:
                     if tier_idx in self._replay_pose_batch_reset_tiers or not is_missing_xform_ops_error(exc):
+                        if is_singular_matrix_error(exc):
+                            raise RuntimeError(
+                                singular_matrix_pose_message(self._replay_pose_batch_target(tier_idx))
+                            ) from exc
                         raise
                     tier_batch.reset_xform_op_properties()
                     self._replay_pose_batch_reset_tiers.add(tier_idx)
-                    _write()
+                    try:
+                        _write()
+                    except Exception as retry_exc:
+                        if is_singular_matrix_error(retry_exc):
+                            raise RuntimeError(
+                                singular_matrix_pose_message(self._replay_pose_batch_target(tier_idx))
+                            ) from retry_exc
+                        raise
+
+    def _replay_pose_batch_target(self, tier_idx: int) -> str:
+        paths = (
+            self._replay_pose_batch_tier_paths[tier_idx] if tier_idx < len(self._replay_pose_batch_tier_paths) else []
+        )
+        if not paths:
+            return f"EpisodeReplayer pose batch tier {tier_idx}"
+        sample = ", ".join(paths[:3])
+        if len(paths) > 3:
+            sample += f", ... ({len(paths)} prims)"
+        return f"EpisodeReplayer pose batch tier {tier_idx} [{sample}]"
 
     def _build_replay_pose_batch(self, recordables: list[Recordable]) -> None:
         """Build ancestry-ordered ``XformPrim`` tiers for replaying world-pose recordables.
@@ -701,6 +724,7 @@ class EpisodeReplayer:
             for tier_global_indices in tier_assignment:
                 tier_paths = [all_paths[i] for i in tier_global_indices]
                 self._replay_pose_batch_tiers.append(XformPrim(tier_paths))
+                self._replay_pose_batch_tier_paths.append(tier_paths)
                 tier_indices_arr = np.asarray(tier_global_indices, dtype=np.int64)
                 self._replay_pose_batch_tier_indices.append(tier_indices_arr)
                 # Single contiguous tier covering all prims is the common
@@ -732,6 +756,7 @@ class EpisodeReplayer:
 
     def _teardown_replay_pose_batch(self) -> None:
         self._replay_pose_batch_tiers = []
+        self._replay_pose_batch_tier_paths = []
         self._replay_pose_batch_tier_indices = []
         self._replay_pose_batch_tier_selectors = []
         self._replay_pose_batch_slot_by_id = {}

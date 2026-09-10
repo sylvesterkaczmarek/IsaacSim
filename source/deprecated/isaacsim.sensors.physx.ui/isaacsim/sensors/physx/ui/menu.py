@@ -163,8 +163,8 @@ class RangeSensorMenu:
         """Creates a PhysX Lidar sensor with predefined configuration.
 
         Args:
-            *args: Variable length argument list passed to the command.
-            **kwargs: Additional keyword arguments passed to the command.
+            *args: Unused variable length argument list accepted by action callbacks.
+            **kwargs: Unused additional keyword arguments accepted by action callbacks.
         """
         result, prim = omni.kit.commands.execute(
             "RangeSensorCreateLidar",
@@ -188,8 +188,8 @@ class RangeSensorMenu:
         """Creates a generic range sensor with predefined configuration.
 
         Args:
-            *args: Variable length argument list passed to the command.
-            **kwargs: Additional keyword arguments passed to the command.
+            *args: Unused variable length argument list accepted by action callbacks.
+            **kwargs: Unused additional keyword arguments accepted by action callbacks.
         """
         result, prim = omni.kit.commands.execute(
             "RangeSensorCreateGeneric",
@@ -206,8 +206,8 @@ class RangeSensorMenu:
         """Creates a LightBeam sensor with predefined configuration.
 
         Args:
-            *args: Variable length argument list passed to the command.
-            **kargs: Additional keyword arguments passed to the command.
+            *args: Unused variable length argument list accepted by action callbacks.
+            **kargs: Unused additional keyword arguments accepted by action callbacks.
         """
         result, prim = omni.kit.commands.execute(
             "IsaacSensorCreateLightBeamSensor",

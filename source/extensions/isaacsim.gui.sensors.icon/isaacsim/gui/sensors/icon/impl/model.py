@@ -25,7 +25,7 @@ import omni.kit.app
 import omni.usd
 import usdrt.Usd
 from omni.ui import scene as sc
-from pxr import Gf, Sdf, Trace, Usd, UsdGeom
+from pxr import Gf, Sdf, Tf, Trace, Usd, UsdGeom
 
 
 class IconModel(sc.AbstractManipulatorModel):
@@ -86,7 +86,11 @@ class IconModel(sc.AbstractManipulatorModel):
         self._usdrt_stage = None
         self._world_unit = 0.1
         self._icons = {}
+        # Caller-supplied urls, kept so repopulation does not revert to the default.
+        self._custom_icon_urls = {}
         self._frame_sub = None
+        self._usd_notice_listener = None
+        self._sensor_paths_dirty = False
         # Persistent XformCache used across position queries
         self._xform_cache = None
         self._hidden_paths = set()
@@ -110,6 +114,7 @@ class IconModel(sc.AbstractManipulatorModel):
     def _connect_to_stage(self) -> None:
         """Connects the icon model to the current USD stage and initializes icon population."""
         stage = self._usd_context.get_stage()
+        self._deregister_usd_notice_listener()
         if stage:
             stage_id = self._usd_context.get_stage_id()
             try:
@@ -122,6 +127,8 @@ class IconModel(sc.AbstractManipulatorModel):
 
             if self._world_unit == 0.0:
                 self._world_unit = 0.1
+
+            self._register_usd_notice_listener(stage)
 
             if self._usd_listening_active:
                 self._frame_sub = carb.eventdispatcher.get_eventdispatcher().observe_event(
@@ -143,7 +150,28 @@ class IconModel(sc.AbstractManipulatorModel):
             self._usdrt_stage = None
             if self._frame_sub:
                 self._frame_sub = None
+            self._custom_icon_urls = {}
             self.clear()
+
+    def _register_usd_notice_listener(self, stage: Usd.Stage) -> None:
+        """Listen for structural stage changes that can add or remove sensor prims."""
+        self._usd_notice_listener = Tf.Notice.Register(Usd.Notice.ObjectsChanged, self._on_usd_objects_changed, stage)
+
+    def _deregister_usd_notice_listener(self) -> None:
+        """Revoke the stage listener before changing or releasing stages."""
+        if self._usd_notice_listener:
+            self._usd_notice_listener.Revoke()
+            self._usd_notice_listener = None
+
+    def _on_usd_objects_changed(self, notice: Usd.Notice.ObjectsChanged, sender: Usd.Stage) -> None:
+        """Schedule sensor discovery after a structural USD change.
+
+        Attribute-only changes do not alter the set of sensor prims and are handled by the
+        existing per-frame visibility update. A resync can add, remove, or retarget a prim,
+        so defer the type query until the next frame, when Fabric is synchronized.
+        """
+        if notice.GetResyncedPaths():
+            self._sensor_paths_dirty = True
 
     @Trace.TraceFunction
     def _populate_initial_icons(self) -> None:
@@ -175,7 +203,7 @@ class IconModel(sc.AbstractManipulatorModel):
                 continue
 
             # Create icon for all sensors and compute initial visibility
-            item = IconModel.IconItem(prim_path, self._sensor_icon_path)
+            item = IconModel.IconItem(prim_path, self._custom_icon_urls.get(prim_path, self._sensor_icon_path))
 
             # Check visibility and activation status
             is_active = prim.IsActive()
@@ -192,6 +220,7 @@ class IconModel(sc.AbstractManipulatorModel):
             item.visible = should_be_visible if self._usd_listening_active else False
             self._icons[prim_path] = item
 
+        self._sensor_paths_dirty = False
         self._item_changed(None)
 
     def _on_stage_opened(self, event: object) -> None:
@@ -208,8 +237,10 @@ class IconModel(sc.AbstractManipulatorModel):
         Args:
             event: The stage closed event.
         """
+        self._custom_icon_urls = {}
         self.clear()
         self._usdrt_stage = None
+        self._deregister_usd_notice_listener()
 
     def get_world_unit(self) -> float:
         """World unit scale for the current stage.
@@ -231,6 +262,7 @@ class IconModel(sc.AbstractManipulatorModel):
         self._icons = {}
         if self._frame_sub:
             self._frame_sub = None
+        self._deregister_usd_notice_listener()
         self._hidden_paths.clear()
 
     def get_item(self, identifier: object) -> IconItem | None:
@@ -329,31 +361,14 @@ class IconModel(sc.AbstractManipulatorModel):
         if not self._usd_listening_active or not self._usdrt_stage:
             return
 
-        current_sensor_paths = set()
-        for sensor_type in self.SENSOR_TYPES:
-            try:
-                paths = self._usdrt_stage.GetPrimsWithTypeName(sensor_type)
-                current_sensor_paths.update(Sdf.Path(str(p)) for p in paths if p)
-            except Exception as err:
-                carb.log_warn(f"[SensorIcon] usdrt query failed for {sensor_type}: {err}")
-
-        cached_paths = set(self._icons.keys())
-        added_paths = current_sensor_paths - cached_paths
-        removed_paths = cached_paths - current_sensor_paths
-
-        for prim_path in added_paths:
-            if prim_path not in self._hidden_paths:
-                self.add_sensor_icon(prim_path)
-
-        for prim_path in removed_paths:
-            self.remove_sensor_icon(prim_path)
-            self._hidden_paths.discard(prim_path)
+        if self._sensor_paths_dirty:
+            self._synchronize_sensor_paths()
 
         stage = self._usd_context.get_stage()
         if not stage:
             return
 
-        for prim_path in current_sensor_paths:
+        for prim_path in self._icons:
             item = self._icons.get(prim_path)
             if not item:
                 continue
@@ -378,6 +393,27 @@ class IconModel(sc.AbstractManipulatorModel):
 
             self._item_changed(item)
 
+    def _synchronize_sensor_paths(self) -> None:
+        """Refresh the cached sensor paths after a structural stage change."""
+        current_sensor_paths = set()
+        for sensor_type in self.SENSOR_TYPES:
+            try:
+                paths = self._usdrt_stage.GetPrimsWithTypeName(sensor_type)
+                current_sensor_paths.update(Sdf.Path(str(p)) for p in paths if p)
+            except Exception as err:
+                carb.log_warn(f"[SensorIcon] usdrt query failed for {sensor_type}: {err}")
+
+        cached_paths = set(self._icons.keys())
+        for prim_path in current_sensor_paths - cached_paths:
+            if prim_path not in self._hidden_paths:
+                self.add_sensor_icon(prim_path)
+
+        for prim_path in cached_paths - current_sensor_paths:
+            self.remove_sensor_icon(prim_path)
+            self._hidden_paths.discard(prim_path)
+
+        self._sensor_paths_dirty = False
+
     def clear(self) -> None:
         """Clears all sensor icons from the model and notifies observers of the change."""
         if self._icons:
@@ -399,6 +435,12 @@ class IconModel(sc.AbstractManipulatorModel):
             prim_path = Sdf.Path(prim_path)
 
         if prim_path in self._icons:
+            # The listener registers sensors with the default icon; a caller's wins.
+            item = self._icons[prim_path]
+            if icon_url and item.icon_url != icon_url:
+                item.icon_url = icon_url
+                self._custom_icon_urls[prim_path] = icon_url
+                self._item_changed(item)
             return
 
         is_sensor = False
@@ -418,6 +460,8 @@ class IconModel(sc.AbstractManipulatorModel):
                     is_sensor = True
 
         if is_sensor:
+            if icon_url:
+                self._custom_icon_urls[prim_path] = icon_url
             icon_url = icon_url or self._sensor_icon_path
             item = IconModel.IconItem(prim_path, icon_url)
 
@@ -456,6 +500,7 @@ class IconModel(sc.AbstractManipulatorModel):
             self._icons[prim_path].removed = True
             self._item_changed(self._icons[prim_path])
             self._icons.pop(prim_path)
+            self._custom_icon_urls.pop(prim_path, None)
             # Mark as hidden
             self._hidden_paths.add(prim_path)
 

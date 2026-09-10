@@ -18,19 +18,20 @@
 import copy
 from typing import Any
 
+import isaacsim.core.experimental.utils.prim as prim_utils
 import numpy as np
 import omni.graph.core as og
 import omni.kit.app
 import omni.kit.test
 import omni.kit.ui_test as ui_test
-import omni.usd
 import rclpy
 import usdrt.Sdf
 from isaacsim.core.experimental.objects import Cube, GroundPlane
 from isaacsim.core.experimental.prims import XformPrim
-from isaacsim.core.experimental.utils.stage import add_reference_to_stage, define_prim
+from isaacsim.core.experimental.utils.stage import add_reference_to_stage, define_prim, get_current_stage
 from isaacsim.test.utils import menu_click_with_retry
 from nav_msgs.msg import Odometry
+from pxr import Gf, Sdf, UsdRender
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import Image, JointState, PointCloud2
 from std_msgs.msg import Float32, Header
@@ -63,7 +64,7 @@ class ROS2MenuTestBase(ROS2TestCase):
         from pxr import UsdLux
 
         # Creating environment and Carter Robot
-        stage = omni.usd.get_context().get_stage()
+        stage = get_current_stage()
         distant_light = UsdLux.DistantLight.Define(stage, "/World/DistantLight")
         distant_light.CreateIntensityAttr(3000)
 
@@ -93,6 +94,43 @@ class ROS2MenuTestBase(ROS2TestCase):
 
         return robot, xform_path, articulation_root_path
 
+    async def create_reusable_render_product(
+        self, render_product_path: str, sensor_path: str, resolution: tuple[int, int] = (320, 240)
+    ) -> UsdRender.Product:
+        stage = get_current_stage()
+        render_product = UsdRender.Product.Define(stage, render_product_path)
+        render_product.GetResolutionAttr().Set(Gf.Vec2i(resolution[0], resolution[1]))
+        render_product.GetCameraRel().SetTargets([Sdf.Path(sensor_path)])
+        await omni.kit.app.get_app().next_update_async()
+        return render_product
+
+    def assert_graph_reuses_render_product(self, graph_path: str, render_product_path: str) -> None:
+        graph = og.get_graph_by_path(graph_path)
+        self.assertIsNotNone(graph, "Graph was not created")
+
+        nodes = graph.get_nodes()
+        node_types = {node.get_type_name() for node in nodes}
+        self.assertIn("isaacsim.core.nodes.IsaacAttachHydraTexture", node_types)
+        self.assertNotIn("isaacsim.core.nodes.IsaacCreateRenderProduct", node_types)
+
+        attach_nodes = [node for node in nodes if node.get_type_name() == "isaacsim.core.nodes.IsaacAttachHydraTexture"]
+        self.assertEqual(len(attach_nodes), 1, "Expected exactly one AttachHydraTexture node")
+        render_product_attr = attach_nodes[0].get_attribute("inputs:renderProductPrim")
+        self.assertIsNotNone(render_product_attr)
+        render_product_targets = og.Controller.get(render_product_attr)
+        self.assertTrue(render_product_targets)
+        self.assertEqual(str(render_product_targets[0]), render_product_path)
+
+    def assert_usd_connection(self, source_attr_path: str, target_attr_path: str) -> None:
+        """Assert that a USD-authored OmniGraph connection exists."""
+        stage = get_current_stage()
+        target_prim_path, target_attr_name = target_attr_path.split(".", 1)
+        target_attr = stage.GetPrimAtPath(target_prim_path).GetAttribute(target_attr_name)
+        self.assertTrue(target_attr.IsValid(), f"{target_attr_path} is not a valid attribute")
+
+        source_paths = {str(path) for path in target_attr.GetConnections()}
+        self.assertIn(source_attr_path, source_paths)
+
 
 class TestMenuROS2CameraGraph(ROS2MenuTestBase):
     """Test ROS2 Camera OmniGraph creation from menu."""
@@ -116,34 +154,41 @@ class TestMenuROS2CameraGraph(ROS2MenuTestBase):
         camera_prim = ui_test.find(root_widget_path + "/HStack[2]/StringField[0]")
         camera_prim.model.set_value("/World/test_robot/chassis_link/sensors/front_hawk/left/camera_left")
 
+        # Publish RGB as HEVC compressed images.
+        rgb_compression_dropdown = ui_test.find(
+            root_widget_path + "/**/ComboBox[*].identifier=='ros2_camera_rgb_compression'"
+        )
+        self.assertIsNotNone(rgb_compression_dropdown, "RGB compression dropdown not found")
+        rgb_compression_dropdown.model.get_item_value_model().set_value(2)
+
         # Enable Depth Point Clouds
-        depth_checkbox = ui_test.find(root_widget_path + "/HStack[7]/HStack[0]/VStack[0]/ToolButton[0]")
+        depth_checkbox = ui_test.find(root_widget_path + "/HStack[8]/HStack[0]/VStack[0]/ToolButton[0]")
         depth_checkbox.model.set_value(True)
 
         # Enable Instance Segmentation
-        instance_checkbox = ui_test.find(root_widget_path + "/HStack[8]/HStack[0]/VStack[0]/ToolButton[0]")
+        instance_checkbox = ui_test.find(root_widget_path + "/HStack[9]/HStack[0]/VStack[0]/ToolButton[0]")
         instance_checkbox.model.set_value(True)
 
         # Enable Semantic Segmentation
-        semantic_checkbox = ui_test.find(root_widget_path + "/HStack[9]/HStack[0]/VStack[0]/ToolButton[0]")
+        semantic_checkbox = ui_test.find(root_widget_path + "/HStack[10]/HStack[0]/VStack[0]/ToolButton[0]")
         semantic_checkbox.model.set_value(True)
 
         # Enable BoundingBox2D Tight
-        bbox2d_tight_checkbox = ui_test.find(root_widget_path + "/HStack[10]/HStack[0]/VStack[0]/ToolButton[0]")
+        bbox2d_tight_checkbox = ui_test.find(root_widget_path + "/HStack[11]/HStack[0]/VStack[0]/ToolButton[0]")
         bbox2d_tight_checkbox.model.set_value(True)
 
         # Enable BoundingBox2D Loose
-        bbox2d_loose_checkbox = ui_test.find(root_widget_path + "/HStack[11]/HStack[0]/VStack[0]/ToolButton[0]")
+        bbox2d_loose_checkbox = ui_test.find(root_widget_path + "/HStack[12]/HStack[0]/VStack[0]/ToolButton[0]")
         bbox2d_loose_checkbox.model.set_value(True)
 
         # Enable BoundingBox3D
-        bbox3d_checkbox = ui_test.find(root_widget_path + "/HStack[12]/HStack[0]/VStack[0]/ToolButton[0]")
+        bbox3d_checkbox = ui_test.find(root_widget_path + "/HStack[13]/HStack[0]/VStack[0]/ToolButton[0]")
         bbox3d_checkbox.model.set_value(True)
 
         await omni.kit.app.get_app().next_update_async()
 
         # Click OK button
-        ok_button = ui_test.find(root_widget_path + "/HStack[13]/Button[0]")
+        ok_button = ui_test.find(root_widget_path + "/HStack[14]/Button[0]")
         self.assertIsNotNone(ok_button, "OK button not found")
         await ok_button.click()
         await omni.kit.app.get_app().next_update_async()
@@ -152,21 +197,55 @@ class TestMenuROS2CameraGraph(ROS2MenuTestBase):
         graph = og.get_graph_by_path("/Graph/ROS_Camera")
         self.assertIsNotNone(graph, "Graph was not created")
 
-        # Verify essential nodes
+        # Exhaustive node-set verification lives in the isaacsim.ros2.nodes graph_api tests.
+        # Here we only confirm the menu applied the UI-driven RGB-compression dropdown.
         nodes = graph.get_nodes()
-        node_types = {node.get_type_name() for node in nodes}
 
-        expected_nodes = {
-            "omni.graph.action.OnPlaybackTick",
-            "isaacsim.core.nodes.OgnIsaacRunOneSimulationFrame",
-            "isaacsim.core.nodes.IsaacCreateRenderProduct",
-            "isaacsim.ros2.bridge.ROS2Context",
-            "isaacsim.ros2.bridge.ROS2CameraHelper",
-            "isaacsim.ros2.bridge.ROS2CameraInfoHelper",
-        }
+        camera_helper_topics = {}
+        for node in nodes:
+            if node.get_type_name() == "isaacsim.ros2.bridge.ROS2CameraHelper":
+                type_attr = node.get_attribute("inputs:type")
+                topic_attr = node.get_attribute("inputs:topicName")
+                if type_attr and topic_attr:
+                    camera_helper_topics[og.Controller.get(type_attr)] = og.Controller.get(topic_attr)
 
-        for expected in expected_nodes:
-            self.assertIn(expected, node_types, f"Missing expected node type: {expected}")
+        self.assertEqual(
+            camera_helper_topics.get("rgb_hevc"),
+            "/rgb/compressed",
+            "The RGB compression dropdown should configure an HEVC compressed image helper",
+        )
+
+    async def test_camera_graph_reuses_existing_render_product_from_menu(self) -> None:
+        """Test camera graph menu can reuse an existing render product without creating one."""
+        robot, base_link_path, art_root_path = await self.setup_test_environment()
+        camera_path = "/World/test_robot/chassis_link/sensors/front_hawk/left/camera_left"
+        render_product_path = "/Render/ReusableCameraRP"
+        render_product = await self.create_reusable_render_product(render_product_path, camera_path)
+
+        window_name = "ROS2 Camera Graph"
+        param_window = await menu_click_with_retry("Tools/Robotics/ROS 2 OmniGraphs/Camera", window_name=window_name)
+        self.assertIsNotNone(param_window, "Parameter window not found")
+
+        root_widget_path = f"{window_name}//Frame/VStack[0]"
+        camera_prim = ui_test.find(root_widget_path + "/HStack[2]/StringField[0]")
+        render_product_prim = ui_test.find(root_widget_path + "/HStack[3]/StringField[0]")
+        self.assertIsNotNone(render_product_prim, "Render product prim field not found")
+        camera_prim.model.set_value(camera_path)
+        render_product_prim.model.set_value(render_product_path)
+
+        await omni.kit.app.get_app().next_update_async()
+
+        ok_button = ui_test.find(root_widget_path + "/HStack[14]/Button[0]")
+        self.assertIsNotNone(ok_button, "OK button not found")
+        await ok_button.click()
+        await omni.kit.app.get_app().next_update_async()
+
+        self.assert_graph_reuses_render_product("/Graph/ROS_Camera", render_product_path)
+        graph = og.get_graph_by_path("/Graph/ROS_Camera")
+        node_types = {node.get_type_name() for node in graph.get_nodes()}
+        self.assertIn("isaacsim.ros2.bridge.ROS2CameraInfoHelper", node_types)
+        self.assertEqual(render_product.GetResolutionAttr().Get(), Gf.Vec2i(320, 240))
+        self.assertEqual([str(path) for path in render_product.GetCameraRel().GetTargets()], [camera_path])
 
     async def test_camera_null_conditions(self) -> None:
         """Test camera graph with null target prim."""
@@ -185,7 +264,7 @@ class TestMenuROS2CameraGraph(ROS2MenuTestBase):
         camera_prim_field.model.set_value("")
 
         # Click OK button
-        ok_button = ui_test.find(root_widget_path + "/HStack[13]/Button[0]")
+        ok_button = ui_test.find(root_widget_path + "/HStack[14]/Button[0]")
         self.assertIsNotNone(ok_button, "OK button not found")
         await ok_button.click()
 
@@ -244,13 +323,13 @@ class TestMenuROS2CameraGraph(ROS2MenuTestBase):
         camera_prim_field.model.set_value("/World/test_robot/chassis_link/sensors/front_hawk/left/camera_left")
 
         # Enable Depth Point Clouds
-        depth_checkbox = ui_test.find(root_widget_path + "/HStack[7]/HStack[0]/VStack[0]/ToolButton[0]")
+        depth_checkbox = ui_test.find(root_widget_path + "/HStack[8]/HStack[0]/VStack[0]/ToolButton[0]")
         depth_checkbox.model.set_value(True)
 
         await omni.kit.app.get_app().next_update_async()
 
         # Click OK button
-        ok_button = ui_test.find(root_widget_path + "/HStack[13]/Button[0]")
+        ok_button = ui_test.find(root_widget_path + "/HStack[14]/Button[0]")
         self.assertIsNotNone(ok_button, "OK button not found")
         await ok_button.click()
 
@@ -326,13 +405,13 @@ class TestMenuROS2LidarGraph(ROS2MenuTestBase):
         lidar_prim.model.set_value("/World/test_robot/chassis_link/sensors/XT_32/PandarXT_32_10hz")
 
         # Enable Point Cloud
-        point_cloud_checkbox = ui_test.find(root_widget_path + "/HStack[6]/HStack[0]/VStack[0]/ToolButton[0]")
+        point_cloud_checkbox = ui_test.find(root_widget_path + "/HStack[7]/HStack[0]/VStack[0]/ToolButton[0]")
         point_cloud_checkbox.model.set_value(True)
 
         await omni.kit.app.get_app().next_update_async()
 
         # Click OK button (index updated due to metadata UI additions)
-        ok_button = ui_test.find(root_widget_path + "/HStack[8]/Button[0]")
+        ok_button = ui_test.find(root_widget_path + "/HStack[9]/Button[0]")
         self.assertIsNotNone(ok_button, "OK button not found")
         await ok_button.click()
 
@@ -342,20 +421,14 @@ class TestMenuROS2LidarGraph(ROS2MenuTestBase):
         graph = og.get_graph_by_path("/Graph/ROS_LidarRTX")
         self.assertIsNotNone(graph, "Graph was not created")
 
-        # Verify essential nodes exist
-        nodes = graph.get_nodes()
-        node_types = {node.get_type_name() for node in nodes}
-
-        expected_nodes = {
-            "omni.graph.action.OnPlaybackTick",
-            "isaacsim.ros2.bridge.ROS2Context",
-            "isaacsim.core.nodes.OgnIsaacRunOneSimulationFrame",
-            "isaacsim.core.nodes.IsaacCreateRenderProduct",
-            "isaacsim.ros2.bridge.ROS2RtxLidarHelper",
+        # Exhaustive node-set verification lives in the isaacsim.ros2.nodes graph_api tests.
+        # Here we only confirm the menu produced a lidar graph and applied the Point Cloud toggle.
+        lidar_helper_types = {
+            og.Controller.get(node.get_attribute("inputs:type"))
+            for node in graph.get_nodes()
+            if node.get_type_name() == "isaacsim.ros2.bridge.ROS2RtxLidarHelper"
         }
-
-        for expected in expected_nodes:
-            self.assertIn(expected, node_types, f"Missing expected node type: {expected}")
+        self.assertIn("point_cloud", lidar_helper_types)
 
     async def test_lidar_null_conditions(self) -> None:
         """Test lidar graph with null target prim."""
@@ -377,7 +450,7 @@ class TestMenuROS2LidarGraph(ROS2MenuTestBase):
         await omni.kit.app.get_app().next_update_async()
 
         # Click OK button (index updated due to metadata UI additions)
-        ok_button = ui_test.find(root_widget_path + "/HStack[8]/Button[0]")
+        ok_button = ui_test.find(root_widget_path + "/HStack[9]/Button[0]")
         self.assertIsNotNone(ok_button, "OK button not found")
         await ok_button.click()
 
@@ -395,16 +468,10 @@ class TestMenuROS2LidarGraph(ROS2MenuTestBase):
 
     async def test_lidar_data_flow(self) -> None:
         """Test RTX Lidar data is being properly published to ROS2 topics with detailed data validation."""
-        from pxr import Sdf
-
         # Creating environment and Carter Robot
         robot, base_link_path, art_root_path = await self.setup_test_environment(add_test_cubes=True)
 
-        # Pre-check if this is a 3D lidar to help with setting up the right expectations
         lidar_path = "/World/test_robot/chassis_link/sensors/XT_32/PandarXT_32_10hz"
-        stage = omni.usd.get_context().get_stage()
-        lidar_prim_obj = stage.GetPrimAtPath(Sdf.Path(lidar_path))
-        is_3d_lidar = False
 
         # Store actual message data for validation, not just counts
         self.point_cloud_data = None
@@ -437,17 +504,17 @@ class TestMenuROS2LidarGraph(ROS2MenuTestBase):
         lidar_prim.model.set_value(lidar_path)
 
         # Disable LaserScan as the lidar is 3D
-        laser_scan_checkbox = ui_test.find(root_widget_path + "/HStack[5]/HStack[0]/VStack[0]/ToolButton[0]")
+        laser_scan_checkbox = ui_test.find(root_widget_path + "/HStack[6]/HStack[0]/VStack[0]/ToolButton[0]")
         laser_scan_checkbox.model.set_value(False)
 
         # Enable Point Cloud
-        point_cloud_checkbox = ui_test.find(root_widget_path + "/HStack[6]/HStack[0]/VStack[0]/ToolButton[0]")
+        point_cloud_checkbox = ui_test.find(root_widget_path + "/HStack[7]/HStack[0]/VStack[0]/ToolButton[0]")
         point_cloud_checkbox.model.set_value(True)
 
         await omni.kit.app.get_app().next_update_async()
 
         # Click OK button (index updated due to metadata UI additions)
-        ok_button = ui_test.find(root_widget_path + "/HStack[8]/Button[0]")
+        ok_button = ui_test.find(root_widget_path + "/HStack[9]/Button[0]")
         self.assertIsNotNone(ok_button, "OK button not found")
         await ok_button.click()
 
@@ -458,10 +525,10 @@ class TestMenuROS2LidarGraph(ROS2MenuTestBase):
         self.assertIsNotNone(graph, "Graph was not created")
 
         # Double-check 3D lidar detection - use the actual prim path that was configured
-        lidar_prim_obj = stage.GetPrimAtPath(Sdf.Path(lidar_path))
+        lidar_prim_obj = prim_utils.get_prim_at_path(lidar_path)
         is_3d_lidar = False
 
-        if lidar_prim_obj:
+        if lidar_prim_obj.IsValid():
             # Check for elevation attributes that would indicate a 3D lidar
             if lidar_prim_obj.HasAttribute("elevationDeg") and lidar_prim_obj.GetAttribute("elevationDeg").Get() != 0:
                 is_3d_lidar = True
@@ -526,32 +593,32 @@ class TestMenuROS2LidarGraph(ROS2MenuTestBase):
         lidar_prim.model.set_value("/World/test_robot/chassis_link/sensors/XT_32/PandarXT_32_10hz")
 
         # Disable Laser Scan
-        laser_scan_checkbox = ui_test.find(root_widget_path + "/HStack[5]/HStack[0]/VStack[0]/ToolButton[0]")
+        laser_scan_checkbox = ui_test.find(root_widget_path + "/HStack[6]/HStack[0]/VStack[0]/ToolButton[0]")
         laser_scan_checkbox.model.set_value(False)
 
         # Enable Point Cloud
-        point_cloud_checkbox = ui_test.find(root_widget_path + "/HStack[6]/HStack[0]/VStack[0]/ToolButton[0]")
+        point_cloud_checkbox = ui_test.find(root_widget_path + "/HStack[7]/HStack[0]/VStack[0]/ToolButton[0]")
         point_cloud_checkbox.model.set_value(True)
 
-        # Enable some metadata options in the left VStack (HStack[7]/VStack[0])
+        # Enable some metadata options in the left VStack (HStack[8]/VStack[0])
         # Intensity checkbox is the first one in left VStack
         intensity_checkbox = ui_test.find(
-            root_widget_path + "/HStack[7]/VStack[0]/HStack[0]/HStack[0]/VStack[0]/ToolButton[0]"
+            root_widget_path + "/HStack[8]/VStack[0]/HStack[0]/HStack[0]/VStack[0]/ToolButton[0]"
         )
         if intensity_checkbox:
             intensity_checkbox.model.set_value(True)
 
         # Timestamp checkbox is the second one in left VStack
         timestamp_checkbox = ui_test.find(
-            root_widget_path + "/HStack[7]/VStack[0]/HStack[1]/HStack[0]/VStack[0]/ToolButton[0]"
+            root_widget_path + "/HStack[8]/VStack[0]/HStack[1]/HStack[0]/VStack[0]/ToolButton[0]"
         )
         if timestamp_checkbox:
             timestamp_checkbox.model.set_value(True)
 
-        # Enable some metadata options in the right VStack (HStack[7]/VStack[1])
+        # Enable some metadata options in the right VStack (HStack[8]/VStack[1])
         # Velocity checkbox is the second one in right VStack
         velocity_checkbox = ui_test.find(
-            root_widget_path + "/HStack[7]/VStack[1]/HStack[1]/HStack[0]/VStack[0]/ToolButton[0]"
+            root_widget_path + "/HStack[8]/VStack[1]/HStack[1]/HStack[0]/VStack[0]/ToolButton[0]"
         )
         if velocity_checkbox:
             velocity_checkbox.model.set_value(True)
@@ -559,7 +626,7 @@ class TestMenuROS2LidarGraph(ROS2MenuTestBase):
         await omni.kit.app.get_app().next_update_async()
 
         # Click OK button
-        ok_button = ui_test.find(root_widget_path + "/HStack[8]/Button[0]")
+        ok_button = ui_test.find(root_widget_path + "/HStack[9]/Button[0]")
         self.assertIsNotNone(ok_button, "OK button not found")
         await ok_button.click()
 
@@ -622,7 +689,7 @@ class TestMenuROS2LidarGraph(ROS2MenuTestBase):
 
         # Try to enable some metadata options (should show warning and be ignored)
         intensity_checkbox = ui_test.find(
-            root_widget_path + "/HStack[7]/VStack[0]/HStack[0]/HStack[0]/VStack[0]/ToolButton[0]"
+            root_widget_path + "/HStack[8]/VStack[0]/HStack[0]/HStack[0]/VStack[0]/ToolButton[0]"
         )
         if intensity_checkbox:
             intensity_checkbox.model.set_value(True)
@@ -630,7 +697,7 @@ class TestMenuROS2LidarGraph(ROS2MenuTestBase):
         await omni.kit.app.get_app().next_update_async()
 
         # Click OK button
-        ok_button = ui_test.find(root_widget_path + "/HStack[8]/Button[0]")
+        ok_button = ui_test.find(root_widget_path + "/HStack[9]/Button[0]")
         self.assertIsNotNone(ok_button, "OK button not found")
         await ok_button.click()
 
@@ -667,13 +734,231 @@ class TestMenuROS2LidarGraph(ROS2MenuTestBase):
                     self.assertEqual(type_value, "laser_scan", "Helper should be configured for laser_scan")
 
 
+class TestMenuROS2RadarGraph(ROS2MenuTestBase):
+    """Test ROS2 RTX Radar OmniGraph creation from menu."""
+
+    async def _setup_radar(self, path: str = "/World/test_radar", aux_output_level: str = "NONE") -> Any:
+        """Create an RTX Radar prim on the stage.
+
+        RTX Radar requires Motion BVH; this is defensively enabled here in case the
+        test runner does not pick up the extension.toml app args.
+
+        Args:
+            path: Path at which to create the radar prim.
+            aux_output_level: Auxiliary-data level, either ``"NONE"`` or ``"BASIC"``.
+
+        Returns:
+            Created radar object.
+
+        Raises:
+            ValueError: If ``aux_output_level`` is unsupported.
+        """
+        import carb
+
+        carb.settings.get_settings().set("/renderer/raytracingMotion/enabled", True)
+        from isaacsim.sensors.experimental.rtx import Radar
+
+        radar = Radar(path=path, aux_output_level=aux_output_level)
+        await omni.kit.app.get_app().next_update_async()
+        return radar
+
+    async def test_radar_graph_creation(self) -> None:
+        """Test creation of RTX Radar graph structure via menu."""
+        robot, base_link_path, art_root_path = await self.setup_test_environment()
+        radar_path = "/World/test_radar"
+        await self._setup_radar(radar_path)
+
+        # Click through the menu to create the graph
+        window_name = "ROS2 RTX Radar Graph"
+        param_window = await menu_click_with_retry("Tools/Robotics/ROS 2 OmniGraphs/RTX Radar", window_name=window_name)
+        self.assertIsNotNone(param_window, "Parameter window not found")
+
+        root_widget_path = f"{window_name}//Frame/VStack[0]"
+
+        # Find and set RTX Radar prim
+        radar_prim = ui_test.find(root_widget_path + "/HStack[2]/StringField[0]")
+        radar_prim.model.set_value(radar_path)
+
+        await omni.kit.app.get_app().next_update_async()
+
+        # Click OK button (radar dialog OK/Cancel row is HStack[7])
+        ok_button = ui_test.find(root_widget_path + "/HStack[7]/Button[0]")
+        self.assertIsNotNone(ok_button, "OK button not found")
+        await ok_button.click()
+
+        await omni.kit.app.get_app().next_update_async()
+
+        # Get the created graph at default path
+        graph = og.get_graph_by_path("/Graph/ROS_RadarRTX")
+        self.assertIsNotNone(graph, "Graph was not created")
+
+        # Exhaustive node-set verification lives in the isaacsim.ros2.nodes graph_api tests.
+        # Here we only confirm the menu produced a radar graph.
+        node_types = {node.get_type_name() for node in graph.get_nodes()}
+        self.assertIn("isaacsim.ros2.bridge.ROS2RtxRadarHelper", node_types)
+
+    async def test_radar_null_conditions(self) -> None:
+        """Test radar graph with null target prim."""
+        robot, base_link_path, art_root_path = await self.setup_test_environment()
+
+        # Click through the menu to create the graph
+        window_name = "ROS2 RTX Radar Graph"
+        param_window = await menu_click_with_retry("Tools/Robotics/ROS 2 OmniGraphs/RTX Radar", window_name=window_name)
+        self.assertIsNotNone(param_window, "Parameter window not found")
+
+        root_widget_path = f"{window_name}//Frame/VStack[0]"
+
+        # Leave radar path empty (null condition)
+        radar_prim_field = ui_test.find(root_widget_path + "/HStack[2]/StringField[0]")
+        radar_prim_field.model.set_value("")
+
+        await omni.kit.app.get_app().next_update_async()
+
+        # Click OK button
+        ok_button = ui_test.find(root_widget_path + "/HStack[7]/Button[0]")
+        self.assertIsNotNone(ok_button, "OK button not found")
+        await ok_button.click()
+
+        await omni.kit.app.get_app().next_update_async()
+
+        # Run simulation to test (should not crash)
+        self._timeline.play()
+        await omni.kit.app.get_app().next_update_async()
+        self._timeline.stop()
+
+        await omni.kit.app.get_app().next_update_async()
+
+        # Verify simulation completed (implicit test that no crash occurred)
+        self.assertFalse(self._timeline.is_playing())
+
+    async def test_radar_with_metadata(self) -> None:
+        """Test creation of RTX Radar graph with helper metadata flags enabled.
+
+        Unlike the lidar graph (which inserts a separate PointCloudConfig node),
+        the radar helper exposes its metadata as boolean inputs directly on
+        ROS2RtxRadarHelper, so this test verifies the helper's input attributes
+        are set rather than checking for a config node.
+        """
+        robot, base_link_path, art_root_path = await self.setup_test_environment()
+        radar_path = "/World/test_radar"
+        # BASIC aux output level is required for the radial velocity channel to populate.
+        await self._setup_radar(radar_path, aux_output_level="BASIC")
+
+        # Click through the menu to create the graph
+        window_name = "ROS2 RTX Radar Graph"
+        param_window = await menu_click_with_retry("Tools/Robotics/ROS 2 OmniGraphs/RTX Radar", window_name=window_name)
+        self.assertIsNotNone(param_window, "Parameter window not found")
+
+        root_widget_path = f"{window_name}//Frame/VStack[0]"
+
+        # Find and set RTX Radar prim
+        radar_prim = ui_test.find(root_widget_path + "/HStack[2]/StringField[0]")
+        radar_prim.model.set_value(radar_path)
+
+        # Enable each metadata checkbox. Metadata rows live in the inner VStack[0]
+        # (sibling to the parameter HStacks), one HStack per option. Order matches
+        # Ros2RtxRadarGraph.METADATA_OPTIONS: RadialVelocityMS, Intensity, Timestamp.
+        for row_index in range(3):
+            checkbox = ui_test.find(
+                root_widget_path + f"/VStack[0]/HStack[{row_index}]/HStack[0]/VStack[0]/ToolButton[0]"
+            )
+            if checkbox:
+                checkbox.model.set_value(True)
+
+        await omni.kit.app.get_app().next_update_async()
+
+        # Click OK button
+        ok_button = ui_test.find(root_widget_path + "/HStack[7]/Button[0]")
+        self.assertIsNotNone(ok_button, "OK button not found")
+        await ok_button.click()
+
+        await omni.kit.app.get_app().next_update_async()
+
+        # Get the created graph at default path
+        graph = og.get_graph_by_path("/Graph/ROS_RadarRTX")
+        self.assertIsNotNone(graph, "Graph was not created")
+
+        nodes = graph.get_nodes()
+        node_types = {node.get_type_name() for node in nodes}
+
+        expected_nodes = {
+            "omni.graph.action.OnPlaybackTick",
+            "isaacsim.ros2.bridge.ROS2Context",
+            "isaacsim.core.nodes.OgnIsaacRunOneSimulationFrame",
+            "isaacsim.core.nodes.IsaacCreateRenderProduct",
+            "isaacsim.ros2.bridge.ROS2RtxRadarHelper",
+        }
+        for expected in expected_nodes:
+            self.assertIn(expected, node_types, f"Missing expected node type: {expected}")
+
+        # Verify the radar helper has each metadata flag set to True.
+        radar_helper_node = None
+        for node in nodes:
+            if node.get_type_name() == "isaacsim.ros2.bridge.ROS2RtxRadarHelper":
+                radar_helper_node = node
+                break
+        self.assertIsNotNone(radar_helper_node, "Radar helper node not found")
+
+        for input_name in ("outputRadialVelocityMS", "outputIntensity", "outputTimestamp"):
+            attr = radar_helper_node.get_attribute(f"inputs:{input_name}")
+            self.assertIsNotNone(attr, f"Missing input attribute: inputs:{input_name}")
+            self.assertTrue(
+                og.Controller.get(attr),
+                f"inputs:{input_name} should be True after enabling the corresponding checkbox",
+            )
+
+    async def test_radar_data_flow(self) -> None:
+        """Test the RTX Radar menu graph wires the ROS 2 publisher configuration."""
+        robot, base_link_path, art_root_path = await self.setup_test_environment()
+        radar_path = "/World/test_radar"
+        await self._setup_radar(radar_path)
+
+        point_cloud_topic = "/radar_point_cloud"
+
+        # Click through the menu to create the graph.
+        window_name = "ROS2 RTX Radar Graph"
+        param_window = await menu_click_with_retry("Tools/Robotics/ROS 2 OmniGraphs/RTX Radar", window_name=window_name)
+        self.assertIsNotNone(param_window, "Parameter window not found")
+
+        root_widget_path = f"{window_name}//Frame/VStack[0]"
+
+        radar_prim_field = ui_test.find(root_widget_path + "/HStack[2]/StringField[0]")
+        radar_prim_field.model.set_value(radar_path)
+
+        await omni.kit.app.get_app().next_update_async()
+
+        ok_button = ui_test.find(root_widget_path + "/HStack[7]/Button[0]")
+        self.assertIsNotNone(ok_button, "OK button not found")
+        await ok_button.click()
+
+        await omni.kit.app.get_app().next_update_async()
+
+        # Verify graph was created.
+        graph = og.get_graph_by_path("/Graph/ROS_RadarRTX")
+        self.assertIsNotNone(graph, "Graph was not created")
+
+        radar_helper_node = None
+        for node in graph.get_nodes():
+            if node.get_type_name() == "isaacsim.ros2.bridge.ROS2RtxRadarHelper":
+                radar_helper_node = node
+                break
+        self.assertIsNotNone(radar_helper_node, "Radar helper node not found")
+
+        topic_attr = radar_helper_node.get_attribute("inputs:topicName")
+        frame_attr = radar_helper_node.get_attribute("inputs:frameId")
+        self.assertIsNotNone(topic_attr, "Radar helper missing topicName input")
+        self.assertIsNotNone(frame_attr, "Radar helper missing frameId input")
+        self.assertEqual(og.Controller.get(topic_attr), point_cloud_topic)
+        self.assertEqual(og.Controller.get(frame_attr), "radar")
+
+
 class TestMenuROS2JointStatesGraph(ROS2MenuTestBase):
     """Test ROS2 Joint States OmniGraph creation from menu."""
 
     async def test_joint_states_graph_creation(self) -> None:
         """Test creation of Joint States graph structure via menu."""
         # Creating environment and Carter Robot
-        robot, base_link_path, art_root_path = await self.setup_test_environment()
+        robot, _base_link_path, art_root_path = await self.setup_test_environment()
 
         # Click through the menu to create the graph
         window_name = "ROS2 Joint States Graph"
@@ -687,7 +972,7 @@ class TestMenuROS2JointStatesGraph(ROS2MenuTestBase):
 
         # Set Articulation Root
         articulation_root_field = ui_test.find(root_widget_path + "/HStack[3]/StringField[0]")
-        articulation_root_field.model.set_value(base_link_path)
+        articulation_root_field.model.set_value(art_root_path)
 
         # Enable Publisher
         publisher_checkbox = ui_test.find(root_widget_path + "/HStack[4]/HStack[0]/VStack[0]/ToolButton[0]")
@@ -710,21 +995,27 @@ class TestMenuROS2JointStatesGraph(ROS2MenuTestBase):
         graph = og.get_graph_by_path("/Graph/ROS_JointStates")
         self.assertIsNotNone(graph, "Graph was not created")
 
-        # Verify essential nodes exist
-        nodes = graph.get_nodes()
-        node_types = {node.get_type_name() for node in nodes}
+        # Exhaustive connection verification lives in the isaacsim.ros2.nodes graph_api tests.
+        # Here we confirm the menu creates the migrated publisher path and subscriber node.
+        node_types = {node.get_type_name() for node in graph.get_nodes()}
+        self.assertIn("isaacsim.sensors.physics.IsaacReadJointState", node_types)
+        self.assertIn("isaacsim.ros2.bridge.ROS2PublishJointState", node_types)
+        self.assertIn("isaacsim.ros2.bridge.ROS2SubscribeJointState", node_types)
 
-        expected_nodes = {
-            "omni.graph.action.OnPlaybackTick",
-            "isaacsim.ros2.bridge.ROS2Context",
-            "isaacsim.core.nodes.IsaacReadSimulationTime",
-            "isaacsim.ros2.bridge.ROS2SubscribeJointState",
-            "isaacsim.ros2.bridge.ROS2PublishJointState",
-            "isaacsim.core.nodes.IsaacArticulationController",
-        }
+        read_joint_state = [
+            node for node in graph.get_nodes() if node.get_type_name() == "isaacsim.sensors.physics.IsaacReadJointState"
+        ][0]
+        read_joint_state_targets = og.Controller.get(read_joint_state.get_attribute("inputs:prim"))
+        self.assertEqual([str(path) for path in read_joint_state_targets], [art_root_path])
 
-        for expected in expected_nodes:
-            self.assertIn(expected, node_types, f"Missing expected node type: {expected}")
+        self.assert_usd_connection(
+            "/Graph/ROS_JointStates/OnPlaybackTick.outputs:tick",
+            "/Graph/ROS_JointStates/ReadJointState.inputs:execIn",
+        )
+        self.assert_usd_connection(
+            "/Graph/ROS_JointStates/ReadJointState.outputs:execOut",
+            "/Graph/ROS_JointStates/PublisherJointState.inputs:execIn",
+        )
 
     async def test_joint_states_null_conditions(self) -> None:
         """Test robot state graph with null target prim."""
@@ -954,19 +1245,10 @@ class TestMenuROS2TFGraph(ROS2MenuTestBase):
         graph = og.get_graph_by_path("/Graph/ROS_TF")
         self.assertIsNotNone(graph, "Graph was not created")
 
-        # Verify essential nodes exist
-        nodes = graph.get_nodes()
-        node_types = {node.get_type_name() for node in nodes}
-
-        expected_nodes = {
-            "omni.graph.action.OnPlaybackTick",
-            "isaacsim.ros2.bridge.ROS2Context",
-            "isaacsim.core.nodes.IsaacReadSimulationTime",
-            "isaacsim.ros2.bridge.ROS2PublishTransformTree",
-        }
-
-        for expected in expected_nodes:
-            self.assertIn(expected, node_types, f"Missing expected node type: {expected}")
+        # Exhaustive node-set verification lives in the isaacsim.ros2.nodes graph_api tests.
+        # Here we only confirm the menu produced a TF publisher graph.
+        node_types = {node.get_type_name() for node in graph.get_nodes()}
+        self.assertIn("isaacsim.ros2.bridge.ROS2PublishTransformTree", node_types)
 
     async def test_tf_null_conditions(self) -> None:
         """Test TF graph with null target prim."""
@@ -1137,22 +1419,10 @@ class TestMenuROS2OdometryGraph(ROS2MenuTestBase):
         graph = og.get_graph_by_path("/Graph/ROS_Odometry")
         self.assertIsNotNone(graph, "Graph was not created")
 
-        # Verify essential nodes exist
-        nodes = graph.get_nodes()
-        node_types = {node.get_type_name() for node in nodes}
-
-        expected_nodes = {
-            "omni.graph.action.OnPlaybackTick",
-            "isaacsim.ros2.bridge.ROS2Context",
-            "isaacsim.core.nodes.IsaacReadSimulationTime",
-            "isaacsim.core.nodes.IsaacComputeOdometry",
-            "isaacsim.ros2.bridge.ROS2PublishOdometry",
-            "isaacsim.ros2.bridge.ROS2PublishRawTransformTree",
-            "isaacsim.ros2.bridge.ROS2PublishTransformTree",
-        }
-
-        for expected in expected_nodes:
-            self.assertIn(expected, node_types, f"Missing expected node type: {expected}")
+        # Exhaustive node-set verification lives in the isaacsim.ros2.nodes graph_api tests.
+        # Here we only confirm the menu produced an odometry graph.
+        node_types = {node.get_type_name() for node in graph.get_nodes()}
+        self.assertIn("isaacsim.ros2.bridge.ROS2PublishOdometry", node_types)
 
     async def test_odometry_null_conditions(self) -> None:
         """Test odometry graph with null chassis prim."""
@@ -1387,19 +1657,10 @@ class TestMenuROS2ClockGraph(ROS2MenuTestBase):
         graph = og.get_graph_by_path("/Graph/ROS_Clock")
         self.assertIsNotNone(graph, "Graph was not created")
 
-        # Verify essential nodes exist
-        nodes = graph.get_nodes()
-        node_types = {node.get_type_name() for node in nodes}
-
-        expected_nodes = {
-            "omni.graph.action.OnPlaybackTick",
-            "isaacsim.ros2.bridge.ROS2Context",
-            "isaacsim.core.nodes.IsaacReadSimulationTime",
-            "isaacsim.ros2.bridge.ROS2PublishClock",
-        }
-
-        for expected in expected_nodes:
-            self.assertIn(expected, node_types, f"Missing expected node type: {expected}")
+        # Exhaustive node-set verification lives in the isaacsim.ros2.nodes graph_api tests.
+        # Here we only confirm the menu produced a clock graph.
+        node_types = {node.get_type_name() for node in graph.get_nodes()}
+        self.assertIn("isaacsim.ros2.bridge.ROS2PublishClock", node_types)
 
     async def test_clock_data_flow(self) -> None:
         """Test Clock data is being properly published to ROS2 topics with data validation."""
@@ -1562,19 +1823,10 @@ class TestMenuROS2GenericPublisherGraph(ROS2MenuTestBase):
         graph = og.get_graph_by_path("/Graph/ROS_GenericPub")
         self.assertIsNotNone(graph, "Graph was not created")
 
-        # Verify essential nodes exist
-        nodes = graph.get_nodes()
-        node_types = {node.get_type_name() for node in nodes}
-
-        expected_nodes = {
-            "omni.graph.action.OnPlaybackTick",
-            "isaacsim.ros2.bridge.ROS2Context",
-            "isaacsim.core.nodes.IsaacRealTimeFactor",
-            "isaacsim.ros2.bridge.ROS2Publisher",
-        }
-
-        for expected in expected_nodes:
-            self.assertIn(expected, node_types, f"Missing expected node type: {expected}")
+        # Exhaustive node-set verification lives in the isaacsim.ros2.nodes graph_api tests.
+        # Here we only confirm the menu produced a generic publisher graph.
+        node_types = {node.get_type_name() for node in graph.get_nodes()}
+        self.assertIn("isaacsim.ros2.bridge.ROS2Publisher", node_types)
 
     async def test_generic_publisher_data_flow(self) -> None:
         """Test Generic Publisher data is properly publishing RTF as Float32 to ROS2 topics."""

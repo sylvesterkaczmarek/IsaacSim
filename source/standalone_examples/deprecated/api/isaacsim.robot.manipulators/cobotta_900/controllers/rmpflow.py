@@ -22,7 +22,13 @@ from isaacsim.core.prims import SingleArticulation
 
 
 class RMPFlowController(mg.MotionPolicyController):
-    """Control the Cobotta Pro 900 end effector using RMPFlow motion policy."""
+    """Control the Cobotta Pro 900 end effector using RMPFlow motion policy.
+
+    Args:
+        name: Name used to identify the controller.
+        robot_articulation: Cobotta articulation to drive with the motion policy.
+        physics_dt: Simulation interval in seconds used to convert policy targets into articulation actions.
+    """
 
     def __init__(self, name: str, robot_articulation: SingleArticulation, physics_dt: float = 1.0 / 60.0) -> None:
         self.rmpflow = mg.lula.motion_policies.RmpFlow(

@@ -2,33 +2,50 @@
 
 ## Classes
 
-- class Acoustic(_SensorAuthoring)
+- class SensorAuthoring(XformPrim, ABC)
+  - def __init__(self, path: str)
+  - [property] def asset_root_path(self) -> str | None
+  - [property] def aux_output_level(self) -> str
+  - def author_spg(self, nodes: SPGNode | list[SPGNode], connections: list[tuple[str, str]] | None = None) -> str
+
+- class SensorRuntime(ABC)
+  - def __init__(self, path: str | list[str] | XformPrim)
+  - [property] def authoring_object(self) -> XformPrim
+  - [property] def annotators(self) -> list[str]
+  - [property] def render_product(self) -> UsdRender.Product
+  - def has_data(self) -> bool
+  - def attach_annotators(self, annotators: str | list[str]) -> dict[str, Any]
+  - def detach_annotators(self, annotators: str | list[str])
+  - def get_data(self, annotator: str) -> tuple[wp.array | None, dict[str, Any]]
+  - def attach_writer(self, writer_name: str, **kwargs: Any) -> rep.Writer
+  - def detach_writer(self, writer_name: str)
+
+- class Acoustic(SensorAuthoring)
   - static def create(path: str) -> Acoustic
 
-- class AcousticSensor(_SensorRuntime)
+- class AcousticSensor(SensorRuntime)
   - [property] def acoustic(self) -> Acoustic
 
-- class CameraSensor(_SensorRuntime)
+- class CameraSensor(SensorRuntime)
   - def __init__(self, path: str | RtxCamera)
   - [property] def camera(self) -> Any
   - [property] def resolution(self) -> tuple[int, int]
-  - def attach_annotators(self, annotators: str | list[str]) -> dict[str, Any]
   - def get_data(self, annotator: str) -> tuple[wp.array | None, dict[str, Any]]
 
-- class Lidar(_SensorAuthoring)
+- class Lidar(SensorAuthoring)
   - def __init__(self, path: str)
   - static def create(path: str) -> Lidar
 
-- class LidarSensor(_SensorRuntime)
+- class LidarSensor(SensorRuntime)
   - [property] def lidar(self) -> Lidar
 
-- class Radar(_SensorAuthoring)
+- class Radar(SensorAuthoring)
   - static def create(path: str) -> Radar
 
-- class RadarSensor(_SensorRuntime)
+- class RadarSensor(SensorRuntime)
   - [property] def radar(self) -> Radar
 
-- class RtxCamera(_SensorAuthoring)
+- class RtxCamera(SensorAuthoring)
   - def __init__(self, path: str)
   - static def create(path: str) -> RtxCamera
   - [property] def camera(self) -> Camera
@@ -59,6 +76,14 @@
   - def get_sensor_size(self) -> float
   - static def add_template_render_product(parent_prim_path: str, camera_prim_path: str, **kwargs: Any) -> Usd.Prim
 
+- class SPGNode
+  - name: str
+  - cuda_kernel: str
+  - sub_identifier: str | None
+  - inputs: list[str]
+  - outputs: list[str]
+  - params: dict[str, bool | int | float]
+
 - class StructuredLightCamera(RtxCamera)
   - def __init__(self, path: str, projector_light_patterns: list[str | Path], projector_direction_texture: str | Path)
   - def destroy(self)
@@ -74,15 +99,11 @@
   - def get_projector_cycle_period(self) -> tuple[int, int]
   - def set_projector_cycle_period(self, period: tuple[int, int] | None)
 
-- class TiledCameraSensor
+- class TiledCameraSensor(SensorRuntime)
   - def __init__(self, paths: str | list[str] | Camera)
-  - [property] def annotators(self) -> list[str]
   - [property] def camera(self) -> Camera
   - [property] def resolution(self) -> tuple[int, int]
   - [property] def tiled_resolution(self) -> tuple[int, int]
-  - [property] def render_product(self) -> UsdRender.Product
-  - def attach_annotators(self, annotators: str | list[str]) -> dict[str, Any]
-  - def detach_annotators(self, annotators: str | list[str])
   - def get_data(self, annotator: str) -> tuple[wp.array | None, dict[str, Any]]
 
 ## Functions

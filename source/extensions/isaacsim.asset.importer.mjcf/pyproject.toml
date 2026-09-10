@@ -19,13 +19,11 @@ version = "1.0.0"
 description = "MJCF (MuJoCo) importer for converting robot descriptions to USD"
 requires-python = ">=3.12"
 dependencies = [
-    "isaacsim-asset-importer-utils==1.0.0",
-    "isaacsim-asset-transformer==1.0.0",
     "isaacsim-asset-transformer-rules==1.0.0",
-    "mujoco==3.8.0",
-    "newton-usd-schemas==0.2.0",
-    "mujoco-usd-converter==0.2.0",
-    "usd-exchange>=2.2.2",
+    "mujoco==3.11.0",
+    "newton-usd-schemas==0.4.1",
+    "mujoco-usd-converter==0.5.0",
+    "usd-exchange==2.3.0",
 ]
 readme = "docs/Overview.md"
 license = "Apache-2.0"

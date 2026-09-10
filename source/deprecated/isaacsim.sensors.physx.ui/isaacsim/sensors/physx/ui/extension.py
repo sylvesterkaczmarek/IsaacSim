@@ -27,7 +27,7 @@ class Extension(omni.ext.IExt):
     """Isaac Sim PhysX sensors UI extension.
 
     Provides user interface components and menu integration for PhysX-based sensors in Isaac Sim. This extension
-    registers UI elements for managing and configuring range sensors including lidar and generic sensor types through
+    registers UI elements for managing and configuring range sensors, including lidar and generic sensor types through
     the property panel and context menus.
     """
 

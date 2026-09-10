@@ -1,11 +1,15 @@
 # Overview
 
-The isaacsim.asset.validation extension provides custom validation rules for checking robot and simulation assets in Isaac Sim. It integrates with the Omniverse Asset Validator framework to verify that USD assets follow Isaac Sim conventions for physics, materials, joints, drives, and file structure.
+The isaacsim.asset.validation extension provisions the SimReady foundation validation tiers and the `simready-validate` framework inside Isaac Sim, so Isaac Sim content can be validated against the shared SimReady requirements.
 
-## Validation Rules
+The concrete validation rules for physics, joints, drives, robot schema, and materials that previously lived in this extension have been migrated to the SimReady foundation tiers and are now the single source of truth:
 
-- **Robot rules**: Validates robot asset naming conventions (Manufacturer/Robot/robot.usd), folder structure, and required schemas such as IsaacRobotAPI
-- **Joint rules**: Checks joint configurations for proper types, limits, and parent-child relationships
-- **Drive rules**: Validates actuator and drive configurations on articulated joints
-- **Material rules**: Verifies material property assignments and detects missing or overridden material bindings
-- **Physics rules**: Checks physics API application, collision geometry, and rigid body configurations
+- **`simready-foundation-tier-core`**: general physics/geometry rules — rigid bodies, colliders, driven joints, articulation.
+- **`simready-foundation-tier-isaac`**: Isaac-specific rules — robot core (naming, schema, physics layering) and robot materials.
+
+## Functionality
+
+The extension prebundles the two tier wheels and imports their capability hubs during startup. The tier decorators register their rules with the shared `usd_validation_nvidia` registry used by `omni.asset_validator.core`, making the rules available in the **Window > Asset Validator** interface and through `simready-validate`.
+This extension registers `RGBSensorUsdRule` for authored RGB sensor USD assets.
+
+Some rules (for example the non-adjacent collision-mesh check) run a live PhysX step and therefore rely on the Isaac/Kit physics runtime, which is why this extension keeps the physics and robot-schema Kit dependencies.

@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: dex3
+asset_path: /Isaac/Robots/Unitree/Dex3/dex3_1_r.usd
+root_xform_name: dex3_1_r_root_xform
+rigid_root_name: dex3_1_r_rigid_root
+gripper_prim_name: dex3_1_r
+base_link_name: right_hand_palm_link
+tcp:
+  parent_link: right_hand_palm_link
+  prim_name: Tcp
+  # Palm-frame TCP translation: +X is forward and +Y is lateral.
+  translation: [0.08, 0.05, 0.0]
+floating_controller:
+  position_kp: 20.0
+  position_kd: 0.5
+  orientation_kp: 20.0
+  orientation_kd: 0.2
+  # Align this asset's tool approach direction with target-local +X forward.
+  rotation_offset_degrees: [-90.0, 0.0, 90.0]
+grasp_controller:
+  config_path: builtin://dex3_grasp

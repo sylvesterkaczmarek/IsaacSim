@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Checks
+
+on:
+  workflow_call:
+
+jobs:
+  format-check:
+    name: "Format Check (repo format -v)"
+    runs-on: [self-hosted, cpu]
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      OMNI_KIT_ALLOW_ROOT: 1
+      PM_PACKAGES_ROOT: ${{ github.workspace }}/.cache/packman
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - name: Make repo scripts executable
+        run: |
+          chmod -R u+w .
+          find . -type f -iname "*.sh" -exec chmod +x {} +
+
+      - name: Run format verification
+        run: |
+          set -euo pipefail
+          touch .eula_accepted
+          echo "::group::Format Check"
+          ./repo.sh format --verify
+          echo "::endgroup::"

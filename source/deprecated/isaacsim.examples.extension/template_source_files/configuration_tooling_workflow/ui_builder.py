@@ -21,7 +21,7 @@ import omni.ui as ui
 import omni.usd
 from isaacsim.core.prims import SingleArticulation
 from isaacsim.core.utils.types import ArticulationAction
-from isaacsim.gui.components.element_wrappers import CollapsableFrame, DropDown, FloatField, TextBlock
+from isaacsim.gui.components import CollapsableFrame, DropDown, FloatField, TextBlock
 from isaacsim.gui.components.ui_utils import get_style
 
 

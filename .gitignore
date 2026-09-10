@@ -3,6 +3,7 @@ _*/
 .ci-dashboard-venv/
 !_impl/
 !docs/isaacsim/_extra/
+!skills/_internal/
 # exclude local website repo, used for publishing
 website/
 
@@ -16,14 +17,18 @@ Makefile
 *.swo
 exts.deps.generated.kit
 
-/oss_baseline_current.csv
-/oss_baseline_diff.json
+/third_party_inventory.json
+/third_party_notice_diff.json
+/third_party_lock_audit.json
+/third_party_notice_generated/
 
 # byte-compiled python files
 *.py[cod]
 
 # pip cache
 .cache
+.pixi/
+.ruff_cache/
 
 # packman package files
 *@*.7z
@@ -64,6 +69,15 @@ exts.deps.generated.kit
 *.usdz
 *.obj
 *.mat
+
+# Authored USD fixtures for standalone libraries.
+!source/libraries/**/resources/tests/**/*.usda
+
+# Skill eval fixtures under skills/**/evals/files/ (tiny authored USD snippets).
+!skills/**/evals/files/**
+!skills/**/evals/files/**/*.usd
+!skills/**/evals/files/**/*.usda
+!skills/**/evals/files/**/*.usdz
 
 *.suo
 
@@ -140,8 +154,9 @@ output
 !SensorSchema.usda
 !RangeSensorSchema.usda
 generatedSchema.usda
-!source/extensions/isaacsim.asset.importer.utils/python/impl/schemas/generatedSchema.usda
+!source/libraries/isaacsim/asset/importer/utils/python/impl/schemas/generatedSchema.usda
 !RobotMotionSchema.usda
+!VirtualGantrySchema.usda
 
 # ignore crash logs from streaming client sessions
 NvStreamer-*.etli
@@ -230,3 +245,18 @@ source/rendered_template_metadata.json
 # Local repo tool overrides
 user.repo.toml
 filename.csv
+
+# ==============================================================================
+# NV-BASE skill validation artifacts. Keep the repo clean of transient run
+# output while still committing the per-skill evals/evals.json datasets.
+# ==============================================================================
+# Per-skill Tier 3 agent-eval scratch/results. The results tree copies the whole
+# skills/ catalog into per-task environments and pollutes similarity/dedup scans.
+skills/**/evals/results/
+skills/**/evals/results/**
+
+# Catalog-level aggregated eval datasets. Regenerated on every local run by
+# tools/ci/gitlab/skills/aggregate_skill_evals.py from the per-skill evals.json files;
+# not consumed by CI, so treat as derived artifacts (do not commit).
+/skills/evals/
+/skills/_internal/evals/

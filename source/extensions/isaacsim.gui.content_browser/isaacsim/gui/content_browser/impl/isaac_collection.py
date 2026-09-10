@@ -53,9 +53,9 @@ class IsaacCollection(CollectionItem):
     """A collection item for Isaac Sim assets in the content browser.
 
     This class provides access to Isaac Sim asset folders through the file browser interface. It automatically
-    detects the protocol (Omniverse or HTTPS) based on the default asset root configuration and populates
-    the collection with configured folders from settings. The collection appears as "Isaac Sim" in the
-    content browser with a cloud icon and allows users to browse Isaac Sim asset directories.
+    reads the default asset root configuration and populates the collection with configured folders from settings.
+    The collection appears as "Isaac Sim" in file browsers with a cloud icon and allows users to browse Isaac Sim
+    asset directories.
 
     The collection is read-only and does not support adding new connections. Asset folders are loaded
     asynchronously from the application settings and displayed as browsable items in the file browser.
@@ -65,15 +65,9 @@ class IsaacCollection(CollectionItem):
         settings = carb.settings.get_settings()
         self._asset_root = settings.get_as_string(SETTING_ASSET_ROOT).rstrip("/")
 
-        protocol = ""
-        if self._asset_root.startswith("omniverse://"):
-            protocol = "omniverse"
-        elif self._asset_root.startswith("https://"):
-            protocol = "https"
         super().__init__(
             identifier="Isaac Sim",
             title="Isaac Sim",
-            protocol=protocol,
             icon=f"{ICON_PATH}/cloud.svg",
             access=omni.client.AccessFlags.READ,
             populated=False,
@@ -124,9 +118,49 @@ class IsaacCollection(CollectionItem):
         ``persistent.isaac.asset_root.default``.
         """
         if self._folders:
-            for folder in self._folders:
-                url = self._resolve_path(folder)
-                parts = url.rstrip("/").split("/")
-                if parts:
-                    name = parts[-1]
-                    self.add_path(name, url)
+            urls = [self._resolve_path(folder) for folder in self._folders]
+            for name, url in zip(self._child_names(urls), urls):
+                self.add_path(name, url)
+
+    @staticmethod
+    def _child_names(urls: list[str]) -> list[str]:
+        """Assign each folder URL a display name unique within the collection.
+
+        The file browser keys children by name, so folders sharing a final segment
+        would otherwise replace one another.
+
+        Args:
+            urls: Resolved folder URLs, in configuration order.
+
+        Returns:
+            One display name per URL, in the same order.
+        """
+        segments = [[part for part in url.rstrip("/").split("/") if part] for url in urls]
+        names = [segment[-1] if segment else url for segment, url in zip(segments, urls)]
+
+        groups: dict[str, list[int]] = {}
+        for index, name in enumerate(names):
+            groups.setdefault(name, []).append(index)
+
+        for indices in groups.values():
+            if len(indices) == 1:
+                continue
+            # Identical URLs never separate; they fall through to the suffix pass.
+            for depth in range(2, max(len(segments[index]) for index in indices) + 1):
+                widened = ["/".join(segments[index][-depth:]) for index in indices]
+                if len(set(widened)) == len(indices):
+                    for index, name in zip(indices, widened):
+                        names[index] = name
+                    break
+
+        # Checked against `taken` so a folder literally named "Robots (2)" survives.
+        taken = set()
+        unique_names = []
+        for name in names:
+            candidate, suffix = name, 1
+            while candidate in taken:
+                suffix += 1
+                candidate = f"{name} ({suffix})"
+            taken.add(candidate)
+            unique_names.append(candidate)
+        return unique_names

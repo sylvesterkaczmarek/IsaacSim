@@ -45,13 +45,13 @@ def clear_xform_ops(prim: Usd.Prim) -> None:
 def reset_and_set_xform_ops(
     prim: Usd.Prim, translation: Gf.Vec3d, orientation: Gf.Quatd, scale: Gf.Vec3d = Gf.Vec3d([1.0, 1.0, 1.0])
 ) -> None:
-    """Reset xform ops to isaac sim defaults, and set their values.
+    """Reset xform ops to Isaac Sim defaults and set their values.
 
     Args:
-        prim: Prim to reset
-        translation: translation to set
-        orientation: orientation to set
-        scale: scale to set
+        prim: Prim to reset.
+        translation: Translation to set.
+        orientation: Orientation to set.
+        scale: Scale to set.
     """
     xformable = UsdGeom.Xformable(prim)
     clear_xform_ops(prim)
@@ -69,10 +69,10 @@ def reset_and_set_xform_ops(
 
 
 def reset_xform_ops(prim: Usd.Prim) -> None:
-    """Reset xform ops for a prim to isaac sim defaults.
+    """Reset xform ops for a prim to Isaac Sim defaults while preserving its local pose.
 
     Args:
-        prim: Prim to reset xform ops on
+        prim: Prim to reset xform ops on.
     """
     xformable = UsdGeom.Xformable(prim)
     # get current position and orientation
@@ -168,7 +168,7 @@ def get_local_pose(prim_path: str) -> tuple:
         prim_path: Path to the prim.
 
     Returns:
-        A tuple containing the local translation (as numpy array) and orientation (as quaternion in w,x,y,z format).
+        A tuple containing the local translation as numpy array and orientation as quaternion in w,x,y,z format.
 
     Raises:
         Exception: If the prim path is not valid.
@@ -219,7 +219,10 @@ def get_world_pose(prim_path: str, fabric: bool = False) -> tuple:
         fabric: Whether to use fabric API for retrieving the pose.
 
     Returns:
-        A tuple containing the world translation (as numpy array) and orientation (as quaternion in w,x,y,z format).
+        A tuple containing the world translation as numpy array and orientation as quaternion in w,x,y,z format.
+
+    Raises:
+        Exception: If the prim path is not valid.
     """
     result_transform = _get_world_pose_transform_w_scale(prim_path, fabric)
     result_transform.Orthonormalize()

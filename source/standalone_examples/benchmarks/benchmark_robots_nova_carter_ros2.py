@@ -51,6 +51,11 @@ parser.add_argument(
 parser.add_argument(
     "--tick-rate", type=float, default=0.0, help="Tick rate for camera sensors (Hz). 0.0 means default rate."
 )
+parser.add_argument(
+    "--mgpu-optimize",
+    action="store_true",
+    help="Balance camera render products across active GPUs before benchmarking.",
+)
 
 args, unknown = parser.parse_known_args()
 
@@ -65,6 +70,7 @@ headless = args.non_headless
 viewport_updates = args.viewport_updates
 async_render_handshake = args.async_render_handshake
 tick_rate = args.tick_rate
+mgpu_optimize = args.mgpu_optimize
 
 extra_args = []
 if async_render_handshake:
@@ -114,6 +120,7 @@ benchmark = BaseIsaacBenchmark(
             {"name": "num_3d_lidars", "data": enable_3d_lidar},
             {"name": "num_robots", "data": n_robot},
             {"name": "num_gpus", "data": carb.settings.get_settings().get("/renderer/multiGpu/currentGpuCount")},
+            {"name": "mgpu_optimize", "data": mgpu_optimize},
         ]
     },
     backend_type=args.backend_type,
@@ -123,7 +130,19 @@ benchmark = BaseIsaacBenchmark(
 
 # Generate Twist message
 def move_cmd_msg(x: float, y: float, z: float, ax: float, ay: float, az: float) -> Twist:
-    """Generate a Twist message with the given linear and angular velocities."""
+    """Generate a Twist message with the given linear and angular velocities.
+
+    Args:
+        x: Linear velocity along the x-axis in meters per second.
+        y: Linear velocity along the y-axis in meters per second.
+        z: Linear velocity along the z-axis in meters per second.
+        ax: Angular velocity about the x-axis in radians per second.
+        ay: Angular velocity about the y-axis in radians per second.
+        az: Angular velocity about the z-axis in radians per second.
+
+    Returns:
+        Twist message populated with the requested linear and angular velocities.
+    """
     msg = Twist()
     msg.linear.x = x
     msg.linear.y = y
@@ -161,8 +180,46 @@ stage = omni.usd.get_context().get_stage()
 PhysicsContext(physics_dt=1.0 / 60.0)
 set_camera_view(eye=[-6, -15.5, 6.5], target=[-6, 10.5, -1], camera_prim_path="/OmniverseKit_Persp")
 
-lidars_2d = ["/front_2d_lidar_render_product", "/back_2d_lidar_render_product"]
-hawk_actiongraphs = ["/front_hawk", "/left_hawk", "/right_hawk", "/back_hawk"]
+LIDAR_2D_RENDER_PRODUCT_NODES = [
+    "/chassis_link/sensors/front_RPLidar/ROS_Lidar/RenderProduct",
+    "/chassis_link/sensors/rear_RPLidar/ROS_Lidar/RenderProduct",
+]
+LIDAR_3D_RENDER_PRODUCT_NODES = ["/chassis_link/sensors/XT_32/ROS_LidarRTX/RenderProduct"]
+# One entry per Hawk stereo pair, holding the left and right image render products.
+HAWK_RENDER_PRODUCT_NODES = [
+    [
+        "/chassis_link/sensors/front_hawk/left/ROS_Camera_Left/left_camera_render_product",
+        "/chassis_link/sensors/front_hawk/right/ROS_Camera_Right/right_camera_render_product",
+    ],
+    [
+        "/chassis_link/sensors/left_hawk/left/ROS_Camera_Left/left_camera_render_product",
+        "/chassis_link/sensors/left_hawk/right/ROS_Camera_Right/right_camera_render_product",
+    ],
+    [
+        "/chassis_link/sensors/right_hawk/left/ROS_Camera_Left/left_camera_render_product",
+        "/chassis_link/sensors/right_hawk/right/ROS_Camera_Right/right_camera_render_product",
+    ],
+    [
+        "/chassis_link/sensors/back_hawk/left/ROS_Camera_Left/left_camera_render_product",
+        "/chassis_link/sensors/back_hawk/right/ROS_Camera_Right/right_camera_render_product",
+    ],
+]
+# Camera info and Owl cameras are outside this benchmark's sensor suite, and the rig enables some of
+# them by default, so they are switched off explicitly.
+UNUSED_RENDER_PRODUCT_NODES = [
+    "/chassis_link/sensors/front_hawk/ROS_Camera_Info/left_camera_render_product",
+    "/chassis_link/sensors/front_hawk/ROS_Camera_Info/right_camera_render_product",
+    "/chassis_link/sensors/left_hawk/ROS_Camera_Info/left_camera_render_product",
+    "/chassis_link/sensors/left_hawk/ROS_Camera_Info/right_camera_render_product",
+    "/chassis_link/sensors/right_hawk/ROS_Camera_Info/left_camera_render_product",
+    "/chassis_link/sensors/right_hawk/ROS_Camera_Info/right_camera_render_product",
+    "/chassis_link/sensors/back_hawk/ROS_Camera_Info/left_camera_render_product",
+    "/chassis_link/sensors/back_hawk/ROS_Camera_Info/right_camera_render_product",
+    "/chassis_link/sensors/front_owl/ROS_Camera/isaac_create_render_product",
+    "/chassis_link/sensors/left_owl/ROS_Camera/isaac_create_render_product",
+    "/chassis_link/sensors/right_owl/ROS_Camera/isaac_create_render_product",
+    "/chassis_link/sensors/back_owl/ROS_Camera/isaac_create_render_product",
+]
 
 robots = []
 for i in range(n_robot):
@@ -182,32 +239,24 @@ for i in range(n_robot):
     omni.kit.app.get_app().update()
     omni.kit.app.get_app().update()
 
-    for i in range(len(lidars_2d)):
-        if i < enable_2d_lidar:
-            og.Controller.attribute(robot_prim_path + "/ros_lidars" + lidars_2d[i] + ".inputs:enabled").set(True)
-        else:
-            og.Controller.attribute(robot_prim_path + "/ros_lidars" + lidars_2d[i] + ".inputs:enabled").set(False)
+    for lidar_idx, render_product_node in enumerate(LIDAR_2D_RENDER_PRODUCT_NODES):
+        og.Controller.attribute(f"{robot_prim_path}{render_product_node}.inputs:enabled").set(
+            lidar_idx < enable_2d_lidar
+        )
 
-    if enable_3d_lidar > 0:
-        og.Controller.attribute(robot_prim_path + "/ros_lidars/front_3d_lidar_render_product.inputs:enabled").set(True)
-    else:
-        og.Controller.attribute(robot_prim_path + "/ros_lidars/front_3d_lidar_render_product.inputs:enabled").set(False)
+    for lidar_idx, render_product_node in enumerate(LIDAR_3D_RENDER_PRODUCT_NODES):
+        og.Controller.attribute(f"{robot_prim_path}{render_product_node}.inputs:enabled").set(
+            lidar_idx < enable_3d_lidar
+        )
 
-    for i in range(len(hawk_actiongraphs)):
-        if i < enable_hawks:
-            og.Controller.attribute(
-                robot_prim_path + hawk_actiongraphs[i] + "/left_camera_render_product" + ".inputs:enabled"
-            ).set(True)
-            og.Controller.attribute(
-                robot_prim_path + hawk_actiongraphs[i] + "/right_camera_render_product" + ".inputs:enabled"
-            ).set(True)
-        else:
-            og.Controller.attribute(
-                robot_prim_path + hawk_actiongraphs[i] + "/left_camera_render_product" + ".inputs:enabled"
-            ).set(False)
-            og.Controller.attribute(
-                robot_prim_path + hawk_actiongraphs[i] + "/right_camera_render_product" + ".inputs:enabled"
-            ).set(False)
+    for hawk_idx, hawk_render_product_nodes in enumerate(HAWK_RENDER_PRODUCT_NODES):
+        for render_product_node in hawk_render_product_nodes:
+            og.Controller.attribute(f"{robot_prim_path}{render_product_node}.inputs:enabled").set(
+                hawk_idx < enable_hawks
+            )
+
+    for render_product_node in UNUSED_RENDER_PRODUCT_NODES:
+        og.Controller.attribute(f"{robot_prim_path}{render_product_node}.inputs:enabled").set(False)
 
     robots.append(current_robot)
 
@@ -237,6 +286,14 @@ omni.kit.app.get_app().update()
 omni.kit.app.get_app().update()
 
 benchmark.store_measurements()
+
+if mgpu_optimize:
+    from isaacsim.core.rendering_manager import ViewportManager
+
+    assignments = ViewportManager.optimize_render_products()
+    for render_product_path, device_ids in assignments.items():
+        carb.log_info(f"Assigned {render_product_path} to deviceIds={device_ids}")
+
 # perform benchmark
 benchmark.set_phase("benchmark", warmup_frames=15)
 

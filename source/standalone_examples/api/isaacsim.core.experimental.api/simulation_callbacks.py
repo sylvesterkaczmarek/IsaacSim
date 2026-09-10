@@ -63,13 +63,23 @@ from isaacsim.storage.native import get_assets_root_path
 
 
 def step_callback_1(dt: float, context: object) -> None:
-    """Physics callback to set joint position target."""
+    """Set the example robot's joint target after a physics step.
+
+    Args:
+        dt: Duration of the completed physics step.
+        context: User context supplied when the callback was registered.
+    """
     robot.set_dof_position_targets(-1.5, dof_indices=[dof_index])
 
 
 def step_callback_2(dt: float, context: object) -> None:
-    """Physics callback to print joint position and simulation time."""
-    step_count = SimulationManager.get_num_physics_steps()
+    """Print the joint position and simulation time after a physics step.
+
+    Args:
+        dt: Duration of the completed physics step.
+        context: User context supplied when the callback was registered.
+    """
+    step_count = SimulationManager.get_num_physics_steps() - physics_step_start
     dof_positions = robot.get_dof_positions(dof_indices=[dof_index])
     # - Convert `wp.array` to Python float for single value
     position_value = (
@@ -80,7 +90,11 @@ def step_callback_2(dt: float, context: object) -> None:
 
 
 def render_callback(event: RenderingEvent) -> None:
-    """Render callback to print render frame."""
+    """Print a message when the renderer produces a frame.
+
+    Args:
+        event: Rendering event that triggered the callback.
+    """
     print("Render Frame")
 
 
@@ -91,11 +105,11 @@ def render_callback(event: RenderingEvent) -> None:
 stage_utils.create_new_stage()
 # - Add Franka robot with variants using experimental API
 assets_root_path = get_assets_root_path()
-asset_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 stage_utils.add_reference_to_stage(
     usd_path=asset_path,
     path="/Franka",
-    variants=[("Gripper", "AlternateFinger"), ("Mesh", "Quality")],
+    variants=[("Gripper", "alternatefinger"), ("Mesh", "quality")],
 )
 
 # Initialize physics before creating articulation.
@@ -111,6 +125,7 @@ dof_index = int(dof_indices.numpy()[0]) if hasattr(dof_indices, "numpy") else in
 
 # Start timeline
 app_utils.play()
+physics_step_start = SimulationManager.get_num_physics_steps()
 
 # Register physics callbacks using `SimulationManager`.
 SimulationManager.register_callback(step_callback_1, IsaacEvents.POST_PHYSICS_STEP)
@@ -123,13 +138,11 @@ RenderingManager.register_callback(RenderingEvent.NEW_FRAME, callback=render_cal
 for i in range(60):
     print("Step", i)
     SimulationManager.step()
-    simulation_app.update()
     if args.test is True:
         break
 
 # Render one frame
 RenderingManager.render()
-simulation_app.update()
 
 # Stop timeline before closing
 app_utils.stop()

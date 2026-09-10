@@ -22,7 +22,10 @@ import tempfile
 import xml.etree.ElementTree as ET
 from typing import Any
 
+import isaacsim.core.experimental.utils.prim as prim_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
+import omni.usd
 
 
 def _is_path_in_scope(path: str, root_path: str) -> bool:
@@ -268,7 +271,7 @@ def _collect_minimal_urdf_graph(stage: Any, export_root_path: str) -> tuple[str,
     Returns:
         The requested value.
     """
-    from pxr import Usd, UsdPhysics
+    from pxr import UsdPhysics
 
     root_prim = stage.GetPrimAtPath(export_root_path)
     if not root_prim or not root_prim.IsValid():
@@ -279,10 +282,12 @@ def _collect_minimal_urdf_graph(stage: Any, export_root_path: str) -> tuple[str,
     child_link_paths: set[str] = set()
     root_link_candidates: list[str] = []
 
-    for prim in Usd.PrimRange(root_prim):
-        if not prim.IsA(UsdPhysics.Joint):
-            continue
-
+    joint_prims = prim_utils.get_all_matching_child_prims(
+        root_prim,
+        predicate=lambda prim, _: prim.IsA(UsdPhysics.Joint),
+        include_self=True,
+    )
+    for prim in joint_prims:
         joint = UsdPhysics.Joint(prim)
         body0_targets = joint.GetBody0Rel().GetTargets()
         body1_targets = joint.GetBody1Rel().GetTargets()
@@ -426,12 +431,11 @@ def _export_minimal_urdf(
     Returns:
         The requested value.
     """
-    import omni.usd
     from pxr import Sdf
 
-    stage = omni.usd.get_context().get_stage()
-    if not stage:
+    if not stage_utils.is_stage_set() and omni.usd.get_context().get_stage() is None:
         raise RuntimeError("No USD stage available for minimal URDF export")
+    stage = stage_utils.get_current_stage()
 
     requested_root_path = export_root_path or articulation_path
     requested_root_prim = stage.GetPrimAtPath(requested_root_path) if requested_root_path else None

@@ -53,7 +53,18 @@ from isaacsim.sensors.experimental.rtx import CameraSensor, RtxCamera
 def validate(
     test_name: str, data: Any, expected_class: type[object], expected_dtype: object, expected_shape: tuple[int, ...]
 ) -> bool:
-    """Validate data against expected type, dtype, and shape."""
+    """Validate data against expected type, dtype, and shape.
+
+    Args:
+        test_name: Label included in validation output.
+        data: Annotator result whose representation should be checked.
+        expected_class: Required container class for ``data``.
+        expected_dtype: Required element data type.
+        expected_shape: Required array dimensions.
+
+    Returns:
+        True when the class, element data type, and shape all match expectations.
+    """
     print(f"{test_name}: data.shape: {data.shape}; dtype: {data.dtype}; type: {type(data)}")
     success = True
     if not isinstance(data, expected_class):
@@ -169,16 +180,18 @@ print("Testing: pointcloud")
 print("-" * 40)
 
 result_pc = True
+pointcloud_shape = (camera_resolution[0] * camera_resolution[1], 3)
 
 print("Default (CUDA warp array):")
 pc_default, _ = sensor.get_data("pointcloud")
 if pc_default is not None:
-    result_pc = validate("get_data_default", pc_default, wp.array, wp.float32, pc_default.shape) and result_pc
+    result_pc = validate("get_data_default", pc_default, wp.array, wp.float32, pointcloud_shape) and result_pc
     print("As numpy (CPU):")
     pc_np = pc_default.numpy()
-    result_pc = validate("numpy", pc_np, np.ndarray, np.float32, pc_np.shape) and result_pc
+    result_pc = validate("numpy", pc_np, np.ndarray, np.float32, pointcloud_shape) and result_pc
 else:
-    carb.log_warn("Pointcloud data is None")
+    carb.log_error("Pointcloud data is None")
+    result_pc = False
 
 print("[PASS]" if result_pc else "[FAIL]")
 

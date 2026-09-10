@@ -40,6 +40,7 @@ from isaacsim.gui.components.element_wrappers import (
     TextBlock,
     XYPlot,
 )
+from isaacsim.gui.components.ui_utils import combo_floatfield_slider_builder
 from isaacsim.storage.native import get_assets_root_path
 
 
@@ -141,6 +142,39 @@ class TestUI(omni.kit.test.AsyncTestCase):
         self.assertTrue(self.cb_wrapper.get_value())
 
         self.assertTrue(self.cb_callbacks == [False, True], "CheckBox callback function not working as expected")
+
+        window.destroy()
+
+    async def testComboFloatfieldSliderBuilder(self) -> None:  # noqa: N802
+        """Test that the floatfield of combo_floatfield_slider_builder clamps values to [min, max]."""
+        window_title = "UI_Widget_Wrapper_Test_Window_ComboFloatfieldSlider_Test"
+        width = 500
+        height = 200
+        window = await self._create_window(window_title, width, height)
+
+        min_val = -1.0
+        max_val = 1.0
+
+        with window.frame:
+            field_model, _ = combo_floatfield_slider_builder(
+                "Float", default_val=0.0, min=min_val, max=max_val, step=0.01
+            )
+        await update_stage_async()
+
+        # Value within bounds should be left untouched
+        field_model.set_value(0.5)
+        await update_stage_async()
+        self.assertEqual(field_model.as_float, 0.5)
+
+        # Typing a value above the max should be clamped to the max
+        field_model.set_value(10.0)
+        await update_stage_async()
+        self.assertEqual(field_model.as_float, max_val)
+
+        # Typing a value below the min should be clamped to the min
+        field_model.set_value(-10.0)
+        await update_stage_async()
+        self.assertEqual(field_model.as_float, min_val)
 
         window.destroy()
 
@@ -264,7 +298,7 @@ class TestUI(omni.kit.test.AsyncTestCase):
         self._timeline = omni.timeline.get_timeline_interface()
 
         stage_utils.add_reference_to_stage(
-            get_assets_root_path() + "/Isaac/Robots/UniversalRobots/ur10/ur10.usd", self._robot_path
+            get_assets_root_path() + "/Isaac/Robots_Multiphysics/UniversalRobots/ur10/ur10.usda", self._robot_path
         )
         # Test that articulations are found both when the timeline is stopped and playing
         dropdown.repopulate()

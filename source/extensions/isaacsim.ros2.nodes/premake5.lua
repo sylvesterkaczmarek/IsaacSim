@@ -22,6 +22,7 @@ project_ext_plugin(ext, "isaacsim.ros2.nodes.plugin")
 
 add_files("impl", "plugins")
 add_files("impl", "library")
+removefiles { "library/tests/**" }
 add_files("impl", "cuda")
 add_files("ogn", ogn.nodes_path)
 
@@ -49,7 +50,7 @@ includedirs {
     "%{root}/_build/target-deps/usd_ext_physics/%{cfg.buildcfg}/include",
     extsbuild_dir .. "/omni.syntheticdata/include",
     extsbuild_dir .. "/usdrt.scenegraph/include",
-    "%{root}/source/extensions/isaacsim.robot.schema/include",
+    "%{root}/_cmake_build/module-carriers/%{config}/isaacsim.robot.schema/sdk/include",
     "%{root}/_build/target-deps/generic_model_output/%{platform}/%{config}/include",
     "%{root}/source/extensions/isaacsim.ros2.nodes/include",
     "%{root}/_build/target-deps/generic_model_output/%{platform}/%{cfg.buildcfg}/include",
@@ -92,6 +93,9 @@ add_files("python", "python/*.py")
 add_files("impl", "cuda")
 add_files("python/nodes", "python/nodes/*.py")
 add_files("python/tests", "python/tests/*.py")
+-- Compile the host point-cloud interleave directly into the bindings module so
+-- fill_point_cloud_buffer is exposed to Python without relying on plugin symbol export.
+files { "library/FillPointCloudBufferHost.cpp" }
 
 includedirs {
     "%{root}/source/extensions/isaacsim.ros2.nodes/include",
@@ -106,6 +110,45 @@ filter { "system:windows" }
     links { "delayimp" }
 filter {}
 
+-- Build the C++ plugin that will be loaded by the tests
+project_ext_tests(ext, "isaacsim.ros2.nodes.tests")
+cppdialect("C++17")
+add_files("source", "tests")
+add_files("source", "library/tests")
+files { "library/TfAggregationManager.cpp" }
+
+includedirs {
+    "include",
+    "plugins/",
+    "%{target_deps}/doctest/include",
+    "%{root}/source/extensions/isaacsim.ros2.nodes/include",
+    "%{root}/source/extensions/isaacsim.ros2.core/include",
+    "%{root}/source/extensions/isaacsim.core.includes/include",
+    "%{root}/_build/target-deps/nlohmann_json/include",
+    "%{root}/_build/target-deps/cuda/include",
+    "%{root}/_build/target-deps/usd/%{cfg.buildcfg}/include",
+    "%{root}/_build/target-deps/usd/%{cfg.buildcfg}/include/boost",
+    "%{kit_sdk_bin_dir}/dev/fabric/include/",
+}
+
+libdirs {
+    extsbuild_dir .. "/omni.kit.test/bin",
+}
+
+add_usd()
+add_cuda_dependencies()
+
+filter { "system:linux", "platforms:x86_64" }
+disablewarnings { "error=narrowing", "error=unused-but-set-variable", "error=unused-variable" }
+links { "stdc++fs" }
+filter { "system:windows" }
+filter {}
+
+filter { "configurations:debug" }
+defines { "_DEBUG" }
+filter { "configurations:release" }
+defines { "NDEBUG" }
+filter {}
 
 -- Copy/link necessary files for packaging
 repo_build.prebuild_copy {

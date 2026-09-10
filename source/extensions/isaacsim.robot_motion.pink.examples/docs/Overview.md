@@ -1,6 +1,6 @@
 # Overview
 
-The isaacsim.robot_motion.pink.examples extension provides interactive demonstrations of the PINK inverse kinematics library within Isaac Sim. Each example registers a menu item under "PINK Examples" and opens a UI window for loading scenes, running scenarios, and observing IK-controlled robot behavior.
+The isaacsim.robot_motion.pink.examples extension provides interactive demonstrations of the PINK inverse kinematics library within Isaac Sim on Linux x86_64. Each example is available from **Window > Examples > Robotics Examples** under **Motion Generation > PINK**, with controls for loading scenes, running scenarios, and observing IK-controlled robot behavior.
 
 ## Examples
 

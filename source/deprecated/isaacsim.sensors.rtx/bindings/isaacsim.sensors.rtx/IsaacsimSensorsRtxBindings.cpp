@@ -16,7 +16,7 @@
 #include <carb/BindingsPythonUtils.h>
 #include <carb/logging/Log.h>
 
-#include <isaacsim/sensors/rtx/IIsaacSimSensorsRtx.h>
+#include <isaacsim/sensors/rtx/IIsaacSimSensorsRtx.hpp>
 
 CARB_BINDINGS("isaacsim.sensors.rtx.python")
 

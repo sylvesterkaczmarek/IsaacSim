@@ -1,8 +1,8 @@
 [package]
-version = "2.0.1"
+version = "2.0.4"
 category = "example"
 title = "Manipulators Examples (Deprecated)"
-description = "Deprecated. Use isaacsim.robot.experimental.manipulators.examples instead. Legacy (non-experimental) Franka and UR10 examples retained for backward compatibility."
+description = "Deprecated. Use isaacsim.robot_motion.examples instead. Legacy Franka and UR10 examples retained for backward compatibility."
 keywords = ["manipulators","grippers"]
 changelog = "docs/CHANGELOG.md"
 readme = "docs/Overview.md"
@@ -11,7 +11,7 @@ icon = "data/icon.png"
 writeTarget.kit = true
 
 [deprecation]
-warning = "Extension deprecated in favor of isaacsim.robot.experimental.manipulators.examples"
+warning = "Extension deprecated since Isaac Sim 6.0.0. Use isaacsim.robot_motion.examples instead."
 
 [dependencies]
 "isaacsim.core.api" = {}

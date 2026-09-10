@@ -52,15 +52,22 @@ async def populate_stage() -> None:
     assets_root_path = await get_assets_root_path_async()
     print(" - Adding reference to stage...")
     stage_utils.add_reference_to_stage(
-        usd_path=assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+        usd_path=assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
         path="/World/robot",
-        variants=[("Gripper", "AlternateFinger"), ("Mesh", "Performance")],
+        variants=[("Gripper", "alternatefinger"), ("Mesh", "performance")],
     )
     print(" - Done populating stage")
 
 
 async def save_stage(collect_dir: str) -> bool:
-    """Save the current stage to a directory asynchronously."""
+    """Save the current stage to a directory asynchronously.
+
+    Args:
+        collect_dir: Destination directory for the stage and its collected dependencies.
+
+    Returns:
+        Success flag and path of the collected root USD file.
+    """
     print("Saving stage asynchronously:")
     print(" - Collecting a USD file with all of its dependencies...")
     usd_path = stage_utils.get_current_stage().GetRootLayer().identifier

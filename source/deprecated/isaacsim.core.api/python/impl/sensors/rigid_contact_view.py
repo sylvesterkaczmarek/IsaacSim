@@ -30,11 +30,9 @@ torch = import_module("torch")
 
 
 class RigidContactView(object):
-    """Provides high level functions to deal with rigid prims (one or many) that track their contacts through filters.
+    """Provides high-level functions to deal with rigid prims (one or many) that track their contacts through filters, as well as their attributes/properties.
 
-    as well as their attributes/properties.
-
-    This class wraps all matching rigid prims found at the regex provided at the ``prim_paths_expr`` argument
+    This class wraps all matching rigid prims found by the regex provided in the ``prim_paths_expr`` argument.
 
     .. warning::
 
@@ -43,20 +41,21 @@ class RigidContactView(object):
 
     Args:
         prim_paths_expr: Prim paths regex to encapsulate all prims that match it.
-            example: "/World/Env[1-5]/Cube" will match /World/Env1/Cube,
-            /World/Env2/Cube..etc.
-            (a non regex prim path can also be used to encapsulate one rigid prim).  Additionally a
-            list of regex can be provided. example ["/World/Env[1-5]/Cube", "/World/Env[10-19]/Cube"].
+            Example: "/World/Env[1-5]/Cube" will match /World/Env1/Cube,
+            /World/Env2/Cube, etc.
+            A non-regex prim path can also be used to encapsulate one rigid prim. Additionally, a
+            list of regexes can be provided. Example: ["/World/Env[1-5]/Cube", "/World/Env[10-19]/Cube"].
         filter_paths_expr: List of prim paths regex to filter the contacts for each corresponding
             prim_paths_expr. Example: ["/World/envs/env_2/Xform"] will filter the contacts corresponding to
             the expression passed.
-        name: Shortname to be used as a key by Scene class.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
         prepare_contact_sensors: If rigid prims in the view are not cloned from a prim in a prepared state,
-            (although slow for large number of prims) this ensures that
-            appropriate physics settings are applied on all the prim in the view.
+            this ensures that appropriate physics settings are applied to all prims in the view.
+            This can be slow for large numbers of prims.
         disable_stablization: Disables the contact stabilization parameter in the physics context.
-        disable_stabilization: Overrides disable_stablization when provided; disables contact stabilization in the physics context.
+        disable_stabilization: Overrides ``disable_stablization`` when provided; disables contact stabilization in
+            the physics context.
         max_contact_count: Maximum number of contact data to report when detailed contact information is needed.
 
     Example:
@@ -83,7 +82,7 @@ class RigidContactView(object):
         >>> env_pos = cloner.clone(
         ...     source_prim_path=env_zero_path,
         ...     prim_paths=cloner.generate_paths("/World/envs/env", num_envs),
-        ...     position_offsets=position_offsets
+        ...     position_offsets=position_offsets,
         ...     copy_from_source=True,
         ... )
         >>>
@@ -96,7 +95,6 @@ class RigidContactView(object):
         ... )
         >>> prims
         <isaacsim.core.api.sensors.rigid_contact_view.RigidContactView object at 0x7f8d4eb1abf0>
-
     """
 
     def __init__(
@@ -167,16 +165,15 @@ class RigidContactView(object):
 
             >>> prims.num_shapes
             5
-
         """
         return self._num_shapes
 
     @property
     def num_filters(self) -> int:
-        """Number of filters bodies that report their contact with the rigid prims.
+        """Number of filter bodies that report their contact with the rigid prims.
 
         Returns:
-            Number of filters bodies that report their contact with the rigid prims.
+            Number of filter bodies that report their contact with the rigid prims.
 
         Example:
 
@@ -184,16 +181,14 @@ class RigidContactView(object):
 
             >>> prims.num_filters
             1
-
         """
         return self._num_filters
 
     def _prepare_contact_reporter(self, prim_at_path: object) -> None:
-        """Prepares the contact reporter by removing the contact thresholds.
+        """Prepares contact reporting for a prim by setting the contact report threshold to zero.
 
         Args:
             prim_at_path: Prim at the specified path to prepare for contact reporting.
-
         """
         if prim_at_path.HasAPI(PhysxSchema.PhysxContactReportAPI):
             cr_api = PhysxSchema.PhysxContactReportAPI(prim_at_path)
@@ -203,14 +198,14 @@ class RigidContactView(object):
         cr_api.CreateThresholdAttr().Set(0)
 
     def is_physics_handle_valid(self) -> bool:
-        """Check if rigid prim view's physics handler is initialized.
+        """Checks if the rigid prim view's physics handle is initialized.
 
         .. warning::
 
-            If the physics handler is not valid many of the methods that requires PhysX will return None.
+            If the physics handle is not valid, many of the methods that require PhysX will return None.
 
         Returns:
-            True if the physics handle of the view is valid (i.e physics is initialized for the view). Otherwise False.
+            True if the physics handle of the view is valid, otherwise False.
 
         Example:
 
@@ -218,12 +213,11 @@ class RigidContactView(object):
 
             >>> prims.is_physics_handle_valid()
             True
-
         """
         return self._physics_view is not None
 
     def initialize(self, physics_sim_view: omni.physics.tensors.SimulationView = None) -> None:
-        """Create a physics simulation view if not passed and set other properties using the PhysX tensor API.
+        """Creates the rigid contact view and initializes contact shape and filter counts using the PhysX tensor API.
 
         .. note::
 
@@ -236,14 +230,13 @@ class RigidContactView(object):
             before interacting with any other class method.
 
         Args:
-            physics_sim_view: Current physics simulation view.
+            physics_sim_view: Physics simulation view used to create the rigid contact view.
 
         Example:
 
         .. code-block:: python
 
             >>> prims.initialize()
-
         """
         if physics_sim_view is None:
             physics_sim_view = omni.physics.tensors.create_simulation_view(self._backend)
@@ -266,17 +259,17 @@ class RigidContactView(object):
     def get_net_contact_forces(
         self, indices: np.ndarray | torch.Tensor | wp.array | None = None, clone: bool = True, dt: float = 1.0
     ) -> np.ndarray | torch.Tensor | wp.indexedarray:
-        """Get the overall net contact forces on the prims in the view with respect to the world's frame.
+        """Gets the overall net contact forces on the prims in the view with respect to the world's frame.
 
         Args:
             indices: Indices to specify which prims
                 to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-            clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: Time step multiplier to convert the underlying impulses to forces. The function returns contact impulses if the default dt is used
+            clone: Whether to return a clone of the internal buffer.
+            dt: Time step multiplier to convert the underlying impulses to forces. Use 1.0 to return contact impulses.
 
         Returns:
-            Net contact forces of the prims with shape (M,3).
+            Net contact forces of the prims with shape (M, 3).
 
         Example:
 
@@ -295,7 +288,6 @@ class RigidContactView(object):
             [[ 1.8731881e-03  5.4876995e-03  1.6408131e+02]
              [-2.1011427e-02  3.5647806e-02  1.6371542e+02]
              [ 9.3709816e-05 -9.2963902e-03  1.6296776e+02]]
-
         """
         if not omni.timeline.get_timeline_interface().is_stopped() and self._physics_view is not None:
             indices = self._backend_utils.resolve_indices(indices, self._num_shapes, self._device)
@@ -313,20 +305,20 @@ class RigidContactView(object):
         clone: bool = True,
         dt: float = 1.0,
     ) -> np.ndarray | torch.Tensor | wp.indexedarray:
-        """Get the contact forces between the prims in the view and the filter prims.
+        """Gets the contact forces between the prims in the view and the filter prims.
 
         E.g., a matrix of dimension ``(num_shapes, num_filters, 3)`` where ``num_filters`` is
-        determined according to the ``filter_paths_expr`` parameter
+         determined according to the ``filter_paths_expr`` parameter.
 
         Args:
             indices: Indices to specify which prims
                 to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-            clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: Time step multiplier to convert the underlying impulses to forces. The function returns contact impulses if the default dt is used
+            clone: Whether to return a clone of the internal buffer.
+            dt: Time step multiplier to convert the underlying impulses to forces. Use 1.0 to return contact impulses.
 
         Returns:
-            Net contact forces between the view prim and the filter prims with shape (M, self.num_filters, 3).
+            Net contact forces between the view prims and the filter prims with shape (M, self.num_filters, 3).
 
         Example:
 
@@ -339,7 +331,6 @@ class RigidContactView(object):
              [[ 0.0000000e+00  0.0000000e+00  0.0000000e+00]]
              [[-3.3276828e-03 -2.3870371e-02  3.2733777e+02]]
              [[ 0.0000000e+00  0.0000000e+00  0.0000000e+00]]]
-
         """
         if not omni.timeline.get_timeline_interface().is_stopped() and self._physics_view is not None:
             indices = self._backend_utils.resolve_indices(indices, self._num_shapes, self._device)
@@ -364,29 +355,30 @@ class RigidContactView(object):
         np.ndarray | torch.Tensor | wp.indexedarray,
         np.ndarray | torch.Tensor | wp.indexedarray,
     ]:
-        """Get more detailed contact information between the prims in the view and the filter prims.
+        """Gets detailed contact information between the prims in the view and the filter prims.
 
-        Specifically, this method provides individual contact normals, contact points, contact separations as well as
-        contact forces for each pair (the sum of which equals the forces that the ``get_contact_force_matrix``
-        method provides as the force aggregate of a pair)
+        Specifically, this method provides individual contact normals, contact points, contact separations, and
+        contact forces for each pair. The sum of the contact forces equals the force aggregate that
+        ``get_contact_force_matrix`` provides for a pair.
 
-        Given to the dynamic nature of collision between bodies, this method will provide buffers of contact data which
+        Given the dynamic nature of collision between bodies, this method provides buffers of contact data that
         are arranged sequentially for each pair. The starting index and the number of contact data points for each pair
         in this stream can be realized from pair_contacts_start_indices, and pair_contacts_count tensors.
         They both have a dimension of ``(num_shapes, num_filters)`` where ``num_filters`` is determined
-        according to the ``filter_paths_expr`` parameter
+        according to the ``filter_paths_expr`` parameter.
 
         Args:
             indices: Indices to specify which prims
                 to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-            clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: Time step multiplier to convert the underlying impulses to forces. If the default value is used then the forces are in fact contact impulses
+            clone: Whether to return a clone of the internal buffer.
+            dt: Time step multiplier to convert the underlying impulses to forces. Use 1.0 to return contact impulses.
 
         Returns:
-            A set of buffers for normal forces with shape (max_contact_count, 1), points with shape (max_contact_count, 3), normals with shape (max_contact_count, 3),
-            and distances with shape (max_contact_count, 1), as well as two tensors with shape (M, self.num_filters)
-            to indicate the starting index and the number of contact data points per pair in the aforementioned buffers.
+            A set of buffers for normal forces with shape (max_contact_count, 1), points with shape
+            (max_contact_count, 3), normals with shape (max_contact_count, 3), and distances with shape
+            (max_contact_count, 1), as well as two tensors with shape (M, self.num_filters) to indicate the starting
+            index and the number of contact data points per pair in the aforementioned buffers.
 
         Example:
 
@@ -450,7 +442,6 @@ class RigidContactView(object):
              [4]
              [4]
              [8]]
-
         """
         if not omni.timeline.get_timeline_interface().is_stopped() and self._physics_view is not None:
             indices = self._backend_utils.resolve_indices(indices, self._num_shapes, self._device)
@@ -495,27 +486,28 @@ class RigidContactView(object):
         np.ndarray | torch.Tensor | wp.indexedarray,
         np.ndarray | torch.Tensor | wp.indexedarray,
     ]:
-        """Gets friction data between the prims in the view and the filter prims. Specifically, this method provides frictional contact forces,.
+        """Gets friction data between the prims in the view and the filter prims.
 
-        and points. The data in reported for number of anchor points that includes tangential forces in a single tangent direction to contact normal.
-        Given to the dynamic nature of collision between bodies, this method will provide buffers of friction data arranged sequentially for each pair.
-        The starting index and the number of contact data points for each pair in this stream can be realized from pair_contacts_start_indices,
-        and pair_contacts_count tensors. They both have a dimension of (self.num_shapes, self.num_filters) where filter_count is determined
-        according to the filter_paths_expr parameter.
+        Specifically, this method provides frictional contact forces and points. The data is reported for the number
+        of anchor points that includes tangential forces in a single tangent direction to contact normal.
+        Given the dynamic nature of collision between bodies, this method provides buffers of friction data arranged
+        sequentially for each pair. The starting index and the number of contact data points for each pair in this
+        stream can be realized from pair_contacts_start_indices, and pair_contacts_count tensors. They both have a
+        dimension of (self.num_shapes, self.num_filters) where filter_count is determined according to the
+        filter_paths_expr parameter.
 
         Args:
-            indices: Indicies to specify which prims
+            indices: Indices to specify which prims
                 to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-            clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: Time step multiplier to convert the underlying impulses to forces. If the default value is used then the forces are in fact contact impulses
+            clone: Whether to return a clone of the internal buffer.
+            dt: Time step multiplier to convert the underlying impulses to forces. Use 1.0 to return contact impulses.
 
         Returns:
-            A set of buffers for tangential forces per patch (at number of anchor points, each in a single directions)
-            with shape (max_contact_count, 3), points with shape (max_contact_count, 3),
-            as well as two tensors with shape (M, self.num_filters) to indicate the starting index and the number of
-            contact data points per pair in the aforementioned buffers.
-
+            A set of buffers for tangential forces per patch at the number of anchor points, each in a single direction,
+            with shape (max_contact_count, 3), points with shape (max_contact_count, 3), as well as two tensors with
+            shape (M, self.num_filters) to indicate the starting index and the number of contact data points per pair
+            in the aforementioned buffers.
         """
         if not omni.timeline.get_timeline_interface().is_stopped() and self._physics_view is not None:
             indices = self._backend_utils.resolve_indices(indices, self._num_shapes, self._device)

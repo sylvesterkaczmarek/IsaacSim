@@ -1,5 +1,5 @@
 [package]
-version = "0.1.2"
+version = "0.1.7"
 category = "Simulation"
 title = "Isaac Sim RTX Sensor Nodes"
 description = "Provides OmniGraph nodes for RTX sensor point cloud extraction and debug draw visualization. Companion to isaacsim.sensors.experimental.rtx."
@@ -39,6 +39,7 @@ name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]
@@ -97,6 +98,7 @@ args = [
     ### Extension specific args
     "--/rtx-transient/stableIds/enabled=true",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

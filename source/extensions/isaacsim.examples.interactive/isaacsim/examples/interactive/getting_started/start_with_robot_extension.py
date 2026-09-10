@@ -22,10 +22,10 @@ import omni.ext
 import omni.timeline
 import omni.ui as ui
 import omni.usd
-from isaacsim.examples.base.base_sample_extension_experimental import BaseSampleUITemplate
+from isaacsim.examples.base import BaseSampleUITemplate
 from isaacsim.examples.browser import get_instance as get_browser_instance
 from isaacsim.examples.interactive.getting_started.start_with_robot import GettingStartedRobot
-from isaacsim.gui.components.ui_utils import btn_builder
+from isaacsim.gui.components import btn_builder
 
 
 class GettingStartedRobotExtension(omni.ext.IExt):
@@ -205,7 +205,7 @@ class GettingStartedRobotUI(BaseSampleUITemplate):
             assets_root_path = get_assets_root_path()
             if assets_root_path is None:
                 carb.log_error("Could not find Isaac Sim assets folder")
-            usd_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+            usd_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
             prim_path = "/World/Arm"
 
             # Add robot using experimental stage utils

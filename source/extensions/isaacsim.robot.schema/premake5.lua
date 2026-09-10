@@ -14,19 +14,14 @@
 -- limitations under the License.
 
 local ext = get_current_extension_info()
+dofile(root .. "/tools/isaac_build/module_carrier.lua")
+
 project_ext(ext)
+stage_isaacsim_module_carrier(ext, "isaacsim.robot.schema", true)
 
 repo_build.prebuild_link {
     { "config", ext.target_dir .. "/config" },
     { "docs", ext.target_dir .. "/docs" },
     { "data", ext.target_dir .. "/data" },
-    { "include", ext.target_dir .. "/include" },
-    { "robot_schema", ext.target_dir .. "/usd/schema/isaac/robot_schema" },
-    { "sensor_schema", ext.target_dir .. "/usd/schema/isaac/sensor_schema" },
-    { "range_sensor_schema", ext.target_dir .. "/usd/schema/isaac/range_sensor_schema" },
     { "python/tests", ext.target_dir .. "/isaacsim/robot/schema/tests" },
-    { "python/compat", ext.target_dir .. "/compat" },
-}
-repo_build.prebuild_copy {
-    { "python/__init__.py", ext.target_dir .. "/usd/schema/isaac" },
 }

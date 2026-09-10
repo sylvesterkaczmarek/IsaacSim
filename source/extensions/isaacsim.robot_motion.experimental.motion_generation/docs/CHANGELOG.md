@@ -1,5 +1,31 @@
 # Changelog
 
+## [7.1.2] - 2026-08-26
+### Changed
+- Replaced checking local scaling to checking global uniform scaling
+
+## [7.1.1] - 2026-08-10
+### Changed
+- `get_shape_type` and scene-query plane detection use USD `Usd.Prim.IsA(<type name>)` instead of the shape `are_of_type` classifier.
+- Route motion-generation warnings through `isaacsim.common.logging` and configure the Kit logging channel during extension startup.
+
+## [7.1.0] - 2026-07-22
+### Changed
+- `WorldBinding` reads obstacle geometry, scale, and collision-enabled state during initialization and synchronizes only transforms at runtime.
+- Use core experimental bounds utilities for world AABB and untransformed OBB collision approximations.
+- Use core experimental prim helpers for prototype filtering, attribute access, and mesh topology reads.
+
+### Removed
+- Remove USDRT property change tracking and the `WorldBinding.synchronize` and `WorldBinding.synchronize_properties` methods. Use `synchronize_transforms` for runtime pose updates.
+
+## [7.0.0] - 2026-07-06
+### Changed
+- Updates the class names.
+
+## [6.1.4] - 2026-07-03
+### Changed
+- Emit `carb.log_warn` on `BaseController` error paths when `forward()` returns `None` or `reset()` fails.
+
 ## [6.1.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

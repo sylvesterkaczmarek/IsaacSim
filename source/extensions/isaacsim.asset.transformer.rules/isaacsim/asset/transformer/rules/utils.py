@@ -263,6 +263,217 @@ def canonical_builtin_mdl_path(path: str) -> str | None:
     return os.path.basename(normalized)
 
 
+def is_remote_path(path: str) -> bool:
+    """Check if a path is a remote URL (Nucleus, HTTP, etc.).
+
+    Args:
+        path: The path to check.
+
+    Returns:
+        True if the path is a remote URL.
+
+    Example:
+
+    .. code-block:: python
+
+        is_remote = is_remote_path("omniverse://server/asset.usd")
+
+    """
+    if not path:
+        return False
+    return path.startswith(("omniverse://", "http://", "https://"))
+
+
+def is_absolute_asset_path(path: str) -> bool:
+    """Check if a path is absolute, including remote URLs.
+
+    Treats remote URLs (``omniverse://``, ``http(s)://``) as absolute even
+    though :func:`os.path.isabs` returns ``False`` for them.
+
+    Args:
+        path: The path to check.
+
+    Returns:
+        ``True`` if *path* is absolute or a remote URL.
+
+    Example:
+
+    .. code-block:: python
+
+        is_absolute_asset_path("omniverse://server/a.usd")  # True
+        is_absolute_asset_path("/tmp/a.usd")  # True
+        is_absolute_asset_path("./a.usd")  # False
+
+    """
+    if not path:
+        return False
+    return is_remote_path(path) or os.path.isabs(path)
+
+
+def asset_dirname(path: str) -> str:
+    """Return the parent of an asset path, preserving remote URL scheme.
+
+    ``os.path.dirname`` works for ``omniverse://`` URLs on POSIX (it walks
+    back to the last ``/``) but the caller still has to avoid further
+    normalization that would collapse ``://``. This helper centralizes the
+    handling so remote URL roots (``omniverse://host``) are preserved
+    rather than truncated into the scheme part.
+
+    Args:
+        path: A local path or a remote URL.
+
+    Returns:
+        Directory portion of *path*. Remote URLs keep their scheme prefix.
+
+    Example:
+
+    .. code-block:: python
+
+        asset_dirname("omniverse://host/a/b/c.usd")  # "omniverse://host/a/b"
+        asset_dirname("/tmp/a.usda")  # "/tmp"
+
+    """
+    if not path:
+        return ""
+    if is_remote_path(path):
+        scheme_end = path.find("://")
+        if scheme_end == -1:
+            return path
+        scheme_end += 3
+        last_slash = path.rfind("/")
+        if last_slash < scheme_end:
+            return path
+        return path[:last_slash]
+    return os.path.dirname(path)
+
+
+def join_asset_path(base_dir: str, relative_path: str) -> str:
+    """Join a base directory and a relative path, URL-safe for remote bases.
+
+    For remote URLs, performs explicit segment-aware joining so the
+    ``scheme://`` portion is preserved (``os.path.normpath`` would collapse
+    ``//`` to ``/``). Relative segments ``.`` and ``..`` are resolved
+    against the base; ``..`` will not consume the host portion of a URL.
+    For local bases this falls back to ``os.path.normpath(os.path.join(...))``.
+
+    If *relative_path* is already absolute (local or remote URL) it is
+    returned unchanged.
+
+    Args:
+        base_dir: The base directory (local path or remote URL).
+        relative_path: The relative path to append.
+
+    Returns:
+        Joined path string. Remote URL scheme is preserved when applicable.
+
+    Example:
+
+    .. code-block:: python
+
+        join_asset_path("omniverse://host/a", "./b/c.usd")
+        # -> "omniverse://host/a/b/c.usd"
+
+    """
+    if not relative_path:
+        return base_dir
+    if is_absolute_asset_path(relative_path):
+        return relative_path
+    if not base_dir:
+        return relative_path
+    if is_remote_path(base_dir):
+        scheme_end = base_dir.find("://") + 3
+        scheme_prefix = base_dir[:scheme_end]
+        host_and_path = base_dir[scheme_end:].rstrip("/")
+        parts = [p for p in host_and_path.split("/") if p]
+        for segment in relative_path.replace("\\", "/").split("/"):
+            if not segment or segment == ".":
+                continue
+            if segment == "..":
+                # Don't pop past the host component.
+                if len(parts) > 1:
+                    parts.pop()
+                continue
+            parts.append(segment)
+        return scheme_prefix + "/".join(parts)
+    return os.path.normpath(os.path.join(base_dir, relative_path))
+
+
+def asset_exists(path: str) -> bool:
+    """Check whether an asset path exists.
+
+    For local paths this delegates to :func:`os.path.isfile`. For remote
+    URLs it queries ``omni.client.stat`` if available. When ``omni.client``
+    cannot be imported (e.g. asset-transformer rules used outside of a Kit
+    runtime) remote paths conservatively return ``False``.
+
+    Args:
+        path: Local path or remote URL.
+
+    Returns:
+        ``True`` if the asset exists and is readable.
+
+    Example:
+
+    .. code-block:: python
+
+        asset_exists("omniverse://server/asset.usda")
+
+    """
+    if not path:
+        return False
+    if is_remote_path(path):
+        try:
+            import omni.client
+        except ImportError:
+            _LOGGER.warning(
+                "omni.client is not available; cannot check existence of remote path: %s",
+                path,
+            )
+            return False
+        try:
+            result, _ = omni.client.stat(path)
+            return result == omni.client.Result.OK
+        except Exception:
+            return False
+    return os.path.isfile(path)
+
+
+def download_remote_file(src_url: str, dst_path: str) -> bool:
+    """Download a remote asset to a local destination using ``omni.client``.
+
+    Args:
+        src_url: The remote URL to download (``omniverse://``, ``http(s)://``).
+        dst_path: The local destination file path.
+
+    Returns:
+        ``True`` if the download succeeded, ``False`` otherwise (including
+        when ``omni.client`` is unavailable).
+
+    Example:
+
+    .. code-block:: python
+
+        download_remote_file("omniverse://server/a.usda", "/tmp/a.usda")
+
+    """
+    try:
+        import omni.client
+    except ImportError:
+        _LOGGER.warning("omni.client is not available; cannot download remote file: %s", src_url)
+        return False
+    try:
+        result, _, content = omni.client.read_file(src_url)
+        if result != omni.client.Result.OK:
+            _LOGGER.warning("Failed to read remote file %s: %s", src_url, result)
+            return False
+        with open(dst_path, "wb") as f:
+            f.write(memoryview(content))
+        return True
+    except Exception as exc:
+        _LOGGER.warning("Failed to download remote file %s: %s", src_url, exc)
+        return False
+
+
 def norm_path(path: str) -> str:
     """Normalize a path for cross-platform comparison.
 
@@ -271,13 +482,21 @@ def norm_path(path: str) -> str:
     case-insensitive file systems (Windows).  On Linux ``normcase``
     is a no-op, so behaviour is unchanged.
 
+    Remote URLs (``omniverse://``, ``http(s)://``) are returned unchanged so
+    the scheme's double slash is preserved and the URL remains a valid
+    dictionary key for asset-tracking maps.
+
     Args:
-        path: The file-system path to normalize.
+        path: The file-system path or remote URL to normalize.
 
     Returns:
         Normalized path string suitable for dict keys and comparisons.
 
     """
+    if not path:
+        return path
+    if is_remote_path(path):
+        return path
     return os.path.normcase(os.path.normpath(path))
 
 
@@ -628,27 +847,6 @@ def matches_prim_filter(
             return False
 
     return True
-
-
-def is_remote_path(path: str) -> bool:
-    """Check if a path is a remote URL (Nucleus, HTTP, etc.).
-
-    Args:
-        path: The path to check.
-
-    Returns:
-        True if the path is a remote URL.
-
-    Example:
-
-    .. code-block:: python
-
-        is_remote = is_remote_path("omniverse://server/asset.usd")
-
-    """
-    if not path:
-        return False
-    return path.startswith(("omniverse://", "http://", "https://"))
 
 
 def is_usd_file(path: str) -> bool:
@@ -1156,13 +1354,13 @@ def copy_composed_prim_to_layer(
                     source_target_strs = {str(t) for t in source_targets}
                     rel_spec.targetPathList.ClearEditsAndMakeExplicit()
                     for target in source_targets:
-                        rel_spec.targetPathList.Prepend(target)
+                        rel_spec.targetPathList.Append(target)
                     for target in existing_rels[rel_name]:
                         if str(target) not in source_target_strs:
-                            rel_spec.targetPathList.Prepend(target)
+                            rel_spec.targetPathList.Append(target)
                 else:
                     for target in source_targets:
-                        rel_spec.targetPathList.Prepend(target)
+                        rel_spec.targetPathList.Append(target)
         except Exception:
             pass
 
@@ -1174,7 +1372,7 @@ def copy_composed_prim_to_layer(
                     rel_spec = Sdf.RelationshipSpec(prim_spec, rel_name)
                     if rel_spec:
                         for target in targets:
-                            rel_spec.targetPathList.Prepend(target)
+                            rel_spec.targetPathList.Append(target)
                 except Exception:
                     pass
 
@@ -1317,8 +1515,12 @@ def copy_stage_metadata_from_layer(source_layer: Sdf.Layer, target_layer: Sdf.La
     source_pseudo_root = source_layer.pseudoRoot
     target_pseudo_root = target_layer.pseudoRoot
 
-    # Keys to skip (handled separately or should not be copied)
-    skip_keys = frozenset(("defaultPrim", "subLayers", "primChildren"))
+    # Keys to skip (handled separately or should not be copied). ``documentation``
+    # is USD's auto-generated "Generated from Composed Stage of root layer <path>"
+    # provenance string, which embeds the absolute/remote source path. Propagating
+    # it would leak host-specific (and non-portable, e.g. ``omniverse://``) paths
+    # into every generated layer, so it is never copied to output layers.
+    skip_keys = frozenset(("defaultPrim", "subLayers", "primChildren", "documentation"))
 
     # Copy all metadata from source to target
     for key in source_pseudo_root.ListInfoKeys():
@@ -1392,34 +1594,47 @@ def remap_asset_path(
 ) -> str:
     """Remap an asset path to a new location.
 
-    Resolves the original path to absolute, then checks if it should be
-    remapped to a variant file or collected dependency location.
+    Resolves the original path to absolute (URL-safe for remote sources),
+    then checks if it should be remapped to a variant file or collected
+    dependency location.
+
+    Resolution rules:
+
+    * Already-absolute paths and remote URLs are used as-is.
+    * Relative paths are joined against *source_dir* via
+      :func:`join_asset_path` so remote URL bases keep their scheme.
+    * If the resolved path appears in *variant_file_map* or *collected_deps*
+      the returned value is a destination-relative path to the new local
+      location (these maps always store local destinations).
+    * Otherwise, local files that exist are returned as paths relative to
+      *dest_dir*; remote URLs that weren't collected are returned unchanged
+      (still resolvable from the consumer).
 
     Args:
         original_path: The original asset path to remap.
-        source_dir: Directory to resolve relative paths against.
+        source_dir: Directory or remote URL to resolve relative paths against.
         dest_dir: Destination directory for computing relative output paths.
         variant_file_map: Map from original variant paths to new variant paths.
         collected_deps: Map from original dependency paths to collected paths.
 
     Returns:
-        The remapped path (relative to dest_dir), or original if no remapping needed.
+        The remapped path (relative to *dest_dir*), or *original_path* if
+        no remapping is needed.
 
     Example:
 
     .. code-block:: python
 
-        remapped = remap_asset_path("foo.usd", "/src", "/dst", {}, {})
+        remap_asset_path("foo.usd", "/src", "/dst", {}, {})
 
     """
     if not original_path:
         return original_path
 
-    # Resolve to absolute path
-    if os.path.isabs(original_path):
+    if is_absolute_asset_path(original_path):
         abs_path = original_path
     else:
-        abs_path = os.path.normpath(os.path.join(source_dir, original_path))
+        abs_path = join_asset_path(source_dir, original_path)
 
     normed = norm_path(abs_path)
 
@@ -1441,8 +1656,10 @@ def remap_asset_path(
         if try_path in collected_deps:
             return make_explicit_relative(os.path.relpath(collected_deps[try_path], dest_dir))
 
-    # For existing files not in maps, make relative to destination
-    if os.path.isfile(abs_path):
+    # For existing LOCAL files not in maps, make relative to destination.
+    # Remote URLs that weren't collected stay as-is — they remain valid
+    # references for the consumer.
+    if not is_remote_path(abs_path) and os.path.isfile(abs_path):
         return make_explicit_relative(os.path.relpath(abs_path, dest_dir))
 
     return original_path
@@ -1455,22 +1672,31 @@ def copy_file_to_directory(
 ) -> str | None:
     """Copy a file to a directory, handling filename conflicts.
 
+    Supports both local sources (copied with ``shutil.copy2``) and remote
+    URLs (downloaded via :func:`download_remote_file`). Remote downloads
+    require ``omni.client``; the function returns ``None`` if it isn't
+    available or the download fails.
+
     Args:
-        src_path: Absolute path to source file.
+        src_path: Absolute local path or remote URL of the source file.
         dest_dir: Directory to copy the file into.
         existing_collected: Optional dict to check for already-collected files.
 
     Returns:
-        The destination path, or None if copy failed.
+        The destination path, or ``None`` if the copy failed.
 
     Example:
 
     .. code-block:: python
 
-        dest_path = copy_file_to_directory("/tmp/a.usd", "/tmp/output")
+        copy_file_to_directory("omniverse://server/a.usd", "/tmp/output")
 
     """
-    if not os.path.isfile(src_path):
+    if not src_path:
+        return None
+
+    is_remote = is_remote_path(src_path)
+    if not is_remote and not os.path.isfile(src_path):
         return None
 
     normed = norm_path(src_path)
@@ -1479,20 +1705,29 @@ def copy_file_to_directory(
     if existing_collected and normed in existing_collected:
         return existing_collected[normed]
 
-    filename = os.path.basename(src_path)
+    filename = os.path.basename(src_path.rstrip("/"))
+    if not filename:
+        return None
     dest_path = os.path.join(dest_dir, filename)
 
-    # Handle filename conflicts
-    if os.path.exists(dest_path) and not files_are_identical(src_path, dest_path):
-        base, ext = os.path.splitext(filename)
-        counter = 1
-        while os.path.exists(dest_path):
-            dest_path = os.path.join(dest_dir, f"{base}_{counter}{ext}")
-            counter += 1
+    # Handle filename conflicts. For remote sources we can't cheaply compare
+    # contents, so we always rename when a same-name file already exists.
+    if os.path.exists(dest_path):
+        same_content = False if is_remote else files_are_identical(src_path, dest_path)
+        if not same_content:
+            base, ext = os.path.splitext(filename)
+            counter = 1
+            while os.path.exists(dest_path):
+                dest_path = os.path.join(dest_dir, f"{base}_{counter}{ext}")
+                counter += 1
 
     if not os.path.exists(dest_path):
         os.makedirs(dest_dir, exist_ok=True)
-        shutil.copy2(src_path, dest_path)
+        if is_remote:
+            if not download_remote_file(src_path, dest_path):
+                return None
+        else:
+            shutil.copy2(src_path, dest_path)
 
     return dest_path
 
@@ -1607,6 +1842,8 @@ def copy_prim_metadata(
 def _try_usd_extensions(base_path: str) -> str | None:
     """Try USD extension variations for a path.
 
+    Works for both local paths and remote URLs (``omniverse://`` etc).
+
     Args:
         base_path: Base path to try extensions on.
 
@@ -1614,14 +1851,14 @@ def _try_usd_extensions(base_path: str) -> str | None:
         The first existing path, or None if none exist.
 
     """
-    if os.path.isfile(base_path):
+    if asset_exists(base_path):
         return base_path
 
     base, ext = os.path.splitext(base_path)
     if ext.lower() == ".usd":
         for alt_ext in [".usda", ".usdc"]:
             alt_path = base + alt_ext
-            if os.path.isfile(alt_path):
+            if asset_exists(alt_path):
                 return alt_path
     return None
 
@@ -1631,49 +1868,57 @@ def resolve_asset_path(
     base_layer: Sdf.Layer | None = None,
     fallback_dirs: list[str] | None = None,
 ) -> str:
-    """Resolve an asset path to an absolute path.
+    """Resolve an asset path to an absolute path or remote URL.
 
     Tries multiple resolution strategies in order:
-    1. If already absolute and exists (with USD extension variations), return it
-    2. Resolve relative to base_layer (with USD extension variations)
-    3. Resolve relative to each fallback directory (with USD extension variations)
+
+    1. If already absolute (local) or a remote URL and exists (with USD
+       extension variations), return it.
+    2. Resolve relative to *base_layer* using its real path (with USD
+       extension variations).
+    3. Resolve relative to each fallback directory (with USD extension
+       variations).
+
+    All directory joins are URL-safe via :func:`join_asset_path`, and all
+    existence checks are routed through :func:`asset_exists` so that remote
+    URLs are handled correctly.
 
     Args:
         arc_asset_path: The asset path to resolve.
         base_layer: Optional layer to resolve relative paths against.
-        fallback_dirs: Optional list of directories to try for resolution.
+        fallback_dirs: Optional list of directories or remote URL roots to
+            try for resolution.
 
     Returns:
-        Resolved absolute path, or empty string if not resolvable.
+        Resolved absolute path or remote URL, or empty string if not
+        resolvable.
 
     Example:
 
     .. code-block:: python
 
-        resolved = resolve_asset_path("asset.usd", base_layer=layer, fallback_dirs=["/tmp"])
+        resolve_asset_path("asset.usd", fallback_dirs=["omniverse://server/dir"])
 
     """
     if not arc_asset_path:
         return ""
 
-    # If already absolute, check if it exists (try USD extension variations)
-    if os.path.isabs(arc_asset_path):
+    if is_absolute_asset_path(arc_asset_path):
         resolved = _try_usd_extensions(arc_asset_path)
         return resolved if resolved else ""
 
-    # Try base layer first
     if base_layer:
-        layer_dir = os.path.dirname(base_layer.realPath)
-        candidate = os.path.normpath(os.path.join(layer_dir, arc_asset_path))
-        resolved = _try_usd_extensions(candidate)
-        if resolved:
-            return resolved
+        layer_dir = asset_dirname(base_layer.realPath)
+        if layer_dir:
+            candidate = join_asset_path(layer_dir, arc_asset_path)
+            resolved = _try_usd_extensions(candidate)
+            if resolved:
+                return resolved
 
-    # Try fallback directories
     if fallback_dirs:
         for fallback_dir in fallback_dirs:
             if fallback_dir:
-                candidate = os.path.normpath(os.path.join(fallback_dir, arc_asset_path))
+                candidate = join_asset_path(fallback_dir, arc_asset_path)
                 resolved = _try_usd_extensions(candidate)
                 if resolved:
                     return resolved

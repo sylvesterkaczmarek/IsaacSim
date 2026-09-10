@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .impl import *
-from .impl.rendering_manager import RenderingEvent  # noqa: F401 – re-exported public API
-from .impl.viewport_manager import ViewportManager  # noqa: F401 – re-exported public API
+from .impl.extension import Extension as Extension
+from .impl.rendering_manager import RenderingEvent as RenderingEvent
+from .impl.rendering_manager import RenderingManager as RenderingManager
+from .impl.viewport_manager import ViewportManager as ViewportManager
+
+__all__ = ["RenderingEvent", "RenderingManager", "ViewportManager"]

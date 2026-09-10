@@ -1,6 +1,6 @@
 {
     "OgnSampleInSphere": {
-        "version": 1,
+        "version": 2,
         "description": "Assigns uniformly sampled location in a sphere.",
         "language": "Python",
         "categoryDefinitions": "config/CategoryDefinition.json",
@@ -24,6 +24,11 @@
                 "type": "float",
                 "description": "sphere radius",
                 "default": 1.0
+            },
+            "seed": {
+                "type": "int",
+                "description": "Random number generator seed. A negative value uses the Replicator global seed.",
+                "default": -1
             }
         },
         "outputs": {

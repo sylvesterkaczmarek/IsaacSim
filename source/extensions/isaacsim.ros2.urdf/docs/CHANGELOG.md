@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.9] - 2026-08-11
+### Fixed
+- Cancel stale robot description requests when changing ROS 2 nodes.
+
+## [2.3.8] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [2.3.7] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

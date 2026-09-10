@@ -19,16 +19,25 @@ class CarterMultiSensorRobot(WheeledMultiSensorRobot):
     robot_config_path = "data/robots/carter.yaml"
 ```
 
-`PolicyMultiSensorRobot` — policy-driven humanoids and quadrupeds (H1, Spot).  The articulation
-is not created directly; instead `build()` instantiates a policy controller (e.g.
-`H1FlatTerrainPolicy`) and uses `controller.robot` as the articulation.  The policy class is set
-on the subclass alongside `robot_config_path`.
+`PolicyMultiSensorRobot` — policy-driven humanoids and quadrupeds (H1, Spot). The articulation
+is not created directly; `build()` creates a `RobotPolicyRunner` and uses the articulation returned by
+`runner.spawn()`. Implement `build_policy()` alongside `robot_config_path`.
 
 ```python
+import numpy as np
+from isaacsim.robot.policy.examples import RobotPolicyRunner, get_h1_spec
+
 @ROBOTS.register()
 class H1MultiSensorRobot(PolicyMultiSensorRobot):
     robot_config_path = "data/robots/h1.yaml"
-    policy_class = H1FlatTerrainPolicy
+
+    @classmethod
+    def build_policy(cls, prim_path: str) -> RobotPolicyRunner:
+        return RobotPolicyRunner(
+            get_h1_spec(),
+            prim_path=prim_path,
+            position=np.array([0.0, 0.0, cls.controller_z_offset]),
+        )
 ```
 
 Both inherit from `MobilityGenMultiSensorRobot` (defined in

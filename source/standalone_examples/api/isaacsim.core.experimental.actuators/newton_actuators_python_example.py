@@ -59,7 +59,7 @@ from isaacsim.core.experimental.utils.stage import add_reference_to_stage
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.storage.native import get_assets_root_path_async
 
-FRANKA_USD_REL_PATH = "Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+FRANKA_USD_REL_PATH = "Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 FRANKA_PRIM_PATH = "/World/Franka"
 ARM_JOINTS = [f"panda_joint{i}" for i in range(1, 8)]
 
@@ -82,7 +82,16 @@ async def setup_stage_with_franka() -> None:
 # 2. Building a stock PD actuator config
 # ============================================================================
 def build_pd_actuator_config(n_robots: int, kp: float, kd: float) -> ActuatorConfig:
-    """Build an ActuatorConfig with a Newton ``ControllerPD``."""
+    """Build an ActuatorConfig with a Newton ``ControllerPD``.
+
+    Args:
+        n_robots: Number of robot instances controlled by the actuator.
+        kp: Proportional gain shared by the robot instances.
+        kd: Derivative gain shared by the robot instances.
+
+    Returns:
+        Actuator configuration containing the per-instance PD gains.
+    """
     # <start-build-pd-config-snippet>
     import warp as wp
     from isaacsim.core.experimental.actuators import ActuatorConfig
@@ -108,6 +117,15 @@ def build_pd_with_clamping_and_delay(n_robots: int, kp: float, kd: float, max_ef
 
     ``kp``, ``kd``, and ``max_effort`` are single-joint scalars; each is fanned
     out across ``n_robots`` instances.
+
+    Args:
+        n_robots: Number of robot instances controlled by the actuator.
+        kp: Proportional gain shared by the robot instances.
+        kd: Derivative gain shared by the robot instances.
+        max_effort: Effort magnitude at which the controller output is clamped.
+
+    Returns:
+        Actuator configuration containing PD control, effort clamping, and a two-step input delay.
     """
     # <start-build-pd-with-clamping-snippet>
     import warp as wp
@@ -142,7 +160,11 @@ MAX_EFFORTS = [1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0]
 
 
 def construct_articulation_actuators() -> ArticulationActuators:
-    """Attach a per-DOF ideal PD actuator to each of the seven Franka arm joints."""
+    """Attach a per-DOF ideal PD actuator to each of the seven Franka arm joints.
+
+    Returns:
+        Franka articulation and its seven configured PD actuators.
+    """
     # <start-construct-from-actuators-snippet>
     from isaacsim.core.experimental.actuators import ArticulationActuators
     from isaacsim.core.experimental.prims import Articulation
@@ -172,7 +194,11 @@ def construct_articulation_actuators() -> ArticulationActuators:
 
 
 def construct_articulation_actuators_non_ideal() -> ArticulationActuators:
-    """Construct `ArticulationActuators` with per-joint clamping and a 2-step input delay."""
+    """Construct `ArticulationActuators` with per-joint clamping and a 2-step input delay.
+
+    Returns:
+        Franka articulation and its seven non-ideal actuator models.
+    """
     from isaacsim.core.experimental.actuators import ArticulationActuators
     from isaacsim.core.experimental.prims import Articulation
 
@@ -195,7 +221,12 @@ def construct_articulation_actuators_non_ideal() -> ArticulationActuators:
 # 5. Driving the robot to a position target
 # ============================================================================
 def drive_to_target(actuated: ArticulationActuators, num_steps: int = 240) -> None:
-    """Set position targets and step the simulation to watch the robot converge."""
+    """Set position targets and step the simulation to watch the robot converge.
+
+    Args:
+        actuated: Franka articulation and actuator models to drive.
+        num_steps: Number of simulation steps to advance after setting the target.
+    """
     # <start-drive-to-target-snippet>
     articulation = actuated.articulation
 

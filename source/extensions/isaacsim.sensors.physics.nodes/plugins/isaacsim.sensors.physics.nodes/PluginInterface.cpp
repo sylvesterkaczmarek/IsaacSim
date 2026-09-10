@@ -19,7 +19,7 @@
 #include <carb/Framework.h>
 #include <carb/PluginUtils.h>
 
-#include <isaacsim/sensors/physics/nodes/IPhysicsSensorNodes.h>
+#include <isaacsim/sensors/physics/nodes/IPhysicsSensorNodes.hpp>
 #include <omni/graph/core/ogn/Registration.h>
 
 const struct carb::PluginImplDesc g_kPluginDesc = { "isaacsim.sensors.physics.nodes.plugin",

@@ -13,7 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared helpers for the interactive policy examples."""
+"""Shared helpers for the interactive policy examples.
+
+Snapshot and restore the global physics sim device and fabric flag, so an example's GPU setup
+never leaks past its cleanup.
+"""
 
 from __future__ import annotations
 

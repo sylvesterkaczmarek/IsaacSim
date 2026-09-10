@@ -49,7 +49,7 @@ my_world.scene.add_default_ground_plane()
 num_objects = 3
 my_cloner = Cloner()
 
-asset_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 root_path = "/World/Group"
 root_group_path = root_path + "_0"
 group_paths = my_cloner.generate_paths(root_path, num_objects)

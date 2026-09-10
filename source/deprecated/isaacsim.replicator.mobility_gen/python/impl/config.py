@@ -50,6 +50,10 @@ class Config:
 
         Returns:
             A new Config instance with the deserialized data.
+
+        Raises:
+            json.JSONDecodeError: If data is not valid JSON.
+            KeyError: If data is missing a required configuration field.
         """
         data = json.loads(data)
         return Config(scenario_type=data["scenario_type"], robot_type=data["robot_type"], scene_usd=data["scene_usd"])

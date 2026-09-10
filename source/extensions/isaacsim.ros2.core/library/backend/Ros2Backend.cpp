@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "Ros2Impl.h"
+#include "Ros2Impl.hpp"
 #include "rosidl_runtime_c/string_functions.h"
 
-#include <isaacsim/ros2/core/Ros2Macros.h>
+#include <isaacsim/ros2/core/Ros2Macros.hpp>
 #include <rcl/rcl.h>
 
 #include <inttypes.h>

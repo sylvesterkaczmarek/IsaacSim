@@ -473,7 +473,7 @@ class Articulation(XformPrim):
         .. code-block:: python
 
             >>> prims.num_shapes
-            13
+            21
         """
         assert self._physics_tensor_entity_initialized, _MSG_PHYSICS_TENSOR_ENTITY_NOT_INITIALIZED
         return self._num_shapes

@@ -17,12 +17,9 @@
 
 from __future__ import annotations
 
-import carb
 import omni.ext
 
 from . import ui_builder
-
-_PYTHON_SERVER_SETTINGS = "/exts/isaacsim.code_editor.python_server"
 
 
 class Extension(omni.ext.IExt):
@@ -39,12 +36,8 @@ class Extension(omni.ext.IExt):
         Args:
             ext_id: The extension identifier.
         """
-        settings = carb.settings.get_settings()
-        host: str = settings.get(f"{_PYTHON_SERVER_SETTINGS}/host")
-        port: int = settings.get(f"{_PYTHON_SERVER_SETTINGS}/port")
-
         ext_name = omni.ext.get_extension_name(ext_id)
-        self._ui_builder = ui_builder.UIBuilder(ext_name, "Window", "VS Code", host, port)
+        self._ui_builder = ui_builder.UIBuilder(ext_name, "Window", "VS Code")
         self._ui_builder.startup()
 
     def on_shutdown(self) -> None:

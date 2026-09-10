@@ -24,9 +24,9 @@ class RMPFlowController(mg.MotionPolicyController):
 
     Args:
         name: Name identifier for the controller.
-        robot_articulation: The robot articulation to control.
+        robot_articulation: The SingleArticulation to control.
         physics_dt: Physics timestep.
-        attach_gripper: Whether gripper is attached.
+        attach_gripper: Whether a gripper is attached.
     """
 
     def __init__(

@@ -15,13 +15,24 @@
 
 """Utility classes and functions for Newton physics UI property builders."""
 
+import re
 from collections.abc import Callable, Sequence
 from typing import Any
 
 import carb
+import omni.kit.undo
+import omni.kit.window.property
 import omni.ui as ui
+from omni.kit.commands import execute
+from omni.kit.property.physics import database
+from omni.kit.property.usd import PrimPathWidget
+from omni.kit.property.usd.prim_selection_payload import PrimSelectionPayload
 from omni.kit.property.usd.usd_attribute_model import UsdAttributeModel
+from omni.kit.property.usd.usd_property_widget import UsdPropertiesWidget
 from omni.kit.property.usd.usd_property_widget_builder import UsdPropertiesWidgetBuilder
+from pxr import Sdf, Usd
+
+from .array_widget import build_number_array_editor, supports_array_editing
 
 try:
     from newton._src.usd.schema_resolver import PrimType
@@ -147,6 +158,7 @@ class DisableByCallbackBuilder(UsdPropertiesWidgetBuilder):
         label_kwargs: dict[str, Any],
         widget_kwargs: dict[str, Any],
         disable_callback: Callable[[Any, Sequence[Any]], tuple[bool, str, str]],
+        inner_builder: type | None = None,
     ) -> Any:
         """Create a new widget with an overlay that disables based on a callback.
 
@@ -157,6 +169,9 @@ class DisableByCallbackBuilder(UsdPropertiesWidgetBuilder):
             label_kwargs: Keyword arguments for the widget label.
             widget_kwargs: Keyword arguments for the widget body.
             disable_callback: Callback returning disabled state and tooltip metadata.
+            inner_builder: Optional property builder class used instead of the default
+                USD attribute widget. Used to compose disable overlays with custom editors
+                (for example the numeric array pop-up).
 
         Returns:
             The created USD property model.
@@ -169,9 +184,12 @@ class DisableByCallbackBuilder(UsdPropertiesWidgetBuilder):
 
         disabled, resolver_name, attr_name = disable_callback(stage, prim_paths)
         with ui.ZStack():
-            model = cls.build(
-                stage, prop.prop_name, prop.metadata, prop.property_type, prim_paths, label_kwargs, widget_kwargs
-            )
+            if inner_builder is not None:
+                model = inner_builder(stage, prop, prim_paths, label_kwargs, widget_kwargs)
+            else:
+                model = cls.build(
+                    stage, prop.prop_name, prop.metadata, prop.property_type, prim_paths, label_kwargs, widget_kwargs
+                )
             overlay = ui.Rectangle(
                 width=ui.Fraction(1),
                 height=ui.Fraction(1),
@@ -227,3 +245,399 @@ class HideByCallbackBuilder(UsdPropertiesWidgetBuilder):
             return UsdAttributeModel(
                 stage, [path.AppendProperty(prop.prop_name) for path in prim_paths], False, prop.metadata
             )
+
+
+def apply_codeless_api_with_dependencies(prim: Usd.Prim, dependencies: Sequence[str], api: str) -> None:
+    """Apply a codeless API schema and its required API dependencies.
+
+    Args:
+        prim: Prim to modify.
+        dependencies: API schema names to apply before the requested API.
+        api: API schema name to apply.
+    """
+    for dependency in dependencies:
+        if not prim.HasAPI(dependency):
+            execute("ApplyCodelessAPISchemaCommand", api=dependency, prim=prim)
+    if not prim.HasAPI(api):
+        execute("ApplyCodelessAPISchemaCommand", api=api, prim=prim)
+
+
+def request_property_window_refresh() -> None:
+    """Rebuild the property window without touching USD selection."""
+    property_window = omni.kit.window.property.get_window()
+    if property_window and property_window._window:  # noqa: SLF001
+        property_window._window.frame.rebuild()  # noqa: SLF001
+
+
+def build_remove_schema_frame_header(
+    collapsed: bool, text: str, schema: str, on_remove: Callable[[], None] | None
+) -> None:
+    """Build a CollapsableFrame header carrying the shared remove-schema button.
+
+    Every Newton and MuJoCo schema frame uses this header so the remove button keeps the
+    same icon, placement, and one-click behavior across all of them.
+
+    Args:
+        collapsed: Whether the frame is currently collapsed.
+        text: The header label text.
+        schema: Applied API schema the button unapplies.
+        on_remove: Callback invoked when the button is clicked. Pass ``None`` to omit the
+            button, for example while the schema is not applied to the selected prim.
+    """
+    if collapsed:
+        alignment = ui.Alignment.RIGHT_CENTER
+        width = 5
+        height = 7
+    else:
+        alignment = ui.Alignment.CENTER_BOTTOM
+        width = 7
+        height = 5
+
+    with ui.HStack(spacing=8):
+        with ui.VStack(width=0):
+            ui.Spacer()
+            ui.Triangle(
+                style_type_name_override="CollapsableFrame.Header", width=width, height=height, alignment=alignment
+            )
+            ui.Spacer()
+        ui.Label(text, style_type_name_override="CollapsableFrame.Header", width=ui.Fraction(1))
+
+        if on_remove is None:
+            return
+
+        button_style = {
+            "Button.Image": {
+                "color": 0xFFFFFFFF,
+                "alignment": ui.Alignment.CENTER,
+                "image_url": "${icons}/Cancel_64.png",
+            }
+        }
+
+        ui.Spacer(width=ui.Fraction(6))
+        with ui.ZStack(content_clipping=True, width=16, height=16):
+            ui.Button(
+                "",
+                style=button_style,
+                clicked_fn=on_remove,
+                identifier=f"remove_{schema}",
+                tooltip=f"Remove {schema}",
+            )
+
+
+def _usd_peroperty_name_to_display_name(name: str) -> str:
+    # usd name are like "newton:selfCollisionEnabled"
+    # we want to take the last part after :
+    # then Capitalize the first entry and split where the capital letters are
+    display_name = name.split(":")[-1]
+    return re.sub(r"((?<=[a-z])[A-Z]|(?<!\A)[A-Z](?=[a-z]))", r" \1", display_name).title()
+
+
+# This is a slightly modified class based on _RobotSchemaWidgetBase, maybe we should reconcile the two
+class NewtonWidgetBase(UsdPropertiesWidget):
+    """Widget builder that adds menu items for adding schemas.
+
+    Args:
+        prefix: Menu path the Apply entry is added under, for example ``Physics/Mujoco``.
+        title: Title of the property section.
+        menu_label: Label of the Apply menu entry.
+        schema: API schema name the widget displays and applies.
+        collapsed: Whether the property section starts collapsed.
+        attributes: Attribute specs of the schema to display; all others are hidden.
+        ignored_attributes: Attribute names to drop from ``attributes``.
+        apply_fn: Callable applying the schema to a prim; defaults to applying ``schema`` alone.
+        show_fn: Callable deciding whether the Apply entry is offered for a prim.
+        relationships: Relationship descriptors to display alongside the attributes.
+        exclusive_classes: API schemas that suppress this widget when already applied.
+    """
+
+    def __init__(
+        self,
+        prefix: str,
+        title: str,
+        menu_label: str,
+        schema: str,
+        collapsed: bool = False,
+        attributes: list | None = None,
+        ignored_attributes: list | None = None,
+        apply_fn: object = None,
+        show_fn: object = None,
+        relationships: object = None,
+        exclusive_classes: object = None,
+    ) -> None:
+        super().__init__(title, collapsed)
+        omni.kit.undo.subscribe_on_change(self._undo_redo_on_change)
+
+        self._schema = schema
+        ignored_attributes = ignored_attributes or []
+        self._attributes = [attr for attr in (attributes or []) if attr.name not in ignored_attributes]
+        self._relationships = relationships or []
+        self._apply_fn = apply_fn
+        self._show_fn = show_fn
+        self._menu_label = menu_label
+        self._attr_map = {attr.name: attr for attr in self._attributes}
+        self._relationship_map = {rel.name: rel for rel in self._relationships}
+        self._prim = None
+        self._old_payload = None
+        self._exclusive_classes = exclusive_classes
+        self._menu_prefix = prefix
+        self._menu_entries = [
+            PrimPathWidget.add_button_menu_entry(
+                f"{self._menu_prefix}/{menu_label}", show_fn=self._button_show, onclick_fn=self._button_onclick
+            )
+        ]
+
+    def clean(self) -> None:
+        """Remove menu entries and release subscriptions."""
+        super().clean()
+        omni.kit.undo.unsubscribe_on_change(self._undo_redo_on_change)
+        for menu in self._menu_entries:
+            PrimPathWidget.remove_button_menu_entry(menu)
+        self._menu_entries = []
+
+    def destroy(self) -> None:
+        """Clean up resources and remove menu entries."""
+        self.clean()
+
+    def _button_show(self, objects: dict) -> bool:
+        """Determines if the button should be shown based on prim selection.
+
+        Args:
+            objects: Dictionary containing stage and prim_list for evaluation.
+
+        Returns:
+            True if button should be shown, False otherwise.
+        """
+        stage = objects.get("stage")
+        prim_list = objects.get("prim_list")
+        if not stage or not prim_list:
+            return False
+        for item in prim_list:
+            prim = stage.GetPrimAtPath(item) if isinstance(item, Sdf.Path) else item
+            if prim and not self._has_exclusive_schema(prim) and (not self._show_fn or self._show_fn(prim)):
+                return True
+        return False
+
+    def _button_onclick(self, payload: PrimSelectionPayload) -> None:
+        """Handles button click to apply schema to selected prims.
+
+        Args:
+            payload: The prim selection payload containing paths to process.
+        """
+        omni.kit.undo.begin_group()
+        stage = self._payload.get_stage() if self._payload else omni.usd.get_context().get_stage()
+        if not stage:
+            return
+
+        for path in payload:
+            if not path:
+                continue
+            prim = stage.GetPrimAtPath(path)
+            if not prim or self._has_exclusive_schema(prim):
+                continue
+            if self._apply_fn:
+                self._apply_fn(prim)
+            else:
+                # Call execute so the command is recorded in the undo stack
+                execute("ApplyCodelessAPISchemaCommand", api=self._schema, prim=prim)
+
+            instanceable = [p for p in Usd.PrimRange(prim) if p.IsInstanceable()]
+            if instanceable:
+                prim.SetInstanceable(True)
+                prim.ClearMetadata("instanceable")
+        self._request_refresh()
+        omni.kit.undo.end_group()
+
+    def _request_refresh(self) -> None:
+        """Refresh the property window without touching USD selection."""
+        request_property_window_refresh()
+
+    def _on_usd_changed(self, notice: object, stage: object) -> None:
+        """Handles USD change notifications.
+
+        A full property-window rebuild is only needed when the prim gains the schema this
+        widget displays, since that changes which widgets the window shows. Rebuilding on
+        every notice would also discard the panel's scroll position on each value edit; the
+        base widget updates its models in place instead.
+
+        Args:
+            notice: The USD change notice.
+            stage: The USD stage that changed.
+        """
+        had_schema = self._prim is not None
+        # `on_new_payload` refreshes `self._prim` from the current stage state.
+        if self.on_new_payload(self._payload) and not had_schema:
+            self._request_refresh()
+            return
+        super()._on_usd_changed(notice, stage)
+
+    def _get_prim(self, prim_path: object) -> Usd.Prim | None:
+        """Retrieves a prim with the required schema from the given path.
+
+        Args:
+            prim_path: The path to the prim.
+
+        Returns:
+            The prim if it exists and has the required schema, None otherwise.
+        """
+        if prim_path:
+            stage = self._payload.get_stage()
+            if stage:
+                prim = stage.GetPrimAtPath(prim_path)
+                if prim and prim.HasAPI(self._schema):
+                    return prim
+        return None
+
+    def on_new_payload(self, payload: list) -> bool:
+        """See ``PropertyWidget.on_new_payload``.
+
+        Args:
+            payload: The new prim selection payload.
+
+        Returns:
+            True if the prim if found, or ``False`` if the widget should not be shown.
+        """
+        if not super().on_new_payload(payload):
+            return False
+
+        if len(self._payload) != 1:
+            return False
+        prim_path = self._payload.get_paths()[0]
+        self._prim = self._get_prim(prim_path)
+        self._old_payload = self._prim
+        if not self._prim:
+            return False
+
+        return True
+
+    def on_remove_schema(self) -> None:
+        """Removes the schema from the prim."""
+        stage = self._payload.get_stage()
+        if not stage or not self._payload:
+            return
+
+        prim = self._get_prim(self._payload.get_paths()[0])
+        if not prim:
+            return
+
+        if prim.HasAPI(self._schema):
+            omni.kit.undo.begin_group()
+            execute("UnapplyCodelessAPISchemaCommand", api=self._schema, prim=prim)
+            omni.kit.undo.end_group()
+        self._request_refresh()
+
+    def _filter_props_to_build(self, props: list) -> list:
+        """Filters properties to build based on the schema's attributes and relationships.
+
+        Args:
+            props: List of properties to filter.
+
+        Returns:
+            Filtered list of properties with display names set.
+        """
+        filtered = []
+        for prop in props:
+            if isinstance(prop, Usd.Attribute) and prop.GetName() in self._attr_map:
+                attr = self._attr_map[prop.GetName()]
+                prop.SetDisplayName(attr.displayName or _usd_peroperty_name_to_display_name(prop.GetName()))
+                filtered.append(prop)
+            elif isinstance(prop, Usd.Relationship) and prop.GetName() in self._relationship_map:
+                relationship = self._relationship_map[prop.GetName()]
+                prop.SetDisplayName(relationship.display_name)
+                filtered.append(prop)
+        return filtered
+
+    def _customize_props_layout(self, props: list) -> list:
+        """Apply physics property builders and ordering to the custom schema frame.
+
+        This widget derives from ``UsdPropertiesWidget``, which builds properties itself and
+        never consults the ``omni.kit.property.physics`` builder database. Ignored schemas
+        still register their builders and ordering in that database, so attach them through
+        each property's ``build_fn`` and sort the resulting entries here.
+
+        Args:
+            props: Property UI entries about to be built.
+
+        Returns:
+            The ordered property UI entries with their registered builders attached.
+        """
+        props = super()._customize_props_layout(props)
+        for prop in props:
+            available_builders = database.get_available_builders(prop.prop_name)
+            if prop.build_fn is None and available_builders:
+                builder_data = available_builders[0]
+
+                def _build_with_physics_builder(
+                    stage: Any,
+                    _attr_name: str,
+                    _metadata: dict,
+                    _property_type: Any,
+                    prim_paths: Sequence[Any],
+                    label_kwargs: dict | None,
+                    widget_kwargs: dict | None,
+                    *,
+                    property_entry: Any = prop,
+                    physics_builder_data: list = builder_data,
+                ) -> Any:
+                    return physics_builder_data[0](
+                        stage,
+                        property_entry,
+                        prim_paths,
+                        label_kwargs or {},
+                        widget_kwargs,
+                        *physics_builder_data[1:],
+                    )
+
+                prop.build_fn = _build_with_physics_builder
+            elif prop.build_fn is None and supports_array_editing(prop.metadata):
+                prop.build_fn = build_number_array_editor
+
+        order = database.get_property_order(self._schema)
+        indices = {name: index for index, name in enumerate(order)}
+        return sorted(props, key=lambda prop: indices.get(getattr(prop, "base_name", prop.prop_name), len(indices)))
+
+    def _has_exclusive_schema(self, prim: object) -> bool:
+        """Checks if the prim has any exclusive schema applied.
+
+        Args:
+            prim: The prim to check.
+
+        Returns:
+            True if prim has exclusive schema, False otherwise.
+        """
+        if self._exclusive_classes:
+            return any(prim.HasAPI(schema) for schema in self._exclusive_classes)
+        else:
+            return False
+
+    def build_items(self) -> None:
+        """Builds property widget items for the schema.
+
+        Constructs the property items only when the collapsible frame is expanded and a valid prim is available.
+        """
+        if self._collapsable_frame and not self._collapsable_frame.collapsed and self._prim:
+            super().build_items()
+
+    def _build_frame_header(self, collapsed: bool, text: str, id: str | None = None) -> None:
+        """Build a custom header for the CollapsableFrame with a remove button.
+
+        Args:
+            collapsed: Whether the frame is currently collapsed.
+            text: The header label text.
+            id: Optional identifier for the header.
+        """
+        build_remove_schema_frame_header(collapsed, text, self._schema, self.on_remove_schema)
+
+    def _undo_redo_on_change(self, cmds: list) -> None: ...
+
+
+from omni.kit.property.physics.builders import PrettyPrintTokenComboBuilder
+
+
+class ValueChangeByCallbackTokenBuilder(PrettyPrintTokenComboBuilder):
+    """Widget builder that triggers a callback when the property value changes."""
+
+    def __init__(self, stage, prop, prim_paths, label_kwargs, widget_kwargs, pretty_names, additions, call_back):
+        super().__init__(stage, prop, prim_paths, label_kwargs, widget_kwargs, pretty_names, additions)
+        if not hasattr(self, "_newton_value_change_call_back"):
+            self._newton_value_change_call_back = []
+        self._newton_value_change_call_back.append(self.subscribe_item_changed_fn(call_back))

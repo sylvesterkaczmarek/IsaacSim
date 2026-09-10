@@ -1,0 +1,22 @@
+---
+description: Documentation structure and source-of-truth rules for libraries under source/libraries
+globs:
+  - "source/libraries/**/*.rst"
+  - "source/libraries/**/README.md"
+---
+
+# Isaac Sim library documentation rules
+
+- Use Markdown for contributor READMEs and changelogs. Use reStructuredText for package and module user documentation.
+- Every independently shipped distribution and every documented module must provide `docs/index.rst` as its overview
+  and landing page. Module indexes include a local table of contents. Do not add a separate `overview.rst` page.
+- Use additional topic pages for substantial concepts or procedures. Use `api_c.rst` for C, `api_cpp.rst` for C++,
+  and `api_python.rst` for Python. Create only the language pages the module exposes.
+- Treat public header Doxygen as the C and C++ API contract and Python or nanobind docstrings as the Python API
+  contract. Do not manually duplicate complete signatures in prose.
+- Use API RST pages for navigation, usage guidance, examples, and autodoc or Doxygen integration.
+- Keep distribution-level docs at the package root and describe the library's purpose and scope there. Keep
+  module-level docs beside the API.
+- Describe current behavior without implementation history, attempted migrations, or repository-specific build paths in
+  public API prose.
+- Generated stubs, generated export headers, ABI symbol baselines, and package manifests are not authored prose.

@@ -73,7 +73,9 @@ TILE_THREADS = 64
 
 
 @wp.kernel
-def _sample_random_position_kernel(center: wp.array2d(dtype=Any), scale: float, seed: int, out: wp.array2d(dtype=Any)):
+def _sample_random_position_kernel(
+    center: wp.array2d(dtype=Any), scale: float, seed: int, out: wp.array2d(dtype=Any)
+) -> None:
     i = wp.tid()
     for axis in range(3):
         state = wp.rand_init(seed, offset=i + axis)
@@ -82,20 +84,37 @@ def _sample_random_position_kernel(center: wp.array2d(dtype=Any), scale: float, 
 
 
 def sample_random_position(*, center: wp.array, scale: float, seed: int) -> wp.array:
-    """Sample a random position within a scaled range around a center point."""
+    """Sample a random position within a scaled range around a center point.
+
+    Args:
+        center: Center coordinates for each position sample.
+        scale: Maximum absolute offset along each coordinate axis.
+        seed: Seed used to initialize a deterministic random state per sample.
+
+    Returns:
+        Random positions with the same shape, device, and data type as ``center``.
+    """
     out = wp.zeros_like(center)
     wp.launch(kernel=_sample_random_position_kernel, dim=center.shape[0], inputs=[center, scale, seed], outputs=[out])
     return out
 
 
 @wp.kernel
-def _add_kernel(a: wp.array2d(dtype=Any), b: wp.array2d(dtype=Any), out: wp.array2d(dtype=Any)):
+def _add_kernel(a: wp.array2d(dtype=Any), b: wp.array2d(dtype=Any), out: wp.array2d(dtype=Any)) -> None:
     i, j = wp.tid()
     out[i, j] = a[i, j] + b[i, j]
 
 
 def add(a: wp.array, b: wp.array) -> wp.array:
-    """Perform element-wise addition of two Warp arrays."""
+    """Perform element-wise addition of two Warp arrays.
+
+    Args:
+        a: Left operand array.
+        b: Right operand array with the same shape as ``a``.
+
+    Returns:
+        Element-wise sum on the same device and with the same shape as ``a``.
+    """
     out = wp.zeros_like(a)
     wp.launch(kernel=_add_kernel, dim=a.shape, inputs=[a, b], outputs=[out], device=a.device)
     return out
@@ -108,7 +127,7 @@ def _compute_error_kernel(
     goal_position: wp.array2d(dtype=Any),  # shape: (N, 3)
     goal_orientation: wp.array2d(dtype=Any),  # shape: (N, 4)
     out: wp.array3d(dtype=Any),  # shape: (N, 6, 1)
-):
+) -> None:
     i = wp.tid()
     # Convert Isaac Sim quaternion (wxyz) to Warp quaternion (xyzw)
     q_goal = wp.quat(goal_orientation[i, 1], goal_orientation[i, 2], goal_orientation[i, 3], goal_orientation[i, 0])
@@ -132,7 +151,7 @@ def _transpose_kernel(
     error: wp.array3d(dtype=wp.float32),  # shape: (N, 6, 1)
     scale: wp.float32,
     output: wp.array3d(dtype=wp.float32),  # shape: (N, 7, 1)
-):
+) -> None:
     i = wp.tid()
     _jacobian = wp.tile_load(jacobian[i], shape=(6, 7))
     _error = wp.tile_load(error[i], shape=(6, 1))
@@ -149,7 +168,25 @@ def differential_inverse_kinematics(
     method: str = "damped-least-squares",
     method_cfg: dict[str, float] | None = None,
 ) -> wp.array:
-    """Compute delta DOF positions via differential inverse kinematics."""
+    """Compute delta DOF positions via differential inverse kinematics.
+
+    Args:
+        jacobian_end_effector: Batched end-effector Jacobian matrices.
+        current_position: Current Cartesian positions for the end effectors.
+        current_orientation: Current scalar-first orientation quaternions.
+        goal_position: Desired Cartesian positions for the end effectors.
+        goal_orientation: Desired scalar-first orientation quaternions, or None to preserve the current orientations.
+        method: Solver name: ``singular-value-decomposition``, ``pseudoinverse``, ``transpose``, or
+            ``damped-least-squares``.
+        method_cfg: Solver coefficients for ``scale``, ``damping``, and ``min_singular_value``, or None to use
+            the example's coefficients.
+
+    Returns:
+        Joint-position updates for each articulation in the batch.
+
+    Raises:
+        ValueError: If ``method`` does not identify a supported solver.
+    """
     batch_size = jacobian_end_effector.shape[0]
     device = jacobian_end_effector.device
     method_cfg = {"scale": 1.0, "damping": 0.05, "min_singular_value": 1e-5} if method_cfg is None else method_cfg
@@ -193,9 +230,9 @@ simulation_app.update()  # allow configuration to take effect
 stage_utils.create_new_stage(template="sunlight")
 # - Add robot (Franka Panda)
 robot_prim = stage_utils.add_reference_to_stage(
-    usd_path=get_assets_root_path() + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+    usd_path=get_assets_root_path() + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
     path="/World/robot",
-    variants=[("Gripper", "AlternateFinger"), ("Mesh", "Performance")],
+    variants=[("Gripper", "alternatefinger"), ("Mesh", "performance")],
 )
 # - Add red sphere
 visual_material = PreviewSurfaceMaterial("/Visual_materials/red")

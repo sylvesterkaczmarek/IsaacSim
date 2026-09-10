@@ -20,13 +20,13 @@
 #define CARB_EXPORTS
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 
-#include <isaacsim/sensors/physics/IsaacSensorComponent.h>
-#include <isaacsim/sensors/physics/IsaacSensorManager.h>
-#include <isaacsim/sensors/physics/ImuSensor.h>
-#include <isaacsim/sensors/physics/ContactManager.h>
-#include <isaacsim/sensors/physics/ContactSensor.h>
+#include <isaacsim/sensors/physics/IsaacSensorComponent.hpp>
+#include <isaacsim/sensors/physics/IsaacSensorManager.hpp>
+#include <isaacsim/sensors/physics/ImuSensor.hpp>
+#include <isaacsim/sensors/physics/ContactManager.hpp>
+#include <isaacsim/sensors/physics/ContactSensor.hpp>
 // clang-format on
 
 #include <carb/Framework.h>
@@ -34,8 +34,8 @@
 #include <carb/logging/Log.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/core/includes/Buffer.h>
-#include <isaacsim/sensors/physics/IPhysicsSensor.h>
+#include <isaacsim/core/includes/Buffer.hpp>
+#include <isaacsim/sensors/physics/IPhysicsSensor.hpp>
 #include <omni/fabric/usd/PathConversion.h>
 #include <omni/kit/IStageUpdate.h>
 #include <omni/physics/tensors/IRigidBodyView.h>

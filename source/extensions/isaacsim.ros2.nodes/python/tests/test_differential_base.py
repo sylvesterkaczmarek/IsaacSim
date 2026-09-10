@@ -38,7 +38,13 @@ from .common import (
     get_qos_profile,
     set_rotate,
     set_translate,
+    simulate_async,
 )
+
+_NOVA_CARTER_ROS_ROOT = "/nova_carter_ros2_sensors"
+_NOVA_CARTER_BASE_LINK_PATH = _NOVA_CARTER_ROS_ROOT + "/chassis_link/base_link"
+_NOVA_CARTER_ODOMETRY_GRAPH_PATH = _NOVA_CARTER_ROS_ROOT + "/transform_tree_odometry"
+_NOVA_CARTER_DRIVE_GRAPH_PATH = _NOVA_CARTER_ROS_ROOT + "/differential_drive"
 
 
 class TestRos2DifferentialBase(ROS2TestCase):
@@ -53,7 +59,15 @@ class TestRos2DifferentialBase(ROS2TestCase):
 
         # Initialize class members
         self._trans = None
+        self._world_to_odom = None
+        self._odom_to_base_link = None
         self._odom_data = None
+
+        # Initialize velocity tracking members
+        self._command_start_time = None
+        self._target_velocity = 0.0
+        self._target_velocity_reach_time = None
+        self._velocity_check_func = None
 
         # Create ROS2 node for this test
 
@@ -65,7 +79,15 @@ class TestRos2DifferentialBase(ROS2TestCase):
 
         # Reset class members
         self._trans = None
+        self._world_to_odom = None
+        self._odom_to_base_link = None
         self._odom_data = None
+
+        # Reset velocity tracking members
+        self._command_start_time = None
+        self._target_velocity = 0.0
+        self._target_velocity_reach_time = None
+        self._velocity_check_func = None
 
         await super().tearDown()
 
@@ -75,12 +97,21 @@ class TestRos2DifferentialBase(ROS2TestCase):
 
         rclpy.spin_once(self.node, timeout_sec=0.1)
 
+    async def wait_for_cmd_vel_subscriber(self, publisher: Any) -> None:
+        """Wait for the graph-side cmd_vel subscriber before publishing one-shot commands."""
+        await self.wait_for_subscribers_on_topic(publisher, timeout_sec=10.0, per_frame_callback=self.spin)
+
     def tf_callback(self, data: Any) -> None:
         """Handle tf callback.
 
         Args:
             data: Transform tree message.
         """
+        for transform in data.transforms:
+            if transform.header.frame_id == "world" and transform.child_frame_id == "odom":
+                self._world_to_odom = transform
+            elif transform.header.frame_id == "odom" and transform.child_frame_id == "base_link":
+                self._odom_to_base_link = transform
         self._trans = data.transforms[-1]
 
     def odom_callback(self, data: Any) -> None:
@@ -90,6 +121,8 @@ class TestRos2DifferentialBase(ROS2TestCase):
             data: Odometry message.
         """
         self._odom_data = data.pose.pose
+        if self._command_start_time is not None and self._velocity_check_func is not None:
+            self._velocity_check_func(data)
 
     def move_cmd_msg(self, x: Any, y: Any, z: Any, ax: Any, ay: Any, az: Any) -> Any:
         """Create a move cmd msg message.
@@ -127,27 +160,41 @@ class TestRos2DifferentialBase(ROS2TestCase):
         await add_carter_ros(self._assets_root_path)
         stage = omni.usd.get_context().get_stage()
 
-        # add an odom prim to carter
-        odom_prim = stage.DefinePrim("/Carter/chassis_link/odom", "Xform")
-
         graph_path = "/Carter/ActionGraph"
 
-        # add an tf publisher for world->odom
+        # Publish the standard `world` -> `odom` and `odom` -> `base_link` transforms without adding an `odom` USD prim.
         try:
             og.Controller.edit(
                 graph_path,
                 {
-                    og.Controller.Keys.CREATE_NODES: [("PublishTF", "isaacsim.ros2.bridge.ROS2PublishTransformTree")],
+                    og.Controller.Keys.CREATE_NODES: [
+                        ("ComputeOdometryTF", "isaacsim.core.nodes.IsaacComputeOdometry"),
+                        ("PublishWorldToOdom", "isaacsim.ros2.bridge.ROS2PublishRawTransformTree"),
+                        ("PublishOdomToBaseLink", "isaacsim.ros2.bridge.ROS2PublishRawTransformTree"),
+                    ],
                     og.Controller.Keys.SET_VALUES: [
-                        ("PublishTF.inputs:topicName", "tf_test"),
-                        ("PublishTF.inputs:targetPrims", [usdrt.Sdf.Path("/Carter/chassis_link/odom")]),
+                        ("ComputeOdometryTF.inputs:chassisPrim", [usdrt.Sdf.Path("/Carter")]),
+                        ("PublishWorldToOdom.inputs:topicName", "tf_test"),
+                        ("PublishWorldToOdom.inputs:parentFrameId", "world"),
+                        ("PublishWorldToOdom.inputs:childFrameId", "odom"),
+                        ("PublishOdomToBaseLink.inputs:topicName", "tf_test"),
+                        ("PublishOdomToBaseLink.inputs:parentFrameId", "odom"),
+                        ("PublishOdomToBaseLink.inputs:childFrameId", "base_link"),
                     ],
                     og.Controller.Keys.CONNECT: [
-                        (graph_path + "/on_playback_tick.outputs:tick", "PublishTF.inputs:execIn"),
+                        (graph_path + "/on_playback_tick.outputs:tick", "ComputeOdometryTF.inputs:execIn"),
+                        (graph_path + "/on_playback_tick.outputs:tick", "PublishWorldToOdom.inputs:execIn"),
+                        ("ComputeOdometryTF.outputs:execOut", "PublishOdomToBaseLink.inputs:execIn"),
                         (
                             graph_path + "/isaac_read_simulation_time.outputs:simulationTime",
-                            "PublishTF.inputs:timeStamp",
+                            "PublishWorldToOdom.inputs:timeStamp",
                         ),
+                        (
+                            graph_path + "/isaac_read_simulation_time.outputs:simulationTime",
+                            "PublishOdomToBaseLink.inputs:timeStamp",
+                        ),
+                        ("ComputeOdometryTF.outputs:position", "PublishOdomToBaseLink.inputs:translation"),
+                        ("ComputeOdometryTF.outputs:orientation", "PublishOdomToBaseLink.inputs:rotation"),
                     ],
                 },
             )
@@ -174,17 +221,23 @@ class TestRos2DifferentialBase(ROS2TestCase):
         # then wait for subscriber data — odom.z reflects settling at this timing
         await self.simulate_until_condition(lambda: False, max_frames=60, per_frame_callback=self.spin)
         await self.simulate_until_condition(
-            lambda: self._trans is not None and self._odom_data is not None,
+            lambda: self._world_to_odom is not None
+            and self._odom_to_base_link is not None
+            and self._odom_data is not None,
             max_frames=120,
             per_frame_callback=self.spin,
         )
+        await self.wait_for_cmd_vel_subscriber(cmd_vel_pub)
 
-        # check 0: is carter initial tf position and odometry position
+        # Check 0: `world` -> `odom` is identity and `odom` -> `base_link` matches odometry.
         # [tx, ty, tz, rx, ry, rz, rw]
-        expected_trans = [1.0, -3.0, -0.01, 0, 0, 0.38268, 0.9238]
+        expected_world_to_odom = [0, 0, 0, 0, 0, 0, 1]
         # [px, py, pz, ox, oy, oz, ow]
         expected_odom = [0, 0, -0.23, 0, 0, 0, 1]
-        self.check_pose(expected_trans, expected_odom, tolerance=1)
+        self._trans = self._world_to_odom
+        self.check_pose(expected_world_to_odom, expected_odom, tolerance=1)
+        self._trans = self._odom_to_base_link
+        self.check_pose(expected_odom, None, tolerance=1)
 
         # straight forward for 3s at 0.1 m/s → ~0.3m accumulated
         move_cmd = self.move_cmd_msg(0.1, 0.0, 0.0, 0.0, 0.0, 0.0)
@@ -201,15 +254,19 @@ class TestRos2DifferentialBase(ROS2TestCase):
         # check 1: location using default param
         print(self._trans.transform, self._odom_data)
         # [tx, ty, tz, rx, ry, rz, rw]
-        expected_trans = [1.22, -2.78, -0.01, 0, 0, 0.38268, 0.9238]
         # [px, py, pz, ox, oy, oz, ow]
         expected_odom = [0.3, 0, -0.23, 0, 0, 0, 1]
-        self.check_pose(expected_trans, expected_odom, tolerance=1)
+        self._trans = self._world_to_odom
+        self.check_pose(expected_world_to_odom, expected_odom, tolerance=1)
+        self._trans = self._odom_to_base_link
+        self.check_pose(expected_odom, None, tolerance=1)
 
         self._timeline.stop()
         await omni.kit.app.get_app().next_update_async()
         self.spin()
         self._trans = None
+        self._world_to_odom = None
+        self._odom_to_base_link = None
         self._odom_data = None
 
         # change wheel rotation and wheel base
@@ -221,17 +278,22 @@ class TestRos2DifferentialBase(ROS2TestCase):
         # fixed 60 frames to let physics settle before reading subscriber data
         await self.simulate_until_condition(lambda: False, max_frames=60, per_frame_callback=self.spin)
         await self.simulate_until_condition(
-            lambda: self._trans is not None and self._odom_data is not None,
+            lambda: self._world_to_odom is not None
+            and self._odom_to_base_link is not None
+            and self._odom_data is not None,
             max_frames=120,
             per_frame_callback=self.spin,
         )
+        await self.wait_for_cmd_vel_subscriber(cmd_vel_pub)
 
-        # check 3: is carter initial tf position and odometry position
+        # Check 3: `world` -> `odom` is identity and `odom` -> `base_link` matches odometry.
         # [tx, ty, tz, rx, ry, rz, rw]
-        expected_trans = [1.0, -3.0, 0, 0, 0, 0.38268, 0.9238]
         # [px, py, pz, ox, oy, oz, ow]
         expected_odom = [0, 0, -0.23, 0, 0, 0, 1]
-        self.check_pose(expected_trans, expected_odom, tolerance=1)
+        self._trans = self._world_to_odom
+        self.check_pose(expected_world_to_odom, expected_odom, tolerance=1)
+        self._trans = self._odom_to_base_link
+        self.check_pose(expected_odom, None, tolerance=1)
 
         # straight forward for 3s at 0.1 m/s (odometry units, new wheel params) → ~0.7m accumulated
         move_cmd = self.move_cmd_msg(0.1, 0.0, 0.0, 0.0, 0.0, 0.0)
@@ -251,10 +313,12 @@ class TestRos2DifferentialBase(ROS2TestCase):
         )
 
         # [tx, ty, tz, rx, ry, rz, rw]
-        expected_trans = [1.51, -2.49, 0, 0, 0, 0.3846, 0.9230]
         # [px, py, pz, ox, oy, oz, ow]
         expected_odom = [0.7, 0, -0.23, 0, 0, 0, 1]
-        self.check_pose(expected_trans, expected_odom, tolerance=1)
+        self._trans = self._world_to_odom
+        self.check_pose(expected_world_to_odom, expected_odom, tolerance=1)
+        self._trans = self._odom_to_base_link
+        self.check_pose(expected_odom, None, tolerance=1)
 
         self._timeline.stop()
         self.spin()
@@ -280,6 +344,7 @@ class TestRos2DifferentialBase(ROS2TestCase):
         await omni.kit.app.get_app().next_update_async()
         # fixed 60 frames: match original simulate_async(1, 60) settle before checking data
         await self.simulate_until_condition(lambda: False, max_frames=60, per_frame_callback=self.spin)
+        await self.wait_for_cmd_vel_subscriber(cmd_vel_pub)
 
         # check 0: is carter initially stationary
         # No transform expected in this test, only check odometry
@@ -321,6 +386,7 @@ class TestRos2DifferentialBase(ROS2TestCase):
         await omni.kit.app.get_app().next_update_async()
         # fixed 60 frames: match original simulate_async(1, 60) settle before issuing rotation command
         await self.simulate_until_condition(lambda: False, max_frames=60, per_frame_callback=self.spin)
+        await self.wait_for_cmd_vel_subscriber(cmd_vel_pub)
 
         # rotate back for 2s at angular_z=-0.2 rad/s (wider wheelbase → faster rotation) → orientation.z ~-0.61
         move_cmd = self.move_cmd_msg(0.0, 0.0, 0.0, 0.0, 0.0, -0.2)
@@ -354,23 +420,25 @@ class TestRos2DifferentialBase(ROS2TestCase):
         from nav_msgs.msg import Odometry
         from tf2_msgs.msg import TFMessage
 
-        await add_nova_carter_ros(self._assets_root_path)
+        await add_nova_carter_ros(self._assets_root_path, enable_sensors=False)
         stage = omni.usd.get_context().get_stage()
 
-        graph_path = "/nova_carter_ros2_sensors/transform_tree_odometry"
-        drive_graph_path = "/nova_carter_ros2_sensors/differential_drive"
-        # add an tf publisher for world->base_link
+        graph_path = _NOVA_CARTER_ODOMETRY_GRAPH_PATH
+        drive_graph_path = _NOVA_CARTER_DRIVE_GRAPH_PATH
+        # Publish the world pose of the existing `base_link` prim as `world` -> `base_link`.
         try:
             og.Controller.edit(
                 graph_path,
                 {
-                    og.Controller.Keys.CREATE_NODES: [("PublishTF", "isaacsim.ros2.bridge.ROS2PublishTransformTree")],
+                    og.Controller.Keys.CREATE_NODES: [
+                        ("ReadBaseLinkWorldPose", "isaacsim.core.nodes.IsaacReadWorldPose"),
+                        ("PublishTF", "isaacsim.ros2.bridge.ROS2PublishRawTransformTree"),
+                    ],
                     og.Controller.Keys.SET_VALUES: [
                         ("PublishTF.inputs:topicName", "tf_test"),
-                        (
-                            "PublishTF.inputs:targetPrims",
-                            [usdrt.Sdf.Path("/nova_carter_ros2_sensors/chassis_link/base_link")],
-                        ),
+                        ("PublishTF.inputs:parentFrameId", "world"),
+                        ("PublishTF.inputs:childFrameId", "base_link"),
+                        ("ReadBaseLinkWorldPose.inputs:prim", [usdrt.Sdf.Path(_NOVA_CARTER_BASE_LINK_PATH)]),
                     ],
                     og.Controller.Keys.CONNECT: [
                         (graph_path + "/on_playback_tick.outputs:tick", "PublishTF.inputs:execIn"),
@@ -378,6 +446,8 @@ class TestRos2DifferentialBase(ROS2TestCase):
                             graph_path + "/isaac_read_simulation_time.outputs:simulationTime",
                             "PublishTF.inputs:timeStamp",
                         ),
+                        ("ReadBaseLinkWorldPose.outputs:translation", "PublishTF.inputs:translation"),
+                        ("ReadBaseLinkWorldPose.outputs:orientation", "PublishTF.inputs:rotation"),
                     ],
                 },
             )
@@ -385,7 +455,7 @@ class TestRos2DifferentialBase(ROS2TestCase):
             print(e)
         await omni.kit.app.get_app().next_update_async()
         # move carter off origin
-        carter_prim = stage.GetPrimAtPath("/nova_carter_ros2_sensors")
+        carter_prim = stage.GetPrimAtPath(_NOVA_CARTER_ROS_ROOT)
         new_translate = Gf.Vec3d(1.00, -3.00, 0.0)
         new_rotate = Gf.Rotation(Gf.Vec3d(0, 0, 1), 45)
         set_translate(carter_prim, new_translate)
@@ -406,6 +476,7 @@ class TestRos2DifferentialBase(ROS2TestCase):
             max_frames=240,
             per_frame_callback=self.spin,
         )
+        await self.wait_for_cmd_vel_subscriber(cmd_vel_pub)
 
         # check 0: is carter initial tf position and odometry position
         # [tx, ty, tz, rx, ry, rz, rw]
@@ -460,6 +531,7 @@ class TestRos2DifferentialBase(ROS2TestCase):
             max_frames=240,
             per_frame_callback=self.spin,
         )
+        await self.wait_for_cmd_vel_subscriber(cmd_vel_pub)
 
         # check 3: is carter initial tf position and odometry position
         # [tx, ty, tz, rx, ry, rz, rw]
@@ -492,6 +564,107 @@ class TestRos2DifferentialBase(ROS2TestCase):
         # [px, py, pz, ox, oy, oz, ow]
         expected_odom = [0.43, 0, 0, 0, 0, 0, 1]
         self.check_pose(expected_trans, expected_odom, delta=0.1)
+
+        self._timeline.stop()
+        self.spin()
+
+    async def test_nova_carter_angular_velocity(self):
+        """Test Nova Carter robot's response time to angular velocity commands.
+
+        This test guards against the regression where Nova Carter took too long to
+        reach a commanded angular velocity. It publishes a 0.1 rad/s angular velocity
+        command and measures the simulation time until odometry first reports 90% of
+        that target.
+
+        The test fails if the robot needs more than 20 seconds to reach 90% of target.
+        """
+        from geometry_msgs.msg import Twist
+        from nav_msgs.msg import Odometry
+
+        # Set up velocity tracking members
+        self._target_velocity_reach_time = None
+
+        def check_angular_velocity(data):
+            # Latch the first crossing: callbacks keep arriving while the robot spins
+            # down, and re-recording would report the last crossing instead.
+            if self._target_velocity_reach_time is not None:
+                return
+            angular_z = data.twist.twist.angular.z
+            if abs(angular_z) >= abs(self._target_velocity) * 0.9:
+                self._target_velocity_reach_time = SimulationManager.get_simulation_time() - self._command_start_time
+                print(f"Reached 90% target angular velocity in {self._target_velocity_reach_time} seconds")
+
+        self._velocity_check_func = check_angular_velocity
+
+        # Load Nova Carter robot
+        await add_nova_carter_ros(self._assets_root_path, enable_sensors=False)
+
+        # Set up ROS2 subscribers and publishers
+        odom_sub = self.create_subscription(self.node, Odometry, "chassis/odom", self.odom_callback, get_qos_profile())
+        cmd_vel_pub = self.create_publisher(self.node, Twist, "cmd_vel", 1)
+
+        # Start simulation
+        self._timeline.play()
+        await omni.kit.app.get_app().next_update_async()
+        await simulate_async(2, 60, self.spin)
+
+        # Wait for initial odometry data
+        await self.simulate_until_condition(
+            lambda: self._odom_data is not None, max_frames=60, per_frame_callback=self.spin
+        )
+
+        # Verify initial state - robot should be stationary
+        self.assertIsNotNone(self._odom_data, "Initial odometry data should be available")
+
+        # Send angular velocity command (replicating the reported issue)
+        self._target_velocity = 0.1
+        move_cmd = self.move_cmd_msg(0.0, 0.0, 0.0, 0.0, 0.0, self._target_velocity)
+
+        # Wait for the graph-side subscriber so the one-shot command is not dropped.
+        # This runs before the start time is recorded so the wait is not measured.
+        await self.wait_for_cmd_vel_subscriber(cmd_vel_pub)
+
+        # Record command send time
+        self._command_start_time = SimulationManager.get_simulation_time()
+        cmd_vel_pub.publish(move_cmd)
+
+        carb.log_info(f"Sent angular velocity command: {self._target_velocity} rad/s")
+
+        # Watch for up to 30 seconds of simulation time after the command. This window is
+        # deliberately longer than the 20 second acceptance threshold asserted below, so a
+        # slow run reports the time it actually took instead of "never reached target".
+        max_monitor_duration = 30.0
+
+        while SimulationManager.get_simulation_time() - self._command_start_time < max_monitor_duration:
+            await simulate_async(0.1, 60, self.spin)
+
+            # Check if we've reached 90% of target velocity
+            if self._target_velocity_reach_time is not None:
+                break
+
+        # Stop the robot
+        stop_cmd = self.move_cmd_msg(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        cmd_vel_pub.publish(stop_cmd)
+        await simulate_async(1, 60, self.spin)
+
+        # Validate response time
+        self.assertIsNotNone(
+            self._target_velocity_reach_time,
+            f"Robot should have reached 90% of target velocity of {self._target_velocity} within test duration",
+        )
+
+        # The main assertion: robot should reach 90% of target velocity within 20 seconds.
+        # Measured at ~15.5s once the test waits for the graph-side cmd_vel subscriber,
+        # so this leaves margin for slower machines rather than tracking the observed value.
+        max_acceptable_target_velocity_reach_time = 20.0  # seconds
+        self.assertLess(
+            self._target_velocity_reach_time,
+            max_acceptable_target_velocity_reach_time,
+            f"Robot took {self._target_velocity_reach_time:.2f}s to reach 90% target velocity of {self._target_velocity}, "
+            f"but should reach it within {max_acceptable_target_velocity_reach_time}s",
+        )
+
+        print(f"SUCCESS: Robot reached 90% target velocity in {self._target_velocity_reach_time:.2f} seconds")
 
         self._timeline.stop()
         self.spin()
@@ -568,7 +741,7 @@ class TestRos2DifferentialBase(ROS2TestCase):
                     ],
                     keys.CONNECT: [
                         ("OnPlaybackTick.outputs:tick", "computeOdom.inputs:execIn"),
-                        ("OnPlaybackTick.outputs:tick", "publishOdom.inputs:execIn"),
+                        ("computeOdom.outputs:execOut", "publishOdom.inputs:execIn"),
                         ("OnPlaybackTick.outputs:tick", "publishRawTF.inputs:execIn"),
                         ("ReadSimTime.outputs:simulationTime", "publishOdom.inputs:timeStamp"),
                         ("ReadSimTime.outputs:simulationTime", "publishRawTF.inputs:timeStamp"),

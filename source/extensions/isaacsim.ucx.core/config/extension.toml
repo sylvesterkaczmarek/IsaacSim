@@ -1,5 +1,5 @@
 [package]
-version = "1.4.4"
+version = "1.4.6"
 category = "Simulation"
 title = "UCX Core"
 description = "The UCX Core extension provides high-performance communication capabilities using UCX (Unified Communication X) for distributed simulation scenarios with low-latency data transfer"
@@ -17,10 +17,6 @@ name = "isaacsim.ucx.core"
 [[python.module]]
 path = "pip_prebundle"
 
-[[native.plugin]]
-path = "bin/*.plugin"
-recursive = false
-
 [[test]]
 name = "startup"
 dependencies = [
@@ -28,6 +24,10 @@ dependencies = [
 ]
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [[test]]
@@ -40,6 +40,10 @@ dependencies = [
 cppTests.libraries = ["bin/${lib_prefix}isaacsim.ucx.core.tests${lib_ext}"]
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [[test]]
@@ -96,6 +100,10 @@ args = [
     "--/rtx/reservedDescriptors=900000",
 ]
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 timeout = 300
 dependencies = [
@@ -148,6 +156,10 @@ args = [
     "--/rtx/newDenoiser/enabled=1",
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [documentation]

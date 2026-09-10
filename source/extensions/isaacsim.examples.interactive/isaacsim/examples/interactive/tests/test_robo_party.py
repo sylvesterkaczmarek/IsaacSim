@@ -16,6 +16,7 @@
 # limitations under the License.
 
 import asyncio
+from unittest.mock import MagicMock, patch
 
 import isaacsim.core.experimental.utils.app as app_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
@@ -23,6 +24,36 @@ import omni.kit
 import omni.kit.test
 from isaacsim.core.simulation_manager import PhysicsScene, PhysxScene
 from isaacsim.examples.interactive.robo_party import RoboParty
+
+
+class TestRoboPartyLoading(omni.kit.test.AsyncTestCase):
+    """Test asynchronous scene initialization."""
+
+    async def test_tasks_initialize_after_stage_loading(self) -> None:
+        """Wait for referenced robot assets before creating task controllers."""
+        sample = RoboParty()
+        sample._stacking = MagicMock(cube_paths=["/World/FrankaCube"])
+        sample._ur10_stacking = MagicMock(cube_paths=["/World/Ur10Cube"])
+        events = []
+        sample._stacking.initialize.side_effect = lambda *_args: events.append("franka")
+        sample._ur10_stacking.initialize.side_effect = lambda *_args: events.append("ur10")
+        loading = iter((True, False))
+
+        def is_stage_loading() -> bool:
+            events.append("loading")
+            return next(loading)
+
+        async def update_app() -> None:
+            events.append("update")
+
+        with (
+            patch.object(stage_utils, "is_stage_loading", side_effect=is_stage_loading),
+            patch.object(app_utils, "update_app_async", side_effect=update_app),
+            patch("isaacsim.examples.interactive.robo_party.robo_party.ViewportManager.set_camera_view"),
+        ):
+            await sample.setup_post_load()
+
+        self.assertEqual(events, ["loading", "update", "loading", "update", "franka", "ur10"])
 
 
 class TestRoboPartyExampleExtension(omni.kit.test.AsyncTestCase):
@@ -51,15 +82,47 @@ class TestRoboPartyExampleExtension(omni.kit.test.AsyncTestCase):
         self._sample = None
 
     # Run all functions with simulation enabled
-    async def test_stacking(self) -> None:
+    async def test_party_behaviors(self) -> None:
         """Test the stacking and wheeled robot behaviors."""
         await self._sample.reset_async()
         await app_utils.update_app_async()
+        kaya_start = self._sample._kaya.get_world_poses()[0].numpy()[0].copy()
+        jetbot_start = self._sample._jetbot.get_world_poses()[0].numpy()[0].copy()
         await self._sample._on_start_party_event_async()
         await app_utils.update_app_async()
-        # run for 2500 frames and print time
-        for i in range(500):
-            await app_utils.update_app_async()
+        await app_utils.update_app_async(steps=500)
+
+        kaya_end = self._sample._kaya.get_world_poses()[0].numpy()[0]
+        jetbot_end = self._sample._jetbot.get_world_poses()[0].numpy()[0]
+        kaya_displacement = kaya_end - kaya_start
+        jetbot_displacement = jetbot_end - jetbot_start
+        self.assertGreater(kaya_displacement[0], 0.01)
+        self.assertLess(abs(kaya_displacement[1]), kaya_displacement[0])
+        self.assertGreater(jetbot_displacement[0], 0.01)
+        self.assertLess(abs(jetbot_displacement[1]), jetbot_displacement[0])
+
+        def continue_until_finished(_step: int, _steps: int) -> bool:
+            stackings = (self._sample._stacking, self._sample._ur10_stacking)
+            return not all(stacking.is_done or stacking.failed for stacking in stackings)
+
+        await app_utils.update_app_async(steps=2700, callback=continue_until_finished)
+
+        self.assertFalse(self._sample._stacking.failed, self._sample._stacking.status())
+        self.assertFalse(self._sample._ur10_stacking.failed, self._sample._ur10_stacking.status())
+        self.assertTrue(self._sample._stacking.is_done, self._sample._stacking.status())
+        self.assertTrue(self._sample._ur10_stacking.is_done, self._sample._ur10_stacking.status())
+        for stacking, other in (
+            (self._sample._stacking, self._sample._ur10_stacking),
+            (self._sample._ur10_stacking, self._sample._stacking),
+        ):
+            tracked_paths = stacking.scenario._tracked_collision_paths
+            self.assertFalse(
+                any(
+                    path == cube_path or path.startswith(cube_path + "/")
+                    for path in tracked_paths
+                    for cube_path in other.cube_paths
+                )
+            )
 
     async def test_reset(self) -> None:
         """Test that resetting the sample twice works without errors."""

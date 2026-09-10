@@ -21,7 +21,7 @@ Test is implemented using the doctest C++ testing framework:
 #include <carb/BindingsUtils.h>
 
 #include <doctest/doctest.h>
-#include <isaacsim/core/includes/Buffer.h>
+#include <isaacsim/core/includes/Buffer.hpp>
 
 CARB_BINDINGS("isaacsim.core.includes.tests")
 

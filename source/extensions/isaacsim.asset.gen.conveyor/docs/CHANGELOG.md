@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.4] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
 ## [1.2.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

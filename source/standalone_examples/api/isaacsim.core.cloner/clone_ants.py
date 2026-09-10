@@ -42,7 +42,7 @@ GroundPlane("/World/GroundPlane")
 DistantLight("/World/DistantLight").set_intensities(1000)
 
 # create initial robot
-asset_path = assets_root_path + "/Isaac/Robots/IsaacSim/Ant/ant.usd"
+asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/IsaacSim/Ant/ant.usda"
 stage_utils.add_reference_to_stage(usd_path=asset_path, path="/World/Ants/Ant_0")
 
 # create GridCloner instance

@@ -14,14 +14,14 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/Defines.h>
 #include <carb/Types.h>
 
-#include <isaacsim/core/includes/BaseResetNode.h>
-#include <isaacsim/sensors/experimental/physics/IImuSensor.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
+#include <isaacsim/sensors/experimental/physics/IImuSensor.hpp>
 #include <omni/fabric/FabricUSD.h>
 #include <omni/usd/UsdContext.h>
 #include <omni/usd/UsdContextIncludes.h>

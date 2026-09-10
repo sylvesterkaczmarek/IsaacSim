@@ -1,6 +1,12 @@
 ---
 description: C++ docstring generation rules
-globs: *.cpp, *.h
+globs:
+  - "**/*.cpp"
+  - "**/*.hpp"
+  - "**/*.cc"
+  - "**/*.cxx"
+  - "**/*.hh"
+  - "**/*.hxx"
 ---
 # C++ Doxygen Documentation Style Rules
 
@@ -12,7 +18,7 @@ These rules define the standard Doxygen documentation style for C++ code.
 2. Be concise but descriptive in @brief tags
 3. Provide detailed explanations in @details when necessary (behavior/contract, not implementation walkthroughs or history — see "Documentation Content")
 4. Document all parameters, even if their purpose seems obvious
-5. Document exceptions that may be thrown
+5. Document exceptions only when the API can throw them
 6. Include units for numerical parameters/returns where applicable
 7. Use @note for important additional information
 8. Use @warning for potential pitfalls or dangerous usage
@@ -49,7 +55,7 @@ Doxygen comments describe the **contract**, not the implementation or its histor
 2. Align asterisks in multi-line comments
 3. Use empty lines to separate logical sections in detailed descriptions
 4. Maintain consistent indentation
-5. Break long lines at 100 characters
+5. Break long lines at 120 characters
 6. Use markdown formatting in detailed descriptions when helpful
 
 ## Special Tags Reference
@@ -122,7 +128,8 @@ Enums should be documented with descriptions for both the enum and its values:
  * @brief Brief description of the enum
  * @details Detailed description of the enum's purpose
  */
-enum class EnumName {
+enum class EnumName
+{
     /**
      * @brief Description of first enum value
      */

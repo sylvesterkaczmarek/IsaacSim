@@ -57,7 +57,7 @@ class ArticulationMotionPolicy:
         self._default_physics_dt = default_physics_dt
 
     def move(self, physics_dt: float = None) -> None:
-        """Use underlying MotionPolicy to compute and apply joint targets to the robot over the next frame.
+        """Uses the underlying MotionPolicy to compute and apply joint targets to the robot over the next frame.
 
         Args:
             physics_dt: Physics dt to use on this frame to calculate the next action. This overrides
@@ -67,7 +67,7 @@ class ArticulationMotionPolicy:
         self._articulation_controller.apply_action(action)
 
     def get_next_articulation_action(self, physics_dt: float = None) -> ArticulationAction:
-        """Use underlying MotionPolicy to compute joint targets for the robot over the next frame.
+        """Uses the underlying MotionPolicy to compute joint targets for the robot over the next frame.
 
         Args:
             physics_dt: Physics dt to use on this frame to calculate the next action. This overrides
@@ -110,23 +110,23 @@ class ArticulationMotionPolicy:
         return self._active_joints_view.make_articulation_action(position_targets, velocity_targets)
 
     def get_active_joints_subset(self) -> ArticulationSubset:
-        """Get view into active joints.
+        """Gets the view into active joints.
 
         Returns:
-            Returns robot states for active joints in an order compatible with the MotionPolicy.
+            ArticulationSubset for active joints in an order compatible with the MotionPolicy.
         """
         return self._active_joints_view
 
     def get_watched_joints_subset(self) -> ArticulationSubset:
-        """Get view into watched joints.
+        """Gets the view into watched joints.
 
         Returns:
-            Returns robot states for watched joints in an order compatible with the MotionPolicy.
+            ArticulationSubset for watched joints in an order compatible with the MotionPolicy.
         """
         return self._watched_joints_view
 
     def get_robot_articulation(self) -> SingleArticulation:
-        """Get the underlying Articulation object representing the robot.
+        """Gets the underlying Articulation object representing the robot.
 
         Returns:
             Articulation object representing the robot.
@@ -134,7 +134,7 @@ class ArticulationMotionPolicy:
         return self._robot_articulation
 
     def get_motion_policy(self) -> MotionPolicy:
-        """Get MotionPolicy that is being used to compute ArticulationActions.
+        """Gets the MotionPolicy that is being used to compute ArticulationActions.
 
         Returns:
             MotionPolicy being used to compute ArticulationActions.
@@ -142,7 +142,7 @@ class ArticulationMotionPolicy:
         return self.motion_policy
 
     def get_default_physics_dt(self) -> float:
-        """Get the default value of the physics dt that is used to compute actions when none is provided.
+        """Gets the default value of the physics dt that is used to compute actions when none is provided.
 
         Returns:
             Default physics dt.
@@ -150,7 +150,7 @@ class ArticulationMotionPolicy:
         return self._default_physics_dt
 
     def set_default_physics_dt(self, physics_dt: float) -> None:
-        """Set the default value of the physics dt that is used to compute actions when none is provided.
+        """Sets the default value of the physics dt that is used to compute actions when none is provided.
 
         Args:
             physics_dt: Default physics dt.

@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "CpuRigidContactView.h"
+#include "CpuRigidContactView.hpp"
 
-#include "utils/TensorOps.h"
+#include "utils/TensorOps.hpp"
 
 #include <carb/logging/Log.h>
 
@@ -230,6 +230,82 @@ bool CpuRigidContactView::getContactData(const TensorDesc* contactForceTensor,
     return true;
 }
 
+bool CpuRigidContactView::getFrictionData(const TensorDesc* frictionForceTensor,
+                                          const TensorDesc* contactPointTensor,
+                                          const TensorDesc* contactCountTensor,
+                                          const TensorDesc* contactStartIndicesTensor,
+                                          float dt) const
+{
+    if (!frictionForceTensor || !contactPointTensor || !contactCountTensor || !contactStartIndicesTensor)
+        return false;
+    if (!frictionForceTensor->data || !contactPointTensor->data || !contactCountTensor->data ||
+        !contactStartIndicesTensor->data)
+    {
+        return false;
+    }
+    if (m_sensorCount == 0 || m_filterCount == 0 || m_rigidContactMax <= 0)
+        return false;
+
+    const uint32_t maxCount = m_maxContactDataCount;
+    const uint32_t pairCount = m_sensorCount * m_filterCount;
+    if (!checkTensorDevice(*frictionForceTensor, -1, "friction force", __FUNCTION__) ||
+        !checkTensorFloat32(*frictionForceTensor, "friction force", __FUNCTION__) ||
+        !checkTensorSizeExact(*frictionForceTensor, maxCount * 3u, "friction force", __FUNCTION__))
+    {
+        return false;
+    }
+    if (!checkTensorDevice(*contactPointTensor, -1, "friction point", __FUNCTION__) ||
+        !checkTensorFloat32(*contactPointTensor, "friction point", __FUNCTION__) ||
+        !checkTensorSizeExact(*contactPointTensor, maxCount * 3u, "friction point", __FUNCTION__))
+    {
+        return false;
+    }
+    if (!checkTensorDevice(*contactCountTensor, -1, "friction count", __FUNCTION__) ||
+        !checkTensorInt32(*contactCountTensor, "friction count", __FUNCTION__) ||
+        !checkTensorSizeExact(*contactCountTensor, pairCount, "friction count", __FUNCTION__))
+    {
+        return false;
+    }
+    if (!checkTensorDevice(*contactStartIndicesTensor, -1, "friction start indices", __FUNCTION__) ||
+        !checkTensorInt32(*contactStartIndicesTensor, "friction start indices", __FUNCTION__) ||
+        !checkTensorSizeExact(*contactStartIndicesTensor, pairCount, "friction start indices", __FUNCTION__))
+    {
+        return false;
+    }
+
+    _refreshContactPointers();
+    const float* force = _resolveContactForce();
+    if (!force)
+        return false;
+
+    std::fill_n(m_scratchCounts.data(), pairCount, 0u);
+    cpuCountContactsPerPair(m_cachedContactCount, m_cachedShape0, m_cachedShape1, m_cachedShapeBody,
+                            m_hostBodySensorMap.data(), m_bodyCount, m_hostBodyFilterMap.data(), m_bodyCount,
+                            static_cast<int>(m_filterCount), m_worldBodyIndex, m_scratchCounts.data(), m_rigidContactMax);
+    uint32_t remainingCount = maxCount;
+    for (uint32_t i = 0; i < pairCount; ++i)
+    {
+        m_scratchStartIndices[i] = maxCount - remainingCount;
+        m_scratchCounts[i] = std::min(m_scratchCounts[i], remainingCount);
+        remainingCount -= m_scratchCounts[i];
+    }
+
+    std::memcpy(contactStartIndicesTensor->data, m_scratchStartIndices.data(), pairCount * sizeof(uint32_t));
+    std::memset(frictionForceTensor->data, 0, maxCount * 3 * sizeof(float));
+    std::memset(contactPointTensor->data, 0, maxCount * 3 * sizeof(float));
+    std::fill_n(m_scratchFillCounts.data(), pairCount, 0u);
+
+    cpuFrictionData(m_cachedContactCount, m_cachedShape0, m_cachedShape1, _getContactPoint0(), _getContactPoint1(),
+                    m_cachedContactNormal, force, _getThickness0(), _getThickness1(), m_cachedShapeBody, m_cachedBodyQ,
+                    m_hostBodySensorMap.data(), m_bodyCount, m_hostBodyFilterMap.data(), m_bodyCount,
+                    static_cast<int>(m_filterCount), m_worldBodyIndex, _getPhysicsDtScale(dt), maxCount,
+                    static_cast<float*>(frictionForceTensor->data), static_cast<float*>(contactPointTensor->data),
+                    m_scratchFillCounts.data(), m_scratchCounts.data(), m_scratchStartIndices.data(), m_rigidContactMax,
+                    m_contactPointsInWorldSpace);
+    std::memcpy(contactCountTensor->data, m_scratchFillCounts.data(), pairCount * sizeof(uint32_t));
+    return true;
+}
+
 bool CpuRigidContactView::getRawContactData(const TensorDesc* contactForceTensor,
                                             const TensorDesc* contactPointTensor,
                                             const TensorDesc* contactNormalTensor,
@@ -296,10 +372,20 @@ bool CpuRigidContactView::getRawContactData(const TensorDesc* contactForceTensor
 
     _refreshContactPointers();
     const float* force = _resolveContactForce();
-    if (!force)
-        return false;
-
     float dtScale = _getPhysicsDtScale(dt);
+
+    if (!force || m_rigidContactMax <= 0)
+    {
+        std::fill_n(m_scratchCounts.data(), m_sensorCount, 0u);
+        std::memcpy(contactCountTensor->data, m_scratchCounts.data(), m_sensorCount * sizeof(uint32_t));
+        std::memset(contactStartIndicesTensor->data, 0, m_sensorCount * sizeof(uint32_t));
+        std::memset(contactForceTensor->data, 0, maxCount * sizeof(float));
+        std::memset(contactPointTensor->data, 0, maxCount * 3 * sizeof(float));
+        std::memset(contactNormalTensor->data, 0, maxCount * 3 * sizeof(float));
+        std::memset(contactSeparationTensor->data, 0, maxCount * sizeof(float));
+        std::memset(otherActorIdsTensor->data, 0, maxCount * sizeof(uint64_t));
+        return true;
+    }
 
     std::fill_n(m_scratchCounts.data(), m_sensorCount, 0u);
     cpuCountRawContactsPerSensor(m_cachedContactCount, m_cachedShape0, m_cachedShape1, m_cachedShapeBody,

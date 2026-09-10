@@ -21,9 +21,12 @@ repo_build.prebuild_link {
     { "docs", ext.target_dir .. "/docs" },
     { "data", ext.target_dir .. "/data" },    
     { "python/tests", ext.target_dir .. "/usd/schema/mujoco/tests" },    
-    { "$root/_build/target-deps/isaac_newton_prebundle/mujoco_usd_converter/plugins", ext.target_dir .. "/plugins" },    
 }
 repo_build.prebuild_copy {
     { "python/__init__.py", ext.target_dir .. "/usd/schema/mujoco" },
+    -- Copy (not link) the mjcPhysics schema resources into the extension so the plugin
+    -- ships self-contained. Linking out to `target-deps` leaves the plugin dangling
+    -- whenever the prebundle is refreshed or the package is deployed without target-deps.
+    { "$root/_build/target-deps/isaac_newton_prebundle/mujoco_usd_converter/plugins", ext.target_dir .. "/plugins" },
 }
 

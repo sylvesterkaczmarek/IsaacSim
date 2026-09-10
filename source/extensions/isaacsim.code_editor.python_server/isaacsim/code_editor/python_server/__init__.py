@@ -16,5 +16,26 @@
 """TCP socket server for remote Python code execution in Isaac Sim."""
 
 from .extension import Extension  # noqa: F401 (Extension loaded for side effects)
+from .server import (
+    BoundEndpoint,
+    ServerState,
+    ServerStatus,
+    get_server_endpoint,
+    get_server_status,
+    restart_server,
+    start_server,
+    stop_server,
+    subscribe_server_status,
+)
 
-__all__ = []
+__all__ = [
+    "BoundEndpoint",
+    "ServerState",
+    "ServerStatus",
+    "get_server_endpoint",
+    "get_server_status",
+    "restart_server",
+    "start_server",
+    "stop_server",
+    "subscribe_server_status",
+]

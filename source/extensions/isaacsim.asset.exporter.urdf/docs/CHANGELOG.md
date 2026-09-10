@@ -1,5 +1,68 @@
 # Changelog
 
+## [2.2.6] - 2026-08-31
+### Fixed
+- Apply composed parent and robot scale to exported primitive geometry dimensions.
+- Export X-axis and Y-axis cylinder and capsule orientations correctly.
+
+## [2.2.5] - 2026-08-28
+### Fixed
+- Reconstruct products of inertia correctly from rotated USD principal axes.
+
+## [2.2.4] - 2026-08-24
+### Fixed
+- Ignore unauthored or non-finite PhysX DriveAPI `maxForce` values when exporting URDF joint effort limits.
+
+## [2.2.3] - 2026-08-20
+### Changed
+- Pin `usd-exchange` to version 2.3.0 for reproducible standalone installs.
+
+## [2.2.2] - 2026-08-17
+### Fixed
+- Export native USD joint effort limits using PhysX DriveAPI `maxForce` when available, falling back to the `urdf:limit:effort` attribute otherwise.
+
+## [2.2.1] - 2026-07-29
+### Fixed
+- Read joint velocity limits from canonical `newton:velocityLimit` metadata while preserving finite legacy `urdf:limit:velocity` values for backward compatibility.
+- Re-apply the root prim's world **scale** (the component that `GetInverse()` removes) to the frame-relative transforms, so it propagates to all links
+- Robustness: strip scale from stored link frames, so an inherited scale cannot cancel the re-applied root scale
+
+## [2.2.0] - 2026-07-23
+### Added
+- Material export: read OmniPBR/MDL parameters (diffuse, roughness, metallic, emissive) from the `.mdl` source (resolved against its authoring layer) when not authored as USD shader inputs; USD inputs take precedence.
+- Write roughness/metallic to `.mtl` (`Pr`/`Pm`) and bake a diffuse texture's average color into `Kd`, so material appearance round-trips on reimport.
+
+### Fixed
+- Rebase the physical root link's transform relative to the robot prim so ancestor Xform offsets no longer leak into exported joint origins.
+- Skip geometry-bearing Xforms spuriously tagged `IsaacSiteAPI`
+- `_fmt`: use significant-figure formatting so tiny valid inertias (~1e-10) are preserved instead of rounded to `0`.
+- Classify visual/collision meshes by computed (inherited) purpose
+- Export unbounded USD revolute joints (`±inf` limits) as URDF continuous joints.
+- `export_duplicate_ghost_links`: rename site links that collide with their parent link name instead of always skipping them.
+
+## [2.1.3] - 2026-07-21
+### Added
+- `UsdToUrdfConverter`: optionally export colliding site ghost links with numeric suffixes.
+
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+### Fixed
+- Skip site ghost links whose resolved name matches an existing URDF link (e.g. multiphysics UR10e ``base_link/base_link``).
+
+## [2.1.2] - 2026-07-15
+### Fixed
+- Explicitly set physics variant in unit test
+- Joint friction is now imported to newton:friction rather than physxjoint:jointFriction
+
+## [2.1.1] - 2026-07-15
+### Added
+- Export `NewtonMassAPI` `newton:inertia` tensor directly to URDF `<inertia>`, taking precedence over principal-axis reconstruction.
+
+## [2.1.0] - 2026-07-02
+### Added
+- `UsdToUrdfConverter.convert`: add a callback for modifying the completed URDF XML before it is written.
+
 ## [2.0.5] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

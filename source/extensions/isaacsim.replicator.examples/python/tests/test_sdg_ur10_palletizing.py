@@ -21,6 +21,8 @@ import unittest
 from typing import Any
 
 import carb.settings
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit
 import omni.usd
 from isaacsim.test.utils.file_validation import validate_folder_contents
@@ -31,9 +33,9 @@ class TestSDGUR10Palletizing(omni.kit.test.AsyncTestCase):
 
     async def setUp(self) -> None:
         """Create a clean stage and preserve the DLSS setting used by palletizing captures."""
-        await omni.kit.app.get_app().next_update_async()
-        await omni.usd.get_context().new_stage_async()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
         self.original_dlss_exec_mode = carb.settings.get_settings().get("rtx/post/dlss/execMode")
 
     async def tearDown(self) -> Any:
@@ -42,11 +44,11 @@ class TestSDGUR10Palletizing(omni.kit.test.AsyncTestCase):
         Returns:
             None.
         """
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
         # In some cases the test will end before the asset is loaded, in this case wait for assets to load
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
         carb.settings.get_settings().set("rtx/post/dlss/execMode", self.original_dlss_exec_mode)
 
     @unittest.skipIf(os.getenv("ETM_ACTIVE"), "Skipped in ETM.")
@@ -440,9 +442,7 @@ class TestSDGUR10Palletizing(omni.kit.test.AsyncTestCase):
         ) -> None:
             import random
 
-            from isaacsim.cortex.examples.ur10_palletizing.ur10_palletizing import (
-                BinStacking,
-            )
+            from isaacsim.robot_motion.examples.manipulation.interactive.palletizing.palletizing import Palletizing
 
             # Createa new stage
             await omni.usd.get_context().new_stage_async()
@@ -453,27 +453,29 @@ class TestSDGUR10Palletizing(omni.kit.test.AsyncTestCase):
             # Seed for the replicator randomization
             rep.set_global_seed(42)
 
-            # Load the bin stacking stage and start the demo
-            bin_staking_sample = BinStacking()
-            print(f"[PalletizingSDGDemo] Loading the bin stacking stage..")
-            await bin_staking_sample.load_world_async()
-            print(f"[PalletizingSDGDemo] Starting bin stacking..")
-            await bin_staking_sample.on_event_async()
+            # Load the shared code-authored palletizing scene and start the demo.
+            palletizing_sample = Palletizing()
+            try:
+                print("[PalletizingSDGDemo] Loading the bin stacking stage..")
+                await palletizing_sample.load_world_async()
+                print("[PalletizingSDGDemo] Starting bin stacking..")
+                await palletizing_sample.start_palletizing_async()
 
-            # Wait a few frames for the stage to fully load then start the SDG pipeline
-            for _ in range(5):
-                await omni.kit.app.get_app().next_update_async()
+                # Wait a few frames for the stage to fully load then start the SDG pipeline
+                await app_utils.update_app_async(steps=5)
 
-            print(f"[PalletizingSDGDemo] Starting SDG pipeline with {num_captures} bins to capture")
-            sdg_demo = PalletizingSDGDemo(output_dir=output_dir)
-            sdg_demo.start(num_captures, bin_flip_frames, pallet_frames)
+                print(f"[PalletizingSDGDemo] Starting SDG pipeline with {num_captures} bins to capture")
+                sdg_demo = PalletizingSDGDemo(output_dir=output_dir)
+                sdg_demo.start(num_captures, bin_flip_frames, pallet_frames)
 
-            # Wait until the SDG pipeline demo is finished
-            while sdg_demo.is_running():
-                await omni.kit.app.get_app().next_update_async()
-            print("[PalletizingSDGDemo] SDG pipeline finished, pausing the simulation..")
-            timeline = omni.timeline.get_timeline_interface()
-            timeline.pause()
+                # Wait until the SDG pipeline demo is finished
+                while sdg_demo.is_running():
+                    await omni.kit.app.get_app().next_update_async()
+                print("[PalletizingSDGDemo] SDG pipeline finished, pausing the simulation..")
+                timeline = omni.timeline.get_timeline_interface()
+                timeline.pause()
+            finally:
+                await palletizing_sample.clear_async()
 
         # asyncio.ensure_future(
         #     run_example_async(
@@ -491,8 +493,8 @@ class TestSDGUR10Palletizing(omni.kit.test.AsyncTestCase):
 
         # Validate that all expected files were written to disk
 
-        # Bin flip scenario happens randomly, but with seed=42, we get 2 flips out of 2 captures
-        num_flips = 2
+        num_flips = sum(entry.is_dir() and entry.name.startswith("annot_bin_") for entry in os.scandir(out_dir))
+        self.assertEqual(num_flips, 1, "The seeded scenario should capture exactly one flipped bin.")
 
         # Bin flip scenario (uses annotators directly):
         # - Outputs per frame: 2 PNGs (rgb, instance_segmentation) + 1 JSON (instance_segmentation annotator with 1 json file)

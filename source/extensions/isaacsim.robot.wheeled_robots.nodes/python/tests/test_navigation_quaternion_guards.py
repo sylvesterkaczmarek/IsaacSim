@@ -21,6 +21,9 @@ import numpy as np
 import omni.graph.core as og
 import omni.graph.core.tests as ogts
 import omni.kit.test
+import omni.usd
+import usdrt
+from pxr import Gf, UsdGeom
 
 
 class TestNavigationQuaternionGuards(ogts.OmniGraphTestCase):
@@ -61,6 +64,40 @@ class TestNavigationQuaternionGuards(ogts.OmniGraphTestCase):
         reached_goal = og.Controller(og.Controller.attribute("outputs:reachedGoal", check_goal_node)).get()
         self.assertEqual(list(reached_goal), [True, True])
 
+    async def test_check_goal_compares_current_yaw_to_target_yaw(self) -> None:
+        """CheckGoal2D should compare the wrapped yaw error against the orientation threshold."""
+        graph, [check_goal_node], _, _ = og.Controller.edit(
+            {"graph_path": "/ActionGraph"},
+            {
+                og.Controller.Keys.CREATE_NODES: [
+                    ("CheckGoal2D", "isaacsim.robot.wheeled_robots.CheckGoal2D"),
+                ],
+                og.Controller.Keys.SET_VALUES: [
+                    ("CheckGoal2D.inputs:currentPosition", [0.0, 0.0, 0.0]),
+                    ("CheckGoal2D.inputs:thresholds", [0.1, 0.05]),
+                ],
+            },
+        )
+
+        target_attribute = og.Controller.attribute("inputs:target", check_goal_node)
+        target_changed_attribute = og.Controller.attribute("inputs:targetChanged", check_goal_node)
+        orientation_attribute = og.Controller.attribute("inputs:currentOrientation", check_goal_node)
+        reached_goal_attribute = og.Controller.attribute("outputs:reachedGoal", check_goal_node)
+        cases = [
+            (0.8, 0.8, True),
+            (0.8, -1.0, False),
+            (np.pi - 0.01, -np.pi + 0.01, True),
+        ]
+
+        for target_yaw, current_yaw, expected in cases:
+            og.Controller.set(target_attribute, [0.0, 0.0, target_yaw])
+            og.Controller.set(target_changed_attribute, True)
+            og.Controller.set(orientation_attribute, [0.0, 0.0, np.sin(current_yaw / 2.0), np.cos(current_yaw / 2.0)])
+            await og.Controller.evaluate(graph)
+
+            reached_goal = og.Controller(reached_goal_attribute).get()
+            self.assertEqual(list(reached_goal), [True, expected])
+
     async def test_quintic_path_planner_uses_zero_yaw_for_default_zero_quaternions(self) -> None:
         """QuinticPathPlanner should plan with zero yaw when current and target quaternions are zero."""
         graph, [planner_node], _, _ = og.Controller.edit(
@@ -85,6 +122,46 @@ class TestNavigationQuaternionGuards(ogts.OmniGraphTestCase):
         self.assertTrue(np.all(np.isfinite(target)))
         self.assertTrue(np.all(np.isfinite(path_arrays)))
         self.assertGreater(len(path_arrays), 0)
+
+    async def test_quintic_path_planner_uses_signed_yaw_from_target_prim(self) -> None:
+        """QuinticPathPlanner should preserve the sign of a targetPrim's rotation, not just its magnitude."""
+        stage = omni.usd.get_context().get_stage()
+        goal_prim = UsdGeom.Xform.Define(stage, "/World/Goal")
+        goal_prim.AddTranslateOp().Set(Gf.Vec3d(1.0, 0.0, 0.0))
+        rotate_op = goal_prim.AddRotateXYZOp()
+
+        graph, [planner_node], _, _ = og.Controller.edit(
+            {"graph_path": "/ActionGraph"},
+            {
+                og.Controller.Keys.CREATE_NODES: [
+                    ("QuinticPathPlanner", "isaacsim.robot.wheeled_robots.QuinticPathPlanner"),
+                ],
+                og.Controller.Keys.SET_VALUES: [
+                    ("QuinticPathPlanner.inputs:currentPosition", [0.0, 0.0, 0.0]),
+                    ("QuinticPathPlanner.inputs:currentOrientation", [0.0, 0.0, 0.0, 1.0]),
+                    ("QuinticPathPlanner.inputs:maxAccel", 1000.0),
+                    ("QuinticPathPlanner.inputs:maxJerk", 1000.0),
+                    (
+                        "QuinticPathPlanner.inputs:targetPrim",
+                        [usdrt.Sdf.Path("/World/Goal")],
+                    ),
+                ],
+            },
+        )
+
+        target_attribute = og.Controller.attribute("outputs:target", planner_node)
+
+        for goal_yaw_deg, expected_sign in ((30.0, 1.0), (-30.0, -1.0)):
+            # perturb the goal far enough (>0.05 rad) from any prior target to force a re-plan
+            rotate_op.Set(Gf.Vec3d(0.0, 0.0, 179.0))
+            await og.Controller.evaluate(graph)
+
+            rotate_op.Set(Gf.Vec3d(0.0, 0.0, goal_yaw_deg))
+            await og.Controller.evaluate(graph)
+
+            planned_yaw = og.Controller(target_attribute).get()[2]
+            self.assertAlmostEqual(planned_yaw, np.radians(goal_yaw_deg), places=3)
+            self.assertEqual(np.sign(planned_yaw), expected_sign)
 
     async def test_stanley_control_uses_zero_yaw_for_default_zero_quaternion(self) -> None:
         """StanleyControlPID should not fail when its orientation input remains at the OGN zero default."""

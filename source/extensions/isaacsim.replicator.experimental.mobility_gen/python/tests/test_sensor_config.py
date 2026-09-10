@@ -51,7 +51,7 @@ _sensor_rig_globs = {
     "carb": _carb_stub,
     "get_current_stage": MagicMock(),
     "Module": object,
-    "_join_sdf_paths": lambda *a: "/".join(a),
+    "join_prim_paths": lambda *a: "/".join(a),
     "CameraConfig": CameraConfig,
     "SensorConfig": SensorConfig,
 }

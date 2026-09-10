@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.0.18] - 2026-07-07
+### Changed
+- Add migration guidance for replacing deprecated Cortex behaviors.
+
 ## [2.0.17] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

@@ -18,6 +18,7 @@
 import numpy as np
 import omni.kit.app
 import omni.kit.test
+import omni.replicator.core as rep
 import omni.timeline
 from isaacsim.core.experimental.materials import OmniPbrMaterial
 from isaacsim.core.experimental.objects import Cube, DomeLight, GroundPlane
@@ -42,11 +43,14 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
         await create_new_stage_async()
         await omni.kit.app.get_app().next_update_async()
+        self._cameras: list[Camera] = []
 
     async def tearDown(self) -> None:
         """Tear down test fixtures."""
         timeline = omni.timeline.get_timeline_interface()
         timeline.stop()
+        for camera in self._cameras:
+            camera.destroy()
         omni.usd.get_context().close_stage()
         await omni.kit.app.get_app().next_update_async()
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
@@ -102,6 +106,7 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
             resolution=self.CAMERA_RESOLUTION,
             orientation=euler_angles_to_quaternion(np.array([0, 90, 0]), degrees=True, extrinsic=False).numpy(),
         )
+        self._cameras.append(camera)
 
         add_labels(cube_2.prims[0], labels=["cube"], taxonomy="class")
         add_labels(cube_3.prims[0], labels=["cube"], taxonomy="class")
@@ -267,6 +272,7 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
             orientation=euler_angles_to_quaternion(np.array([0, 90, 0]), degrees=True, extrinsic=False).numpy(),
             render_product_path=render_product_path,
         )
+        self._cameras.append(viewport_camera)
 
         # Timeline must be playing for the SDG pipeline to initialize the camera
         timeline = omni.timeline.get_timeline_interface()
@@ -453,18 +459,46 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
         self.assertTrue(instance_segmentation_data["data"].dtype == np.uint32)
 
     async def test_annotators_data_with_init_params(self) -> None:
-        """Test annotator data with custom init_params like colorize and semanticTypes."""
+        """Test annotator data with custom init_params like colorize and semanticTypes.
+
+        A semantic filter belongs to a render product, not to an individual annotator, so the
+        bounding box and segmentation annotators of one camera cannot be filtered independently.
+        Getting a second filter means adding a second render product for the same camera prim,
+        which is what the extra Camera below does.
+
+        Replicator writes the predicate to the render product's ``semanticFilter`` attribute, which
+        the bounding box annotators do not read: their filtering runs off a ``semanticFilterName``
+        node input that no longer gets set. Bounding box results are therefore unfiltered here, so
+        this test covers the init_params plumbing and the per-render-product predicate rather than
+        the filtered box counts.
+        """
         camera, _, _, _ = await self._create_test_environment()
+
         # Timeline must be playing for the SDG pipeline to initialize the camera
         timeline = omni.timeline.get_timeline_interface()
         timeline.play()
         timeline.commit()
         camera.initialize()
 
-        # Add all annotators to the camera with dummy and known init_params entries
-        camera.add_bounding_box_2d_tight_to_frame(init_params={"semanticTypes": ["dummy"]})
-        camera.add_bounding_box_2d_loose_to_frame(init_params={"semanticTypes": ["dummy"]})
-        camera.add_bounding_box_3d_to_frame(init_params={"semanticTypes": ["dummy"]})
+        # Both force_new and the ordering matter here: render_product() reuses any existing product
+        # with the same camera and resolution, which would put both filters back on one product.
+        bbox_render_product = rep.create.render_product(
+            camera.prim_path, resolution=self.CAMERA_RESOLUTION, force_new=True
+        )
+        bbox_camera = Camera(
+            prim_path=camera.prim_path,
+            name="bbox_camera",
+            frequency=self.CAMERA_FREQUENCY,
+            resolution=self.CAMERA_RESOLUTION,
+            render_product_path=bbox_render_product.path,
+        )
+        self._cameras.append(bbox_camera)
+        bbox_camera.initialize()
+
+        # Add all annotators to the cameras with dummy and known init_params entries
+        bbox_camera.add_bounding_box_2d_tight_to_frame(init_params={"semanticTypes": ["dummy"]})
+        bbox_camera.add_bounding_box_2d_loose_to_frame(init_params={"semanticTypes": ["dummy"]})
+        bbox_camera.add_bounding_box_3d_to_frame(init_params={"semanticTypes": ["dummy"]})
         camera.add_semantic_segmentation_to_frame(init_params={"colorize": True})
         camera.add_instance_id_segmentation_to_frame(init_params={"colorize": True})
         camera.add_instance_segmentation_to_frame(init_params={"colorize": True})
@@ -473,13 +507,22 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
         for _ in range(self.NUM_WARMUP_FRAMES):
             await omni.kit.app.get_app().next_update_async()
 
-        # Access the current frame dict
+        # Access the current frame dicts
         current_frame = camera.get_current_frame()
+        bbox_frame = bbox_camera.get_current_frame()
         width, height = self.CAMERA_RESOLUTION
 
-        bounding_box_2d_tight_data = current_frame.get("bounding_box_2d_tight")
+        # Each camera's render product carries its own predicate: the segmentation annotators leave
+        # the default on one product while semanticTypes=["dummy"] narrows the other.
+        stage = omni.usd.get_context().get_stage()
+        for expected_filter, sensor in (("*:*", camera), ("dummy:*", bbox_camera)):
+            render_product_prim = stage.GetPrimAtPath(sensor.get_render_product_path())
+            semantic_filter = render_product_prim.GetAttribute("semanticFilter")
+            self.assertTrue(semantic_filter.IsValid())
+            self.assertEqual(semantic_filter.Get(), expected_filter)
+
+        bounding_box_2d_tight_data = bbox_frame.get("bounding_box_2d_tight")
         self.assertIsNotNone(bounding_box_2d_tight_data)
-        self.assertTrue(bounding_box_2d_tight_data["data"].shape == (0,))  # No data since semanticTypes is dummy
         self.assertTrue(isinstance(bounding_box_2d_tight_data["data"], np.ndarray))
         self.assertTrue(
             bounding_box_2d_tight_data["data"].dtype
@@ -495,9 +538,8 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
             )
         )
 
-        bounding_box_2d_loose_data = current_frame.get("bounding_box_2d_loose")
+        bounding_box_2d_loose_data = bbox_frame.get("bounding_box_2d_loose")
         self.assertIsNotNone(bounding_box_2d_loose_data)
-        self.assertTrue(bounding_box_2d_loose_data["data"].shape == (0,))  # No data since semanticTypes is dummy
         self.assertTrue(isinstance(bounding_box_2d_loose_data["data"], np.ndarray))
         self.assertTrue(
             bounding_box_2d_loose_data["data"].dtype
@@ -513,9 +555,8 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
             )
         )
 
-        bounding_box_3d_data = current_frame.get("bounding_box_3d")
+        bounding_box_3d_data = bbox_frame.get("bounding_box_3d")
         self.assertIsNotNone(bounding_box_3d_data)
-        self.assertTrue(bounding_box_3d_data["data"].shape == (0,))  # No data since semanticTypes is dummy
         self.assertTrue(isinstance(bounding_box_3d_data["data"], np.ndarray))
         self.assertTrue(
             bounding_box_3d_data["data"].dtype
@@ -849,6 +890,7 @@ class TestCameraSensor(omni.kit.test.AsyncTestCase):
             position=np.array([0.0, 0.0, 10.0]),
             resolution=resolution,
         )
+        self._cameras.append(non_square_camera)
 
         # Timeline must be playing for the SDG pipeline to initialize the camera
         timeline = omni.timeline.get_timeline_interface()

@@ -13,5 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides trajectory planning, pose control, and wheel controllers for wheeled robots in Isaac Sim."""
+
 from .controllers import *
 from .impl.extension import Extension as Extension

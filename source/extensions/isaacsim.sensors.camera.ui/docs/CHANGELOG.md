@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.4] - 2026-08-28
+### Changed
+- `test_camera_sensors_context_menu_click`: click one sensor per vendor.
+
+## [0.7.3] - 2026-07-07
+### Changed
+- Overview.md: list all supported sensors from `SUPPORTED_CAMERA_CONFIGS` (added Luxonis, remaining Sensing/SICK/Orbbec models) and update the Sensor Creation Actions and Integration sections to reference `RtxCamera` / `SingleViewDepthCameraSensor` from `isaacsim.sensors.experimental.rtx` instead of the deprecated `SingleViewDepthSensorAsset` / `isaacsim.sensors.camera`.
+- Regenerate `config/actions_api.md` to match the current registry display names.
+
 ## [0.7.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

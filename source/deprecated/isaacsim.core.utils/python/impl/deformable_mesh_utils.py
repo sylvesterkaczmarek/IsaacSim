@@ -32,10 +32,13 @@ def loadTetFile(path: str) -> tuple:  # noqa: N802
     scaling vertex positions by 500 units.
 
     Args:
-        path: Relative path to the .tet file from the Kit installation directory.
+        path: Relative path to the .tet file from the Omniverse Kit SDK installation directory.
 
     Returns:
         A tuple of (points, indices) containing the loaded tetrahedral mesh data.
+
+    Raises:
+        OSError: If the .tet file cannot be opened or read.
     """
     points = []
     indices = []

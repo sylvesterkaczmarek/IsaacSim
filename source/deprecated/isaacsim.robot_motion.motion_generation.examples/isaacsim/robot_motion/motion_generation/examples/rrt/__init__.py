@@ -15,6 +15,7 @@
 
 """Tutorial extension for robot motion generation using RRT path planning with a Franka robot in Isaac Sim."""
 
-from .extension import *
+from .extension import Extension as Extension
+from .extension import UIBuilder as UIBuilder
 
-__all__ = ["UIBuilder", "Extension"]
+__all__ = []

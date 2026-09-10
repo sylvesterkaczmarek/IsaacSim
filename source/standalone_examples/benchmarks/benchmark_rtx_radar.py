@@ -56,7 +56,16 @@ from isaacsim.benchmark.services import BaseIsaacBenchmark
 
 # Create RTX Radar from params
 def add_rtx_radar(prim_path: str, sensor_translation: Any, sensor_orientation: Any) -> Any:
-    """Create an RTX radar sensor at the specified path and transform."""
+    """Create an RTX radar sensor at the specified path and transform.
+
+    Args:
+        prim_path: Stage path at which to create the radar prim.
+        sensor_translation: Radar position in stage coordinates.
+        sensor_orientation: Radar orientation as a scalar-first quaternion.
+
+    Returns:
+        Created radar sensor prim.
+    """
     radar = Radar.create(
         path=prim_path,
         translations=[

@@ -1,5 +1,5 @@
 [package]
-version = "5.10.5"
+version = "5.10.13"
 category = "Simulation"
 title = "Isaac Sim Core OmniGraph Nodes"
 description = "Provides OmniGraph nodes for Isaac Sim workflows including articulation control, simulation timing, camera info reading, viewport management, and physics step event handling."
@@ -41,6 +41,7 @@ name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]
@@ -102,6 +103,7 @@ args = [
     "--/app/hydraEngine/waitIdle=1",
     "--/app/updateOrder/checkForHydraRenderComplete=1000",
 ]
+
 stdoutFailPatterns.exclude = [
     '*[Error] [omni.graph.core.plugin] /TestGraph/Template_isaacsim_core_nodes_IsaacComputeOdometry: [/TestGraph] Omnigraph Error: no chassis prim found*',
     '*[Error] [omni.graph.core.plugin] /TestGraph/Template_isaacsim_core_nodes_IsaacCreateRenderProduct: [/TestGraph] OmniGraph Error: Camera prim must be specified*',
@@ -125,6 +127,8 @@ stdoutFailPatterns.exclude = [
     '*[Error] [omni.graph.core.plugin] /ActionGraph/attachHydraTexture: [/ActionGraph] OmniGraph Error: Render product prim must be specified*',
     '*[Error] [omni.graph.core.plugin] /ActionGraph/attachHydraTexture: [/ActionGraph] OmniGraph Error: Prim is not a RenderProduct*',
     '*[Error] [omni.hydratexture.plugin] Was not able to get a RenderProduct from the path*',
+    # IsaacMapScalarsToColors test error exclusion (test_null_pointer_with_nonzero_size_logs_error)
+    '*[Error] [omni.graph.core.plugin] *MapScalars: *Scalar buffer pointer must be nonzero when scalarBufferSize is nonzero.*',
 ]
 
 [documentation]

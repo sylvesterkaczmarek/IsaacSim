@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id = "hello_world.cpp_python"
+title = "C++ with Python Hello World"
+summary = "Call the public C++ logging API through an example-local Python extension."
+owners = ["isaacsim.common.logging"]
+topics = ["logging", "cpp", "python"]
+
+[build]
+adapter = "cmake"
+targets = ["_hello_world_cpp"]
+
+[run]
+adapter = "python"
+path = "main.py"
+
+[requirements]
+system = ["cmake", "cpp", "python", "python_development"]
+
+[[requirements.modules]]
+name = "isaacsim_common"
+surfaces = ["native_sdk"]
+
+[[test]]
+name = "default"
+stdout_contains = ["[isaacsim.examples.hello_world.cpp_python] Hello World from C++ with Python."]

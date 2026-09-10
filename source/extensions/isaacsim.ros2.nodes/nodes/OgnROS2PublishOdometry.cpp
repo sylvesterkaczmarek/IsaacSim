@@ -14,10 +14,10 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include <isaacsim/ros2/core/Ros2Node.h>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
 
 #include <OgnROS2PublishOdometryDatabase.h>
 

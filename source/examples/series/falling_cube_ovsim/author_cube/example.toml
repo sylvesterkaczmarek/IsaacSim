@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id = "falling_cube_ovsim.author_cube"
+title = "Author a Cube"
+summary = "Create a stage and author a cube."
+owners = ["isaacsim.foundation.objects"]
+topics = ["python", "usd"]
+
+[build]
+adapter = "none"
+
+[run]
+adapter = "python"
+path = "main.py"
+
+[requirements]
+system = ["python"]
+
+[[requirements.modules]]
+name = "isaacsim_foundation"
+surfaces = ["python"]
+
+[[requirements.modules]]
+name = "isaacsim_ovsim"
+surfaces = ["python"]
+
+[[test]]
+name = "default"
+stdout_contains = ["Authored /World/Cube at (0.0, 0.0, 2.0)."]

@@ -13,9 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "Ros2SrtxLaserScanPublisher.h"
+#include "Ros2SrtxLaserScanPublisher.hpp"
 
 #include <carb/profiler/Profile.h>
+
+#include <isaacsim/ros2/nodes/LaserScanUtils.hpp>
 
 #include <GenericModelOutputTypes.h>
 #include <cmath>
@@ -74,7 +76,7 @@ bool Ros2SrtxLaserScanPublisher::initialize(const std::string& topicName,
         CARB_LOG_ERROR("Ros2SrtxLaserScanPublisher: horizontalResolution must be > 0 (got %f)", m_horizontalResolution);
         return false;
     }
-    m_numOutputElements = static_cast<size_t>(m_horizontalFov / m_horizontalResolution);
+    m_numOutputElements = getLaserScanOutputElementCount(m_horizontalFov, m_horizontalResolution);
     if (m_numOutputElements == 0)
     {
         CARB_LOG_ERROR("Ros2SrtxLaserScanPublisher: Computed 0 output elements from fov=%f res=%f", m_horizontalFov,
@@ -229,12 +231,14 @@ void Ros2SrtxLaserScanPublisher::publishData(const uint8_t* data, size_t dataSiz
 
     const bool isSpherical = (gmo->elementsCoordsType == omni::sensors::CoordsType::SPHERICAL);
 
-    pxr::GfVec2f azimuthRange(m_azimuthRangeStart, m_azimuthRangeEnd - m_horizontalResolution);
+    const float azimuthRangeEnd =
+        getLaserScanOutputAngleMax(m_azimuthRangeStart, m_horizontalResolution, m_numOutputElements);
+    pxr::GfVec2f azimuthRange(m_azimuthRangeStart, azimuthRangeEnd);
     pxr::GfVec2f depthRange(m_depthRangeMin, m_depthRangeMax);
 
     m_message->writeHeader(timestamp, m_frameId);
-    m_message->writeData(azimuthRange, m_rotationRate, depthRange, m_horizontalResolution, m_horizontalFov);
     m_message->generateBuffers(m_numOutputElements);
+    m_message->writeData(azimuthRange, m_rotationRate, depthRange, m_horizontalResolution, m_horizontalFov);
 
     std::vector<float>& rangeData = m_message->getRangeData();
     std::vector<float>& intensitiesData = m_message->getIntensitiesData();
@@ -253,10 +257,11 @@ void Ros2SrtxLaserScanPublisher::publishData(const uint8_t* data, size_t dataSiz
         float dist = distance[i];
         float inten = intensity[i];
 
-        size_t outIdx = static_cast<size_t>((az - m_azimuthRangeStart) / m_horizontalResolution);
-        if (outIdx >= m_numOutputElements)
+        size_t outIdx;
+        if (!getLaserScanOutputIndex(az, m_azimuthRangeStart, m_azimuthRangeEnd, m_horizontalFov,
+                                     m_horizontalResolution, m_numOutputElements, outIdx))
         {
-            outIdx = m_numOutputElements - 1;
+            continue;
         }
 
         rangeData[outIdx] = dist;

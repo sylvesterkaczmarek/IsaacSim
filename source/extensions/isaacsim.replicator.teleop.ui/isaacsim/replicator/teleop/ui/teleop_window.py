@@ -16,24 +16,25 @@
 """Main Teleop window - composes independent panel modules."""
 
 import carb.eventdispatcher
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.app
 import omni.ui as ui
 import omni.usd
 from isaacsim.replicator.teleop import (
-    STAGE_STATE_LOADING,
-    STAGE_STATE_NO_STAGE,
-    STAGE_STATE_READY,
     FloatingRigidBodyController,
+    GraspController,
+    LocomotionController,
     MarkersManager,
+    RobotIKController,
     TeleopCommand,
     TeleopManager,
     TeleopProfile,
+    VisualCuesManager,
     activate_pre_session_anchor,
     get_last_teleop_profile_path,
     restore_pre_session_anchor,
     save_teleop_profile,
 )
-from isaacsim.replicator.teleop.controllers import GraspController, LocomotionController, RobotIKController
 
 from .floating_panel import FloatingPanel
 from .grasp_panel import GraspPanel
@@ -41,12 +42,13 @@ from .ik_panel import IKPanel
 from .locomotion_panel import LocomotionPanel
 from .session_panel import SessionPanel
 from .teleop_profile_panel import TeleopProfilePanel
+from .visual_cues_panel import VisualCuesPanel
 
 
 class TeleopWindow(ui.Window):
     """Main window for the Teleop UI extension.
 
-    Composes six panels: Profiles, Session, Floating, IK, Grasp, Locomotion.
+    Composes seven panels: Profiles, Session, Floating, IK, Grasp, Locomotion, Visual Cues.
     The Profiles panel manages unified teleop profile save/load/validate; all
     other panels are independent — only the :class:`TeleopManager` is shared.
 
@@ -69,6 +71,7 @@ class TeleopWindow(ui.Window):
         self._pre_session_anchor_active = False
         self._teleop_manager = TeleopManager()
         self._markers_manager = MarkersManager()
+        self._visual_cues_manager = VisualCuesManager()
         self._floating_controller = FloatingRigidBodyController()
         self._ik_controller = RobotIKController()
         self._grasp_controller = GraspController()
@@ -101,8 +104,11 @@ class TeleopWindow(ui.Window):
         self._locomotion_panel = LocomotionPanel(
             self._locomotion_controller, self._teleop_manager, self._collapsed_states
         )
+        self._visual_cues_panel = VisualCuesPanel(
+            self._visual_cues_manager, self._teleop_manager, self._collapsed_states
+        )
 
-        self._teleop_manager.set_on_stage_closing(self._on_stage_closing)
+        self._teleop_manager.set_on_stage_cleanup_completed(self._on_stage_cleanup_completed)
         self._teleop_manager.set_on_command_executed(self._on_command_executed)
         self._build_window_ui()
 
@@ -113,10 +119,9 @@ class TeleopWindow(ui.Window):
         # The original setting is restored in :meth:`destroy`.
         self._pre_session_anchor_active = activate_pre_session_anchor()
 
-    def _on_stage_closing(self) -> None:
-        """Called by TeleopManager when the USD stage is about to close.
+    def _on_stage_cleanup_completed(self) -> None:
+        """Reset panel state after TeleopManager releases stage-bound resources.
 
-        Backend controllers are already destroyed by TeleopManager.destroy_all_controllers.
         Preserve the user's configured profile state, but clear stage-bound runtime state.
         """
         self._session_panel.on_stage_closed()
@@ -124,6 +129,7 @@ class TeleopWindow(ui.Window):
         self._ik_panel.on_stage_closed()
         self._locomotion_panel.on_stage_closed()
         self._grasp_panel.on_stage_closed()
+        self._visual_cues_panel.on_stage_closed()
 
     def _on_editor_quit_event(self, _event: object) -> None:
         """Save the current teleop profile on app quit.
@@ -134,10 +140,10 @@ class TeleopWindow(ui.Window):
         self._save_last_profile()
 
     def _on_command_executed(self, command: TeleopCommand, success: bool, message: str) -> None:
-        """Syncs panel UIs after a command bus execution.
+        """Sync panel UIs after a teleop command execution.
 
-        Keeps the desktop UI consistent when commands arrive from
-        external sources (e.g. VR headset overlay).
+        Keeps the desktop UI consistent for both its own buttons and commands
+        from external sources such as the VR headset overlay.
 
         Args:
             command: Command that was executed.
@@ -156,6 +162,7 @@ class TeleopWindow(ui.Window):
         self._ik_panel.reset_ui()
         self._locomotion_panel.reset_ui()
         self._grasp_panel.reset_ui()
+        self._visual_cues_panel.reset_ui()
 
     def collect_teleop_profile(self) -> TeleopProfile:
         """Collect the current window state into a unified teleop profile.
@@ -169,6 +176,7 @@ class TeleopWindow(ui.Window):
             ik=self._ik_panel.collect_profile(),
             grasp=self._grasp_panel.collect_profile(),
             locomotion=self._locomotion_panel.collect_profile(),
+            visual_cues=self._visual_cues_panel.collect_profile(),
         )
 
     def apply_teleop_profile(self, profile: TeleopProfile) -> tuple[bool, str]:
@@ -180,33 +188,20 @@ class TeleopWindow(ui.Window):
         Returns:
             Tuple containing success state and a status message.
         """
-        stage_state = self._get_stage_state()
-        resolve = stage_state == STAGE_STATE_READY
+        resolve = (
+            stage_utils.is_stage_set() or omni.usd.get_context().get_stage() is not None
+        ) and not stage_utils.is_stage_loading()
 
         self._session_panel.apply_profile(profile.session, resolve_stage=resolve)
         self._floating_panel.apply_profile(profile.floating, resolve_stage=resolve)
         self._ik_panel.apply_profile(profile.ik, resolve_stage=resolve)
         self._grasp_panel.apply_profile(profile.grasp, resolve_stage=resolve)
         self._locomotion_panel.apply_profile(profile.locomotion, resolve_stage=resolve)
+        self._visual_cues_panel.apply_profile(profile.visual_cues, resolve_stage=resolve)
 
         if resolve:
             return True, "Loaded and resolved profile"
-        return True, f"Loaded profile; stage resolution deferred ({stage_state})"
-
-    @staticmethod
-    def _get_stage_state() -> str:
-        """Return the current stage state using resolver constants.
-
-        Returns:
-            Stage state resolver constant.
-        """
-        usd_context = omni.usd.get_context()
-        if usd_context.get_stage() is None:
-            return STAGE_STATE_NO_STAGE
-        _, _, remaining = usd_context.get_stage_loading_status()
-        if remaining > 0:
-            return STAGE_STATE_LOADING
-        return STAGE_STATE_READY
+        return True, "Loaded profile; stage resolution deferred"
 
     def destroy(self) -> None:
         """Full teardown - session, controllers, markers, and subscriptions.
@@ -220,6 +215,8 @@ class TeleopWindow(ui.Window):
         self._sub_shutdown = None
         if self._markers_manager:
             self._markers_manager.remove_all_markers()
+        if self._visual_cues_manager:
+            self._visual_cues_manager.hide_all()
         if self._teleop_profile_panel:
             self._teleop_profile_panel.destroy()
         if self._floating_panel:
@@ -231,10 +228,10 @@ class TeleopWindow(ui.Window):
         if self._locomotion_panel:
             self._locomotion_panel.destroy()
         if self._teleop_manager:
-            self._teleop_manager.set_on_command_executed(None)
             self._teleop_manager.destroy()
         self._teleop_manager = None
         self._markers_manager = None
+        self._visual_cues_manager = None
         self._floating_controller = None
         self._ik_controller = None
         self._grasp_controller = None
@@ -262,3 +259,4 @@ class TeleopWindow(ui.Window):
                     self._ik_panel.build()
                     self._grasp_panel.build()
                     self._locomotion_panel.build()
+                    self._visual_cues_panel.build()

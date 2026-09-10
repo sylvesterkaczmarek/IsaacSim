@@ -26,8 +26,8 @@ from isaacsim.core.utils.types import DataFrame
 class DataLogger:
     """Provide data collection, storage, and replay functionality for simulation data.
 
-    Collect simulation data at runtime and save to disk for later replay or analysis.
-    Support pausing and resuming data collection during simulation.
+    Collects simulation data at runtime and saves it to disk for later replay or analysis.
+    Supports pausing and resuming data collection during simulation.
     """
 
     def __init__(self) -> None:
@@ -36,13 +36,12 @@ class DataLogger:
         self._data_frame_logging_func = None
 
     def add_data(self, data: dict, current_time_step: float, current_time: float) -> None:
-        """Add data to the log.
+        """Add data to the log when data collection is started.
 
         Args:
             data: Dictionary representing the data to be logged at this time index.
             current_time_step: Time step corresponding to the data collected.
             current_time: Time in seconds corresponding to the data collected.
-
         """
         if self._pause:
             return
@@ -54,7 +53,6 @@ class DataLogger:
 
         Returns:
             The number of data frames collected in the data logger.
-
         """
         return len(self._data_frames)
 
@@ -64,7 +62,7 @@ class DataLogger:
         return
 
     def start(self) -> None:
-        """Resume or starts data collection."""
+        """Resume or start data collection."""
         self._pause = False
         return
 
@@ -73,25 +71,26 @@ class DataLogger:
 
         Returns:
             True if data collection is started or resumed, False otherwise.
-
         """
         return not self._pause
 
     def reset(self) -> None:
-        """Clears the data in the logger."""
+        """Clear the data in the logger and pause data collection."""
         self._pause = True
         self._data_frames = []
         return
 
     def get_data_frame(self, data_frame_index: int) -> DataFrame:
-        """Retrieves a specific data frame from the logger.
+        """Retrieve a specific data frame from the logger.
 
         Args:
             data_frame_index: Index of the data frame to retrieve.
 
         Returns:
-            Data Frame collected at the specified data frame index.
+            Data frame collected at the specified data frame index.
 
+        Raises:
+            IndexError: If data_frame_index is outside the collected data frame range.
         """
         return self._data_frames[data_frame_index]
 
@@ -106,7 +105,6 @@ class DataLogger:
 
                     def dummy_data_collection_fn(tasks, scene):
                         return {"data 1": [data]}
-
         """
         self._data_frame_logging_func = func
         return
@@ -117,6 +115,9 @@ class DataLogger:
         Args:
             log_path: Path of the json file to be used to save the data.
 
+        Raises:
+            OSError: If log_path cannot be opened or written.
+            TypeError: If logged data cannot be serialized to json.
         """
         data = {}
         data["Isaac Sim Data"] = [data_frame.get_dict() for data_frame in self._data_frames]
@@ -125,11 +126,15 @@ class DataLogger:
         return
 
     def load(self, log_path: str) -> None:
-        """Load data from a json file to read back a previous saved data or to resume recording data from another time step.
+        """Load data from a json file to read back previously saved data or resume recording data from another time step.
 
         Args:
             log_path: Path of the json file to be used to load the data.
 
+        Raises:
+            OSError: If log_path cannot be opened or read.
+            json.JSONDecodeError: If log_path does not contain valid json.
+            KeyError: If the json data does not contain "Isaac Sim Data".
         """
         self._pause = True
         self._data_frames = []

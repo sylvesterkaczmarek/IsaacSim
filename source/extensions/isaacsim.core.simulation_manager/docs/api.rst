@@ -11,6 +11,8 @@ Python API
     PhysicsScene
     PhysxGpuCfg
     PhysxScene
+    NewtonMjcScene
+    NewtonXpbdScene
     SimulationEvent
     SimulationManager
     IsaacEvents

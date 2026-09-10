@@ -17,6 +17,7 @@
 
 from dataclasses import dataclass, field
 
+from .collision_config import CollisionConfig
 from .solver_config import MuJoCoSolverConfig, NewtonSolverConfig
 
 
@@ -114,5 +115,12 @@ class NewtonConfig:
 
     # ========== Solver Configuration ==========
 
-    solver_cfg: NewtonSolverConfig = field(default_factory=MuJoCoSolverConfig)
+    # Do not give it a default solver.
+    # It need to be properly initialized with the correct newton solver in newton_stage's initialization
+    solver_cfg: NewtonSolverConfig = field(default_factory=NewtonSolverConfig)
     """Solver-specific configuration."""
+
+    # ========== Collision Pipeline Configuration ==========
+
+    collision_cfg: CollisionConfig = field(default_factory=CollisionConfig)
+    """Collision pipeline configuration, including hydroelastic contact."""

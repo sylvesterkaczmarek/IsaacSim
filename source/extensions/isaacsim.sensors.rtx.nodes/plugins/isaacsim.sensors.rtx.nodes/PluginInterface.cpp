@@ -16,12 +16,12 @@
 #define CARB_EXPORTS
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/PluginUtils.h>
 
-#include <isaacsim/sensors/rtx/nodes/ISensorsRtxNodes.h>
+#include <isaacsim/sensors/rtx/nodes/ISensorsRtxNodes.hpp>
 #include <omni/graph/core/ogn/Registration.h>
 
 

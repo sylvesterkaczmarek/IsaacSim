@@ -19,6 +19,7 @@ from isaacsim import SimulationApp
 
 simulation_app = SimulationApp({"headless": False})
 
+import argparse
 import os
 
 import carb.settings
@@ -36,9 +37,17 @@ STAGE_FPS = 100.0
 SENSOR_FPS = 10.0
 SENSOR_DT = 1.0 / SENSOR_FPS
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--num-captures", type=int, default=NUM_CAPTURES, help="Number of sensor captures to collect.")
+args, _ = parser.parse_known_args()
+
 
 def run_custom_fps_example(duration_seconds: float) -> None:
-    """Run a simulation capturing data at a custom sensor framerate."""
+    """Run a simulation capturing data at a custom sensor framerate.
+
+    Args:
+        duration_seconds: Amount of simulated time during which to collect sensor data.
+    """
     # Create a new stage
     omni.usd.get_context().new_stage()
 
@@ -137,33 +146,32 @@ def run_custom_fps_example(duration_seconds: float) -> None:
 
 
 # Run example with duration for all captures plus a buffer of 5 frames
-duration = (NUM_CAPTURES * SENSOR_DT) + (5.0 / STAGE_FPS)
+duration = (args.num_captures * SENSOR_DT) + (5.0 / STAGE_FPS)
 run_custom_fps_example(duration_seconds=duration)
 
 # <start-custom-fps-writer-annotator-test>
-import argparse
-import sys
-
-from isaacsim.core.utils.extensions import enable_extension
-
-enable_extension("isaacsim.test.utils")
-from isaacsim.test.utils.file_validation import validate_folder_contents
-
-parser = argparse.ArgumentParser()
-parser.add_argument(
+test_parser = argparse.ArgumentParser()
+test_parser.add_argument(
     "--test",
     action="store_true",
     help="Validate captured output files against expected counts and exit.",
 )
-args, _ = parser.parse_known_args()
+test_args, _ = test_parser.parse_known_args()
 
-if args.test:
+if test_args.test:
+    import sys
+
+    from isaacsim.core.utils.extensions import enable_extension
+
+    enable_extension("isaacsim.test.utils")
+    from isaacsim.test.utils.file_validation import validate_folder_contents
+
     # BasicWriter rgb-only writes 1 png per sensor capture.
     out_dir = os.path.join(os.getcwd(), "_out_writer_fps_rgb")
     ok = validate_folder_contents(
         path=out_dir,
         recursive=True,
-        expected_counts={"png": NUM_CAPTURES},
+        expected_counts={"png": args.num_captures},
         fail_on_empty_files=True,
     )
     if not ok:

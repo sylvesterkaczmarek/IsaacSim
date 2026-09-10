@@ -83,6 +83,9 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
 
         Initializes physics settings, timeline interface, extension manager, policy configuration,
         and creates a new USD stage for the test.
+
+        Raises:
+            AssertionError: If the motion policy configuration map is not found.
         """
         self._physics_dt = 1 / 60  # duration of physics frame in seconds
 
@@ -167,6 +170,10 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
 
         Tests multiple trajectory scenarios including different waypoints, timestamps,
         and interpolation types to verify C-space trajectory generation functionality.
+
+        Raises:
+            AssertionError: If C-space trajectory generation fails or any task space target is not reached within the
+                threshold.
         """
         usd_path = await get_assets_root_path_async()
         usd_path += "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
@@ -219,6 +226,10 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
 
         Tests trajectory generation with and without specified timestamps to verify
         C-space trajectory functionality on the Denso Cobotta robot.
+
+        Raises:
+            AssertionError: If C-space trajectory generation fails or any task space target is not reached within the
+                threshold.
         """
         usd_path = await get_assets_root_path_async()
         usd_path += "/Isaac/Robots/Denso/CobottaPro900/cobotta_pro_900.usd"
@@ -268,6 +279,10 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
             timestamps: Time points for trajectory waypoints.
             interp_type: Interpolation type for trajectory generation.
             distance_thresh: Maximum allowed distance error for target reaching.
+
+        Raises:
+            AssertionError: If timestamped joint targets do not match inverse kinematics results, trajectory generation
+                fails, or any task space target is not reached within the distance threshold.
         """
         add_reference_to_stage(usd_path, robot_prim_path)
 
@@ -379,6 +394,10 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
 
         Tests trajectory generation from multiple position and orientation targets
         to verify task space trajectory functionality on the Franka Panda robot.
+
+        Raises:
+            AssertionError: If task space trajectory generation fails or any position or orientation target is not reached
+                within the threshold.
         """
         usd_path = await get_assets_root_path_async()
         usd_path += "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
@@ -398,6 +417,10 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
         """Tests Lula task space trajectory generation for the Cobotta Pro 900 robot.
 
         Generates and validates rectangular and circular trajectory paths with rotations.
+
+        Raises:
+            AssertionError: If task space trajectory generation fails or any position or orientation target is not reached
+                within the threshold.
         """
         usd_path = await get_assets_root_path_async()
         usd_path += "/Isaac/Robots/Denso/CobottaPro900/cobotta_pro_900.usd"
@@ -421,6 +444,9 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
         """Tests Lula task space trajectory generation for the Cobotta Pro 1300 robot.
 
         Generates and validates a rectangular trajectory path.
+
+        Raises:
+            AssertionError: If the generated trajectory does not reach every target within the distance threshold.
         """
         assets_root_path = await get_assets_root_path_async()
         usd_path = assets_root_path + "/Isaac/Robots/Denso/CobottaPro1300/cobotta_pro_1300.usd"
@@ -438,6 +464,9 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
         """Tests Lula task space trajectory generation for the Fanuc CRX10IAL robot.
 
         Generates and validates rectangular and circular trajectory paths with rotations.
+
+        Raises:
+            AssertionError: If a generated trajectory does not reach every target within the distance threshold.
         """
         assets_root_path = await get_assets_root_path_async()
         usd_path = assets_root_path + "/Isaac/Robots/Fanuc/crx10ia_l/crx10ia_l.usd"
@@ -461,6 +490,9 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
         """Tests Lula task space trajectory generation for the Franka FR3 robot.
 
         Generates and validates rectangular and circular trajectory paths with rotations.
+
+        Raises:
+            AssertionError: If a generated trajectory does not reach every target within the distance threshold.
         """
         assets_root_path = await get_assets_root_path_async()
         usd_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaFR3/fr3.usd"
@@ -484,6 +516,9 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
         """Tests Lula task space trajectory generation for the Techman TM12 robot.
 
         Generates and validates a rectangular trajectory path with an offset position.
+
+        Raises:
+            AssertionError: If the generated trajectory does not reach every target within the distance threshold.
         """
         assets_root_path = await get_assets_root_path_async()
         usd_path = assets_root_path + "/Isaac/Robots/Techman/TM12/tm12.usd"
@@ -498,10 +533,13 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
         )
 
     async def test_lula_task_space_traj_gen_ur10(self) -> None:
-        """Test Lula task space trajectory generation with the UR10 robot.
+        """Tests Lula task space trajectory generation with the UR10 robot.
 
         Tests both composite path specifications and circular paths with rotations
         to verify advanced task space trajectory generation capabilities on the UR10 robot.
+
+        Raises:
+            AssertionError: If the generated trajectory does not reach every target within the distance threshold.
         """
         assets_root_path = await get_assets_root_path_async()
         usd_path = assets_root_path + "/Isaac/Robots/UniversalRobots/ur10/ur10.usd"
@@ -606,6 +644,9 @@ class TestTrajectoryGenerator(omni.kit.test.AsyncTestCase):
             orientation_targets: Target orientations as quaternions.
             built_path: Pre-built lula path specification. If None, generates trajectory from target points.
             distance_thresh: Maximum allowed distance between robot position and targets for validation.
+
+        Raises:
+            AssertionError: If trajectory generation fails or the robot does not reach every target within the threshold.
         """
         add_reference_to_stage(usd_path, robot_prim_path)
 

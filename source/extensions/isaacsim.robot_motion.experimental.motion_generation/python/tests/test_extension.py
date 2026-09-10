@@ -20,6 +20,7 @@ that Kit can collect and execute the extension's async Python test case.
 """
 
 import omni.kit.test
+from isaacsim.robot_motion.experimental.motion_generation.impl._logging import get_logger
 
 
 class TestExtension(omni.kit.test.AsyncTestCase):
@@ -51,5 +52,4 @@ class TestExtension(omni.kit.test.AsyncTestCase):
         # Kit extension system test for Python is based on the unittest module.
         # Visit https://docs.python.org/3/library/unittest.html to see the
         # available assert methods to check for and report failures.
-        print("Test case: test_extension")
-        self.assertTrue(True)
+        self.assertEqual(get_logger().channel, "isaacsim.robot_motion.experimental.motion_generation")

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6] - 2026-08-11
+### Changed
+- Replay pose writes that fail on a singular transform now report the affected prims and the likely cause (zero scale or malformed xform ops) instead of a bare matrix-inversion error.
+
+## [0.1.5] - 2026-07-30
+### Fixed
+- Allow recordable classes to re-register after their defining extension is reloaded.
+
 ## [0.1.4] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

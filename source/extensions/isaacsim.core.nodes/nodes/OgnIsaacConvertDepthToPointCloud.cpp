@@ -17,8 +17,8 @@
 
 #include <carb/logging/Log.h>
 
-#include <isaacsim/core/includes/Buffer.h>
-#include <isaacsim/core/includes/ScopedCudaDevice.h>
+#include <isaacsim/core/includes/Buffer.hpp>
+#include <isaacsim/core/includes/ScopedCudaDevice.hpp>
 
 #include <cmath>
 #include <string>

@@ -49,7 +49,7 @@ class TestCreate3(omni.kit.test.AsyncTestCase):
             return
 
         # add in create3 (from nucleus)
-        self.usd_path = self._assets_root_path + "/Isaac/Robots/iRobot/Create3/create_3.usd"
+        self.usd_path = self._assets_root_path + "/Isaac/Robots_Multiphysics/iRobot/Create3/create_3/create_3.usda"
         result, error = await open_stage_async(self.usd_path)
         # Make sure the stage loaded
         self.assertTrue(result)

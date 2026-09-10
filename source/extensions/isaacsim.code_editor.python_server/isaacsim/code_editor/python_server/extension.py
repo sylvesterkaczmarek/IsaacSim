@@ -32,11 +32,13 @@ import time
 import traceback
 import uuid
 from collections import OrderedDict
+from collections.abc import Callable
 
 import carb
 import omni.ext
 
 from .executor import ExecutionResult, Executor
+from .server import BoundEndpoint, ServerState, ServerStatus, StatusCallback, _set_active_server
 
 _SETTINGS_PREFIX = "/exts/isaacsim.code_editor.python_server"
 _AUTH_HEADER_PREFIX = "# isaacsim-python-server-token:"
@@ -164,6 +166,15 @@ class Extension(omni.ext.IExt):
         #: Number of currently active TCP connections.
         self._active_connections: int = 0
 
+        self._server: asyncio.AbstractServer | None = None
+        self._server_state = ServerState.STOPPED
+        self._bound_endpoints: tuple[BoundEndpoint, ...] = ()
+        self._last_error: str | None = None
+        self._status_callbacks: list[StatusCallback] = []
+        self._startup_task: asyncio.Task | None = None
+        self._lifecycle_lock = asyncio.Lock()
+        self._shutting_down = False
+
         settings = carb.settings.get_settings()
         self._socket_host: str = settings.get(f"{_SETTINGS_PREFIX}/host")
         self._socket_port: int = settings.get(f"{_SETTINGS_PREFIX}/port")
@@ -185,18 +196,198 @@ class Extension(omni.ext.IExt):
 
             self._udp_server: socket.socket | None = None
             self._udp_clients: list[tuple[str, int]] = []
-            self._udp_server_running = False
-            threading.Thread(target=self._create_udp_socket).start()
+            self._udp_stop_event: threading.Event | None = None
+            self._udp_thread: threading.Thread | None = None
 
-        self._server: asyncio.AbstractServer | None = None
-        _get_event_loop().create_task(self._create_socket())
+        _set_active_server(self)
+        self._startup_task = _get_event_loop().create_task(self.start())
+
+    # ------------------------------------------------------------------
+    # Listener lifecycle and status
+    # ------------------------------------------------------------------
+
+    @property
+    def status(self) -> ServerStatus:
+        """Return an immutable listener status snapshot."""
+        return ServerStatus(
+            state=self._server_state,
+            configured_host=self._socket_host,
+            configured_port=self._socket_port,
+            bound_endpoints=self._bound_endpoints,
+            active_connections=self._active_connections,
+            authentication_required=self._require_auth,
+            last_error=self._last_error,
+        )
+
+    def subscribe(self, callback: StatusCallback) -> Callable[[], None]:
+        """Subscribe to status changes and return an unsubscribe callback."""
+        self._status_callbacks.append(callback)
+        try:
+            callback(self.status)
+        except Exception:
+            self._status_callbacks.remove(callback)
+            raise
+
+        def unsubscribe() -> None:
+            with contextlib.suppress(ValueError):
+                self._status_callbacks.remove(callback)
+
+        return unsubscribe
+
+    async def start(self) -> bool:
+        """Start listening with the configured endpoint."""
+        async with self._lifecycle_lock:
+            return await self._start()
+
+    async def _start(self) -> bool:
+        if self._shutting_down:
+            return False
+        if self._server is not None:
+            return True
+        self._set_server_state(ServerState.STARTING)
+        try:
+            server, endpoints = await self._open_server(self._socket_host, self._socket_port)
+        except Exception as exc:  # noqa: BLE001 - socket failures are UI-visible
+            self._set_server_state(ServerState.ERROR, str(exc))
+            carb.log_error(f"Python server failed to start: {exc}")
+            return False
+        if self._shutting_down:
+            server.close()
+            await server.wait_closed()
+            return False
+        self._server = server
+        self._bound_endpoints = endpoints
+        self._start_udp_socket()
+        self._set_server_state(ServerState.RUNNING)
+        carb.log_info(f"Python server listening at {self._format_endpoints(endpoints)}")
+        return True
+
+    async def stop(self) -> bool:
+        """Stop accepting new connections."""
+        async with self._lifecycle_lock:
+            return await self._stop()
+
+    async def _stop(self) -> bool:
+        if self._server is None:
+            await self._stop_udp_socket()
+            self._set_server_state(ServerState.STOPPED)
+            return True
+        self._set_server_state(ServerState.STOPPING)
+        server = self._server
+        self._server = None
+        server.close()
+        await server.wait_closed()
+        await self._stop_udp_socket()
+        self._bound_endpoints = ()
+        self._set_server_state(ServerState.STOPPED)
+        return True
+
+    async def restart(self, host: str, port: int) -> bool:
+        """Move the listener, restoring the previous endpoint on failure."""
+        async with self._lifecycle_lock:
+            return await self._restart(host, port)
+
+    async def _restart(self, host: str, port: int) -> bool:
+        if self._shutting_down:
+            return False
+        if not host:
+            raise ValueError("Host must not be empty")
+        if port < 1 or port > 65535:
+            raise ValueError("Port must be between 1 and 65535")
+        if self._server is not None and (host, port) == (self._socket_host, self._socket_port):
+            return True
+
+        old_server = self._server
+        old_host, old_port = self._socket_host, self._socket_port
+        self._set_server_state(ServerState.RESTARTING)
+
+        same_port = old_server is not None and any(endpoint.port == port for endpoint in self._bound_endpoints)
+        if old_server is not None and not same_port:
+            try:
+                server, endpoints = await self._open_server(host, port)
+            except Exception as exc:  # noqa: BLE001 - the working listener remains active
+                self._set_server_state(ServerState.RUNNING, str(exc))
+                return False
+            if self._shutting_down:
+                server.close()
+                await server.wait_closed()
+                return False
+            old_server.close()
+            await old_server.wait_closed()
+        else:
+            if old_server is not None:
+                old_server.close()
+                await old_server.wait_closed()
+                self._server = None
+                if self._shutting_down:
+                    return False
+            try:
+                server, endpoints = await self._open_server(host, port)
+            except Exception as exc:  # noqa: BLE001 - restore an overlapping listener
+                if old_server is None or self._shutting_down:
+                    self._bound_endpoints = ()
+                    self._set_server_state(ServerState.ERROR, str(exc))
+                    return False
+                try:
+                    restored_server, restored_endpoints = await self._open_server(old_host, old_port)
+                except Exception as rollback_exc:  # noqa: BLE001
+                    self._bound_endpoints = ()
+                    self._set_server_state(ServerState.ERROR, f"Restart failed: {exc}; rollback failed: {rollback_exc}")
+                    return False
+                if self._shutting_down:
+                    restored_server.close()
+                    await restored_server.wait_closed()
+                    return False
+                self._server, self._bound_endpoints = restored_server, restored_endpoints
+                self._set_server_state(ServerState.RUNNING, f"Restart failed: {exc}")
+                return False
+
+        if self._shutting_down:
+            server.close()
+            await server.wait_closed()
+            return False
+
+        self._server = server
+        self._socket_host, self._socket_port = host, port
+        self._bound_endpoints = endpoints
+        settings = carb.settings.get_settings()
+        settings.set_string(f"{_SETTINGS_PREFIX}/host", host)
+        settings.set_int(f"{_SETTINGS_PREFIX}/port", port)
+        await self._stop_udp_socket()
+        if self._shutting_down:
+            return False
+        self._start_udp_socket()
+        self._set_server_state(ServerState.RUNNING)
+        return True
+
+    def _set_server_state(self, state: ServerState, error: str | None = None) -> None:
+        self._server_state = state
+        self._last_error = error
+        for callback in tuple(self._status_callbacks):
+            try:
+                callback(self.status)
+            except Exception as exc:  # noqa: BLE001 - one observer must not break the server
+                carb.log_warn(f"Python server status listener failed: {exc}")
+
+    @staticmethod
+    def _format_endpoints(endpoints: tuple[BoundEndpoint, ...]) -> str:
+        return ", ".join(f"{endpoint.host}:{endpoint.port}" for endpoint in endpoints)
 
     def on_shutdown(self) -> None:
         """Shut down the TCP server and clean up resources."""
+        self._shutting_down = True
+        _set_active_server(None)
+        if self._startup_task is not None and not self._startup_task.done():
+            self._startup_task.cancel()
+        self._startup_task = None
         if self._server is not None:
             self._server.close()
             asyncio.run_coroutine_threadsafe(self._server.wait_closed(), _get_event_loop())
             self._server = None
+
+        self._bound_endpoints = ()
+        self._server_state = ServerState.STOPPED
+        self._status_callbacks.clear()
 
         self._contexts.clear()
         self._completed_tasks.clear()
@@ -205,15 +396,9 @@ class Extension(omni.ext.IExt):
             self._logging.remove_logger(self._logger_handle)
             self._logging = None
             self._logger_handle = None
-            self._udp_server = None
-            self._udp_clients = []
-            trial_count = 0
-            while self._udp_server_running:
-                time.sleep(0.1)
-                trial_count += 1
-                if trial_count > 10:
-                    break
-            self._udp_server_running = False
+            thread = self._request_udp_stop()
+            if thread is not None:
+                thread.join(timeout=0.5)
 
     # ------------------------------------------------------------------
     # UDP carb log broadcasting
@@ -237,25 +422,51 @@ class Extension(omni.ext.IExt):
                 except Exception as exc:
                     carb.log_error(f"{exc} len:{len(data)}")
 
-    def _create_udp_socket(self) -> None:
+    def _start_udp_socket(self) -> None:
+        if not self._publish_carb_logs:
+            return
+        stop_event = threading.Event()
+        self._udp_stop_event = stop_event
+        self._udp_thread = threading.Thread(
+            target=self._create_udp_socket,
+            args=(self._socket_host, self._socket_port, stop_event),
+            daemon=True,
+        )
+        self._udp_thread.start()
+
+    async def _stop_udp_socket(self) -> None:
+        thread = self._request_udp_stop()
+        if thread is not None:
+            await asyncio.to_thread(thread.join, 0.5)
+        self._udp_thread = None
+
+    def _request_udp_stop(self) -> threading.Thread | None:
+        if not self._publish_carb_logs:
+            return None
+        if self._udp_stop_event is not None:
+            self._udp_stop_event.set()
+        if self._udp_server is not None:
+            self._udp_server.close()
+            self._udp_server = None
+        return self._udp_thread
+
+    def _create_udp_socket(self, host: str, port: int, stop_event: threading.Event) -> None:
         """Create a UDP socket for broadcasting carb log messages."""
         self._udp_clients = []
-        self._udp_server_running = True
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server:
             try:
                 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                server.bind((self._socket_host, self._socket_port))
+                server.bind((host, port))
                 server.setblocking(False)
                 server.settimeout(0.25)
             except Exception as exc:
-                self._udp_server = None
-                self._udp_clients = []
                 carb.log_error(str(exc))
-                self._udp_server_running = False
                 return
 
+            if stop_event.is_set():
+                return
             self._udp_server = server
-            while self._udp_server:
+            while not stop_event.is_set():
                 try:
                     _, addr = server.recvfrom(1024)
                     if addr not in self._udp_clients:
@@ -263,11 +474,12 @@ class Extension(omni.ext.IExt):
                 except socket.timeout:
                     pass
                 except Exception as exc:
-                    carb.log_warn(f"UDP server error: {exc}")
+                    if not stop_event.is_set():
+                        carb.log_warn(f"UDP server error: {exc}")
                     break
-            self._udp_server = None
+            if self._udp_server is server:
+                self._udp_server = None
             self._udp_clients = []
-            self._udp_server_running = False
 
     # ------------------------------------------------------------------
     # Context management
@@ -326,8 +538,8 @@ class Extension(omni.ext.IExt):
         print(f"Python server authentication token: {token}")
         return token
 
-    async def _create_socket(self) -> None:
-        """Create the async TCP server and begin accepting connections."""
+    async def _open_server(self, host: str, port: int) -> tuple[asyncio.AbstractServer, tuple[BoundEndpoint, ...]]:
+        """Bind and start a TCP listener."""
 
         class _ServerProtocol(asyncio.Protocol):
             """Handle individual TCP connections from clients.
@@ -344,19 +556,26 @@ class Extension(omni.ext.IExt):
                 super().__init__()
                 self._parent = parent
                 self._buffer = bytearray()
+                self.transport: asyncio.Transport | None = None
 
             def connection_made(self, transport: asyncio.BaseTransport) -> None:
                 carb.log_info(f"Connection from {transport.get_extra_info('peername')}")
-                self.transport = transport
+                self.transport = transport  # type: ignore[assignment]
                 self._parent._active_connections += 1
+                self._parent._set_server_state(self._parent._server_state, self._parent._last_error)
 
             def connection_lost(self, exc: Exception | None) -> None:
                 self._parent._active_connections = max(0, self._parent._active_connections - 1)
+                self._parent._set_server_state(self._parent._server_state, self._parent._last_error)
+                self.transport = None
 
             def data_received(self, data: bytes) -> None:
                 self._buffer.extend(data)
 
             def eof_received(self) -> bool:
+                transport = self.transport
+                if transport is None:
+                    return True
                 try:
                     code = self._buffer.decode()
                 except UnicodeDecodeError as exc:
@@ -371,8 +590,8 @@ class Extension(omni.ext.IExt):
                             "traceback": [],
                         }
                     )
-                    self.transport.write(error_reply.encode())
-                    self.transport.close()
+                    transport.write(error_reply.encode())
+                    transport.close()
                     return True
                 self._buffer.clear()
                 # Schedule execution outside the transport's _read_ready
@@ -382,24 +601,31 @@ class Extension(omni.ext.IExt):
                 # on Python 3.12+.
                 loop = _get_event_loop()
                 if loop is not None and loop.is_running():
-                    loop.call_soon(self._parent._process_code, code, self.transport)
+                    loop.call_soon(self._parent._process_code, code, transport)
                 else:
                     carb.log_warn("Event loop unavailable; dropping python_server command")
                 return True
 
+        server = await _get_event_loop().create_server(
+            protocol_factory=lambda: _ServerProtocol(self),
+            host=host,
+            port=port,
+            family=socket.AF_INET,
+            start_serving=False,
+            reuse_port=None if sys.platform == "win32" else True,
+        )
         try:
-            self._server = await _get_event_loop().create_server(
-                protocol_factory=lambda: _ServerProtocol(self),
-                host=self._socket_host,
-                port=self._socket_port,
-                family=socket.AF_INET,
-                reuse_port=None if sys.platform == "win32" else True,
-            )
-            carb.log_info(f"Serving at {self._socket_host}:{self._socket_port}")
-            await self._server.start_serving()
-        except Exception as exc:
-            carb.log_error(str(exc))
-            self._server = None
+            await server.start_serving()
+        except BaseException:
+            server.close()
+            await server.wait_closed()
+            raise
+        endpoints = tuple(
+            BoundEndpoint(host=str(address[0]), port=int(address[1]))
+            for listener in server.sockets or ()
+            if isinstance((address := listener.getsockname()), tuple) and len(address) >= 2
+        )
+        return server, endpoints
 
     def _strip_auth_header(self, source: str) -> tuple[str | None, str]:
         """Extract the optional raw-source token header from *source*.

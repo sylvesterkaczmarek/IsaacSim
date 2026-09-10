@@ -25,7 +25,8 @@ from __future__ import annotations
 
 import math
 import os
-from typing import Any
+from collections.abc import Callable, Sequence
+from typing import Any, Literal
 
 import numpy as np
 import omni.kit.app
@@ -33,6 +34,8 @@ import omni.kit.test
 import omni.physics.tensors as tensors
 import omni.usd
 import warp as wp
+from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.physics.newton import switch_newton_solver
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 
 from . import warp_utils as warp_utils
@@ -368,6 +371,21 @@ class NewtonTensorTestBase(omni.kit.test.AsyncTestCase):
         create_grid_scene(self.stage, asset_path, "humanoid", num_envs, spacing=2.0, position=Gf.Vec3f(0.0, 0.0, 1.5))
         return num_envs
 
+    def setup_franka_grid(self, num_envs: int | None = None) -> int:
+        """Set up a grid of Franka articulations from the USDA asset.
+
+        Args:
+            num_envs: Number of environments. Defaults to ``self.NUM_ENVS``.
+
+        Returns:
+            Number of environments created.
+        """
+        if num_envs is None:
+            num_envs = self.NUM_ENVS
+        asset_path = os.path.join(get_asset_root(), "Franka.usda")
+        create_grid_scene(self.stage, asset_path, "franka", num_envs, spacing=2.0, position=Gf.Vec3f(0.0, 0.0, 1.5))
+        return num_envs
+
     def setup_ball_grid(
         self,
         num_envs: int | None = None,
@@ -577,5 +595,39 @@ def run_on_device_configs(configs: tuple[DeviceParams, ...] = ALL_DEVICE_CONFIGS
             else:
                 setattr(module, name, variant)
         return first
+
+    return decorator
+
+
+def parameterize(
+    *,
+    solvers: Sequence[Literal["mujoco", "xpbd"]] = ("mujoco", "xpbd"),
+) -> Callable:
+    """Parameterize.
+
+    Args:
+        solvers: different newton solvers for testing
+
+    Returns:
+        Decorator that runs a test over the requested configurations.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        async def wrapper(self: Any) -> None:
+            if SimulationManager.get_active_physics_engine() != "newton":
+                success = SimulationManager.switch_physics_engine("newton")
+                assert success, "Failed to switch to newton engine"
+                await omni.kit.app.get_app().next_update_async()
+            for solver in solvers:
+                # find the physics scene and set the solver
+                for physics_scene in SimulationManager.get_physics_scenes():
+                    assert physics_scene
+                    prim = physics_scene.prim
+                    assert prim
+                    switch_newton_solver(solver, prim)
+                await omni.kit.app.get_app().next_update_async()
+                await func(self, solver=solver)
+
+        return wrapper
 
     return decorator

@@ -28,11 +28,11 @@ from isaacsim.robot_motion.motion_generation.kinematics_interface import Kinemat
 
 
 class ArticulationKinematicsSolver:
-    """Wrapper class for computing robot kinematics in a way that is easily transferable to the simulated robot Articulation.  A KinematicsSolver.
+    """Wrapper class for computing robot kinematics in a way that is easily transferable to the simulated robot Articulation.
 
-    computes FK and IK at any frame, possibly only using a subset of joints available on the simulated robot.
-    This wrapper simplifies computing the current position of the simulated robot's end effector, as well as wrapping an IK result in an ArticulationAction that is
-    recognized by the robot Articulation.
+    A KinematicsSolver computes FK and IK at any frame, possibly only using a subset of joints available on the
+    simulated robot. This wrapper simplifies computing the current position of the simulated robot's end effector, as
+    well as wrapping an IK result in an ArticulationAction that is recognized by the robot Articulation.
 
     Args:
         robot_articulation: Initialized robot Articulation object representing the simulated USD robot.
@@ -58,9 +58,9 @@ class ArticulationKinematicsSolver:
                 left undefined.
 
         Returns:
-            A tuple containing (position, rotation) where position is translation vector describing the translation
-            of the robot end effector relative to the USD global frame (in stage units) and rotation is (3x3)
-            rotation matrix describing the rotation of the frame relative to the USD stage global frame.
+            A tuple containing (position, rotation) where position is the translation vector describing the robot end
+            effector translation relative to the USD global frame (in stage units), and rotation is a (3x3) rotation
+            matrix describing the frame rotation relative to the USD stage global frame.
         """
         joint_positions = self._joints_view.get_joint_positions()
         if joint_positions is None:
@@ -80,9 +80,9 @@ class ArticulationKinematicsSolver:
         position_tolerance: Optional[float] = None,
         orientation_tolerance: Optional[float] = None,
     ) -> tuple[ArticulationAction, bool]:
-        """Compute inverse kinematics for the end effector frame using the current robot position as a warm start.  The result is returned.
+        """Compute inverse kinematics for the end effector frame using the current robot position as a warm start.
 
-        in an articulation action that can be directly applied to the robot.
+        The result is returned in an ArticulationAction that can be directly applied to the robot.
 
         Args:
             target_position: Target translation of the target frame (in stage units) relative to the USD stage origin.
@@ -94,7 +94,7 @@ class ArticulationKinematicsSolver:
 
         Returns:
             A tuple containing (ik_result, success) where ik_result is an ArticulationAction that can be applied to
-            the robot to move the end effector frame to the desired position and success indicates if solver
+            the robot to move the end effector frame to the desired position and success indicates if the solver
             converged successfully.
         """
         warm_start = self._joints_view.get_joint_positions()
@@ -111,12 +111,13 @@ class ArticulationKinematicsSolver:
         return self._joints_view.make_articulation_action(ik_result, None), succ
 
     def set_end_effector_frame(self, end_effector_frame_name: str) -> None:
-        """Set the name for the end effector frame. If the frame is not recognized by the internal KinematicsSolver.
-
-        instance, an error will be thrown.
+        """Set the name for the end effector frame.
 
         Args:
             end_effector_frame_name: Name of the robot end effector frame.
+
+        Raises:
+            ValueError: If the frame is not recognized by the internal KinematicsSolver instance.
         """
         if end_effector_frame_name not in self._kinematics_solver.get_all_frame_names():
             raise ValueError(

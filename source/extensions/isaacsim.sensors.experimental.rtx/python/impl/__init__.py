@@ -17,6 +17,8 @@ from ._common import register_annotator_spec as register_annotator_spec
 from ._common import register_writer_spec as register_writer_spec
 from ._common import unregister_annotator_spec as unregister_annotator_spec
 from ._common import unregister_writer_spec as unregister_writer_spec
+from ._sensor_base import SensorAuthoring as SensorAuthoring
+from ._sensor_base import SensorRuntime as SensorRuntime
 from .acoustic import Acoustic as Acoustic
 from .acoustic_sensor import AcousticSensor as AcousticSensor
 from .camera_sensor import CameraSensor as CameraSensor
@@ -36,6 +38,7 @@ from .rtx_lidar_configs import SUPPORTED_LIDAR_VARIANT_SET_NAME as SUPPORTED_LID
 from .rtx_radar_configs import SUPPORTED_RADAR_CONFIGS as SUPPORTED_RADAR_CONFIGS
 from .rtx_radar_configs import SUPPORTED_RADAR_VARIANT_SET_NAME as SUPPORTED_RADAR_VARIANT_SET_NAME
 from .single_view_depth_camera_sensor import SingleViewDepthCameraSensor as SingleViewDepthCameraSensor
+from .spg import SPGNode as SPGNode
 from .structured_light_camera import StructuredLightCamera as StructuredLightCamera
 from .tiled_camera_sensor import TiledCameraSensor as TiledCameraSensor
 from .utils import parse_generic_model_output_data as parse_generic_model_output_data

@@ -26,6 +26,8 @@ from isaacsim import SimulationApp
 
 simulation_app = SimulationApp(launch_config={"headless": False})
 
+import argparse
+
 import carb
 import carb.settings
 import isaacsim.core.experimental.utils.bounds as bounds_utils
@@ -53,9 +55,27 @@ STACK_COUNT_RANGE = range(1, 4)
 BOXES_PER_STACK_RANGE = range(1, 6)
 STACK_SCATTER_AREA_SCALE = 0.9
 
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--num-captures",
+    type=int,
+    default=TOTAL_CAPTURES,
+    help="Total number of SDG captures to write across all scenes.",
+)
+args, _ = parser.parse_known_args()
+
 
 def create_pallets_on_floor(scene_scope_path: str, assets_root_path: str, rng: Any) -> list[Any]:
-    """Create and scatter pallets on a hidden floor plane."""
+    """Create and scatter pallets on a hidden floor plane.
+
+    Args:
+        scene_scope_path: Parent scope under which to create scene prims.
+        assets_root_path: Root URL prepended to the pallet asset path.
+        rng: Replicator random generator that samples pallet count and placement.
+
+    Returns:
+        Pallet prims scattered across the floor plane.
+    """
     pallet_count = int(rng.generator.choice(PALLET_COUNT_RANGE))
     # Use a hidden floor plane as a sampling surface so scattered pallets avoid each other.
     floor_plane = rep.functional.create.plane(
@@ -102,7 +122,21 @@ def create_pallets_on_floor(scene_scope_path: str, assets_root_path: str, rng: A
 def create_stacks_on_pallet(
     scene_scope_path: str, pallet_index: int, pallet: Any, assets_root_path: str, rng: Any
 ) -> list[Any]:
-    """Create randomized box stacks on a pallet."""
+    """Create randomized box stacks on a pallet.
+
+    Args:
+        scene_scope_path: Parent scope under which to create box prims.
+        pallet_index: Index used to generate unique prim names for this pallet.
+        pallet: Pallet prim whose bounds define the stack area.
+        assets_root_path: Root URL prepended to each box asset path.
+        rng: Replicator random generator that samples stack counts, assets, and placement.
+
+    Returns:
+        Box prims arranged into stacks on the pallet.
+
+    Raises:
+        ValueError: If Replicator cannot scatter even one stack on the pallet.
+    """
     bbox_cache = bounds_utils.create_bbox_cache()
     pallet_bounds = bounds_utils.compute_aabb(pallet, bbox_cache=bbox_cache, include_children=True)
     pallet_origin = rep_utils.get_world_position(pallet)
@@ -209,7 +243,13 @@ def create_stacks_on_pallet(
 
 
 def randomize_camera(camera: Any, pallet: Any, rng: Any) -> None:
-    """Randomize a camera pose around the selected pallet."""
+    """Randomize a camera pose around the selected pallet.
+
+    Args:
+        camera: Camera prim to position and orient.
+        pallet: Pallet prim whose bounds define the camera target.
+        rng: Replicator random generator that samples the orbit position.
+    """
     bbox_cache = bounds_utils.create_bbox_cache()
     pallet_bounds = bounds_utils.compute_aabb(pallet, bbox_cache=bbox_cache, include_children=True)
     pallet_origin = rep_utils.get_world_position(pallet)
@@ -234,8 +274,12 @@ def randomize_camera(camera: Any, pallet: Any, rng: Any) -> None:
     )
 
 
-def run_workflow() -> None:
-    """Run the multi-scene pallet stack SDG workflow."""
+def run_workflow(num_captures: int) -> None:
+    """Run the multi-scene pallet stack SDG workflow.
+
+    Args:
+        num_captures: Total number of randomized pallet-stack images to capture.
+    """
     assets_root_path = get_assets_root_path()
     if assets_root_path is None:
         carb.log_error("[SDG] Could not resolve assets root path; aborting.")
@@ -287,7 +331,7 @@ def run_workflow() -> None:
     randomization_count = 0
     prev_scene_scope_path = None
 
-    while capture_count < TOTAL_CAPTURES:
+    while capture_count < num_captures:
         randomization_count += 1
         print(f"[SDG] Randomization {randomization_count}")
 
@@ -329,13 +373,13 @@ def run_workflow() -> None:
         for pallet_idx, pallet in enumerate(pallets):
             create_stacks_on_pallet(scene_scope_path, pallet_idx, pallet, assets_root_path, rng)
 
-        captures_this_scene = min(CAPTURES_PER_SCENE, TOTAL_CAPTURES - capture_count)
+        captures_this_scene = min(CAPTURES_PER_SCENE, num_captures - capture_count)
         for capture_idx in range(captures_this_scene):
             pallet = pallets[capture_idx % len(pallets)]
             randomize_camera(cam, pallet, rng)
 
             capture_count += 1
-            print(f"[SDG] Capture {capture_count}/{TOTAL_CAPTURES}")
+            print(f"[SDG] Capture {capture_count}/{num_captures}")
             rp.hydra_texture.set_updates_enabled(True)
             rep.orchestrator.step(rt_subframes=RT_SUBFRAMES)
             rp.hydra_texture.set_updates_enabled(False)
@@ -346,29 +390,28 @@ def run_workflow() -> None:
     rp.destroy()
 
 
-run_workflow()
+run_workflow(args.num_captures)
 
 # <start-sdg-workflow-02-test>
-import argparse
-import sys
-
-from isaacsim.core.utils.extensions import enable_extension
-
-enable_extension("isaacsim.test.utils")
-from isaacsim.test.utils.file_validation import validate_folder_contents
-
-parser = argparse.ArgumentParser()
-parser.add_argument(
+test_parser = argparse.ArgumentParser()
+test_parser.add_argument(
     "--test",
     action="store_true",
     help="Validate captured output files against expected counts and exit.",
 )
-args, _ = parser.parse_known_args()
+test_args, _ = test_parser.parse_known_args()
 
-if args.test:
+if test_args.test:
+    import sys
+
+    from isaacsim.core.utils.extensions import enable_extension
+
+    enable_extension("isaacsim.test.utils")
+    from isaacsim.test.utils.file_validation import validate_folder_contents
+
     # BasicWriter with rgb + colorized semantic_segmentation writes 2 png + 1 json per capture.
-    expected_json_count = TOTAL_CAPTURES
-    expected_png_count = TOTAL_CAPTURES * 2
+    expected_json_count = args.num_captures
+    expected_png_count = args.num_captures * 2
     out_dir = os.path.join(os.getcwd(), "_out_workflow_02")
     ok = validate_folder_contents(
         path=out_dir,

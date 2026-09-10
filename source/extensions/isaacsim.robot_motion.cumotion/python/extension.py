@@ -18,7 +18,6 @@
 
 import os
 import pathlib
-from typing import Any
 
 import omni.ext
 
@@ -38,13 +37,3 @@ class Extension(omni.ext.IExt):
     applications. On Windows systems, it automatically configures DLL loading paths to ensure proper
     functioning of the cuMotion Python extension module and its dependencies.
     """
-
-    def on_startup(self, ext_id: Any) -> None:
-        """Startup the extension.
-
-        Args:
-            ext_id: The extension ID.
-        """
-
-    def on_shutdown(self) -> None:
-        """Shutdown the extension."""

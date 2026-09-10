@@ -15,158 +15,130 @@
 
 """Example demonstration of a Franka robot performing an open drawer task using a policy-based approach."""
 
-import numpy as np
-import omni.timeline
 from isaacsim.core.experimental.prims import Articulation
 from isaacsim.core.experimental.utils.stage import add_reference_to_stage
-from isaacsim.core.simulation_manager import SimulationManager
-from isaacsim.examples.base.base_sample_experimental import BaseSample
-from isaacsim.robot.policy.examples.robots.franka import FrankaOpenDrawerPolicy
+from isaacsim.core.simulation_manager import IsaacEvents, SimulationManager
+from isaacsim.robot.policy.examples import (
+    PolicyEnvConfig,
+    RobotPolicyRunner,
+    get_franka_spec,
+    make_franka_task_state_provider,
+)
+from isaacsim.robot.policy.examples.interactive.example_base import PolicySampleBase
 from isaacsim.storage.native import get_assets_root_path
 
 
-class FrankaExample(BaseSample):
-    """Example demonstration of a Franka robot performing an open drawer task using a policy-based approach.
+class FrankaExample(PolicySampleBase):
+    """Franka open-drawer policy example over the bundled spec and cabinet task state.
 
-    This class creates a complete simulation scene with a Franka Emika Panda robot and a cabinet, where the robot
-    autonomously attempts to open a cabinet drawer using a learned policy. The scene includes a ground plane,
-    a Sektion cabinet positioned in front of the robot, and the Franka robot equipped with an open drawer policy.
-
-    The simulation runs with physics at 200 Hz and rendering at 60 Hz. The robot is initialized on the first
-    physics step after play begins, and then continuously executes its policy to interact with the cabinet drawer.
-    The simulation automatically resets every 10 seconds to demonstrate the task repeatedly.
-
-    The class manages the complete lifecycle of the simulation, including scene setup, robot initialization,
-    physics stepping, and cleanup. It uses the SimulationManager to register physics callbacks for real-time
-    control and provides automatic reset functionality for continuous demonstration.
+    Creates a ground plane, a Sektion cabinet, and a Franka deployed through the generic
+    ``RobotPolicyRunner`` (explicit binding + task state provider + controller) with the
+    caller-owned cabinet articulation. The robot initializes on the first physics step
+    after play and the scene auto-resets at the exported episode duration. Each physics
+    engine selects its corresponding policy artifact and exported environment configuration.
     """
+
+    physics_callback_event = IsaacEvents.PRE_PHYSICS_STEP
 
     def __init__(self) -> None:
         super().__init__()
-        self._world_settings["stage_units_in_meters"] = 1.0
-        self._world_settings["physics_dt"] = 1.0 / 200.0
-        self._world_settings["rendering_dt"] = 1.0 / 60.0
+        engine = (SimulationManager.get_active_physics_engine() or "").lower()
+        self._spec = get_franka_spec()
+        self._env_config = PolicyEnvConfig.from_file(self._spec.engines[engine].env_config_path)
+        timing = self._env_config.timing
+        self._world_settings["physics_dt"] = timing.physics_dt
+        self._world_settings["rendering_dt"] = timing.render_interval * timing.physics_dt
 
-        self._physics_ready = False
         self.franka = None
         self.cabinet = None
-        self._timeline = omni.timeline.get_timeline_interface()
-        self._physics_callback_id = None
         self._time_elapsed = 0.0
 
     def setup_scene(self) -> None:
         """Set up the scene with robot, cabinet, and environment."""
-        # Add ground plane
         add_reference_to_stage(
             usd_path=get_assets_root_path() + "/Isaac/Environments/Grid/default_environment.usd",
             path="/World/defaultGroundPlane",
         )
 
-        # Add cabinet
+        # Cabinet articulation, owned by the caller and consumed by the task state provider.
         cabinet_prim_path = "/World/cabinet"
-        cabinet_usd_path = get_assets_root_path() + "/Isaac/Props/Sektion_Cabinet/sektion_cabinet_instanceable.usd"
-
-        cabinet_position = [0.8, 0.0, 0.4]
-        cabinet_orientation = [0.0, 0.0, 0.0, 1.0]
-
+        cabinet_usd_path = self._env_config.scene_entity_usd_path("cabinet")
+        if cabinet_usd_path is None:
+            raise ValueError("Franka policy env config does not define scene.cabinet.spawn.usd_path.")
         add_reference_to_stage(cabinet_usd_path, cabinet_prim_path)
+        self.cabinet = Articulation(paths=cabinet_prim_path, reset_xform_op_properties=True)
+        cabinet_position, cabinet_orientation = self._env_config.scene_entity_root_pose("cabinet")
+        if cabinet_position is None or cabinet_orientation is None:
+            raise ValueError("Franka policy env config does not define the cabinet initial root pose.")
+        self.cabinet.set_world_poses([cabinet_position], [cabinet_orientation])
 
-        self.cabinet = Articulation(
-            paths=cabinet_prim_path, positions=cabinet_position, orientations=cabinet_orientation
+        # Author the Franka through the runner; policy initialization happens on the first physics step.
+        self.franka = RobotPolicyRunner(
+            self._spec,
+            prim_path="/World/franka",
+            task_state_provider=make_franka_task_state_provider(self.cabinet, self._env_config),
         )
-
-        # Create Franka robot with policy
-        self.franka = FrankaOpenDrawerPolicy(prim_path="/World/franka", cabinet=self.cabinet)
+        self.franka.spawn()
+        applied_materials = self.franka.apply_scene_properties({"cabinet": self.cabinet})
+        if applied_materials != {"robot", "cabinet"}:
+            raise ValueError("The exported policy config is missing the robot or drawer-handle startup material event.")
+        self._episode_length_s = self._env_config.episode_length_s
         print("Scene setup complete with Franka robot and cabinet")
 
     async def setup_post_load(self) -> None:
-        """Setup physics callback after initial load."""
+        """Set up the physics callback after initial load."""
         self._physics_ready = False
-
-        # Register physics callback using SimulationManager
-        from isaacsim.core.simulation_manager.impl.isaac_events import IsaacEvents
-
-        if self._physics_callback_id is None:
-            self._physics_callback_id = SimulationManager.register_callback(
-                self.on_physics_step, IsaacEvents.POST_PHYSICS_STEP
-            )
+        self._register_physics_callback()
         print("Franka open drawer scene loaded successfully")
 
     async def setup_pre_reset(self) -> None:
-        """Called before world reset."""
-        # Reset physics ready flag before reset
-        self._physics_ready = False
+        """Reset the physics-ready flag and elapsed time before a world reset."""
+        await super().setup_pre_reset()
         self._time_elapsed = 0.0
 
     async def setup_post_reset(self) -> None:
-        """Called after world reset."""
-        # Reset physics ready flag after reset so robot reinitializes on next play
-        self._physics_ready = False
-        self._time_elapsed = 0.0
-
-        if self.franka:
-            # Reset previous action for clean state
-            self.franka.previous_action = np.zeros(9)
-
-    async def setup_post_clear(self) -> None:
-        """Called after clearing the scene."""
-        # Deregister physics callback
-        if self._physics_callback_id is not None:
-            try:
-                SimulationManager.deregister_callback(self._physics_callback_id)
-            except Exception as e:
-                print(f"Note: Could not deregister callback {self._physics_callback_id}: {e}")
-            self._physics_callback_id = None
-
-        self.franka = None
-        self.cabinet = None
-        self._physics_ready = False
+        """Reset flags after a reset; the runner's replay reset clears the previous action."""
+        await super().setup_post_reset()
         self._time_elapsed = 0.0
 
     def on_physics_step(self, dt: float, context: object) -> None:
-        """Physics step callback - initialize on first step, then run policy.
+        """Initialize the runner on the first step, then step the policy and reset in place.
 
         Args:
             dt: Time delta for the physics step.
             context: Physics step context information.
         """
-        if not self.franka:
+        if self.franka is None or self.franka.articulation is None:
             return
 
-        # Auto-reset at 10 seconds
         if self._physics_ready:
             self._time_elapsed += dt
-            if self._time_elapsed >= 10.0:
-                self._physics_ready = False
+            if self._time_elapsed >= self._episode_length_s:
                 self._time_elapsed = 0.0
-                self._timeline.stop()
-                self._timeline.play()
-                print("Simulation reset at 10 seconds")
+                self.franka.reset()
+                print(f"Simulation reset at {self._episode_length_s:g} seconds")
                 return
 
-        # Check if physics tensors are valid, if not, reinitialize
-        if not self.franka.robot.is_physics_tensor_entity_valid():
+        # If the physics tensors were invalidated, reinitialize on this step.
+        if not self.franka.articulation.is_physics_tensor_entity_valid():
             self._physics_ready = False
 
         if self._physics_ready:
-            # Robot is initialized, run the policy
-            self.franka.forward(dt)
+            self.franka.step(dt)
         else:
-            # First physics step after play - initialize the robot
+            # First physics step after play - initialize the robot and (re)start the runtime.
             self._physics_ready = True
             self.franka.initialize()
-            self.franka.post_reset()
+            # PhysX stabilization/sleep would freeze the near-still arm mid-task; the drawer
+            # example disables both, as the 6.x class did.
+            self.franka.articulation.set_stabilization_thresholds([0.0])
+            self.franka.articulation.set_sleep_thresholds([0.0])
 
     def physics_cleanup(self) -> None:
         """Clean up physics resources."""
-        # Deregister physics callback
-        if self._physics_callback_id is not None:
-            try:
-                SimulationManager.deregister_callback(self._physics_callback_id)
-            except Exception as e:
-                print(f"Note: Could not deregister callback {self._physics_callback_id}: {e}")
-            self._physics_callback_id = None
-
+        self._deregister_physics_callback()
+        if self.franka is not None:
+            self.franka.close()
         self.franka = None
         self.cabinet = None
         self._physics_ready = False

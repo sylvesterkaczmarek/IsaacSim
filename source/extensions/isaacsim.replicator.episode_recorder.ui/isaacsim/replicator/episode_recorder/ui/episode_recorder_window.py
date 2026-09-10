@@ -17,8 +17,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import carb.eventdispatcher
 import omni.kit.app
 import omni.ui as ui
@@ -44,19 +42,17 @@ class EpisodeRecorderWindow(ui.Window):
 
         self._panel = EpisodeRecorderPanel()
 
-        self._sub_shutdown = carb.eventdispatcher.get_eventdispatcher().observe_event(
+        event_dispatcher = carb.eventdispatcher.get_eventdispatcher()
+        self._sub_shutdown = event_dispatcher.observe_event(
             event_name=omni.kit.app.GLOBAL_EVENT_POST_QUIT,
             on_event=self._on_editor_quit_event,
             observer_name="isaacsim.replicator.episode_recorder.ui._on_editor_quit_event",
             order=0,
         )
-        self._stage_event_sub = (
-            omni.usd.get_context()
-            .get_stage_event_stream()
-            .create_subscription_to_pop(
-                self._on_stage_event,
-                name="isaacsim.replicator.episode_recorder.ui._on_stage_event",
-            )
+        self._stage_event_sub = event_dispatcher.observe_event(
+            event_name=omni.usd.get_context().stage_event_name(omni.usd.StageEventType.CLOSING),
+            on_event=self._on_stage_closing_event,
+            observer_name="isaacsim.replicator.episode_recorder.ui._on_stage_closing_event",
         )
 
         with self.frame:
@@ -66,9 +62,8 @@ class EpisodeRecorderWindow(ui.Window):
     def _on_editor_quit_event(self, _event: object) -> None:
         self._panel.destroy()
 
-    def _on_stage_event(self, event: Any) -> None:
-        if event.type == int(omni.usd.StageEventType.CLOSING):
-            self._panel.on_stage_closed()
+    def _on_stage_closing_event(self, _event: object) -> None:
+        self._panel.on_stage_closed()
 
     def destroy(self) -> None:
         """Destroy the panel and release event subscriptions."""

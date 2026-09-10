@@ -6,7 +6,7 @@ The isaacsim.sensors.experimental.rtx extension provides experimental Python API
 
 ### Authoring classes
 
-Authoring classes inherit from `_SensorAuthoring` (which inherits `XformPrim`) and manage the underlying USD sensor prim. They handle prim creation (or wrapping existing prims), schema application, attribute setting, and transform operations.
+Authoring classes inherit from {class}`SensorAuthoring <isaacsim.sensors.experimental.rtx.SensorAuthoring>` (which inherits `XformPrim`) and manage the underlying USD sensor prim. They handle prim creation (or wrapping existing prims), schema application, attribute setting, and transform operations. Do not instantiate `SensorAuthoring` directly.
 
 - {class}`Lidar <isaacsim.sensors.experimental.rtx.Lidar>` — Creates or wraps `OmniLidar` prims. Supports creating from known configurations via {data}`SUPPORTED_LIDAR_CONFIGS <isaacsim.sensors.experimental.rtx.SUPPORTED_LIDAR_CONFIGS>`. Accepts `accumulate_outputs` (default ``True``).
 - {class}`Radar <isaacsim.sensors.experimental.rtx.Radar>` — Creates or wraps `OmniRadar` prims. Requires Motion BVH to be enabled (`/renderer/raytracingMotion/enabled`).
@@ -22,7 +22,8 @@ All authoring classes accept:
 
 ### Runtime sensor classes
 
-Runtime sensor classes wrap an authoring object, create a Replicator render product, and manage annotator attachment and data retrieval.
+Runtime sensor classes inherit from {class}`SensorRuntime <isaacsim.sensors.experimental.rtx.SensorRuntime>`, wrap an authoring object, create a Replicator render product, and manage annotator attachment and data retrieval. Do not instantiate `SensorRuntime` directly.
+Annotator initialization parameters can be supplied at construction time with `annotator_init_params` or later with `attach_annotators(..., annotator_init_params=...)`.
 
 **RTX sensors** (lidar, radar, acoustic) support `generic-model-output` and `stable-id-map` annotators:
 
@@ -39,6 +40,17 @@ Runtime sensor classes wrap an authoring object, create a Replicator render prod
 ### Lidar configuration registry
 
 **Supported USD lidar assets and variants.** The package exports {data}`SUPPORTED_LIDAR_CONFIGS <isaacsim.sensors.experimental.rtx.SUPPORTED_LIDAR_CONFIGS>` (paths to known Isaac Sim lidar assets mapped to optional variant names) and {data}`SUPPORTED_LIDAR_VARIANT_SET_NAME <isaacsim.sensors.experimental.rtx.SUPPORTED_LIDAR_VARIANT_SET_NAME>` (expected variant set name on those prims).
+
+### Sensor Processing Graphs (SPG)
+
+An RTX **Sensor Processing Graph** runs custom GPU code as post-processing passes over a sensor's render outputs (AOVs). A graph is a set of shader nodes; each node is a `UsdShade.Shader` prim that references a CUDA source (`.cu`) file and names an entry-point function (`subIdentifier`) that must match both the `extern "C"` kernel and a function in the co-located Lua launch script (`<kernel>.cu.lua`). The framework itself (kernel compilation, launch configuration, and semantic validation) is owned by the `omni.rtx.spg` extension — see its [documentation](https://docs.omniverse.nvidia.com/kit/docs/omni.rtx.spg/0.2.0/Overview.html).
+
+This extension provides authoring helpers for assembling that USD prim structure from kernels you have written offline:
+
+- {class}`SPGNode <isaacsim.sensors.experimental.rtx.SPGNode>` — describes a single shader node (CUDA kernel path, `sub_identifier`, opaque `inputs`/`outputs`, and typed `params`). On construction it performs **structural** validation only: the `.cu` file and its co-located `.cu.lua` launch script must exist.
+- {meth}`RtxCamera.author_spg <isaacsim.sensors.experimental.rtx.RtxCamera.author_spg>` (inherited from the authoring base class) — authors one shader prim per node onto a render product tied to the sensor, wires the requested connections using an `omni.graph`-style declarative `(src, dst)` list, and ensures the referenced `RenderVar` AOVs exist (warning and creating a source AOV if it is missing). Its `resolution` argument is `(width, height)` (note this is the opposite order of `CameraSensor.resolution`, which is `(height, width)`). It optionally copies the kernel sources into a directory via `copy_to` to help assemble a self-contained sensor asset. `author_spg` only authors USD — it performs no CUDA/Lua/SPG semantic validation, and the graph is compiled and executed by the `omni.rtx.spg` runtime at render time (this extension pulls that runtime in transitively).
+
+Custom output AOVs authored this way can be read back as arrays with a Replicator annotator via [`omni.replicator.core.AnnotatorRegistry.register_annotator_from_aov`](https://docs.omniverse.nvidia.com/py/replicator/1.11.35/source/extensions/omni.replicator.core/docs/API.html) (with `is_gpu_enabled=True`), without requiring a viewport, or written to disk with a Replicator `Writer`.
 
 ### Parser utilities
 
@@ -133,6 +145,36 @@ cam = RtxCamera(
 )
 ```
 
+### Sensor Processing Graph (grayscale post-process)
+
+```python
+from isaacsim.sensors.experimental.rtx import RtxCamera, SPGNode
+
+cam = RtxCamera("/World/camera")
+
+# Author a single-shader SPG that converts the LdrColor AOV to grayscale.
+# The kernel and its co-located launch script (GrayscaleKernel.cu.lua) must
+# already exist next to GrayscaleKernel.cu.
+render_product_path = cam.author_spg(
+    SPGNode(
+        "GrayscaleKernel",
+        "kernels/GrayscaleKernel.cu",
+        sub_identifier="grayscale",
+        inputs=["LdrColor"],
+        outputs=["LdrGrayscale"],
+    ),
+    connections=[
+        ("LdrColor", "GrayscaleKernel.inputs:LdrColor"),
+        ("GrayscaleKernel.outputs:LdrGrayscale", "LdrGrayscale"),
+    ],
+    resolution=(640, 360),  # (width, height)
+    copy_to="my_sensor_asset/kernels",  # optional: vendor the kernels alongside an asset
+)
+```
+
+Chain multiple shaders by wiring one node's output port to the next node's input port
+(e.g. `("GrayscaleKernel.outputs:LdrGrayscale", "InvertKernel.inputs:Image")`).
+
 ## Known warnings
 
 When `aux_output_level` is set, the following warning may appear in the log:
@@ -146,4 +188,4 @@ This is harmless. The `usdrt` Fabric cache does not mirror `VtArray<std::string>
 
 ## Integration
 
-Dependencies include **isaacsim.core.experimental.prims** (transform and prim utilities), **isaacsim.core.experimental.objects** (Camera prim wrapper), **omni.replicator.core** (annotators and writers), **omni.sensors.nv.lidar**, **omni.sensors.nv.radar**, **omni.sensors.nv.acoustic**, **omni.sensors.nv.common**, **omni.sensors.nv.ids**, **omni.usd.schema.omni_sensors**, and **isaacsim.storage.native** for asset paths. Enable the extension from **Window > Extensions** and turn on `isaacsim.sensors.experimental.rtx`.
+Dependencies include **isaacsim.core.experimental.prims** (transform and prim utilities), **isaacsim.core.experimental.objects** (Camera prim wrapper), **omni.replicator.core** (annotators and writers), **omni.sensors.nv.lidar**, **omni.sensors.nv.radar**, **omni.sensors.nv.acoustic**, **omni.sensors.nv.common**, **omni.sensors.nv.ids**, **omni.usd.schema.omni_sensors**, and **isaacsim.storage.native** for asset paths. The `omni.rtx.spg` Sensor Processing Graph runtime (which executes graphs authored via `author_spg` at render time) is available transitively through the sensor plugins. Enable the extension from **Window > Extensions** and turn on `isaacsim.sensors.experimental.rtx`.

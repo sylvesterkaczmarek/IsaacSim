@@ -66,7 +66,7 @@ from isaacsim.storage.native import get_assets_root_path_async
 enable_extension("omni.graph.window.action")
 simulation_app.update()
 
-FRANKA_USD_REL_PATH = "Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+FRANKA_USD_REL_PATH = "Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 GRAPH_PATH = "/ActionGraph"
 
 
@@ -96,7 +96,11 @@ async def setup_stage_with_franka() -> str:
 # 3. Author NewtonActuator prims onto the Franka arm joints
 # ============================================================================
 def author_actuators_on_franka(franka_path: str) -> None:
-    """Author one PD actuator with effort clamping on each Franka arm joint."""
+    """Author one PD actuator with effort clamping on each Franka arm joint.
+
+    Args:
+        franka_path: Path of the Franka articulation root prim.
+    """
     from isaacsim.core.experimental.actuators import (
         MaxEffortClampingConfig,
         PDControlConfig,
@@ -157,6 +161,9 @@ def build_action_graph(franka_path: str) -> None:
     targets can be authored from the graph: one **Constant Double** per DOF
     feeds a **Construct Array** that aggregates the per-DOF targets into a
     ``double[]`` ``positionCommand``.
+
+    Args:
+        franka_path: Path of the Franka articulation root prim controlled by the graph.
     """
     keys = og.Controller.Keys
 

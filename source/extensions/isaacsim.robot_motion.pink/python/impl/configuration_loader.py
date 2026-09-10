@@ -18,11 +18,15 @@
 from __future__ import annotations
 
 import pathlib
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
 import isaacsim.core.experimental.utils.app as app_utils
 import numpy as np
 import pinocchio as pin
+
+# Match teleop's permissive fallback for missing `effort` and `velocity` attributes.
+_URDFDOM_DEFAULT_LIMIT = "1000"
 
 
 @dataclass
@@ -73,6 +77,45 @@ def _get_controlled_joint_names(model: pin.Model) -> list[str]:
     return names
 
 
+def _normalize_urdf_for_urdfdom(urdf_text: str) -> str:
+    """Normalize a URDF document for Pinocchio's strict urdfdom parser.
+
+    Add permissive defaults for joint-limit and safety-controller attributes
+    that urdfdom requires but the USD-to-URDF exporter can omit.
+
+    Args:
+        urdf_text: URDF document to normalize.
+
+    Returns:
+        Normalized URDF text, or the original text if it is already compatible.
+
+    Raises:
+        ValueError: If the URDF is not well-formed XML.
+    """
+    try:
+        root = ET.fromstring(urdf_text)
+    except ET.ParseError as error:
+        raise ValueError(f"Malformed URDF XML: {error}") from error
+
+    modified = False
+    for joint in root.iter("joint"):
+        limit = joint.find("limit")
+        if limit is not None:
+            for attribute in ("effort", "velocity"):
+                if attribute not in limit.attrib:
+                    limit.set(attribute, _URDFDOM_DEFAULT_LIMIT)
+                    modified = True
+
+        safety_controller = joint.find("safety_controller")
+        if safety_controller is not None and "k_velocity" not in safety_controller.attrib:
+            safety_controller.set("k_velocity", "0")
+            modified = True
+
+    if not modified:
+        return urdf_text
+    return ET.tostring(root, encoding="unicode")
+
+
 def load_pink_robot(
     urdf_path: pathlib.Path | str,
     package_dirs: list[str] | None = None,
@@ -97,7 +140,7 @@ def load_pink_robot(
 
     Raises:
         FileNotFoundError: If the URDF file does not exist.
-        RuntimeError: If the URDF cannot be parsed by Pinocchio.
+        ValueError: If the URDF cannot be parsed by Pinocchio.
 
     Example:
 
@@ -118,10 +161,21 @@ def load_pink_robot(
     collision_model = None
     collision_data = None
 
-    if build_collision_model:
-        model, collision_model, _ = pin.buildModelsFromUrdf(str(urdf_path), package_dirs)
-    else:
-        model = pin.buildModelFromUrdf(str(urdf_path))
+    try:
+        urdf_text = _normalize_urdf_for_urdfdom(urdf_path.read_text(encoding="utf-8"))
+        model = pin.buildModelFromXML(urdf_text)
+        if build_collision_model:
+            collision_model = pin.buildGeomFromUrdfString(
+                model,
+                urdf_text,
+                pin.GeometryType.COLLISION,
+                package_dirs=package_dirs,
+            )
+    except (RuntimeError, ValueError) as error:
+        raise ValueError(
+            f"Failed to parse URDF '{urdf_path}' with Pinocchio. Verify the XML structure, joint parent/child "
+            f"links, joint limits, and referenced names. Original error: {error}"
+        ) from error
 
     data = model.createData()
     controlled_joint_names = _get_controlled_joint_names(model)

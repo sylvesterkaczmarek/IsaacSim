@@ -16,16 +16,16 @@
 #define CARB_EXPORTS
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/Framework.h>
 #include <carb/PluginUtils.h>
 #include <carb/logging/Log.h>
 
-#include <isaacsim/asset/gen/omap/IOccupancyMap.h>
-#include <isaacsim/asset/gen/omap/MapGenerator.h>
-#include <isaacsim/util/debug_draw/PrimitiveDrawingHelper.h>
+#include <isaacsim/asset/gen/omap/IOccupancyMap.hpp>
+#include <isaacsim/asset/gen/omap/MapGenerator.hpp>
+#include <isaacsim/util/debug_draw/PrimitiveDrawingHelper.hpp>
 #include <omni/kit/IStageUpdate.h>
 #include <omni/physx/IPhysx.h>
 
@@ -63,11 +63,18 @@ CARB_PLUGIN_IMPL_DEPS(omni::physx::IPhysx, omni::kit::IStageUpdate)
  * Configures the generator with the current transform and cell size settings,
  * then generates a 2D occupancy map.
  *
- * @pre g_physx and g_stage must be valid
  * @post g_generator will be initialized with a new MapGenerator instance
+ *
+ * @note No-op when no stage is attached, i.e. after the stage was closed or replaced.
  */
 void CARB_ABI generateMap()
 {
+    if (!g_physx || !g_stage)
+    {
+        CARB_LOG_ERROR("Cannot generate an occupancy map without an attached stage and physics interface");
+        g_generator.reset();
+        return;
+    }
 
     g_generator = std::make_unique<isaacsim::asset::gen::omap::MapGenerator>(g_physx, g_stage);
 
@@ -196,11 +203,17 @@ void drawGrid(float lineWidth)
  * Clears previous visualization elements and redraws the bounding box,
  * grid, and coordinate axes based on the current settings.
  *
- * @pre g_lineDrawing and g_cellDrawing must be initialized
  * @post The visualization will be updated to reflect the current map settings
+ *
+ * @note No-op when the drawing helpers are not initialized, i.e. after the stage was detached.
  */
 void CARB_ABI update()
 {
+    if (!g_lineDrawing || !g_cellDrawing)
+    {
+        return;
+    }
+
     g_lineDrawing->clear();
     g_cellDrawing->clear();
     float lineWidth = 2.0f;
@@ -456,11 +469,12 @@ static void onAttach(long int stageId, double metersPerUnit, void* userData)
  *
  * @param[in] data User data pointer
  *
- * @post g_lineDrawing and g_cellDrawing will be reset
+ * @post g_generator, g_stage, g_lineDrawing, and g_cellDrawing will be reset
  */
 static void onDetach(void* data)
 {
-
+    g_generator.reset();
+    g_stage = nullptr;
     g_lineDrawing.reset();
     g_cellDrawing.reset();
 }
@@ -520,11 +534,17 @@ CARB_EXPORT void carbOnPluginStartup()
  * @details
  * Cleans up plugin resources when the plugin is unloaded.
  *
- * @post g_stageUpdateNode will be destroyed, g_lineDrawing and g_cellDrawing will be reset
+ * @post g_generator, g_stage, g_lineDrawing, and g_cellDrawing will be reset, and g_stageUpdateNode will be destroyed
  */
 CARB_EXPORT void carbOnPluginShutdown()
 {
-    g_stageUpdate->destroyStageUpdateNode(g_stageUpdateNode);
+    g_generator.reset();
+    g_stage = nullptr;
+    if (g_stageUpdateNode)
+    {
+        g_stageUpdate->destroyStageUpdateNode(g_stageUpdateNode);
+        g_stageUpdateNode = nullptr;
+    }
     g_lineDrawing.reset();
     g_cellDrawing.reset();
 }

@@ -33,7 +33,7 @@ class TestLightBeamSensor(omni.kit.test.AsyncTestCase):
 
     # Before running each test
     async def setUp(self) -> None:
-        """Set up test fixtures."""
+        """Set up test fixtures for lightbeam sensor tests."""
         self._lb = _range_sensor.acquire_lightbeam_sensor_interface()
         await omni.usd.get_context().new_stage_async()
         self._stage = omni.usd.get_context().get_stage()
@@ -45,7 +45,7 @@ class TestLightBeamSensor(omni.kit.test.AsyncTestCase):
 
     # After running each test
     async def tearDown(self) -> None:
-        """Tear down test fixtures."""
+        """Tear down test fixtures for lightbeam sensor tests."""
         self.my_world.stop()
         self.my_world.clear_instance()
         await omni.kit.app.get_app().next_update_async()
@@ -76,7 +76,7 @@ class TestLightBeamSensor(omni.kit.test.AsyncTestCase):
 
     # Tests a light beam sensor with a cube in front of it breaking the beam
     async def test_basic_lightbeam_sensor(self) -> None:
-        """Test basic lightbeam sensor."""
+        """Test basic lightbeam sensor detection with one ray hitting a cube."""
         # Add a cube
         cubePath = "/World/Cube"
         await self.add_cube(cubePath, 1.000, Gf.Vec3f(0.8, -0.5, 0.0))
@@ -111,7 +111,7 @@ class TestLightBeamSensor(omni.kit.test.AsyncTestCase):
         self.assertEqual(n_length, 1)
 
     async def test_lightbeam_curtain(self) -> None:
-        """Test lightbeam curtain."""
+        """Test lightbeam curtain detection with multiple rays hitting a cube."""
         # Add a cube
         cubePath = "/World/Cube"
         await self.add_cube(cubePath, 1.000, Gf.Vec3f(1.5, -0.5, 0.0))

@@ -13,10 +13,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "Ros2Impl.h"
+#include "Ros2Impl.hpp"
 
-#include <isaacsim/ros2/core/Ros2Macros.h>
+#include <isaacsim/ros2/core/Ros2Macros.hpp>
 #include <rcl/rcl.h>
+
+#include <limits>
 
 namespace isaacsim
 {
@@ -28,6 +30,22 @@ namespace core
 void* Ros2ContextHandleImpl::getContext()
 {
     return m_context.get();
+}
+
+size_t Ros2ContextHandleImpl::getDomainId()
+{
+    if (!m_context)
+    {
+        return (std::numeric_limits<size_t>::max)();
+    }
+
+    size_t domainId = 0;
+    rcl_ret_t rc = rcl_context_get_domain_id(m_context.get(), &domainId);
+    if (rc != RCL_RET_OK)
+    {
+        return (std::numeric_limits<size_t>::max)();
+    }
+    return domainId;
 }
 
 void Ros2ContextHandleImpl::init(int argc, char const* const* argv, bool setDomainId, size_t domainId)

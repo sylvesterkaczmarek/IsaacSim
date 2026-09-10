@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id = "physics_sensors"
+title = "Physics Sensors"
+summary = "Derive sensor readings from the state a physics engine already simulates."
+
+[[step]]
+example = "physics_sensors.imu_sensor"
+level = "intermediate"
+
+[[step]]
+example = "physics_sensors.joint_state_sensor"
+level = "intermediate"

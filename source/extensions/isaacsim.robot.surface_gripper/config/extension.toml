@@ -1,5 +1,5 @@
 [package]
-version = "3.6.2"
+version = "3.6.3"
 category = "Simulation"
 title = "Isaac Sim Surface Gripper"
 description = "Helper to model Suction and Distance based grippers"
@@ -38,6 +38,7 @@ name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [    
     '*The NumPy module was reloaded*',
 ]

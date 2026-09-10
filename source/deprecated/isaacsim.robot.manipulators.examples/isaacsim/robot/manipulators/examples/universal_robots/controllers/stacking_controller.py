@@ -30,8 +30,8 @@ class StackingController(manipulators_controllers.StackingController):
 
     Args:
         name: Name identifier for the controller.
-        gripper: The surface gripper to use.
-        robot_articulation: The robot articulation to control.
+        gripper: The SurfaceGripper to use.
+        robot_articulation: The SingleArticulation to control.
         picking_order_cube_names: Ordered list of cube names to stack.
         robot_observation_name: Name key for robot observations.
     """

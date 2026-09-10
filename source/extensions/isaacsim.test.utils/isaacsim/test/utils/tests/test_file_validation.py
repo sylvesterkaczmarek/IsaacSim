@@ -151,6 +151,54 @@ class TestFileValidation(TimedAsyncTestCase):
         result = validate_folder_contents(self.test_dir, {"txt": 3}, fail_on_empty_files=True)
         self.assertFalse(result, "Should fail when empty file detected")
 
+    async def test_validate_folder_contents_fail_on_empty_extensions(self) -> None:
+        """Test empty file detection for selected extensions only."""
+        self.create_test_files(
+            {
+                "empty.mp4": 0,
+                "valid.mp4": "video",
+                "empty.png": 0,
+                "valid.png": "image",
+            }
+        )
+
+        result = validate_folder_contents(self.test_dir, {"mp4": 2, "png": 2}, fail_on_empty_extensions={"mp4"})
+        self.assertFalse(result, "Should fail when an mp4 file is empty")
+
+        result = validate_folder_contents(self.test_dir, {"mp4": 2, "png": 2}, fail_on_empty_extensions={"png"})
+        self.assertFalse(result, "Should fail when a png file is empty")
+
+        result = validate_folder_contents(self.test_dir, {"mp4": 2, "png": 2}, fail_on_empty_extensions={"json"})
+        self.assertTrue(result, "Should pass when empty files are outside fail_on_empty_extensions")
+
+        result = validate_folder_contents(self.test_dir, {"mp4": 2, "png": 2}, fail_on_empty_extensions={"MP4"})
+        self.assertFalse(result, "Should match fail_on_empty_extensions case-insensitively")
+
+        nested_dir = os.path.join(self.test_dir, "nested")
+        os.makedirs(nested_dir)
+        with open(os.path.join(nested_dir, "nested_empty.mp4"), "wb"):
+            pass
+        result = validate_folder_contents(
+            self.test_dir,
+            {"mp4": 3, "png": 2},
+            recursive=True,
+            fail_on_empty_extensions={"mp4"},
+        )
+        self.assertFalse(result, "Should fail when a nested mp4 file is empty")
+
+        pass_dir = os.path.join(self.test_dir, "pass_case")
+        os.makedirs(pass_dir)
+        with open(os.path.join(pass_dir, "valid.mp4"), "w") as f:
+            f.write("video")
+        with open(os.path.join(pass_dir, "empty.png"), "wb"):
+            pass
+        result = validate_folder_contents(
+            pass_dir,
+            {"mp4": 1, "png": 1},
+            fail_on_empty_extensions={"mp4"},
+        )
+        self.assertTrue(result, "Should pass when only unchecked extensions are empty")
+
     async def test_validate_folder_contents_min_file_size(self) -> None:
         """Test minimum file size validation."""
         self.create_test_files(

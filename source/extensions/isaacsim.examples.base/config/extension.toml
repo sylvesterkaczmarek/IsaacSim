@@ -1,5 +1,5 @@
 [package]
-version = "1.3.2"
+version = "1.3.4"
 category = "Simulation"
 title = "Isaac Sim Base Samples"
 description = "Base sample classes for interactive of Isaac Sim"
@@ -21,10 +21,17 @@ writeTarget.kit = true
 [[python.module]]
 name = "isaacsim.examples.base"
 
+[[python.module]]
+name = "isaacsim.examples.base.tests"
+
 [[test]]
 name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [[test]]

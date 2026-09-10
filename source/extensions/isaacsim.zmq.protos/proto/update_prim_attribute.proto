@@ -1,0 +1,29 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package isaacsim.zmq;
+
+// UpdatePrimAttribute is a generic command from an external server to set a single
+// USD attribute on a prim in the Isaac Sim stage (e.g. a camera's focalLength). The
+// value is scalar — sufficient for numeric attributes; extend with a typed oneof if
+// non-scalar attributes (strings, vectors) are ever needed.
+message UpdatePrimAttribute {
+    double timestamp = 1;  // Command timestamp (seconds)
+    string prim_path = 2;  // USD prim path, e.g. "/World/camera/y_link/Camera"
+    string attribute = 3;  // Attribute name, e.g. "focalLength"
+    double value     = 4;  // Scalar value to write
+}

@@ -56,9 +56,8 @@ class Extension(omni.ext.IExt):
     - Timeline event handling for play/stop simulation control
     - Stage event monitoring for scene changes
     - Physics step callbacks for real-time simulation updates
-    - Automatic resource cleanup when the extension is disabled
 
-    The extension uses a UIBuilder pattern where the actual UI construction and logic is delegated to
+    The extension uses a UIBuilder pattern where the actual UI construction and logic are delegated to
     a separate UIBuilder class. This separation allows for cleaner code organization and easier
     customization of the user interface components.
     """

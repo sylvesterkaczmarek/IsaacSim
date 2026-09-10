@@ -14,11 +14,11 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 #include <pxr/base/tf/patternMatcher.h>
 // clang-format on
 
-#include <isaacsim/core/utils/PrimUtils.h>
+#include <isaacsim/core/utils/PrimUtils.hpp>
 #include <pxr/usd/usdPhysics/articulationRootAPI.h>
 #include <pxr/usd/usdPhysics/rigidBodyAPI.h>
 

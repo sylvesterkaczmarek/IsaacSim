@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import isaacsim.core.experimental.utils.prim as prim_utils
 from isaacsim.core.experimental.utils.stage import get_current_stage
 from pxr import Sdf, Usd, UsdGeom, UsdPhysics
 
@@ -52,7 +53,7 @@ def _validate_prim_exists(prim_path: str) -> tuple[Usd.Prim | None, ValidationRe
         result.errors.append(f"Invalid prim path: '{prim_path}'")
         return None, result
 
-    prim = stage.GetPrimAtPath(prim_path)
+    prim = prim_utils.get_prim_at_path(prim_path)
     if not prim or not prim.IsValid():
         result.errors.append(f"Prim not found at '{prim_path}'")
         return None, result
@@ -73,10 +74,10 @@ def validate_floating_end_effector(prim_path: str) -> ValidationResult:
     if not prim:
         return result
 
-    if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+    if not prim_utils.has_api(prim, UsdPhysics.RigidBodyAPI):
         result.errors.append("Missing RigidBodyAPI")
 
-    if not prim.HasAPI(UsdPhysics.MassAPI):
+    if not prim_utils.has_api(prim, UsdPhysics.MassAPI):
         result.warnings.append("Missing MassAPI (angular dynamics may not work)")
 
     xformable = UsdGeom.Xformable(prim)
@@ -102,13 +103,20 @@ def validate_marker_path(prim_path: str) -> ValidationResult:
     if not prim:
         return result
 
-    rigid = 0
-    collision = 0
-    for desc in Usd.PrimRange(prim):
-        if desc.HasAPI(UsdPhysics.RigidBodyAPI):
-            rigid += 1
-        if desc.HasAPI(UsdPhysics.CollisionAPI):
-            collision += 1
+    rigid = len(
+        prim_utils.get_all_matching_child_prims(
+            prim,
+            predicate=lambda desc, _: prim_utils.has_api(desc, UsdPhysics.RigidBodyAPI),
+            include_self=True,
+        )
+    )
+    collision = len(
+        prim_utils.get_all_matching_child_prims(
+            prim,
+            predicate=lambda desc, _: prim_utils.has_api(desc, UsdPhysics.CollisionAPI),
+            include_self=True,
+        )
+    )
 
     if rigid > 0:
         result.warnings.append(f"{rigid} RigidBody descendant(s)")

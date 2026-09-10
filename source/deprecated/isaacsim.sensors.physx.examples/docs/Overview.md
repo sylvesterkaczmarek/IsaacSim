@@ -4,67 +4,68 @@
 This extension is deprecated in favor of `isaacsim.sensors.physics.examples`.
 ```
 
-The isaacsim.sensors.physx.examples extension provides interactive demonstrations of PhysX-based sensor functionality in Isaac Sim. This extension includes three comprehensive examples showcasing different types of physics-based sensors: Generic Range Sensors, LIDAR sensors, and LightBeam sensors, each demonstrating real-time data collection through PhysX line tracing for collision detection and distance measurements.
+`**isaacsim.sensors.physx.examples**` provides interactive examples for PhysX raycast based sensors in Isaac Sim. It demonstrates how to create sensor scenes, configure sensor behavior, add collision objects, and inspect sensor output through example UI panels. The examples focus on LIDAR, Generic Range Sensor, and LightBeam sensor workflows.
 
-```{image} ../data/preview.png
----
-align: center
----
-```
+## Concepts
 
+### PhysX raycast based sensing
 
-## Key Components
+The examples use PhysX line tracing or ray casting to detect collisions and measure distances. This makes the sensors useful for testing LIDAR-like behavior, custom scanning patterns, and simple beam-based detection against physics collision objects.
 
-### Generic Range Sensor Example
+A valid physics scene is required for the demonstrations because the sensor output depends on collision queries. Some examples create the required `PhysicsScene` and configure the stage automatically.
 
-**Interactive demonstration showcasing custom scanning patterns and sensor configuration.** The example demonstrates how to create PhysX-based range sensors with customizable scanning patterns, configure sensor properties like range limits and sampling rates, and process sensor data in both streaming and batch modes.
+### Sensor output
 
-Key workflows include:
-- Creating sensors with custom scanning patterns
-- Setting up physics scenes with collision objects  
-- Streaming continuous data flow or batch processing predefined patterns
-- Visualizing scanning patterns through point cloud data
-- Saving pattern images for analysis
-- Processing point cloud data to extract specific surface hits
+The examples expose sensor output in different forms depending on the sensor type:
 
-### LIDAR Sensor Example  
-
-**Real-time LIDAR sensor simulation with customizable parameters and live data visualization.** This example provides an interactive interface for configuring LIDAR sensors and viewing their output in real-time, including depth, azimuth, and zenith measurements displayed in formatted tables.
-
-Features include:
-- Configurable LIDAR parameters (FOV, resolution, range, rotation rate)
-- Real-time data streams showing sensor measurements
-- Obstacle environment creation for testing
-- Viewport visualization of LIDAR rays and detection points
-- Automatic stage configuration with Z-up axis orientation and physics scene setup
-
-### LightBeam Sensor Example
-
-**Physics-based ray casting demonstration with interactive object manipulation.** The LightBeam sensor example creates a scene with a moveable cube target and demonstrates real-time sensor response to object positioning and movement.
-
-The demonstration includes:
-- Real-time visualization of 5 light beam rays with color-coded display
-- Live updates of beam hit detection, linear depth, and hit position data
-- Interactive cube manipulation for testing sensor behavior
-- Automatic scene setup with proper lighting and camera positioning
-- Action graph configuration for sensor data processing and visualization
+- LIDAR data, including depth, azimuth, and zenith measurements.
+- Generic Range Sensor point cloud data from custom scanning patterns.
+- LightBeam hit status, linear depth, and hit position data.
 
 ## Functionality
 
-### Data Processing and Visualization
+### PhysX LIDAR example
 
-Each example provides specialized data processing capabilities tailored to the specific sensor type. The Generic Range Sensor example includes point cloud filtering to extract wall surface hits, while the LIDAR example formats measurement data into readable tables, and the LightBeam example provides real-time hit detection status updates.
+The LIDAR example demonstrates how to load and configure a PhysX LIDAR sensor. The UI includes controls for creating a sensor, spawning obstacles, and viewing the live data stream.
 
-### Scene Configuration
+Users can test common LIDAR configuration values such as field of view, resolution, range, and rotation rate. The example also visualizes LIDAR rays and detection points in the viewport, making it easier to understand how the sensor reacts to scene geometry.
 
-All examples automatically configure the USD stage with appropriate physics settings, including PhysicsScene setup required for PhysX line tracing operations. The extensions handle stage initialization, object creation with collision properties, and camera positioning for optimal demonstration viewing.
+### Generic Range Sensor example
 
-### Interactive Controls
+The Generic Range Sensor example shows how to create a PhysX based range sensor with custom scanning patterns. It includes controls for loading the sensor, creating an obstacle scene, setting a custom sensor pattern, streaming data, and saving pattern visualization images.
 
-The extensions provide UI panels with buttons and controls for loading sensors, spawning test environments, configuring sensor parameters, and displaying live data streams. Users can interact with demonstration scenes by manipulating objects and observing real-time sensor responses.
+The example supports both continuous streaming and repeating mode for predefined patterns. It also processes point cloud data to filter points that hit a wall surface and extracts the relevant Y-Z coordinates for pattern analysis.
 
-## Integration
+### LightBeam sensor example
 
-The extension integrates with isaacsim.examples.browser to register demonstrations in Isaac Sim's examples interface, allowing users to easily discover and launch sensor examples. It uses isaacsim.sensors.physx for the underlying sensor implementations and isaacsim.gui.components for consistent UI elements across demonstrations.
+The LightBeam example creates a simple scene with a movable cube and a LightBeam sensor. The sensor continuously checks for hits and reports live data such as beam hit status, linear depth, and hit positions.
 
-The examples work within Isaac Sim's physics simulation system, requiring active PhysicsScene components and supporting real-time timeline updates for continuous sensor data collection and visualization.
+The demo visualizes 5 light beam rays with color-coded display. Users can move the cube in the scene and observe how the beam data changes as the target intersects or moves away from the rays.
+
+## UI Components
+
+### Examples browser entries
+
+The extension registers its sensor demonstrations with the Isaac Sim examples browser. Each example is presented as an interactive entry that opens a focused UI for the selected sensor workflow.
+
+### Command panels
+
+The LIDAR and Generic Range Sensor examples provide command panels for creating sensors, spawning test obstacles, and controlling data output. These panels are intended to guide users through a complete sensor setup and testing workflow.
+
+### Data display areas
+
+The LIDAR example displays live sensor measurements in a formatted table. The LightBeam example displays live beam hit, depth, and position information while the simulation runs.
+
+### Viewport visualization
+
+The examples use viewport visualization to make sensor behavior visible. LIDAR rays, detection points, Generic Range Sensor point cloud patterns, and LightBeam rays can be inspected directly in the scene.
+
+## Relationships
+
+`**isaacsim.sensors.physx.examples**` demonstrates sensor functionality from `**isaacsim.sensors.physx**`. The examples use PhysX based ray casting and line tracing to generate distance and hit data.
+
+The extension also registers its demonstrations with `**isaacsim.examples.browser**`, which is how users access the individual sensor examples from the examples browser UI.
+
+## Requirements
+
+The sensor examples depend on physics collision queries. Scenes used by the examples must include collision objects and a `PhysicsScene` for the raycast based sensors to produce meaningful hit data.

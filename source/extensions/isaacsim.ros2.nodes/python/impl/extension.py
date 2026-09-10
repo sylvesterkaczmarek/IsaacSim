@@ -22,7 +22,7 @@ import omni.ext
 import omni.replicator.core as rep
 import omni.syntheticdata
 import omni.syntheticdata._syntheticdata as sd
-from isaacsim.core.nodes.scripts.utils import register_node_writer_with_telemetry
+from isaacsim.core.nodes import register_node_writer_with_telemetry
 from isaacsim.ros2.nodes.bindings._ros2_nodes import acquire_interface, release_interface
 
 from .ros2_common import BRIDGE_NAME, BRIDGE_PREFIX

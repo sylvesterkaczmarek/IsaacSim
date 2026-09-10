@@ -28,7 +28,7 @@ from isaacsim.core.experimental.prims import Articulation, GeomPrim, RigidPrim
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.sensors.experimental.physics.impl.joint_state_sensor import JointStateSensor, JointStateSensorReading
 from isaacsim.storage.native import get_assets_root_path_async
-from pxr import UsdPhysics
+from pxr import UsdPhysics, UsdUtils
 
 from .common import step_simulation
 
@@ -238,6 +238,41 @@ class TestJointStateSensor(omni.kit.test.AsyncTestCase):
         second_reading = self.joint_state_sensor.get_sensor_reading()
         self.assertTrue(second_reading.is_valid)
         self.assertEqual(len(second_reading.dof_names), len(first_reading.dof_names))
+
+    async def test_reader_reinitialize_during_play(self) -> None:
+        """Force reader.initialize() while joint state sensor is active, then step physics."""
+        await self.create_simple_articulation()
+
+        self.joint_state_sensor = JointStateSensor("/Articulation")
+
+        from isaacsim.core.experimental.prims import _prims_reader
+
+        reader = _prims_reader.acquire_prim_data_reader_interface()
+        try:
+            self._timeline.play()
+            for _ in range(10):
+                await omni.kit.app.get_app().next_update_async()
+
+            reading = self.joint_state_sensor.get_sensor_reading()
+            self.assertTrue(reading.is_valid)
+
+            stage_id = UsdUtils.StageCache.Get().GetId(stage_utils.get_current_stage()).ToLongInt()
+            gen_before = reader.get_generation()
+
+            reader.initialize(stage_id, -1)
+            self.assertGreater(reader.get_generation(), gen_before)
+
+            for _ in range(10):
+                await omni.kit.app.get_app().next_update_async()
+
+            reading_after = self.joint_state_sensor.get_sensor_reading()
+            self.assertTrue(
+                reading_after.is_valid,
+                "Joint state reading should remain valid after reader.initialize() rebuilds views",
+            )
+            self.assertEqual(len(reading_after.dof_names), len(reading.dof_names))
+        finally:
+            _prims_reader.release_prim_data_reader_interface(reader)
 
     async def test_disable_enable(self) -> None:
         """Set enabled=False/True, verify validity changes accordingly."""

@@ -17,10 +17,9 @@
 
 import numpy as np
 from isaacsim.core.experimental.objects import Mesh
-from pxr import UsdGeom
 
 
-def triangulate_mesh(mesh_input: Mesh) -> list[np.ndarray[int]]:
+def triangulate_mesh(mesh_input: Mesh) -> list[np.ndarray]:
     """Triangulate mesh faces into triangle index arrays.
 
     Args:
@@ -44,14 +43,13 @@ def triangulate_mesh(mesh_input: Mesh) -> list[np.ndarray[int]]:
     if len(mesh_input.geoms) == 0:
         raise ValueError("triangulate_mesh was passed a mesh with no geoms.")
 
-    triangle_lists = []
-    for geom in mesh_input.geoms:
-        mesh = UsdGeom.Mesh(geom)
-        # indices and faces converted to triangles
-        indices = mesh.GetFaceVertexIndicesAttr().Get()
-        faces = mesh.GetFaceVertexCountsAttr().Get()
+    face_indices, face_counts, _, _ = mesh_input.get_face_specs()
 
-        if not indices or not faces:
+    triangle_lists = []
+    for indices, faces in zip(face_indices, face_counts):
+        indices = indices.numpy()
+        faces = faces.numpy()
+        if indices.size == 0 or faces.size == 0:
             raise ValueError("triangulate_mesh was passed a mesh geom with no indices or faces.")
         triangles = []
         indices_offset = 0

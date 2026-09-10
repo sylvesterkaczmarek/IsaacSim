@@ -44,6 +44,7 @@ version_file = "${root}/VERSION"
 
 [repo_build.premake]
 linux_x86_64_cxx_abi=true
+max_project_name_length = 60
 
 [repo_build.stage_files]
 # Allowed destinations for prebuild_copy (e.g. GMO docs -> docs/source/generic_model_output).
@@ -59,25 +60,31 @@ allowed_paths=[
 [repo_build.docker]
 enabled = false
 [repo_build]
+entry_point = "${root}/tools/isaac_build/repo_build.py:setup_repo_tool"
+
 # List of packman projects to pull (in order)
 
+"platform:windows-x86_64".version_check_failure_message = "Visual Studio 2022 is required to build Isaac Sim. Please install Visual Studio 2022 based on the instructions in docs/readme/windows_developer_configuration.md and try again."
+
+fetch.pip.use_uv = false
+fetch.pip.licensing_enabled = false
+fetch.pip.publish_pip_cache = false
+
+fetch.packman_host_files_to_pull = [
+]
+
 fetch.packman_target_files_to_pull = [
-  "${root}/deps/msvc.packman.xml",
-  "${root}/deps/msvc.packman.xml",
-  "${root}/deps/msvc.packman.xml",
-  "${root}/deps/msvc.packman.xml",
-  "${root}/deps/msvc.packman.xml",
   "${root}/deps/kit-sdk.packman.xml",
   "${root}/deps/omni-physics.packman.xml",
   "${root}/deps/kit-sdk-deps.packman.xml",
   "${root}/deps/ext-deps.packman.xml",
   "${root}/deps/isaac-sim.packman.xml",
-
 ]
 
 fetch.pip.files_to_pull = [
   "${root}/deps/pip.toml",
   "${root}/deps/pip_ml.toml",
+  "${root}/deps/pip_nv.toml",
   "${root}/deps/pip_lula.toml",
   "${root}/deps/pip_cumotion.toml",
   "${root}/deps/pip_pink.toml",
@@ -86,11 +93,13 @@ fetch.pip.files_to_pull = [
   "${root}/deps/pip_cloud.toml",
   "${root}/deps/pip_ucx.toml",
   "${root}/deps/pip_newton.toml",
+  "${root}/deps/pip_onnx.toml",
   "${root}/deps/pip_episode_recorder.toml",
   "${root}/deps/pip_teleop.toml",
+  "${root}/deps/pip_zmq.toml",
+  "${root}/deps/pip_simready.toml",
+  "${root}/deps/pip_sysid_telemetry.toml",
 ]
-fetch.pip.licensing_enabled = false
-fetch.pip.publish_pip_cache = false
 
 enable_compiler_version_check = true
 
@@ -120,6 +129,7 @@ vscode.python_env.PYTHONPATH = [
   "$root/_build/$platform/$config/kit/plugins/bindings-python/",
   "$root/_build/$platform/$config/exts/isaacsim.replicator.episode_recorder/pip_prebundle",
   "$root/_build/$platform/$config/exts/isaacsim.replicator.teleop/pip_prebundle",
+  "$root/_build/$platform/$config/exts/isaacsim.asset.validation/pip_prebundle",
   "$root/_build/$platform/$config/extsDeprecated/isaacsim.robot_motion.lula/pip_prebundle",
   "$root/_build/$platform/$config/exts/isaacsim.robot_motion.cumotion/pip_prebundle",
   "$root/_build/$platform/$config/exts/isaacsim.robot_motion.pink/pip_prebundle",
@@ -185,13 +195,6 @@ post_build.commands = [
     "-c",
     "${config}",
   ],
-  [
-    "${root}/schemas/generate-schema${shell_ext}",
-    "-c",
-    "${config}",
-    "-p",
-    "${platform}",
-  ],
   # [
   #   "${root}/repo${shell_ext}",
   #   "usd",
@@ -230,7 +233,7 @@ link_host_toolchain = true   # This requires Microsoft Visual Studio BuildTools 
 # Filter on Visual Studio version e.g.: Visual Studio 2022. Empty string will match all years and prioritize the newest.
 vs_version = "18"
 
-# Local developer toolchain (VS 2022). CI overrides below use VS 2019.
+# Local developer toolchain (VS 2022). CI uses the equivalent pinned Packman toolchain below.
 "token:in_ci==false".vs_version = "2022"
 "token:in_ci==false".msvc_version = "v143"
 "token:in_ci==false".winsdk_version = "10.0.26100.0"
@@ -243,6 +246,7 @@ vs_version = "18"
 "token:in_ci==false".version_check_msvc_version = "v143"
 "token:in_ci==false".version_check_msbuild_version = "17"
 "token:in_ci==false".version_check_winsdk_version = "10.0.26100.0"
+
 
 # Filter specifically to "Enterprise", "Professional", or "Community" editions of Visual Studio
 # vs_edition = "Community"
@@ -286,10 +290,6 @@ apps = [
     "${root}/_build/$platform/$config/apps/isaacsim.exp.extscache.kit"
 ]
 
-"registries.++" = [
-    { name = "isaacsim/prod/6.0", url = "https://ovextensionsprod.blob.core.windows.net/exts/isaacsim/prod/6.0/shared" },
-]
-
 # Link selected extensions into a separate folder without a version. Used for build-time referencing extensions.
 # Wildcards are supported in the list.
 links.exts.include = [
@@ -304,34 +304,6 @@ links.exts.include = [
 links.path = "${root}/_build/${platform}/${config}/extsbuild"
 
 
-# #####################################################################
-# # schema
-# #############################
-# [repo_usd]
-# generate_plugin_buildfiles = false
-# plugin_buildfile_format = "premake"
-# usd_python_root = "${root}/_build/target-deps/python"
-# usd_root = "${root}/_build/target-deps/usd/%{cfg.buildcfg}"
-
-# [repo_usd.plugin.robotSchema]
-# schema_file = "${root}/source/extensions/isaacsim.robot.schema/robot_schema/RobotSchema.usda"
-# generate_dir = "${root}/source/extensions/isaacsim.robot.schema/robot_schema"
-# plugin_dir = "${root}/source/extensions/isaacsim.robot.schema/robot_schema"
-# install_root =  "${root}/source/extensions/isaacsim.robot.schema/robot_schema"
-# build_dir =  "${root}/source/extensions/isaacsim.robot.schema/robot_schema"
-
-# library_prefix = "RobotSchema"
-# generate_module_deps_cpp_file = false
-# is_codeless = true
-# usd_lib_dependencies = [
-#   "arch",
-#   "tf",
-#   "vt",
-#   "sdf",
-#   "usd",
-#   "usdPhysics",
-#   "usdGeom",
-# ]
 
 # ########################################################################################################################
 # # Build Number
@@ -477,9 +449,21 @@ stdout_fail_patterns.include = ["*[error]*", "*[fatal]*", "*[fail]*"]
 
 
 generate_report_cmd = [
+  "./repo${shell_ext}",
+  "ci",
+  "standalone_report",
+  "--",
+  "${test_root}/_testoutput",
+  "startuptests",
 ]
 
 "platform:windows-x86_64".generate_report_cmd = [
+  "repo${shell_ext}",
+  "ci",
+  "standalone_report",
+  "--",
+  "${test_root}/_testoutput",
+  "startuptests",
 ]
 
 #-----------------------------------------------------------------------------------------------------------------------
@@ -525,9 +509,11 @@ generate_report_cmd = [
   "--portable",
   "--/log/flushStandardStreamOutput=1",                    # Prevents mixed up piped stdout
   "--reset-user",
+  "--/structuredLog/enable=0",                             # Keep CI telemetry subprocesses from outliving the app
+  "--/telemetry/enableAnonymousData=0",
   "--/exts/omni.kit.test/testExtOutputPath='${test_root}/_testoutput'",
 ]
-exclude = ["tests-startup.xr*${shell_ext}"]
+exclude = []
 include = ["tests-startup*${shell_ext}"]
 timeout = 500
 
@@ -657,6 +643,10 @@ include = ["tests-isaacsim.core*${shell_ext}"]
 name = "core"
 
 [[repo_test.suites.pythontests.bucket]]
+include = ["tests-isaacsim.test.action_event_sdg*${shell_ext}"]
+name = "action_event_sdg"
+
+[[repo_test.suites.pythontests.bucket]]
 include = [
   "tests-isaacsim.examples*${shell_ext}",
   "tests-isaacsim.test*${shell_ext}",
@@ -784,6 +774,10 @@ args = [
 ]
 exclude = []
 include = ["tests-nativepython*${shell_ext}"]
+stdout_fail_patterns.exclude = [
+  "*[Error] [omni.rtx] Failed to request UJITSO build result for: *.hdr*",
+  "*[Error] [rtx.scenedb] Failed to upload DomeLight texture *.hdr*",
+]
 stdout_fail_patterns.include = ["*[error]*", "*[fatal]*", "*[fail]*"]
 tc_report_enabled = false
 timeout = 960
@@ -966,6 +960,7 @@ cpp.files.exclude = [
   "templates/**",
   "tools/container/**",
 ]
+cpp.files.extensions = [".h", ".hpp", ".inl", ".cpp", ".c"]
 
 python.files.include = [
   "**",
@@ -1124,11 +1119,11 @@ precache_exts_enabled = false
 
 
 [[repo_kit_pull_extensions.environment]]
-name = "prod"
+name = "integ"
 app_version_regex = ""
 "tokens.registry_url" = "https://ovextensionsprod.blob.core.windows.net"
 "tokens.registry_shared_name" = "shared"
-"tokens.registry_name" = "isaacsim/prod/6.0"
+"tokens.registry_name" = "kit/prod"
 
 
 ########################################################################################################################
@@ -1257,6 +1252,8 @@ wheel.python = "cp312"
 [repo_comment_archive_deps]
 archives = [
   "isaacsim.pip.newton",
+  "isaacsim.pip.nv",
+  "isaacsim.pip.onnx",
   "omni.isaac.core_archive",
   "omni.isaac.ml_archive",
   "omni.pip.compute",

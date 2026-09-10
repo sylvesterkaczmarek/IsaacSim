@@ -17,6 +17,10 @@
 # entire test process — no subsequent tests run.
 replicator_tutorials/tutorial_replicator_isaac_snippets/cosmos_writer_simple_script_editor.py
 
+# Full UR10 palletizing SDG workflow runs for many frames and schedules nested
+# async capture tasks; exercise it as a tutorial script, not as a 30-frame snippet.
+replicator_tutorials/tutorial_replicator_ur10_palletizing/sdg_ur10_palletizing_script_editor.py
+
 # This manipulation tutorial is an interactive ROS2 loop.  In headless snippet
 # collection it can consume the per-snippet timeout and kill the whole suite
 # before expected-failure matching can run.

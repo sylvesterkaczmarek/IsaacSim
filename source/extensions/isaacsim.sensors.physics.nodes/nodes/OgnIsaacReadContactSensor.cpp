@@ -14,14 +14,14 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/Defines.h>
 #include <carb/Types.h>
 
-#include <isaacsim/core/includes/BaseResetNode.h>
-#include <isaacsim/sensors/experimental/physics/IContactSensor.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
+#include <isaacsim/sensors/experimental/physics/IContactSensor.hpp>
 #include <omni/fabric/FabricUSD.h>
 
 #include <OgnIsaacReadContactSensorDatabase.h>

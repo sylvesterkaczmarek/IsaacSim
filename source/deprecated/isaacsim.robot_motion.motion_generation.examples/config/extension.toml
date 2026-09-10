@@ -4,7 +4,7 @@
 #
 
 [package]
-version = "0.3.2"
+version = "0.3.4"
 category = "Simulation"
 title = "Motion Generation Examples"
 description = "Examples for using the Lula planning library under motion generation."

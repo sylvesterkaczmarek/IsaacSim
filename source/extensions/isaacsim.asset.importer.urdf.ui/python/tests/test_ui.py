@@ -33,7 +33,7 @@ from isaacsim.asset.importer.urdf import URDFImporter, URDFImporterConfig
 from isaacsim.asset.importer.urdf.ui.impl import extension as urdf_ui_extension
 from isaacsim.core.experimental.utils import stage as stage_utils
 from isaacsim.test.utils import MenuUITestCase, usd_utils
-from pxr import Sdf
+from pxr import Sdf, Usd
 
 
 # Having a test class dervived from omni.kit.test.AsyncTestCase declared on the root of module will make it auto-discoverable by omni.kit.test
@@ -182,6 +182,40 @@ class TestImporterUI(MenuUITestCase):
         self.assertAlmostEqual(shoulder_link.GetAttribute("physics:mass").Get(), 7.778, delta=1e-2)
 
         await omni.kit.app.get_app().next_update_async()
+
+    async def test_import_ur10_adds_reference_to_current_stage(self) -> None:
+        """Add the imported UR10 USD as a reference to the current stage."""
+        extension = urdf_ui_extension.get_instance()
+        extension.reset_config()
+
+        stage_utils.create_new_stage()
+        stage_utils.define_prim("/World", type_name="Xform")
+        stage = stage_utils.get_current_stage()
+        stage.SetDefaultPrim(stage.GetPrimAtPath("/World"))
+        stage_id = extension._usd_context.get_stage_id()
+
+        extension.build_new_options([self._urdf_path])
+        state = extension._per_file_state[urdf_ui_extension._normalize_path_key(self._urdf_path)]
+        self.assertFalse(state.models["add_reference_to_stage"].get_value_as_bool())
+        state.models["dst_path"].set_value(self._tmpdir)
+        state.models["add_reference_to_stage"].set_value(True)
+
+        output_path = extension._start_import(self._urdf_path)
+        self.assertIsNotNone(output_path)
+        await omni.kit.app.get_app().next_update_async()
+        self.assertEqual(extension._usd_context.get_stage_id(), stage_id)
+        reference_specs = [
+            prim_spec
+            for prim_spec in stage.GetRootLayer().rootPrims
+            if prim_spec.referenceList.GetAddedOrExplicitItems()
+        ]
+        self.assertEqual(len(reference_specs), 1)
+        references = reference_specs[0].referenceList.GetAddedOrExplicitItems()
+        source_stage = Usd.Stage.Open(output_path)
+        self.assertEqual(references[0].assetPath, output_path)
+        self.assertEqual(references[0].primPath, Sdf.Path.emptyPath)
+        self.assertTrue(source_stage.HasDefaultPrim())
+        self.assertTrue(source_stage.GetDefaultPrim().IsValid())
 
     async def test_urdf_ui_selections(self) -> None:
         """Update UI settings and validate importer config values.

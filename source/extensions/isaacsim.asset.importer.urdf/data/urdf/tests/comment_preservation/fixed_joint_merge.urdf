@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="test">
+  <!-- preserve note for "adapter" -->
+  <link name="base"/>
+  <link name="adapter">
+    <visual>
+      <geometry><box size="1 1 1"/></geometry>
+      <!-- isaac:source_geometry {"type": "Capsule"} -->
+    </visual>
+    <collision>
+      <geometry><box size="1 1 1"/></geometry>
+      <!-- isaac:source_geometry {"type": "Cone"} -->
+    </collision>
+  </link>
+  <link name="tip"/>
+  <joint name="fixed_j" type="fixed">
+    <parent link="base"/>
+    <child link="adapter"/>
+  </joint>
+  <joint name="moving_j" type="revolute">
+    <parent link="adapter"/>
+    <child link="tip"/>
+    <axis xyz="0 0 1"/>
+    <!-- isaac:source_joint {"type": "D6Joint"} -->
+    <!-- isaac:source_drive {"source": "physx"} -->
+  </joint>
+</robot>

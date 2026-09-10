@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.2.0] - 2026-08-10
+### Added
+- Expose SimReady foundation tier rules in the Asset Validator interface.
+
+### Fixed
+- Register `RGBSensorUsdRule` explicitly on startup so it survives the Asset Validator registry reset.
+
+## [2.1.0] - 2026-07-29
+### Added
+- Added `RGBSensorUsdRule` for validating authored RGB sensor USD assets.
+
+## [2.0.0] - 2026-07-15
+### Removed
+- Removed all in-extension validation rules (physics, joints, drives, robot schema, materials) and their unit tests. These now live in the SimReady foundation validation tiers and are the single source of truth.
+
+### Changed
+- The extension now provisions `simready-validate` and the `simready-foundation-tier-core` / `simready-foundation-tier-isaac` wheels via `[python.pipapi]` (internal Artifactory index) instead of registering rules with the Omniverse Asset Validator.
+- Dropped the `omni.asset_validator.core` dependency; physics and robot-schema Kit dependencies are retained for tier validators that need the runtime.
+
 ## [1.3.6] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

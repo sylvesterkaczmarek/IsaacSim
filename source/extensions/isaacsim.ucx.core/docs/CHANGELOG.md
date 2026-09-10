@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.6] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [1.4.5] - 2026-06-23
+### Fixed
+- Removed `[[native.plugin]]` declaration.
+
 ## [1.4.4] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.
@@ -49,7 +57,7 @@
 
 ## [1.1.0] - 2025-11-24
 ### Added
-- Added `UcxUtils.h`.
+- Added `UcxUtils.hpp`.
 - Added UCX Python dependencies.
 
 ### Changed

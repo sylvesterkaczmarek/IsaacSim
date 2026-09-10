@@ -24,9 +24,11 @@ import numpy as np
 from isaacsim.core.api import objects
 from isaacsim.core.api.controllers.base_controller import BaseController
 from isaacsim.core.utils.types import ArticulationAction
-from isaacsim.robot_motion.motion_generation.articulation_kinematics_solver import ArticulationKinematicsSolver
-from isaacsim.robot_motion.motion_generation.articulation_trajectory import ArticulationTrajectory
-from isaacsim.robot_motion.motion_generation.path_planner_visualizer import PathPlannerVisualizer
+from isaacsim.robot_motion.motion_generation import (
+    ArticulationKinematicsSolver,
+    ArticulationTrajectory,
+    PathPlannerVisualizer,
+)
 
 
 class LulaController(BaseController):
@@ -51,14 +53,14 @@ class LulaController(BaseController):
     def forward(
         self, target_end_effector_position: np.ndarray, target_end_effector_orientation: Optional[np.ndarray] = None
     ) -> ArticulationAction:
-        """Computes control actions to reach the target end effector pose.
+        """Defines the LulaController interface for computing control actions to reach the target end effector pose.
 
         Args:
             target_end_effector_position: Target position for the end effector in world coordinates.
             target_end_effector_orientation: Target orientation for the end effector.
 
         Returns:
-            Articulation action containing joint commands to achieve the target pose.
+            The articulation action driving the robot toward the target end-effector pose.
         """
         return
 
@@ -112,7 +114,7 @@ class TrajectoryController(LulaController):
     """A controller that executes pre-computed articulation trajectories.
 
     This controller plays back a sequence of joint actions from a pre-computed articulation trajectory at a fixed
-    framerate of 60 FPS. It automatically handles the conversion from trajectory waypoints to individual
+    frame rate of 60 FPS. It automatically handles the conversion from trajectory waypoints to individual
     ArticulationAction objects that can be applied to control robot articulations.
 
     The controller manages trajectory playback by:
@@ -141,10 +143,10 @@ class TrajectoryController(LulaController):
         of joint positions on the first call and trajectory completion when all actions are consumed.
 
         Args:
-            target_end_effector_position: Target position for the end effector (not used in trajectory
-                execution but required for interface compatibility).
-            target_end_effector_orientation: Target orientation for the end effector (not used in trajectory
-                execution but required for interface compatibility).
+            target_end_effector_position: Target position for the end effector. Required for interface compatibility and
+                not used during trajectory execution.
+            target_end_effector_orientation: Target orientation for the end effector. Required for interface compatibility
+                and not used during trajectory execution.
 
         Returns:
             The next articulation action in the trajectory sequence.

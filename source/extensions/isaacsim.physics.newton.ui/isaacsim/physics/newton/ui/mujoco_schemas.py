@@ -15,6 +15,13 @@
 
 """Mujoco schema discovery and UI definitions for the Newton physics extension."""
 
+from omni.kit.property.physics.builders import HideWidgetBuilder
+from pxr import UsdPhysics
+
+from .array_widget import NumberArrayEditorBuilder
+from .mujoco_widgets import ignored_schemas
+from .utils import DisableByCallbackBuilder, PrimType, make_hide_cb
+
 
 def _get_mujoco_schema_names(pluginName: str) -> tuple[set[str], set[str]]:
     """Get all schema type names from the specified plugin.
@@ -57,7 +64,10 @@ def _get_mujoco_schema_names(pluginName: str) -> tuple[set[str], set[str]]:
         if schema_kind in (Usd.SchemaKind.AbstractTyped, Usd.SchemaKind.ConcreteTyped):
             # This is a typed schema (prim type)
             prim_type_names.add(schema_type_name)
-        elif schema_kind in (Usd.SchemaKind.SingleApplyAPI, Usd.SchemaKind.MultipleApplyAPI):
+        elif schema_kind in (
+            Usd.SchemaKind.SingleApplyAPI,
+            Usd.SchemaKind.MultipleApplyAPI,
+        ):
             # This is an API schema
             api_schema_names.add(schema_type_name)
 
@@ -94,20 +104,16 @@ def get_mujoco_schema_names() -> tuple[set[str], set[str]]:
 
 # NOTE: omni.physics.physx.ui/omni/physics/physxui/schemas/physxschema.py for reference
 
-from omni.kit.property.physics.builders import HideWidgetBuilder
-from pxr import UsdPhysics
-
-from .utils import DisableByCallbackBuilder, PrimType, make_hide_cb
-
 CallbackBuilder = DisableByCallbackBuilder
 HIDE_PROPERTY = [HideWidgetBuilder]
+ARRAY_EDITOR = [NumberArrayEditorBuilder]
 
 
 class MujocoUiDefinitions:
     """UI definitions (widgets, property builders, ordering) for Mujoco schemas."""
 
-    ignore = {}
-    """Dictionary of schema types to ignore in UI rendering."""
+    ignore = ignored_schemas
+    """Schema types rendered by custom MuJoCo apply widgets."""
 
     extensions = {UsdPhysics.Joint: ["MjcJointAPI"]}
     """Dictionary mapping USD schema types to their corresponding Mujoco API extensions."""
@@ -122,12 +128,29 @@ class MujocoUiDefinitions:
         "mjc:compiler:useThread": HIDE_PROPERTY,
         # Common Mjc/Newton properties - hidden when the Newton resolver provides the value.
         # SCENE
-        "mjc:flag:gravity": [CallbackBuilder, make_hide_cb("mjc", PrimType.SCENE, "gravity_enabled", True)],
-        "mjc:option:iterations": [CallbackBuilder, make_hide_cb("mjc", PrimType.SCENE, "max_solver_iterations", None)],
-        "mjc:option:timestep": [CallbackBuilder, make_hide_cb("mjc", PrimType.SCENE, "time_steps_per_second", 1000)],
+        "mjc:flag:gravity": [
+            CallbackBuilder,
+            make_hide_cb("mjc", PrimType.SCENE, "gravity_enabled", True),
+        ],
+        "mjc:option:iterations": [
+            CallbackBuilder,
+            make_hide_cb("mjc", PrimType.SCENE, "max_solver_iterations", None),
+        ],
+        "mjc:option:timestep": [
+            CallbackBuilder,
+            make_hide_cb("mjc", PrimType.SCENE, "time_steps_per_second", 1000),
+        ],
         # JOINT
-        "mjc:armature": [CallbackBuilder, make_hide_cb("mjc", PrimType.JOINT, "armature", 0.0)],
-        "mjc:frictionloss": [CallbackBuilder, make_hide_cb("mjc", PrimType.JOINT, "friction", 0.0)],
+        "mjc:armature": [
+            CallbackBuilder,
+            make_hide_cb("mjc", PrimType.JOINT, "armature", 0.0),
+        ],
+        "mjc:frictionloss": [
+            CallbackBuilder,
+            make_hide_cb("mjc", PrimType.JOINT, "friction", 0.0),
+        ],
+        # SolRef is shared by joint/collision/equality schemas. Keep the Newton
+        # hide overlay and render the fixed-size array through the pop-up editor.
         "mjc:solref": [
             CallbackBuilder,
             make_hide_cb(
@@ -152,14 +175,61 @@ class MujocoUiDefinitions:
                     "limit_rotZ_kd",
                 ],
             ),
+            NumberArrayEditorBuilder,
         ],
         # SHAPE
-        "mjc:maxhullvert": [CallbackBuilder, make_hide_cb("mjc", PrimType.SHAPE, "max_hull_vertices", -1)],
-        "mjc:margin": [CallbackBuilder, make_hide_cb("mjc", PrimType.SHAPE, "margin", 0.0)],
+        "mjc:maxhullvert": [
+            CallbackBuilder,
+            make_hide_cb("mjc", PrimType.SHAPE, "max_hull_vertices", -1),
+        ],
+        "mjc:margin": [
+            CallbackBuilder,
+            make_hide_cb("mjc", PrimType.SHAPE, "margin", 0.0),
+        ],
         "mjc:gap": [CallbackBuilder, make_hide_cb("mjc", PrimType.SHAPE, "gap", 0.0)],
         # MATERIAL
-        "mjc:torsionalfriction": [CallbackBuilder, make_hide_cb("mjc", PrimType.MATERIAL, "mu_torsional", 0.005)],
-        "mjc:rollingfriction": [CallbackBuilder, make_hide_cb("mjc", PrimType.MATERIAL, "mu_rolling", 0.0001)],
+        "mjc:torsionalfriction": [
+            CallbackBuilder,
+            make_hide_cb("mjc", PrimType.MATERIAL, "mu_torsional", 0.005),
+        ],
+        "mjc:rollingfriction": [
+            CallbackBuilder,
+            make_hide_cb("mjc", PrimType.MATERIAL, "mu_rolling", 0.0001),
+        ],
+        # Numeric arrays edited by index through a pop-up window (see array_widget.py).
+        # KEYFRAME (variable length; sized by the model)
+        "mjc:act": ARRAY_EDITOR,
+        "mjc:ctrl": ARRAY_EDITOR,
+        "mjc:mpos": ARRAY_EDITOR,
+        "mjc:mquat": ARRAY_EDITOR,
+        "mjc:qpos": ARRAY_EDITOR,
+        "mjc:qvel": ARRAY_EDITOR,
+        # ACTUATOR parameter vectors (fixed MuJoCo lengths)
+        "mjc:biasPrm": ARRAY_EDITOR,
+        "mjc:dynPrm": ARRAY_EDITOR,
+        "mjc:gainPrm": ARRAY_EDITOR,
+        "mjc:gear": ARRAY_EDITOR,
+        # JOINT solver / spring arrays (fixed MuJoCo lengths)
+        "mjc:solimpfriction": ARRAY_EDITOR,
+        "mjc:solimplimit": ARRAY_EDITOR,
+        "mjc:solreffriction": ARRAY_EDITOR,
+        "mjc:solreflimit": ARRAY_EDITOR,
+        "mjc:springdamper": ARRAY_EDITOR,
+        # COLLISION / EQUALITY contact solver arrays (fixed MuJoCo lengths)
+        "mjc:solimp": ARRAY_EDITOR,
+        # SCENE contact-override arrays (fixed MuJoCo lengths)
+        "mjc:option:o_friction": ARRAY_EDITOR,
+        "mjc:option:o_solimp": ARRAY_EDITOR,
+        "mjc:option:o_solref": ARRAY_EDITOR,
+        # TENDON path/side-site arrays (variable length) and springlength (max 2)
+        "mjc:path:coef": ARRAY_EDITOR,
+        "mjc:path:divisors": ARRAY_EDITOR,
+        "mjc:path:indices": ARRAY_EDITOR,
+        "mjc:path:segments": ARRAY_EDITOR,
+        "mjc:sideSites:indices": ARRAY_EDITOR,
+        "mjc:springlength": ARRAY_EDITOR,
+        # SCENE
+        "mjc:option:actuatorgroupdisable": ARRAY_EDITOR,
     }
     """Dictionary mapping property names to their corresponding UI builder classes."""
     property_order = {
@@ -282,7 +352,8 @@ class MujocoUiDefinitions:
             "mjc:flag:actuation",  # Actuation Forces Toggle
             "mjc:option:actuatorgroupdisable",  # Actuator Group Disable
             "mjc:compiler:alignFree",  # Align Free
-            "mjc:compiler:angle",  # Angle
+            # Do not expose angle conversion, it is only used in MJCF import, usd will always be in degrees
+            # "mjc:compiler:angle",  # Angle
             "mjc:compiler:autoLimits",  # Automatic Limits
             "mjc:flag:autoreset",  # Automatic Simulation Reset Toggle
             "mjc:compiler:balanceInertia",  # Balance Inertia

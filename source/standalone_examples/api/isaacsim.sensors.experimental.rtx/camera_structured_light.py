@@ -134,7 +134,14 @@ CAMERA_INTRINSICS: dict[str, object] = {
 
 
 def _is_local_path(value: str) -> bool:
-    """Return True if ``value`` looks like a local filesystem path (no URI scheme)."""
+    """Return True if ``value`` looks like a local filesystem path (no URI scheme).
+
+    Args:
+        value: Path or asset URI to classify.
+
+    Returns:
+        True when ``value`` contains no URI scheme, otherwise False.
+    """
     return "://" not in value
 
 
@@ -143,6 +150,13 @@ def _get_bundled_data_dir() -> Path:
 
     The assets live under the ``isaacsim.sensors.experimental.rtx`` extension at
     ``tests/data/structured_light_camera/``.
+
+    Returns:
+        Path of the extension's structured-light test-data directory.
+
+    Raises:
+        RuntimeError: If the sensor extension cannot be located.
+        FileNotFoundError: If the extension does not contain its bundled structured-light data.
     """
     ext_manager = omni.kit.app.get_app().get_extension_manager()
     ext_path = ext_manager.get_extension_path_by_module("isaacsim.sensors.experimental.rtx")
@@ -163,7 +177,15 @@ def _get_bundled_data_dir() -> Path:
 
 
 def _resolve_pattern_files() -> list[str | Path]:
-    """Resolve the projector pattern paths from CLI args or bundled defaults."""
+    """Resolve the projector pattern paths from CLI args or bundled defaults.
+
+    Returns:
+        Ordered local paths or asset URIs for every projector pattern.
+
+    Raises:
+        RuntimeError: If the sensor extension cannot be located when using bundled patterns.
+        FileNotFoundError: If a requested local or bundled pattern file does not exist.
+    """
     if args.pattern_dir is not None:
         if _is_local_path(args.pattern_dir):
             pattern_dir_path = Path(args.pattern_dir)
@@ -184,7 +206,15 @@ def _resolve_pattern_files() -> list[str | Path]:
 
 
 def _resolve_direction_texture() -> str | Path:
-    """Resolve the projector direction texture from CLI args or bundled default."""
+    """Resolve the projector direction texture from CLI args or bundled default.
+
+    Returns:
+        Local path or asset URI for the projector direction texture.
+
+    Raises:
+        RuntimeError: If the sensor extension cannot be located when using the bundled texture.
+        FileNotFoundError: If the requested local or bundled texture does not exist.
+    """
     if args.direction_texture is not None:
         if _is_local_path(args.direction_texture):
             direction_texture: str | Path = Path(args.direction_texture)

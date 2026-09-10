@@ -4,81 +4,228 @@
 This extension is deprecated in favor of `isaacsim.sensors.experimental.physics`.
 ```
 
-The isaacsim.sensors.physics extension provides physics-based sensor simulation capabilities for Isaac Sim. This extension offers contact sensors for detecting physical interactions, IMU sensors for measuring inertial data, and effort sensors for monitoring joint forces and torques in robotic simulations. The sensors integrate with the physics simulation to provide real-time measurements with configurable sampling rates, filtering, and interpolation capabilities.
+`**isaacsim.sensors.physics**` provides Python APIs for physics-based sensor simulation, including contact sensing, IMU readings, and joint effort measurement. It lets you create sensor prims in a USD stage, configure their sampling behavior, and read simulation data from physics-enabled objects. The main use cases are detecting contact forces, measuring inertial motion, and monitoring effort on articulated joints.
+
+<div align="center">
+
+```mermaid
+graph TD
+    %% Inheritance relationships
+    BaseSensor --> ContactSensor
+    BaseSensor --> IMUSensor
+    SingleArticulation --> EffortSensor
+    omni.kit.commands.Command --> IsaacSensorCreatePrim
+    omni.kit.commands.Command --> IsaacSensorCreateContactSensor
+    omni.kit.commands.Command --> IsaacSensorCreateImuSensor
+```
+
+</div>
+
+## Concepts
+
+### Sensor timing
+
+{class}`ContactSensor <isaacsim.sensors.physics.ContactSensor>` and {class}`IMUSensor <isaacsim.sensors.physics.IMUSensor>` support either `frequency` or `dt` to control sampling. These options are mutually exclusive, so use only one when constructing the sensor.
+
+```python
+from isaacsim.sensors.physics import IMUSensor
+
+imu = IMUSensor(
+    prim_path="/World/Robot/imu",
+    name="imu_sensor",
+    frequency=60,
+)
+```
+
+Use `frequency` when you want readings in Hz. Use `dt` when you want to specify the exact sensor period in seconds.
+
+### Physics requirements
+
+{class}`ContactSensor <isaacsim.sensors.physics.ContactSensor>` must be attached to a prim that has `UsdPhysics.CollisionAPI` enabled. Contact sensing depends on physics collision data, so the parent prim must participate in collision reporting.
+
+{class}`IMUSensor <isaacsim.sensors.physics.IMUSensor>` reads simulated linear acceleration, angular velocity, and orientation from a physics body. When creating a new IMU prim without an explicit `dt`, a `PhysicsScene` must exist on the stage.
+
+### Frame data
+
+Sensor readings are returned as frame dictionaries. These frames include simulation timing information such as `time` and `physics_step`, along with sensor-specific values.
+
+For example, `IMUSensor.get_current_frame()` returns linear acceleration, angular velocity, orientation, and validity state. `ContactSensor.get_current_frame()` returns contact state, force, number of contacts, and optionally raw contact entries.
+
+## Functionality
+
+### Contact sensing
+
+{class}`ContactSensor <isaacsim.sensors.physics.ContactSensor>` detects physical contact and reports contact force data. It supports configurable force thresholds and a detection radius.
+
+Key capabilities include:
+
+- Detect whether the sensor is currently in contact.
+- Read the current contact force magnitude.
+- Configure minimum and maximum force thresholds.
+- Configure the sensor detection radius.
+- Optionally include raw contact data such as contact points, normals, and impulses.
+- Pause and resume data collection.
+
+```python
+from isaacsim.sensors.physics import ContactSensor
+
+contact_sensor = ContactSensor(
+    prim_path="/World/Object/contact_sensor",
+    name="contact_sensor",
+    frequency=60,
+    min_threshold=0.1,
+    max_threshold=100000.0,
+    radius=-1.0,
+)
+
+contact_sensor.initialize()
+
+frame = contact_sensor.get_current_frame()
+print(frame["in_contact"])
+print(frame["force"])
+```
+
+To include detailed contact data in the frame:
+
+```python
+contact_sensor.add_raw_contact_data_to_frame()
+frame = contact_sensor.get_current_frame()
+
+contacts = frame.get("contacts", [])
+for contact in contacts:
+    print(contact)
+```
+
+### IMU sensing
+
+{class}`IMUSensor <isaacsim.sensors.physics.IMUSensor>` measures inertial data from a simulated body. It provides three-axis linear acceleration, three-axis angular velocity, and orientation as a quaternion in scalar-first order.
+
+The sensor also supports moving average filter sizes for each measurement type:
+
+- `linear_acceleration_filter_size`
+- `angular_velocity_filter_size`
+- `orientation_filter_size`
+
+```python
+from isaacsim.sensors.physics import IMUSensor
+
+imu_sensor = IMUSensor(
+    prim_path="/World/Robot/imu_sensor",
+    name="imu_sensor",
+    dt=1.0 / 120.0,
+    linear_acceleration_filter_size=4,
+    angular_velocity_filter_size=4,
+    orientation_filter_size=1,
+)
+
+imu_sensor.initialize()
+
+frame = imu_sensor.get_current_frame(read_gravity=True)
+print(frame["lin_acc"])
+print(frame["ang_vel"])
+print(frame["orientation"])
+```
+
+Use `read_gravity=False` when you want linear acceleration without gravity included.
+
+### Effort sensing
+
+{class}`EffortSensor <isaacsim.sensors.physics.EffortSensor>` measures joint effort for an articulated body. The `prim_path` should point to a joint under an articulation, for example `"/World/Robot/joint_name"`.
+
+The sensor stores readings in buffers and can return either the latest value or an interpolated value based on the configured `sensor_period`.
+
+```python
+from isaacsim.sensors.physics import EffortSensor
+
+effort_sensor = EffortSensor(
+    prim_path="/World/Robot/arm_joint",
+    sensor_period=1.0 / 60.0,
+    use_latest_data=False,
+    enabled=True,
+)
+
+reading = effort_sensor.get_sensor_reading()
+print(reading.is_valid)
+print(reading.time)
+print(reading.value)
+```
+
+{class}`EsSensorReading <isaacsim.sensors.physics.EsSensorReading>` is the data container returned by {class}`EffortSensor <isaacsim.sensors.physics.EffortSensor>`. It contains:
+
+- `is_valid`: Whether the reading is valid.
+- `time`: Simulation time for the reading.
+- `value`: Measured effort value.
 
 ## Key Components
 
 ### {class}`ContactSensor <isaacsim.sensors.physics.ContactSensor>`
 
-**{class}`ContactSensor <isaacsim.sensors.physics.ContactSensor>` detects physical contact and measures contact forces in real-time.** The sensor creates a collision detection area that monitors when objects come into contact and reports the magnitude of contact forces. It requires the parent prim to have UsdPhysics.CollisionAPI enabled and supports configurable force thresholds to filter contacts based on minimum and maximum force values.
+{class}`ContactSensor <isaacsim.sensors.physics.ContactSensor>` is the high-level runtime API for contact force sensing. It is used after a contact sensor prim exists or is created at the requested path.
 
-The sensor provides both basic contact information (boolean contact state and force magnitude) and detailed contact data including contact positions, normals, and impulses. Detection radius can be configured to limit the sensing area, and the sensor operates at specified frequencies or time steps.
+Common operations include:
 
-```python
-import isaacsim.sensors.physics as sensors_physics
-
-# Create a contact sensor with force thresholds
-contact_sensor = sensors_physics.ContactSensor(
-    prim_path="/World/ContactSensor",
-    min_threshold=1.0,
-    max_threshold=1000.0,
-    radius=0.5,
-    frequency=60
-)
-
-# Get current contact data
-frame_data = contact_sensor.get_current_frame()
-```
+- `get_current_frame()` to read contact state and force data.
+- `set_frequency()` and `set_dt()` to change sampling.
+- `set_radius()` to change detection radius.
+- `set_min_threshold()` and `set_max_threshold()` to filter contact forces.
+- `pause()`, `resume()`, and `is_paused()` to control collection.
 
 ### {class}`IMUSensor <isaacsim.sensors.physics.IMUSensor>`
 
-**{class}`IMUSensor <isaacsim.sensors.physics.IMUSensor>` measures linear acceleration, angular velocity, and orientation through simulated inertial measurement.** The sensor provides three-axis linear acceleration, three-axis angular velocity, and quaternion orientation data from physics simulation. It supports configurable filtering for each measurement type using moving average filters to smooth sensor readings.
+{class}`IMUSensor <isaacsim.sensors.physics.IMUSensor>` is the high-level runtime API for inertial measurements. It reads linear acceleration, angular velocity, and orientation from simulation.
 
-The sensor can be positioned and oriented relative to its parent body through local translation and rotation offsets. It operates at configurable sampling frequencies and can include or exclude gravity from acceleration measurements.
+Common operations include:
 
-```python
-# Create an IMU sensor with filtering
-imu_sensor = sensors_physics.IMUSensor(
-    prim_path="/World/Robot/IMU",
-    frequency=100,
-    linear_acceleration_filter_size=5,
-    angular_velocity_filter_size=3,
-    orientation_filter_size=2
-)
-
-# Get current inertial measurements
-imu_data = imu_sensor.get_current_frame(read_gravity=False)
-```
+- `get_current_frame(read_gravity=True)` to read IMU data.
+- `set_frequency()` and `set_dt()` to change sampling.
+- `pause()`, `resume()`, and `is_paused()` to control collection.
 
 ### {class}`EffortSensor <isaacsim.sensors.physics.EffortSensor>`
 
-**{class}`EffortSensor <isaacsim.sensors.physics.EffortSensor>` monitors joint effort (force/torque) in articulated bodies during physics simulation.** The sensor measures the effort applied to specific joints in robotic systems and provides configurable sampling rates with data interpolation capabilities. It maintains internal buffers for temporal data processing and automatically manages data acquisition through physics simulation callbacks.
+{class}`EffortSensor <isaacsim.sensors.physics.EffortSensor>` measures effort on a selected degree of freedom in an articulation. It derives from `SingleArticulation`, which reflects that effort readings are tied to articulated-body state.
 
-The sensor can operate at different frequencies than the physics step rate and provides interpolation between samples when needed. It supports both latest data retrieval and time-based interpolated values.
+Useful methods include:
+
+- `get_sensor_reading()` to retrieve the current effort reading.
+- `update_dof_name()` to change which joint degree of freedom is monitored.
+- `change_buffer_size()` to resize internal reading buffers.
+- `lerp()` for linear interpolation between effort values.
+
+### Sensor creation commands
+
+The module also exposes command classes for creating sensor prims in the stage:
+
+- {class}`IsaacSensorCreatePrim <isaacsim.sensors.physics.IsaacSensorCreatePrim>`
+- {class}`IsaacSensorCreateContactSensor <isaacsim.sensors.physics.IsaacSensorCreateContactSensor>`
+- {class}`IsaacSensorCreateImuSensor <isaacsim.sensors.physics.IsaacSensorCreateImuSensor>`
+
+These classes derive from `**omni.kit.commands.Command**`, so they follow the Kit command pattern with `do()` and `undo()` methods.
+
+{class}`IsaacSensorCreateContactSensor <isaacsim.sensors.physics.IsaacSensorCreateContactSensor>` creates a contact sensor prim and applies the PhysX Contact Report API to the parent prim. {class}`IsaacSensorCreateImuSensor <isaacsim.sensors.physics.IsaacSensorCreateImuSensor>` creates an IMU sensor prim with configurable sensor period, transform, and filter sizes.
 
 ```python
-# Create an effort sensor for a robot joint
-effort_sensor = sensors_physics.EffortSensor(
-    prim_path="/World/Robot/joint_1",
-    sensor_period=0.01,  # 100 Hz sampling
-    use_latest_data=False
-)
+import omni.kit.commands
+from pxr import Gf
 
-# Get interpolated effort reading
-reading = effort_sensor.get_sensor_reading()
-print(f"Joint effort: {reading.value} at time {reading.time}")
+omni.kit.commands.execute(
+    "IsaacSensorCreateImuSensor",
+    path="/Imu_Sensor",
+    parent="/World/Robot",
+    sensor_period=1.0 / 60.0,
+    translation=Gf.Vec3d(0.0, 0.0, 0.0),
+    orientation=Gf.Quatd(1.0, 0.0, 0.0, 0.0),
+    linear_acceleration_filter_size=1,
+    angular_velocity_filter_size=1,
+    orientation_filter_size=1,
+)
 ```
 
-## Functionality
+## Relationships
 
-### Sensor Creation Commands
+{class}`ContactSensor <isaacsim.sensors.physics.ContactSensor>` and {class}`IMUSensor <isaacsim.sensors.physics.IMUSensor>` inherit from `BaseSensor` in `**isaacsim.core.api.sensors.base_sensor**`, so they follow the same general sensor pattern for initialization, frame access, and pause/resume control.
 
-The extension provides USD commands for programmatically creating sensor prims in the stage. {class}`IsaacSensorCreateContactSensor <isaacsim.sensors.physics.IsaacSensorCreateContactSensor>` creates contact sensors with collision detection capabilities, while {class}`IsaacSensorCreateImuSensor <isaacsim.sensors.physics.IsaacSensorCreateImuSensor>` creates IMU sensors with inertial measurement functionality. These commands handle prim creation, schema application, and initial configuration.
+{class}`EffortSensor <isaacsim.sensors.physics.EffortSensor>` inherits from `SingleArticulation` from `**isaacsim.core.prims**`, because it reads effort from an articulated body joint. It also manages physics and timeline callbacks to keep effort readings synchronized with simulation steps.
 
-### Data Structures
+The sensor creation APIs use `**omni.kit.commands.Command**`, allowing sensor prim creation to participate in the command system. The command arguments use `pxr.Gf` vector and quaternion types for translation, orientation, radius visualization color, and other stage-facing values.
 
-{class}`EsSensorReading <isaacsim.sensors.physics.EsSensorReading>` encapsulates effort sensor measurement data including the measured value, timestamp, and validity status. The sensor classes use these data containers to manage buffered sensor readings and provide consistent interfaces for accessing measurement data across different sensor types.
-
-## Integration
-
-The extension integrates with **omni.physics** for physics simulation callbacks and **omni.timeline** for simulation timing control. It uses isaacsim.core.api for base sensor functionality and connects with the broader Isaac Sim ecosystem for robotic simulation workflows. The sensors automatically register with physics simulation events to collect data during simulation steps.
+The extension is backed by a Carbonite C++ plugin and a `_sensor` Python binding module. The plugin exposes the `ContactSensorInterface` and `ImuSensorInterface` interfaces that {class}`ContactSensor <isaacsim.sensors.physics.ContactSensor>` and {class}`IMUSensor <isaacsim.sensors.physics.IMUSensor>` acquire to read simulated sensor data.

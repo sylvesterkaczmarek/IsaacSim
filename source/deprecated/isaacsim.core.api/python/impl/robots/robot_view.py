@@ -25,33 +25,33 @@ torch = import_module("torch")
 
 
 class RobotView(Articulation):
-    """Implementation (on ``Articulation`` class) to deal with articulation prims as robots.
+    """Implementation on the ``Articulation`` class to deal with articulation prims as robots.
 
-    This class wraps all matching articulations found at the regex provided at the ``prim_paths_expr`` argument
+    This class wraps all matching articulations found at the regex provided in the ``prim_paths_expr`` argument.
 
     .. warning::
 
-        The robot (articulation) view object must be initialized in order to be able to operate on it.
+        The robot articulation view object must be initialized in order to be able to operate on it.
         See the ``initialize`` method for more details.
 
     Args:
-        prim_paths_expr: prim paths regex to encapsulate all prims that match it.
-            example: "/World/Env[1-5]/Franka" will match /World/Env1/Franka,
+        prim_paths_expr: Prim paths regex to encapsulate all prims that match it.
+            Example: "/World/Env[1-5]/Franka" will match /World/Env1/Franka,
             /World/Env2/Franka, etc.
-            (a non regex prim path can also be used to encapsulate one rigid prim).
-        name: shortname to be used as a key by Scene class.
-            Note: needs to be unique if the object is added to the Scene.
-        positions: default positions in the world frame of the prims.
-            shape is (N, 3).
-        translations: default translations in the local frame of the prims
-            (with respect to its parent prims). shape is (N, 3).
-        orientations: default quaternion orientations in the world/ local frame of the prims
-            (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (N, 4).
-        scales: local scales to be applied to
-            the prim's dimensions in the view. shape is (N, 3).
-        visibilities: set to false for an invisible prim in
-            the stage while rendering. shape is (N,).
+            A non-regex prim path can also be used to encapsulate one rigid prim.
+        name: Short name to be used as a key by Scene class.
+            Note: Needs to be unique if the object is added to the Scene.
+        positions: Default positions in the world frame of the prims.
+            Shape is (N, 3).
+        translations: Default translations in the local frame of the prims
+            with respect to its parent prims. Shape is (N, 3).
+        orientations: Default quaternion orientations in the world or local frame of the prims,
+            depending on whether translation or position is specified.
+            Quaternion is scalar-first (w, x, y, z). Shape is (N, 4).
+        scales: Local scales to be applied to
+            the prim's dimensions in the view. Shape is (N, 3).
+        visibilities: Set to False for an invisible prim in
+            the stage while rendering. Shape is (N,).
 
     Example:
 
@@ -79,7 +79,6 @@ class RobotView(Articulation):
         >>> prims = RobotView(prim_paths_expr="/World/envs/env.*/panda", name="franka_panda_view")
         >>> print(prims)
         <isaacsim.core.api.robots.robot_view.RobotView object at 0x7f12785a5fc0>
-
     """
 
     def __init__(
@@ -120,7 +119,6 @@ class RobotView(Articulation):
         .. code-block:: python
 
             >>> prims.post_reset()
-
         """
         Articulation.post_reset(self)
         return

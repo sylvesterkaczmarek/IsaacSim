@@ -15,7 +15,7 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/asset/gen/conveyor/IOmniIsaacConveyor.h>
+#include <isaacsim/asset/gen/conveyor/IOmniIsaacConveyor.hpp>
 
 CARB_BINDINGS("isaacsim.asset.gen.conveyor.python")
 

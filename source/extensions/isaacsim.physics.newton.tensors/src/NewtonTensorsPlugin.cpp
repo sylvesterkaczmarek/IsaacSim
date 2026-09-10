@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "SimulationBackend.h"
+#include "SimulationBackend.hpp"
 
 #include <carb/Framework.h>
 #include <carb/PluginUtils.h>

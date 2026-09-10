@@ -74,7 +74,6 @@ class ContactSensor(_PhysicsSensorRuntime):
         # would AttributeError on self._is_valid_sensor / self._latest_reading.
         self._is_valid_sensor = False
         self._latest_reading = ContactSensorReading()
-        self._last_physics_step = -1
         super().__init__(path)
         self._is_valid_sensor = self._check_sensor_prim_type()
 
@@ -113,6 +112,27 @@ class ContactSensor(_PhysicsSensorRuntime):
             "physics_step": 0.0,
         }
 
+    def _read_and_cache(self) -> ContactSensorReading:
+        """Read the C++ sensor and cache the result as a Python dataclass.
+
+        Returns:
+            The cached reading.
+        """
+        cpp_reading = self._iface.get_sensor_reading(self._prim_path)
+        if not cpp_reading.is_valid and self._sensor_created:
+            self._sensor_created = False
+            if self._ensure_sensor():
+                cpp_reading = self._iface.get_sensor_reading(self._prim_path)
+
+        py_reading = ContactSensorReading(
+            value=float(cpp_reading.value),
+            time=float(cpp_reading.time),
+            is_valid=bool(cpp_reading.is_valid),
+        )
+        py_reading.in_contact = bool(cpp_reading.in_contact)
+        self._latest_reading = py_reading
+        return py_reading
+
     def on_physics_step(self, step_dt: float) -> None:
         """Called by ``_SensorStepManager`` after each physics step.
 
@@ -121,36 +141,18 @@ class ContactSensor(_PhysicsSensorRuntime):
         Args:
             step_dt: Duration of the physics step in seconds.
         """
-        self._last_physics_step = SimulationManager.get_num_physics_steps()
-
         if not self._is_valid_sensor:
             return
 
         if not self._ensure_sensor():
             return
 
-        cpp_reading = self._iface.get_sensor_reading(self._prim_path)
-        if not cpp_reading.is_valid and self._sensor_created:
-            self._sensor_created = False
-            if self._ensure_sensor():
-                cpp_reading = self._iface.get_sensor_reading(self._prim_path)
-
-        # Convert the C++ binding struct to the public Python dataclass so
-        # callers always see a consistent return type (the binding type is an
-        # implementation detail that shouldn't leak through get_sensor_reading).
-        py_reading = ContactSensorReading(
-            value=float(cpp_reading.value),
-            time=float(cpp_reading.time),
-            is_valid=bool(cpp_reading.is_valid),
-        )
-        py_reading.in_contact = bool(cpp_reading.in_contact)
-        self._latest_reading = py_reading
+        self._read_and_cache()
 
     def on_timeline_stop(self) -> None:
         """Reset sensor state when the timeline stops."""
         super().on_timeline_stop()
         self._latest_reading = ContactSensorReading()
-        self._last_physics_step = -1
 
     def get_sensor_reading(self) -> ContactSensorReading:
         """Get the latest cached contact sensor reading.
@@ -165,7 +167,6 @@ class ContactSensor(_PhysicsSensorRuntime):
             if self._sensor_created:
                 self.reset()
             self._latest_reading = ContactSensorReading()
-            self._last_physics_step = -1
             self._is_valid_sensor = False
             return ContactSensorReading(is_valid=False, time=0.0)
 
@@ -175,15 +176,13 @@ class ContactSensor(_PhysicsSensorRuntime):
         if not self._is_valid_sensor:
             return ContactSensorReading(is_valid=False, time=0.0)
 
+        if not SimulationManager.is_simulating():
+            return ContactSensorReading(is_valid=False, time=0.0)
+
         if not self._ensure_sensor():
             return ContactSensorReading(is_valid=False, time=0.0)
 
-        if SimulationManager.is_simulating():
-            current_step = SimulationManager.get_num_physics_steps()
-            if current_step != self._last_physics_step:
-                self.on_physics_step(SimulationManager.get_physics_dt())
-
-        return self._latest_reading
+        return self._read_and_cache()
 
     def get_raw_data(self) -> list[dict[str, object]]:
         """Get raw contact data for the sensor's parent body.
@@ -204,13 +203,20 @@ class ContactSensor(_PhysicsSensorRuntime):
         """Get the current contact sensor data as a structured frame.
 
         Returns:
-            Frame data containing:
+            Newly allocated frame data, independent of any other call, containing:
                 - ``"in_contact"``: Whether contact is detected.
                 - ``"force"``: Contact force magnitude.
                 - ``"time"``: Simulation time of reading.
                 - ``"physics_step"``: Physics step number.
                 - ``"number_of_contacts"``: Number of contact points.
                 - ``"contacts"``: Raw contact data if enabled via ``add_raw_contact_data_to_frame``.
+
+        Note:
+            The frame is refreshed only on a valid reading; otherwise the previous values are
+            returned. Use :meth:`get_sensor_reading` and check ``is_valid`` to tell them apart.
+
+            ``"contacts"`` is rebuilt only on a valid reading, so a returned frame shares that
+            list with the sensor until the next one. Treat it as read-only.
         """
         contact_sensor_reading = self.get_sensor_reading()
 
@@ -249,7 +255,7 @@ class ContactSensor(_PhysicsSensorRuntime):
                     contacts.append(contact_frame)
                 self._current_frame["contacts"] = contacts
 
-        return self._current_frame
+        return dict(self._current_frame)
 
     def add_raw_contact_data_to_frame(self) -> None:
         """Enable raw contact data in frame output.

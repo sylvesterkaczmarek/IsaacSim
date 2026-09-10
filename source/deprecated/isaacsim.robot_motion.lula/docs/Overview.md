@@ -4,59 +4,211 @@
 This extension is deprecated in favor of `isaacsim.robot_motion.experimental.motion_generation` and `isaacsim.robot_motion.cumotion`.
 ```
 
-The isaacsim.robot_motion.lula extension provides a comprehensive Python interface to the Lula library for robotic motion planning and control. This extension enables forward and inverse kinematics, sampling-based global planning, and smooth reactive motion generation through RMPflow and geometric fabrics for robotic manipulators.
+`**isaacsim.robot_motion.lula**` provides a Python interface to the Lula robotics motion library. It is used for robot motion generation tasks such as kinematics, inverse kinematics, path specification, trajectory generation, collision checking, motion planning, and RMPflow motion policy evaluation.
+
+The module is centered around robot configuration space, task space poses, and world obstacles. It gives developers a single interface for loading robot descriptions, querying kinematics, planning paths, and generating smooth robot motion.
+
+## Concepts
+
+### Configuration space
+
+Configuration space, or c-space, represents the robot state in joint coordinates. Many APIs in this module accept or return `numpy.ndarray` values whose length matches the number of c-space coordinates for the robot.
+
+Common c-space operations include:
+
+- Reading joint names and limits from `RobotDescription` or `Kinematics`
+- Creating c-space paths with `CSpacePathSpec`
+- Generating time-parameterized trajectories with `CSpaceTrajectoryGenerator`
+- Evaluating robot state along a path or trajectory
+
+### Task space
+
+Task space represents poses in 3D space, usually for an end effector or control frame. The module provides `Pose3` and `Rotation3` for representing rigid transforms and rotations.
+
+Task-space paths can be built from linear motion, translations, rotations, and arc segments. These task-space paths can then be converted into c-space paths using robot kinematics and inverse kinematics settings.
+
+### World model
+
+The module includes a simple world representation for geometric obstacles. `World` stores obstacles, while `WorldView` provides a queryable view for collision checks and distance evaluations.
+
+World data is used by motion planning, RMPflow, and robot-world inspection APIs.
 
 ## Functionality
 
-**Kinematics and Motion Planning** - The extension supports both forward and inverse kinematics calculations along with collision-free path planning. It provides interfaces for computing joint configurations, end-effector poses, and generating optimal trajectories between waypoints.
+### Robot loading and kinematics
 
-**Path Specification and Conversion** - Users can define paths in both configuration space (joint space) and task space (Cartesian space), with automated conversion capabilities between the two representations. The system supports linear paths, circular arcs, and complex composite path specifications.
+`load_robot()` and `load_robot_from_memory()` create a `RobotDescription` from a robot description YAML and URDF. From there, users can access `Kinematics` to query frame names, c-space coordinate names, limits, poses, positions, orientations, and Jacobians.
 
-**RMPflow Motion Generation** - The extension implements RMPflow (Riemannian Motion Policies) for generating smooth, reactive robot motions. This includes real-time obstacle avoidance, end-effector tracking, and joint limit compliance through a unified motion policy framework.
+The full Lula API is provided by the bundled `lula` module and is accessed with `import lula`. The extension itself only re-exports the logging helpers `LogLevel`, `set_log_level()`, and `set_default_logger_prefix()` under `isaacsim.robot_motion.lula`.
 
-**Collision Detection and World Modeling** - Built-in collision detection capabilities allow robots to navigate safely around obstacles. The system supports geometric primitives like spheres, cubes, and cylinders, with efficient distance calculations and collision queries.
+```python
+import lula
+import numpy as np
 
-**Trajectory Generation** - Advanced trajectory generation features include time-optimal trajectory planning with configurable velocity, acceleration, and jerk limits. Both linear and cubic spline interpolation modes are supported.
+robot = lula.load_robot("robot_description.yaml", "robot.urdf")
+kinematics = robot.kinematics()
+
+print(robot.num_c_space_coords())
+print(kinematics.frame_names())
+
+q = robot.default_c_space_configuration()
+ee_position = kinematics.position(q, "end_effector")
+```
+
+### Inverse kinematics
+
+The module exposes cyclic coordinate descent inverse kinematics through `compute_ik_ccd()`. Solver behavior is controlled with `CyclicCoordDescentIkConfig`, including tolerances, iteration limits, seed configurations, and relative position or orientation weights.
+
+The result is returned as `CyclicCoordDescentIkResults`, which reports whether a solution was found, the resulting c-space position, and the remaining position and orientation error.
+
+### Path and trajectory generation
+
+Lula separates path definition from trajectory generation.
+
+- `CSpacePathSpec` defines a sequence of c-space waypoints.
+- `TaskSpacePathSpec` defines continuous task-space motion.
+- `CompositePathSpec` combines c-space and task-space segments.
+- `LinearCSpacePath` represents a linear c-space path.
+- `Trajectory` represents a time-parameterized c-space path.
+
+`CSpaceTrajectoryGenerator` converts waypoints into smooth trajectories and supports position, velocity, acceleration, and jerk limits.
+
+```python
+import lula
+import numpy as np
+
+q0 = np.array([0.0, 0.0, 0.0])
+q1 = np.array([0.2, 0.4, 0.1])
+
+path_spec = lula.create_c_space_path_spec(q0)
+path_spec.add_c_space_waypoint(q1)
+
+path = lula.create_linear_c_space_path(path_spec)
+
+generator = lula.create_c_space_trajectory_generator(path.num_c_space_coords())
+trajectory = generator.generate_trajectory([q0, q1])
+
+position, velocity, acceleration, jerk = trajectory.eval_all(trajectory.domain().lower)
+```
+
+### Motion planning
+
+`MotionPlanner` provides collision-free path planning for robotic manipulators. It can plan to c-space targets, translation targets, or pose targets, using a `RobotDescription` and `WorldView`.
+
+Planner results are returned through `MotionPlanner.Results`, which includes whether a path was found, the raw path, and an interpolated path.
+
+### RMPflow
+
+`RmpFlow` evaluates an RMPflow motion policy for smooth reactive motion generation. It can use c-space attractors, end-effector position attractors, and end-effector orientation attractors.
+
+`RmpFlowConfig` stores the robot description, RMPflow parameters, end-effector frame, and world view used for obstacle avoidance. Parameters can be queried and updated by name.
+
+```python
+import lula
+import numpy as np
+
+config = lula.create_rmpflow_config(
+    "rmpflow_config.yaml",
+    robot,
+    "end_effector",
+    world_view,
+)
+
+rmpflow = lula.create_rmpflow(config)
+
+q = robot.default_c_space_configuration()
+qd = np.zeros_like(q)
+qdd = np.zeros_like(q)
+
+rmpflow.set_end_effector_position_attractor(np.array([0.4, 0.0, 0.3]))
+rmpflow.eval_accel(q, qd, qdd)
+```
+
+### Collision and spatial queries
+
+The module provides multiple collision-related tools:
+
+- `World` and `WorldView` for obstacle management and distance checks
+- `RobotWorldInspector` for robot-obstacle and self-collision queries
+- `CollisionSphereGenerator` for approximating mesh volumes with spheres
+
+`RobotWorldInspector` is the main API for querying collision sphere positions, collision sphere radii, obstacle collision state, and self-collision state.
 
 ## Key Components
 
-### Motion Planning Interface
+### `RobotDescription`
 
-The MotionPlanner class provides sampling-based path planning algorithms including RRT variants for finding collision-free paths in complex environments. It supports planning to both configuration space targets and task space pose targets.
+`RobotDescription` stores the geometric and kinematic properties of a robot. It provides the default c-space configuration, c-space coordinate names, and access to the robot `Kinematics`.
 
-### RMPflow Configuration
+### `Kinematics`
 
-RmpFlowConfig manages the parameters and settings for reactive motion generation, allowing fine-tuning of behavior for different robot applications. This includes obstacle avoidance weights, attractor strengths, and convergence criteria.
+`Kinematics` evaluates robot frame state from a c-space position. It supports position, orientation, pose, full Jacobian, position Jacobian, and orientation Jacobian queries.
 
-### Path Specifications
+### `Pose3` and `Rotation3`
 
-The extension offers multiple path specification types:
-- CSpacePathSpec for joint space waypoint sequences
-- TaskSpacePathSpec for Cartesian space paths with linear segments and circular arcs  
-- CompositePathSpec for combining both types into complex motion sequences
+`Pose3` represents a 3D rigid transform, and `Rotation3` represents a 3D rotation. These types are used throughout task-space path creation, inverse kinematics, and pose-target planning.
 
-### Robot Modeling
+### `World` and `WorldView`
 
-RobotDescription encapsulates robot kinematics, collision geometry, and joint limits. It supports loading robot definitions from URDF and YAML configuration files.
+`World` manages obstacles. `WorldView` provides the query interface used by planners, RMPflow, and collision inspection.
 
-## Usage Examples
+### {class}`LogLevel <isaacsim.robot_motion.lula.LogLevel>`
+
+{class}`LogLevel <isaacsim.robot_motion.lula.LogLevel>` controls Lula logging verbosity. Levels are ordered from least to most verbose:
+
+- `LogLevel.FATAL`
+- `LogLevel.ERROR`
+- `LogLevel.WARNING`
+- `LogLevel.INFO`
+- `LogLevel.VERBOSE`
+
+Use `set_log_level()` to suppress messages above the selected verbosity.
 
 ```python
 import isaacsim.robot_motion.lula as lula
 
-# Set logging level for debug information
-lula.set_log_level(lula.LogLevel.INFO)
+lula.set_log_level(lula.LogLevel.WARNING)
+lula.set_default_logger_prefix("[lula] ")
+```
 
-# Load robot description from files
-robot_desc = lula.load_robot("robot_config.yaml", "robot.urdf")
+## Usage Examples
 
-# Create a motion planner with collision avoidance
+### Create a world with an obstacle
+
+```python
+import lula
+import numpy as np
+
+world = lula.create_world()
+
+obstacle = lula.create_obstacle(lula.Obstacle.Type.SPHERE)
+obstacle.set_attribute(lula.Obstacle.Attribute.RADIUS, lula.Obstacle.AttributeValue(0.1))
+
+pose = lula.Pose3.from_translation(np.array([0.5, 0.0, 0.25]))
+handle = world.add_obstacle(obstacle, pose)
+
+world_view = world.add_world_view()
+print(world_view.num_enabled_obstacles())
+```
+
+### Inspect robot collision state
+
+```python
+import lula
+
+robot = lula.load_robot("robot_description.yaml", "robot.urdf")
 world = lula.create_world()
 world_view = world.add_world_view()
-motion_planner = lula.create_motion_planner(robot_desc, world_view)
 
-# Generate trajectories with kinematic constraints
-trajectory_gen = lula.create_c_space_trajectory_generator(robot_desc.kinematics())
-trajectory_gen.set_velocity_limits(max_velocities)
-trajectory_gen.set_acceleration_limits(max_accelerations)
+inspector = lula.create_robot_world_inspector(robot, world_view)
+
+q = robot.default_c_space_configuration()
+
+print(inspector.num_collision_spheres())
+print(inspector.in_self_collision(q))
+print(inspector.in_collision_with_obstacle(q))
 ```
+
+## Relationships
+
+`**isaacsim.robot_motion.lula**` exposes the underlying `lula` Python bindings and uses `numpy` arrays for vector, matrix, c-space, and pose-related data. Robot descriptions are loaded from YAML and URDF inputs, while several path specifications can also be loaded from or exported to YAML strings.

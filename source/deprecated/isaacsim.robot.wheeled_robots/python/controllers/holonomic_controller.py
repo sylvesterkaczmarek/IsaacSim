@@ -42,7 +42,8 @@ class HolonomicController(BaseController):
 
     .. hint::
 
-        The wheel joints of the robot prim must have additional attributes to define the roller angles and radii of the mecanum wheels.
+        The wheel joints of the robot prim must have additional attributes to define the roller angles and radii of the
+        mecanum wheels.
 
         .. code-block:: python
 
@@ -168,6 +169,9 @@ class HolonomicController(BaseController):
 
         Returns:
             Action containing wheel joint velocities.
+
+        Raises:
+            Exception: If command does not contain exactly 3 elements.
         """
         if isinstance(command, list):
             command = np.array(command)

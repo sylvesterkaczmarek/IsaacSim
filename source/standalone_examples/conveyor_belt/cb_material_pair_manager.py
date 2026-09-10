@@ -45,6 +45,9 @@ class MaterialPairManager:
         """Allocate a transported-body material index.
 
         The index is used for rigid bodies that are transported by conveyor belts.
+
+        Returns:
+            Newly allocated zero-based transported-body material index.
         """
         index = self.next_transported_body_material_index
 
@@ -58,6 +61,9 @@ class MaterialPairManager:
         """Allocate a conveyor-belt material index.
 
         The index is used for conveyor belt objects.
+
+        Returns:
+            Newly allocated zero-based conveyor-belt material index.
         """
         index = self.next_conveyor_belt_material_index
 

@@ -1,6 +1,8 @@
 # Overview
 
-The isaacsim.ros2.urdf extension expands the URDF Importer to fetch and import robot descriptions directly from ROS 2 nodes. Instead of requiring local URDF files, it queries ROS 2 nodes for their `robot_description` parameter and resolves `package://` URLs to filesystem paths, streamlining the workflow for importing robots that are already configured in a ROS 2 environment. The extension registers a **File → Import from ROS2 URDF Node** menu entry that opens a dedicated import window.
+The isaacsim.ros2.urdf extension extends the URDF Importer to fetch and import robot descriptions directly from ROS 2 nodes. It queries ROS 2 nodes for the `robot_description` parameter and resolves `package://` URLs to filesystem paths, enabling import workflows for robots configured in a ROS 2 environment. The extension registers a **File → Import from ROS2 URDF Node** menu entry that opens a dedicated import window.
+
+Start Isaac Sim from a terminal in which the robot workspace has been sourced. The workspace must provide the node that publishes `robot_description` and the robot description or mesh packages referenced by `package://` URLs. The bundled ROS 2 libraries configured by the launchers provide the bridge runtime, but they do not include robot-specific description or mesh packages.
 
 ```{image} ../../../../source/extensions/isaacsim.ros2.urdf/data/preview.png
 ---
@@ -42,7 +44,7 @@ updated_urdf, package_found = replace_package_urls_with_paths(urdf_string)
 
 - **Model** — ROS 2 node name field, a Find Node button to trigger the parameter fetch, a status label with color-coded feedback, and a USD output folder picker.
 - **Colliders** — Collision from visuals toggle, a collision type dropdown (Convex Hull, Convex Decomposition, Bounding Sphere, Bounding Cube) that appears when collision from visuals is enabled, and an allow self-collision toggle.
-- **Options** — Robot type dropdown (e.g. Manipulator, Humanoid), merge mesh toggle, and debug mode toggle.
+- **Options** — Robot type dropdown (for example, Manipulator or Humanoid), merge mesh toggle, and debug mode toggle.
 - **Import** — Button to execute the import with the current settings.
 
 ### Command Integration
@@ -55,4 +57,4 @@ The ``URDFImportFromROS2Node`` Kit command is deprecated. Use ``RobotDefinitionR
 
 ## Integration
 
-This extension builds upon isaacsim.asset.importer.urdf.ui by adding ROS 2-specific import capabilities. It uses isaacsim.ros2.bridge for the ROS 2 runtime environment and communicates with ROS 2 nodes via `rclpy` and the standard `GetParameters` service. The workflow integrates with the existing URDF import pipeline — once the robot description is retrieved and `package://` URLs are resolved, the standard URDF importer handles the actual USD asset creation.
+This extension builds upon isaacsim.asset.importer.urdf.ui by adding ROS 2-specific import capabilities. It uses isaacsim.ros2.bridge for the ROS 2 runtime environment and communicates with ROS 2 nodes via `rclpy` and the standard `GetParameters` service. The workflow integrates with the existing URDF import pipeline — once the robot description is retrieved and `package://` URLs are resolved, the standard URDF importer handles USD asset creation.

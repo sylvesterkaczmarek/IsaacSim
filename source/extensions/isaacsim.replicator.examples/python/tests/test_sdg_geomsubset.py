@@ -16,9 +16,10 @@
 """Verify semantic segmentation class labels with per-GeomSubset segmentation enabled and disabled."""
 
 import carb.settings
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit
 import omni.replicator.core as rep
-import omni.usd
 import pxr
 
 
@@ -49,19 +50,19 @@ class TestSDGGeomSubset(omni.kit.test.AsyncTestCase):
 
     async def setUp(self) -> None:
         """Create a clean stage and save the per-subset segmentation setting."""
-        await omni.kit.app.get_app().next_update_async()
-        omni.usd.get_context().new_stage()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
         self._original_per_subset = carb.settings.get_settings().get(self.PER_SUBSET_SETTING)
 
     async def tearDown(self) -> None:
         """Restore the per-subset segmentation setting and close the test stage."""
         if self._original_per_subset is not None:
             carb.settings.get_settings().set(self.PER_SUBSET_SETTING, self._original_per_subset)
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
-        while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
+        while stage_utils.is_stage_loading():
+            await app_utils.update_app_async()
 
     async def _capture_classes_async(self, per_subset_segmentation: bool) -> frozenset[str]:
         """Capture semantic classes for cubes with mesh labels, GeomSubset labels, and no subsets.
@@ -73,9 +74,7 @@ class TestSDGGeomSubset(omni.kit.test.AsyncTestCase):
             Captured semantic class names.
         """
         carb.settings.get_settings().set(self.PER_SUBSET_SETTING, per_subset_segmentation)
-        await omni.usd.get_context().new_stage_async()
-
-        stage = omni.usd.get_context().get_stage()
+        stage = await stage_utils.create_new_stage_async()
         rep.functional.create.xform(name="World")
         rep.functional.create.dome_light(intensity=500, parent="/World", name="DomeLight")
 

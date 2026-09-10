@@ -22,9 +22,9 @@ Test is implemented using the doctest C++ testing framework:
 #include <carb/logging/Log.h>
 
 #include <doctest/doctest.h>
-#include <isaacsim/core/includes/ScopedCudaDevice.h>
-#include <isaacsim/ucx/core/UcxListener.h>
-#include <isaacsim/ucx/core/UcxListenerRegistry.h>
+#include <isaacsim/core/includes/ScopedCudaDevice.hpp>
+#include <isaacsim/ucx/core/UcxListener.hpp>
+#include <isaacsim/ucx/core/UcxListenerRegistry.hpp>
 #include <ucxx/api.h>
 
 #include <chrono>

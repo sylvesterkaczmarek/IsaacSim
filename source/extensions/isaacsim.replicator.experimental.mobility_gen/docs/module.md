@@ -137,3 +137,10 @@ pose and joint Buffers and the writer persists them to `state/common/`.  Sensor 
 joints to the articulation.  With the robot at the recorded position, `scenario.update_state()`
 captures fresh sensor readings into image Buffers; `state_dict(include_tags=["rgb", "depth", ...])`
 collects them and the writer saves to `state/rgb/`, `state/depth/`, etc.
+
+An annotator returns nothing until the renderer has produced a frame, so a capture can come back
+incomplete.  `update_state()` clears the Buffers of a modality that produced no frame — leaving the
+previous one would be indistinguishable from an unchanged frame — and reports it through
+`scenario.named_missing_modalities()`.  Check that before persisting a step: the replay scripts
+re-render, then drop the step entirely, common state included, so that every recorded step keeps
+exactly one image per modality.

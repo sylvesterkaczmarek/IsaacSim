@@ -618,6 +618,102 @@ class TestPopulateSubRobotBoundary(omni.kit.test.AsyncTestCase):
         self.assertFalse(no_body.GetPrim().HasAPI(robot_schema.Classes.LINK_API.value))
 
 
+class TestPopulateDisconnectedComponents(omni.kit.test.AsyncTestCase):
+    """Tests recovery of articulation components disconnected by non-rigid frames."""
+
+    async def setUp(self) -> None:
+        """Set up a fresh USD stage for each test."""
+        await omni.usd.get_context().new_stage_async()
+        await omni.kit.app.get_app().next_update_async()
+        self._stage = omni.usd.get_context().get_stage()
+
+    async def test_populate_recovers_rigid_descendants_behind_non_rigid_frame(self) -> None:
+        """Apply link and joint APIs to a disconnected hand component behind a ghost frame."""
+        robot = UsdGeom.Xform.Define(self._stage, "/World/Robot")
+        UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+        UsdPhysics.RigidBodyAPI.Apply(robot.GetPrim())
+        robot_schema.ApplyRobotAPI(robot.GetPrim())
+
+        arm = UsdGeom.Xform.Define(self._stage, "/World/Robot/Arm")
+        UsdPhysics.RigidBodyAPI.Apply(arm.GetPrim())
+        arm_joint = UsdPhysics.Joint.Define(self._stage, "/World/Robot/Physics/arm_joint")
+        arm_joint.CreateBody0Rel().SetTargets([robot.GetPrim().GetPath()])
+        arm_joint.CreateBody1Rel().SetTargets([arm.GetPrim().GetPath()])
+
+        ghost = UsdGeom.Xform.Define(self._stage, "/World/Robot/Arm/Link8")
+        hand = UsdGeom.Xform.Define(self._stage, "/World/Robot/Arm/Link8/Hand")
+        UsdPhysics.RigidBodyAPI.Apply(hand.GetPrim())
+        finger = UsdGeom.Xform.Define(self._stage, "/World/Robot/Arm/Link8/Hand/Finger")
+        UsdPhysics.RigidBodyAPI.Apply(finger.GetPrim())
+
+        hand_joint = UsdPhysics.FixedJoint.Define(self._stage, "/World/Robot/Physics/hand_joint")
+        hand_joint.CreateBody0Rel().SetTargets([ghost.GetPrim().GetPath()])
+        hand_joint.CreateBody1Rel().SetTargets([hand.GetPrim().GetPath()])
+        finger_joint = UsdPhysics.PrismaticJoint.Define(self._stage, "/World/Robot/Physics/finger_joint")
+        finger_joint.CreateBody0Rel().SetTargets([hand.GetPrim().GetPath()])
+        finger_joint.CreateBody1Rel().SetTargets([finger.GetPrim().GetPath()])
+
+        robot_utils.PopulateRobotSchemaFromArticulation(self._stage, robot.GetPrim())
+
+        self.assertFalse(ghost.GetPrim().HasAPI(robot_schema.Classes.LINK_API.value))
+        self.assertTrue(hand.GetPrim().HasAPI(robot_schema.Classes.LINK_API.value))
+        self.assertTrue(finger.GetPrim().HasAPI(robot_schema.Classes.LINK_API.value))
+        self.assertTrue(hand_joint.GetPrim().HasAPI(robot_schema.Classes.JOINT_API.value))
+        self.assertTrue(finger_joint.GetPrim().HasAPI(robot_schema.Classes.JOINT_API.value))
+
+        link_paths = {
+            str(path) for path in robot.GetPrim().GetRelationship(robot_schema.Relations.ROBOT_LINKS.name).GetTargets()
+        }
+        joint_paths = {
+            str(path) for path in robot.GetPrim().GetRelationship(robot_schema.Relations.ROBOT_JOINTS.name).GetTargets()
+        }
+        self.assertIn(str(hand.GetPrim().GetPath()), link_paths)
+        self.assertIn(str(finger.GetPrim().GetPath()), link_paths)
+        self.assertIn(str(hand_joint.GetPrim().GetPath()), joint_paths)
+        self.assertIn(str(finger_joint.GetPrim().GetPath()), joint_paths)
+
+    async def test_populate_skips_recovery_when_joint_api_application_fails(self) -> None:
+        """Do not recover body links when their disconnected joint cannot receive JointAPI."""
+        robot = UsdGeom.Xform.Define(self._stage, "/World/Robot")
+        UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+        UsdPhysics.RigidBodyAPI.Apply(robot.GetPrim())
+        robot_schema.ApplyRobotAPI(robot.GetPrim())
+
+        arm = UsdGeom.Xform.Define(self._stage, "/World/Robot/Arm")
+        UsdPhysics.RigidBodyAPI.Apply(arm.GetPrim())
+        arm_joint = UsdPhysics.Joint.Define(self._stage, "/World/Robot/Physics/arm_joint")
+        arm_joint.CreateBody0Rel().SetTargets([robot.GetPrim().GetPath()])
+        arm_joint.CreateBody1Rel().SetTargets([arm.GetPrim().GetPath()])
+
+        ghost = UsdGeom.Xform.Define(self._stage, "/World/Robot/Arm/Link8")
+        hand = UsdGeom.Xform.Define(self._stage, "/World/Robot/Arm/Link8/Hand")
+        UsdPhysics.RigidBodyAPI.Apply(hand.GetPrim())
+        hand_joint = UsdPhysics.FixedJoint.Define(self._stage, "/World/Robot/Physics/hand_joint")
+        hand_joint.CreateBody0Rel().SetTargets([ghost.GetPrim().GetPath()])
+        hand_joint.CreateBody1Rel().SetTargets([hand.GetPrim().GetPath()])
+
+        original_apply_joint_api = robot_utils.ApplyJointAPI
+
+        def apply_joint_api_unless_disconnected(joint_prim: Usd.Prim) -> None:
+            if joint_prim.GetName() != "hand_joint":
+                original_apply_joint_api(joint_prim)
+
+        with mock.patch.object(robot_utils, "ApplyJointAPI", side_effect=apply_joint_api_unless_disconnected):
+            robot_utils.PopulateRobotSchemaFromArticulation(self._stage, robot.GetPrim())
+
+        self.assertFalse(hand_joint.GetPrim().HasAPI(robot_schema.Classes.JOINT_API.value))
+        self.assertFalse(hand.GetPrim().HasAPI(robot_schema.Classes.LINK_API.value))
+
+        link_paths = {
+            str(path) for path in robot.GetPrim().GetRelationship(robot_schema.Relations.ROBOT_LINKS.name).GetTargets()
+        }
+        joint_paths = {
+            str(path) for path in robot.GetPrim().GetRelationship(robot_schema.Relations.ROBOT_JOINTS.name).GetTargets()
+        }
+        self.assertNotIn(str(hand.GetPrim().GetPath()), link_paths)
+        self.assertNotIn(str(hand_joint.GetPrim().GetPath()), joint_paths)
+
+
 class TestRecalculateRobotSchema(omni.kit.test.AsyncTestCase):
     """Tests for RecalculateRobotSchema."""
 

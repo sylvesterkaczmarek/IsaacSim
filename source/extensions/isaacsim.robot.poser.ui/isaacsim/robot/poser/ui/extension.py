@@ -34,6 +34,7 @@ from isaacsim.gui.components.menu import MenuItemDescription
 from isaacsim.robot.poser.robot_poser import invalidate_articulation_cache
 from omni.kit.menu.utils import add_menu_items, remove_menu_items
 
+from .ui.site_widget import flush_retired_popups
 from .ui.ui_builder import UIBuilder
 
 EXTENSION_TITLE = "Robot Poser"
@@ -238,6 +239,7 @@ class Extension(omni.ext.IExt):
             self._task.cancel()
         self._task = None
 
+        flush_retired_popups()
         gc.collect()
 
     # ###################################################################

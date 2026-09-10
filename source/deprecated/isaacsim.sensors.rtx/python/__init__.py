@@ -13,4 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides RTX sensor APIs for Lidar data collection and commands for creating RTX Lidar, Radar, IDS, and Ultrasonic sensors in Isaac Sim."""
+
 from .impl import *

@@ -21,7 +21,6 @@ repo_build.prebuild_link {
     { "python/tests", ext.target_dir .. "/isaacsim/asset/importer/urdf/tests" },
     { "docs", ext.target_dir .. "/docs" },
     { "data", ext.target_dir .. "/data" },
-    { "icons", ext.target_dir .. "/icons" },
     { "$root/_build/target-deps/isaac_urdf_usd_prebundle", ext.target_dir .. "/pip_prebundle" },
 }
 

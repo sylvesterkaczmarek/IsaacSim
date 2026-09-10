@@ -37,27 +37,27 @@ from .kinematics import LulaKinematicsSolver
 class RmpFlow(LulaInterfaceHelper, MotionPolicy):
     """RMPflow is a real-time, reactive motion policy that smoothly guides a robot to task space targets while avoiding dynamic obstacles.
 
-    This class implements the MotionPolicy interface, as well as providing a number of RmpFlow-specific functions such as visualizing
-    the believed robot position and changing internal settings.
+    This class implements the MotionPolicy interface and provides a number of RmpFlow-specific functions such as
+    visualizing the believed robot position and changing internal settings.
 
     Args:
-        robot_description_path: Path to a robot description yaml file.
-        urdf_path: Path to robot urdf.
-        rmpflow_config_path: Path to an rmpflow parameter yaml file.
-        end_effector_frame_name: Name of the robot end effector frame (must be present in the robot urdf).
-        maximum_substep_size: Maximum substep size [sec] that RmpFlow will use when internally integrating between steps of a
-            simulation. For stability and performance, RmpFlow rolls out the robot actions at a higher framerate than Isaac
-            Sim. For example, while Isaac Sim may be running at 60 Hz, RmpFlow can be set to take internal steps that are
-            no larger than 1/300 seconds. In this case, RmpFlow will perform 5 sub-steps every time it returns an action to
-            the 60 Hz simulation.
+        robot_description_path: Path to a robot description YAML file.
+        urdf_path: Path to robot URDF.
+        rmpflow_config_path: Path to an RMPflow parameter YAML file.
+        end_effector_frame_name: Name of the robot end effector frame (must be present in the robot URDF).
+        maximum_substep_size: Maximum substep size [sec] that RmpFlow will use when internally integrating between
+            steps of a simulation. For stability and performance, RmpFlow rolls out the robot actions at a higher
+            framerate than Isaac Sim. For example, while Isaac Sim may be running at 60 Hz, RmpFlow can be set to take
+            internal steps that are no larger than 1/300 seconds. In this case, RmpFlow will perform 5 substeps every
+            time it returns an action to the 60 Hz simulation.
 
             In general, the maximum_substep_size argument should be at most 1/200. Choosing a very small
-            maximum_substep_size such as 1/1000 is unnecessary, as the resulting actions will not significantly differ from
-            a choice of 1/500, but it will internally require twice the steps to compute.
+            maximum_substep_size such as 1/1000 is unnecessary, as the resulting actions will not significantly differ
+            from a choice of 1/500, but it will internally require twice the steps to compute.
         ignore_robot_state_updates: If False: RmpFlow will set the internal robot state to match the arguments to
-            compute_joint_targets(). When paired with ArticulationMotionPolicy, this means that RMPflow uses the simulated
-            robot's state at every frame. If True: RmpFlow will roll out the robot state internally after it is initially
-            specified in the first call to compute_joint_targets().
+            compute_joint_targets(). When paired with ArticulationMotionPolicy, this means that RMPflow uses the
+            simulated robot's state at every frame. If True: RmpFlow will roll out the robot state internally after it
+            is initially specified in the first call to compute_joint_targets().
     """
 
     def __init__(
@@ -103,27 +103,26 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
         self._ee_visual = None
 
     def set_ignore_state_updates(self, ignore_robot_state_updates: bool) -> None:
-        """An RmpFlow specific method; set an internal flag in RmpFlow: ignore_robot_state_updates.
+        """Sets the RmpFlow ignore_robot_state_updates flag.
 
         Args:
-            ignore_robot_state_updates:
-                If False:
-                    RmpFlow will set the internal robot state to match the arguments to compute_joint_targets().
-                    When paired with ArticulationMotionPolicy, this means that RMPflow uses the simulated robot's state at every frame.
-                If True:
-                    RmpFlow will roll out the robot state internally after it is initially specified in the first call to compute_joint_targets().
-                    The caller may override this flag and directly change the internal robot state with RmpFlow.set_internal_robot_joint_states().
+            ignore_robot_state_updates: If False, RmpFlow sets the internal robot state to match the arguments to
+                compute_joint_targets(). When paired with ArticulationMotionPolicy, this means RMPflow uses the simulated
+                robot's state at every frame. If True, RmpFlow rolls out the robot state internally after it is initially
+                specified in the first call to compute_joint_targets(). The caller may override this flag and directly
+                change the internal robot state with RmpFlow.set_internal_robot_joint_states().
         """
         self.ignore_robot_state_updates = ignore_robot_state_updates
 
     def set_cspace_target(self, active_joint_targets: object) -> None:
-        """Set a cspace target for RmpFlow.  RmpFlow always has a cspace target, and setting a new cspace target does not override a position target.
+        """Sets a cspace target for RmpFlow.
 
-        RmpFlow uses the cspace target to help resolve null space behavior when a position target can be acheived in a variety of ways.
-        If the end effector target is explicitly set to None, RmpFlow will move the robot to the cspace target.
+        RmpFlow always has a cspace target, and setting a new cspace target does not override a position target. RmpFlow
+        uses the cspace target to help resolve null space behavior when a position target can be achieved in a variety of
+        ways. If the end effector target is explicitly set to None, RmpFlow moves the robot to the cspace target.
 
         Args:
-            active_joint_targets: cspace position target for active joints in the robot
+            active_joint_targets: cspace position target for active joints in the robot.
         """
         self._policy.set_cspace_attractor(active_joint_targets.astype(np.float64))
 
@@ -131,7 +130,7 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
         """Updates the world view with obstacles and refreshes RmpFlow's policy with the updated world state.
 
         Args:
-            updated_obstacles: List of obstacles to update in the world view
+            updated_obstacles: Obstacles to update in the world view.
         """
         LulaInterfaceHelper.update_world(self, updated_obstacles)
         self._policy.update_world_view()
@@ -144,38 +143,37 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
         watched_joint_velocities: np.array,
         frame_duration: float,
     ) -> tuple[np.array, np.array]:
-        """Compute robot joint targets for the next frame based on the current robot position.
+        """Computes robot joint targets for the next frame based on the current robot position.
 
-        RmpFlow will ignore active joint positions and velocities if it has been set to ignore_robot_state_updates
-        RmpFlow does not currently support watching joints that it is not actively controlling.
+        RmpFlow ignores active joint positions and velocities if it has been set to ignore_robot_state_updates. RmpFlow
+        does not currently support watching joints that it is not actively controlling.
 
         Args:
-            active_joint_positions: current positions of joints specified by get_active_joints()
-            active_joint_velocities: current velocities of joints specified by get_active_joints()
-            watched_joint_positions: current positions of joints specified by get_watched_joints()
+            active_joint_positions: Current positions of joints specified by get_active_joints().
+            active_joint_velocities: Current velocities of joints specified by get_active_joints().
+            watched_joint_positions: Current positions of joints specified by get_watched_joints().
                 This will always be empty for RmpFlow.
-            watched_joint_velocities: current velocities of joints specified by get_watched_joints()
+            watched_joint_velocities: Current velocities of joints specified by get_watched_joints().
                 This will always be empty for RmpFlow.
-            frame_duration: duration of the physics frame
+            frame_duration: Duration of the physics frame.
 
         Returns:
-            Tuple[np.array,np.array]:
-            active_joint_position_targets : Position targets for the robot in the next frame
-
-            active_joint_velocity_targets : Velocity targets for the robot in the next frame
+            A tuple containing active joint position targets and active joint velocity targets for the robot in the next
+            frame.
         """
         self._update_robot_joint_states(active_joint_positions, active_joint_velocities, frame_duration)
         return self._robot_joint_positions, self._robot_joint_velocities
 
     def visualize_collision_spheres(self) -> None:
-        """An RmpFlow specific debugging method.  This function creates visible sphere prims that match the locations and radii.
+        """Creates visible sphere prims that match the locations and radii of RmpFlow's collision spheres.
 
-        of the collision spheres that RmpFlow uses to prevent robot collisions.  Once created, RmpFlow will update the sphere locations
-        whenever its internal robot state changes.  This can be used alongside RmpFlow.ignore_robot_state_updates(True) to validate RmpFlow's
-        internal representation of the robot as well as help tune the PD gains on the simulated robot; i.e. the simulated robot should
-        match the positions of the RmpFlow collision spheres over time.
+        Once created, RmpFlow updates the sphere locations whenever its internal robot state changes. This can be used
+        alongside RmpFlow.ignore_robot_state_updates(True) to validate RmpFlow's internal representation of the robot and
+        tune the PD gains on the simulated robot. The simulated robot should match the positions of the RmpFlow collision
+        spheres over time.
 
-        Visualizing collision spheres as prims on the stage is likely to significantly slow down the framerate of the simulation.  This function should only be used for debugging purposes
+        Visualizing collision spheres as prims on the stage is likely to significantly slow down the framerate of the
+        simulation. This function should only be used for debugging purposes.
         """
         if len(self._collision_spheres) == 0:
             self._create_collision_sphere_prims(True)
@@ -185,9 +183,9 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
                     sphere.set_visibility(True)
 
     def visualize_end_effector_position(self) -> None:
-        """An RmpFlow specific debugging method.  This function creates a visible cube whose translation and orientation match where RmpFlow.
+        """Creates a visible cube whose translation and orientation match where RmpFlow believes the robot end effector to be.
 
-        believes the robot end effector to be.  Once created, RmpFlow will update the position of the cube whenever its internal robot state changes.
+        Once created, RmpFlow updates the position of the cube whenever its internal robot state changes.
         """
         if self._ee_visual is None:
             self._create_ee_visual(True)
@@ -195,30 +193,30 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
             self._ee_visual.set_visibility(True)
 
     def stop_visualizing_collision_spheres(self) -> None:
-        """An RmpFlow specific debugging method.  This function removes the collision sphere prims created by either RmpFlow.visualize_collision_spheres() or.
+        """Removes the collision sphere prims created by RmpFlow.visualize_collision_spheres() or RmpFlow.get_collision_spheres_as_prims().
 
-        RmpFlow.get_collision_spheres_as_prims().  Rather than making the prims invisible, they are deleted from the stage to increase performance.
+        Rather than making the prims invisible, they are deleted from the stage to increase performance.
         """
         self.delete_collision_sphere_prims()
         self._collision_spheres = []
 
     def stop_visualizing_end_effector(self) -> None:
-        """An RmpFlow specific debugging method.  This function removes the end effector prim that can be created by visualize_end_effector_position() or.
-
-        get_end_effector_position_as_prim().
-        """
+        """Removes the end effector prim created by visualize_end_effector_position() or get_end_effector_position_as_prim()."""
         self.delete_end_effector_prim()
 
     def get_collision_spheres_as_prims(self) -> list:
-        """An RmpFlow specific debugging method.  This function is similar to RmpFlow.visualize_collision_spheres().  If the collision spheres have already been added to the stage as prims,.
+        """Returns prims representing RmpFlow's internal collision spheres.
 
-        they will be returned.  If the collision spheres have not been added to the stage as prims, they will be created and returned.  If created in this function, the spheres will be invisible
-        until RmpFlow.visualize_collision_spheres() is called.
+        This function is similar to RmpFlow.visualize_collision_spheres(). If the collision spheres have already been added
+        to the stage as prims, they are returned. If the collision spheres have not been added to the stage as prims, they
+        are created and returned. If created in this function, the spheres are invisible until
+        RmpFlow.visualize_collision_spheres() is called.
 
-        Visualizing collision spheres on the stage is likely to significantly slow down the framerate of the simulation.  This function should only be used for debugging purposes
+        Visualizing collision spheres on the stage is likely to significantly slow down the framerate of the simulation.
+        This function should only be used for debugging purposes.
 
         Returns:
-            List of prims representing RmpFlow's internal collision spheres
+            Prims representing RmpFlow's internal collision spheres.
         """
         if len(self._collision_spheres) == 0:
             self._create_collision_sphere_prims(False)
@@ -226,10 +224,11 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
         return self._collision_spheres
 
     def get_end_effector_as_prim(self) -> objects.cuboid.VisualCuboid:
-        """An RmpFlow specific debugging method.  This function is similar to RmpFlow.visualize_end_effector_position().  If the end effector has already been visualized as a prim,.
+        """Returns a cuboid prim representing where RmpFlow believes the robot end effector to be.
 
-        it will be returned.  If the end effector is not being visualized, a cuboid will be created and returned.  If created in this function, the end effector will be invisible
-        until RmpFlow.visualize_end_effector_position() is called.
+        This function is similar to RmpFlow.visualize_end_effector_position(). If the end effector has already been
+        visualized as a prim, it is returned. If the end effector is not being visualized, a cuboid is created and returned.
+        If created in this function, the end effector is invisible until RmpFlow.visualize_end_effector_position() is called.
 
         Returns:
             Cuboid whose translation and orientation match RmpFlow's believed robot end effector position.
@@ -241,21 +240,21 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
         return self._ee_visual
 
     def delete_collision_sphere_prims(self) -> None:
-        """An RmpFlow specific debugging method.  This function deletes any prims that have been created by RmpFlow to visualize its internal collision spheres."""
+        """An RmpFlow specific debugging method. Deletes prims created by RmpFlow to visualize its internal collision spheres."""
         for sphere in self._collision_spheres:
             delete_prim(sphere.prim_path)
 
         self._collision_spheres = []
 
     def delete_end_effector_prim(self) -> None:
-        """An RmpFlow specific debugging method.  If RmpFlow is maintaining a prim for its believed end effector position, this function will delete the prim."""
+        """An RmpFlow specific debugging method. Deletes the prim maintained for RmpFlow's believed end effector position."""
         if self._ee_visual is not None:
             delete_prim(self._ee_visual.prim_path)
 
         self._ee_visual = None
 
     def reset(self) -> None:
-        """Reset RmpFlow to its initial state."""
+        """Resets RmpFlow to its initial state."""
         LulaInterfaceHelper.reset(self)
 
         rmpflow_config = lula.create_rmpflow_config(
@@ -292,15 +291,12 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
         RmpFlow does not currently support watching joints that it is not actively controlling.
 
         Args:
-            active_joint_positions: current positions of joints specified by get_active_joints()
-            active_joint_velocities: current velocities of joints specified by get_active_joints()
-            watched_joint_positions: current positions of joints specified by get_watched_joints().
+            active_joint_positions: Current positions of joints specified by get_active_joints().
+            active_joint_velocities: Current velocities of joints specified by get_active_joints().
+            watched_joint_positions: Current positions of joints specified by get_watched_joints().
                 This will always be empty for RmpFlow.
-            watched_joint_velocities: current velocities of joints specified by get_watched_joints()
+            watched_joint_velocities: Current velocities of joints specified by get_watched_joints().
                 This will always be empty for RmpFlow.
-
-        Returns:
-            None.
         """
         self._robot_joint_positions = active_joint_positions
         self._robot_joint_velocities = active_joint_velocities
@@ -309,25 +305,17 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
         return
 
     def get_internal_robot_joint_states(self) -> tuple[np.array, np.array, np.array, np.array]:
-        """An RmpFlow specific method; this function returns the internal robot state that is believed by RmpFlow.
+        """An RmpFlow specific method; this function returns the internal robot state believed by RmpFlow.
 
         Returns:
-            A tuple containing (active_joint_positions, active_joint_velocities, watched_joint_positions, watched_joint_velocities) where:
-
-            active_joint_positions: believed positions of active joints
-
-            active_joint_velocities: believed velocities of active joints
-
-            watched_joint_positions: believed positions of watched robot joints.  This will always be empty for RmpFlow.
-
-            watched_joint_velocities: believed velocities of watched robot joints.  This will always be empty for RmpFlow.
+            A tuple containing (active_joint_positions, active_joint_velocities, watched_joint_positions,
+            watched_joint_velocities). active_joint_positions and active_joint_velocities are the believed states of
+            active joints. watched_joint_positions and watched_joint_velocities are empty for RmpFlow.
         """
         return self._robot_joint_positions, self._robot_joint_velocities, np.empty(0), np.empty(0)
 
     def get_default_cspace_position_target(self) -> np.array:
-        """An RmpFlow specific method; this function returns the default cspace position specified in the.
-
-            Lula robot_description YAML file.
+        """An RmpFlow specific method; this function returns the default cspace position specified in the Lula robot_description YAML file.
 
         Returns:
             Default cspace position target used by RMPflow when none is specified.
@@ -342,26 +330,26 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
         joints.
 
         Returns:
-            Names of active joints.
-                The order of the joints in this list matches the order that the joints are expected
-                in functions like RmpFlow.compute_joint_targets(active_joint_positions, active_joint_velocities,...)
+            Names of active joints. The order of the joints in this list matches the order that the joints are expected
+            in functions like RmpFlow.compute_joint_targets(active_joint_positions, active_joint_velocities, ...).
         """
         return LulaInterfaceHelper.get_active_joints(self)
 
     def get_watched_joints(self) -> list[str]:
-        """Currently, RmpFlow is not capable of watching joint states that are not being directly controlled (active joints).
+        """Currently, RmpFlow is not capable of watching joint states that are not being directly controlled.
 
-        If RmpFlow is controlling a robot arm at the end of an externally controlled body, set_robot_base_pose() can be used to make RmpFlow aware of the robot position
-        This means that RmpFlow is not currently able to support controlling a set of DOFs in a robot that are not sequentially linked to each other or are not connected
-        via fixed transforms to the end effector.
+        If RmpFlow is controlling a robot arm at the end of an externally controlled body, set_robot_base_pose() can be
+        used to make RmpFlow aware of the robot position. This means that RmpFlow is not currently able to support
+        controlling a set of DOFs in a robot that are not sequentially linked to each other or are not connected via
+        fixed transforms to the end effector.
 
         Returns:
-            Empty list
+            Empty list.
         """
         return []
 
     def get_end_effector_pose(self, active_joint_positions: np.array) -> tuple[np.array, np.array]:
-        """Get the end effector pose for the given joint positions.
+        """Gets the end effector pose for the given joint positions.
 
         Args:
             active_joint_positions: Current positions of the active joints.
@@ -372,12 +360,13 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
         return LulaInterfaceHelper.get_end_effector_pose(self, active_joint_positions, self.end_effector_frame_name)
 
     def get_kinematics_solver(self) -> LulaKinematicsSolver:
-        """Return a LulaKinematicsSolver that uses the same robot description as RmpFlow.  The robot base pose of the LulaKinematicsSolver.
+        """Returns a LulaKinematicsSolver that uses the same robot description as RmpFlow.
 
-        will be set to the same base pose as RmpFlow, but the two objects must then have their base poses updated separately.
+        The robot base pose of the LulaKinematicsSolver will be set to the same base pose as RmpFlow, but the two
+        objects must then have their base poses updated separately.
 
         Returns:
-            Kinematics solver using the same cspace as RmpFlow
+            Kinematics solver using the same cspace as RmpFlow.
         """
         solver = LulaKinematicsSolver(None, None, robot_description=self._robot_description)
         solver.set_robot_base_pose(self._robot_pos / self._meters_per_unit, rot_matrices_to_quats(self._robot_rot))
@@ -520,9 +509,6 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
 
         Transforms the stored end effector targets to the robot base frame and configures the internal
         RMPflow attractors. Clears attractors if no targets are set.
-
-        Returns:
-            None.
         """
         target_position = self._end_effector_position_target
         target_rotation = self._end_effector_rotation_target
@@ -596,9 +582,6 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
 
         Moves the visual sphere prims to match the current positions of RMPflow's internal
         collision spheres based on the current robot joint positions.
-
-        Returns:
-            None.
         """
         if len(self._collision_spheres) == 0:
             return
@@ -617,9 +600,6 @@ class RmpFlow(LulaInterfaceHelper, MotionPolicy):
 
         Moves the visual cuboid to match the current end effector pose based on the robot's
         joint positions.
-
-        Returns:
-            None.
         """
         if self._ee_visual is None:
             return

@@ -1,5 +1,29 @@
 # Changelog
 
+## [7.0.2] - 2026-08-27
+### Fixed
+- Recover rigid links and joints from disconnected components behind non-rigid frames.
+
+## [7.0.1] - 2026-08-03
+### Changed
+- Load the Robot schema Python packages and USD resources from the independently built `isaacsim-robot-schema` wheel.
+
+## [7.0.0] - 2026-07-30
+### Removed
+- Remove Robot Poser kinematics, math, and IK modules; import them from `isaacsim.robot.poser`.
+
+## [6.3.10] - 2026-07-29
+### Changed
+- Move the schema diagram generator and its fonts to documentation tooling.
+
+## [6.3.9] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [6.3.8] - 2026-07-07
+### Changed
+- Update the generated Python API inventory.
+
 ## [6.3.7] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.
@@ -10,8 +34,8 @@
 
 ## [6.3.5] - 2026-05-27
 ### Fixed
-- `GenerateRobotLinkTree`: rewrite the two `UsdPrimRange` loops to the conventional range-for shape (`for (const UsdPrim& prim : UsdPrimRange(root))`) instead of treating the range as an iterator. The previous form did not compile and made `utils.h` unincludable from C++ consumers.
-- Add `GetRobotLinkParentMap` helper to `utils.h` for resolving `isaac:physics:robotJoints` body0/body1 relationships into a child-link to parent-link path map.
+- `GenerateRobotLinkTree`: rewrite the two `UsdPrimRange` loops to the conventional range-for shape (`for (const UsdPrim& prim : UsdPrimRange(root))`) instead of treating the range as an iterator. The previous form did not compile and made `utils.hpp` unincludable from C++ consumers.
+- Add `GetRobotLinkParentMap` helper to `utils.hpp` for resolving `isaac:physics:robotJoints` body0/body1 relationships into a child-link to parent-link path map.
 
 ## [6.3.4] - 2026-05-21
 ### Fixed
@@ -60,7 +84,7 @@
 - Migrated `rangeSensorSchema` and `isaacSensorSchema` from pre-built C++ typed schema libraries (`omni-isaacsim-schema` packman package) to codeless USD schemas
 - Removed `omni-isaacsim-schema` packman dependency and associated native library entries
 - All C++ consumers now use generic `prim.GetAttribute(token)` and `prim.GetTypeName()` instead of typed schema classes
-- Added `sensor_tokens.h` header providing token constants for all sensor schema attributes and type names
+- Added `sensor_tokens.hpp` header providing token constants for all sensor schema attributes and type names
 - Added Python compatibility wrappers (`omni.isaac.RangeSensorSchema`, `omni.isaac.IsaacSensorSchema`) so existing Python consumers work without changes
 - Removed ultrasonic sensor schemas (UltrasonicArray, UltrasonicEmitter, UltrasonicFiringGroup, UltrasonicMaterialAPI) — no code references existed
 - Added schema validation tests for both sensor schema and range sensor schema plugin registration

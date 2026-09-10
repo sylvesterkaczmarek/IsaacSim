@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.4.7] - 2026-08-17
+### Fixed
+- Clear the recorder on stage CLOSED instead of CLOSING.
+
+## [2.4.6] - 2026-08-13
+### Changed
+- Use isaacsim.core.experimental app, stage, and prim utilities in the recorder and tests.
+
+### Fixed
+- Reject writers that do not accept `backend` instead of passing an unsupported argument.
+- Failed recorder start no longer reports a successful write or leaves a partial recorder.
+- Accept `Sdf.Path` camera paths (for example `prim.GetPath()`) when validating render products.
+
 ## [2.4.5] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

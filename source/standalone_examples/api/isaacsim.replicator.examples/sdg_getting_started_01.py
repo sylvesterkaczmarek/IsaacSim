@@ -15,6 +15,7 @@
 
 """Demonstrate basic synthetic data generation with a writer and render product."""
 
+import argparse
 import os
 
 from isaacsim import SimulationApp
@@ -22,14 +23,24 @@ from isaacsim import SimulationApp
 simulation_app = SimulationApp(launch_config={"headless": False})
 
 import carb.settings
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.replicator.core as rep
-import omni.usd
+
+NUM_CAPTURES = 3
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--num-captures", type=int, default=NUM_CAPTURES, help="Number of capture steps to run.")
+args, _ = parser.parse_known_args()
 
 
-def run_example() -> None:
-    """Run a basic SDG pipeline capturing RGB and bounding box data."""
+def run_example(num_captures: int) -> None:
+    """Run a basic SDG pipeline capturing RGB and bounding box data.
+
+    Args:
+        num_captures: Number of randomized frames to capture.
+    """
     # Create a new stage and disable capture on play
-    omni.usd.get_context().new_stage()
+    stage_utils.create_new_stage()
     rep.orchestrator.set_capture_on_play(False)
 
     # Set DLSS to Quality mode (2) for best SDG results , options: 0 (Performance), 1 (Balanced), 2 (Quality), 3 (Auto)
@@ -55,7 +66,7 @@ def run_example() -> None:
     writer.attach(rp)
 
     # Trigger a data capture request (data will be written to disk by the writer)
-    for i in range(3):
+    for i in range(num_captures):
         print(f"Step {i}")
         rep.orchestrator.step()
 
@@ -65,34 +76,32 @@ def run_example() -> None:
     rp.destroy()
 
 
-run_example()
+run_example(num_captures=args.num_captures)
 
 # <start-sdg-getting-started-01-test>
-import argparse
-import sys
-
-from isaacsim.core.utils.extensions import enable_extension
-
-enable_extension("isaacsim.test.utils")
-from isaacsim.test.utils.file_validation import validate_folder_contents
-
-parser = argparse.ArgumentParser()
-parser.add_argument(
+test_parser = argparse.ArgumentParser()
+test_parser.add_argument(
     "--test",
     action="store_true",
     help="Validate captured output files against expected counts and exit.",
 )
-args, _ = parser.parse_known_args()
+test_args, _ = test_parser.parse_known_args()
 
-if args.test:
+if test_args.test:
+    import sys
+
+    from isaacsim.core.utils.extensions import enable_extension
+
+    enable_extension("isaacsim.test.utils")
+    from isaacsim.test.utils.file_validation import validate_folder_contents
+
     # BasicWriter with rgb + bounding_box_2d_tight writes per capture:
     # 1 rgb png, 1 bbox npy, 1 bbox labels json, 1 bbox prim_paths json (= 2 json per capture).
-    num_captures = 3
     out_dir = os.path.join(os.getcwd(), "_out_basic_writer")
     ok = validate_folder_contents(
         path=out_dir,
         recursive=True,
-        expected_counts={"png": num_captures, "npy": num_captures, "json": num_captures * 2},
+        expected_counts={"png": args.num_captures, "npy": args.num_captures, "json": args.num_captures * 2},
         fail_on_empty_files=True,
     )
     if not ok:

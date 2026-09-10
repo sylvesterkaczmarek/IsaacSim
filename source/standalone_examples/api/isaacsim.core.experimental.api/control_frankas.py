@@ -81,16 +81,16 @@ GroundPlane("/World/GroundPlane", positions=[0, 0, 0])
 distant_light = DistantLight("/World/DistantLight")
 distant_light.set_intensities(300)
 # - Add Franka robots with variants
-asset_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 stage_utils.add_reference_to_stage(
     usd_path=asset_path,
     path="/World/Franka_1",
-    variants=[("Gripper", "AlternateFinger"), ("Mesh", "Quality")],
+    variants=[("Gripper", "alternatefinger"), ("Mesh", "quality")],
 )
 stage_utils.add_reference_to_stage(
     usd_path=asset_path,
     path="/World/Franka_2",
-    variants=[("Gripper", "AlternateFinger"), ("Mesh", "Quality")],
+    variants=[("Gripper", "alternatefinger"), ("Mesh", "quality")],
 )
 
 # Create articulation wrappers

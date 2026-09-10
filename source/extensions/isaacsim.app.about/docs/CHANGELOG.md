@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.3.2] - 2026-06-26
+### Changed
+- Replace package-root star imports with explicit lifecycle imports.
+
 ## [2.3.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

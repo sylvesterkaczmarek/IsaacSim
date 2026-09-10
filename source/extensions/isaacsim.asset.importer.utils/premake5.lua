@@ -14,16 +14,13 @@
 -- limitations under the License.
 
 local ext = get_current_extension_info()
+dofile(root .. "/tools/isaac_build/module_carrier.lua")
+
 project_ext(ext)
+stage_isaacsim_module_carrier(ext, "isaacsim.asset.importer.utils")
 
 repo_build.prebuild_link {
-    { "python/impl", ext.target_dir .. "/isaacsim/asset/importer/utils/impl" },
-    { "python/tests", ext.target_dir .. "/isaacsim/asset/importer/utils/tests" },
     { "docs", ext.target_dir .. "/docs" },
     { "data", ext.target_dir .. "/data" },
+    { "isaacsim/asset/importer/utils/tests", ext.target_dir .. "/isaacsim/asset/importer/utils/tests" },
 }
-
-repo_build.prebuild_copy {
-    { "python/*.py", ext.target_dir .. "/isaacsim/asset/importer/utils" },
-}
-

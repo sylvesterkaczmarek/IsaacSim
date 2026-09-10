@@ -28,6 +28,21 @@
   - target_position: list[float] | None
   - target_orientation: list[float] | None
 
+- class KinematicChain
+  - def __init__(self, stage: Any, robot_prim: Any, start_prim: Any = None, end_prim: Any = None)
+  - def compute_fk(self, q: VecN) -> tuple[Transform, list[Transform]]
+  - def compute_fk_and_jacobian(self, q: VecN) -> tuple[Transform, Mat]
+  - def read_joint_states(self) -> dict[str, float]
+  - def set_joint_attributes(self, joint_dict: dict[str, float])
+  - def teleport(self, joint_dict: dict[str, float])
+  - def teleport_anchored(self, joint_dict: dict[str, float], anchor_prim: Any = None)
+
+- class Transform
+- class Joint
+- class IKSolver
+- class IKSolverRegistry
+- class IKSolverLM
+
 ## Functions
 
 - def validate_robot_schema(robot_prim: Usd.Prim) -> bool
@@ -40,3 +55,5 @@
 - def delete_named_pose(stage: Usd.Stage, robot_prim: Usd.Prim, pose_name: str) -> bool
 - def export_poses(stage: Usd.Stage, robot_prim: Usd.Prim, filepath: str) -> bool
 - def import_poses(stage: Usd.Stage, robot_prim: Usd.Prim, filepath: str) -> int
+- def pose_error(Td: Transform, T: Transform) -> VecN
+- def ik_lm(chain: KinematicChain, q0: VecN, target: Transform, lam: float = 1e-3, iters: int = 30, tol: float = 1e-6, w_rot: float = 1.0, w_pos: float = 1.0, max_step: float = 0.5, base_frame: Transform | None = None, null_space_bias: float = 0.05, joint_fixed: list[bool] | np.ndarray | None = None) -> VecN

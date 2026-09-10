@@ -16,6 +16,8 @@
 """Interactive sample demonstrating keyboard control of a cube's size using Omni Graph."""
 
 from isaacsim.examples.interactive.omnigraph_keyboard.omnigraph_keyboard import OmnigraphKeyboard
-from isaacsim.examples.interactive.omnigraph_keyboard.omnigraph_keyboard_extension import OmnigraphKeyboardExtension
+from isaacsim.examples.interactive.omnigraph_keyboard.omnigraph_keyboard_extension import (
+    OmnigraphKeyboardExtension as OmnigraphKeyboardExtension,
+)
 
-__all__ = ["OmnigraphKeyboard", "OmnigraphKeyboardExtension"]
+__all__ = ["OmnigraphKeyboard"]

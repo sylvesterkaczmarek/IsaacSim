@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.3] - 2026-07-07
+### Changed
+- Update the generated Python API inventory.
+
 ## [1.2.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

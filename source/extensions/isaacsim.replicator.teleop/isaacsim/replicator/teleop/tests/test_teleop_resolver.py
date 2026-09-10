@@ -17,19 +17,24 @@
 
 from __future__ import annotations
 
-import omni.kit.app
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
 import omni.usd
+from isaacsim.core.experimental.prims import RigidPrim
 from isaacsim.replicator.teleop import (
     STAGE_STATE_NO_STAGE,
     STAGE_STATE_READY,
     BimanualControllerProfile,
     ControllerSideProfile,
+    GraspControllerProfile,
+    GraspSideProfile,
     LocomotionProfile,
     TeleopProfile,
     TeleopSettingsProfile,
     resolve_teleop_profile,
 )
+from pxr import UsdPhysics
 
 
 class TestTeleopResolver(omni.kit.test.AsyncTestCase):
@@ -37,26 +42,23 @@ class TestTeleopResolver(omni.kit.test.AsyncTestCase):
 
     async def setUp(self) -> None:
         """Set up the test fixture."""
-        await omni.kit.app.get_app().next_update_async()
-        omni.usd.get_context().new_stage()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
 
     async def tearDown(self) -> None:
         """Tear down the test fixture."""
-        usd_context = omni.usd.get_context()
-        if usd_context.get_stage() is not None:
-            usd_context.close_stage()
-            await omni.kit.app.get_app().next_update_async()
-        while usd_context.get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+        if stage_utils.is_stage_set() or omni.usd.get_context().get_stage() is not None:
+            stage_utils.close_stage()
+            await app_utils.update_app_async()
+        while stage_utils.is_stage_loading():
+            await app_utils.update_app_async()
 
     async def test_resolver_reports_no_stage(self) -> None:
         """Verify the resolver reports no-stage when no USD stage is open."""
-        usd_context = omni.usd.get_context()
-        usd_context.close_stage()
-        await omni.kit.app.get_app().next_update_async()
-        while usd_context.get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
+        while stage_utils.is_stage_loading():
+            await app_utils.update_app_async()
 
         report = resolve_teleop_profile(TeleopProfile())
 
@@ -93,3 +95,76 @@ class TestTeleopResolver(omni.kit.test.AsyncTestCase):
         self.assertIn("Session Tracking Space", issue_sources)
         self.assertIn("Floating Left", issue_sources)
         self.assertIn("Locomotion", issue_sources)
+
+    def test_floating_profile_schema_query(self) -> None:
+        """Floating targets must be dynamic rigid bodies before the profile is ready."""
+        path = "/World/FloatingHandle"
+        stage_utils.define_prim(path, "Xform")
+        profile = TeleopProfile(
+            floating=BimanualControllerProfile(left=ControllerSideProfile(enabled=True, settings={"prim_path": path}))
+        )
+
+        report = resolve_teleop_profile(profile)
+        floating_issues = [issue for issue in report.issues if issue.source == "Floating Left"]
+        self.assertEqual(len(floating_issues), 1)
+        self.assertIn("must already have RigidBodyAPI", floating_issues[0].message)
+
+        RigidPrim(path)
+        report = resolve_teleop_profile(profile)
+        self.assertFalse([issue for issue in report.issues if issue.source == "Floating Left"])
+
+    @staticmethod
+    def _define_grasp_joint(root_path: str, joint_name: str) -> None:
+        stage = stage_utils.get_current_stage()
+        stage_utils.define_prim(root_path, "Xform")
+        joint = UsdPhysics.RevoluteJoint.Define(stage, f"{root_path}/{joint_name}")
+        UsdPhysics.DriveAPI.Apply(joint.GetPrim(), "angular").CreateTargetPositionAttr(0.0)
+
+    def test_retargeted_grasp_requires_kind_and_aliases(self) -> None:
+        """Resolver explains incomplete retargeted profile fields."""
+        root_path = "/World/Hand"
+        self._define_grasp_joint(root_path, "right_hand_index_0_joint")
+        profile = TeleopProfile(
+            grasp=GraspControllerProfile(
+                right=GraspSideProfile(
+                    enabled=True,
+                    prim_path=root_path,
+                    config_path="builtin://dex3_grasp",
+                    drive_mode="retargeted",
+                )
+            )
+        )
+
+        report = resolve_teleop_profile(profile)
+        messages = " ".join(issue.message for issue in report.issues if issue.source == "Grasp Right")
+
+        self.assertIn("requires retargeter_kind 'trihand'", messages)
+        self.assertIn("requires at least one joint alias", messages)
+
+    def test_retargeted_grasp_aliases_resolve_config_and_stage_joints(self) -> None:
+        """Resolver identifies aliases missing from the grasp config or USD hand."""
+        root_path = "/World/Hand"
+        self._define_grasp_joint(root_path, "right_hand_index_0_joint")
+        profile = TeleopProfile(
+            grasp=GraspControllerProfile(
+                right=GraspSideProfile(
+                    enabled=True,
+                    prim_path=root_path,
+                    config_path="builtin://dex3_grasp",
+                    drive_mode="retargeted",
+                    retargeter_kind="trihand",
+                    joint_aliases={
+                        "index_proximal": "missing_from_config",
+                        "middle_proximal": "right_hand_middle_0_joint",
+                        "ring_proximal": "right_hand_index_0_joint",
+                    },
+                )
+            )
+        )
+
+        report = resolve_teleop_profile(profile)
+        messages = " ".join(issue.message for issue in report.issues if issue.source == "Grasp Right")
+
+        self.assertIn("Unknown TriHand semantic alias(es): ring_proximal", messages)
+        self.assertIn("missing from grasp config: missing_from_config", messages)
+        self.assertIn("not controllable below grasp prim", messages)

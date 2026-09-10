@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.8] - 2026-07-29
+### Changed
+- Pin the deprecated UR10 bin-stacking scene to the Isaac Sim 6.0 asset.
+
+## [0.2.7] - 2026-07-09
+### Changed
+- Add migration guidance for replacing deprecated Cortex examples.
+
+## [0.2.6] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [0.2.5] - 2026-06-29
+### Changed
+- Stop publishing Kit lifecycle classes from the deprecated interactive example modules.
+
 ## [0.2.4] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

@@ -208,7 +208,7 @@ class IsaacSensorCreateImuSensor(omni.kit.commands.Command):
         including sensor period and filter settings for linear acceleration, angular velocity, and orientation.
 
         Returns:
-            The created IMU sensor prim if successful, None otherwise.
+            The created IMU sensor prim if creation succeeds.
         """
         success, self._prim = omni.kit.commands.execute(
             "IsaacSensorCreatePrim",

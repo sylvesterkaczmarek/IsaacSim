@@ -29,13 +29,23 @@ from pxr import Usd, UsdGeom
 def find_link_meshes(
     stage: Usd.Stage,
     articulation_base_path: str,
-    link_names: list[str],
+    link_paths: list[str],
 ) -> OrderedDict[str, list[str]]:
     """Identify and map all meshes within each link of the selected articulation.
 
     Walks the prim subtree rooted at ``articulation_base_path`` and groups every
-    ``UsdGeom.Mesh`` it finds under the link that contains it (matched by the
-    first path component appearing in ``link_names``).
+    ``UsdGeom.Mesh`` it finds under the *deepest* enclosing link, where a link is
+    a prim whose path appears in ``link_paths``.
+
+    Matching against link paths rather than link names is what makes nested links
+    work. A link prim authored inside another link prim -- for example
+    ``base_link/arm_link`` -- shares path components with its parent, so matching
+    the first component that merely *names* a link stops at ``base_link``:
+    ``arm_link`` never appears as a link at all and its geometry is absorbed by
+    its parent, leaving spheres fitted to geometry that moves independently of
+    the link that owns them. Name matching is also ambiguous in the other
+    direction, treating any prim that happens to share a link's name as that
+    link. Paths are unique, so neither case arises.
 
     Instanceable meshes cannot be used for automatic sphere generation, but the
     enclosing link is still recorded (with an empty mesh list) so spheres can be
@@ -44,14 +54,19 @@ def find_link_meshes(
     Args:
         stage: Active USD stage.
         articulation_base_path: Path to the articulation root.
-        link_names: Link names belonging to this articulation.
+        link_paths: Absolute prim paths of the links belonging to this
+            articulation, as reported by ``Articulation.link_paths``.
 
     Returns:
         Ordered mapping from link subpath (relative to ``articulation_base_path``)
-        to the list of mesh subpaths under that link (relative to the link).
+        to the list of mesh subpaths under that link (relative to the link). A
+        nested link is keyed by its full subpath, for example
+        ``"/base_link/arm_link"``. A link authored directly as a mesh maps to a
+        single empty mesh subpath.
     """
     link_to_meshes: OrderedDict[str, list[str]] = OrderedDict()
-    link_names_set = set(link_names)
+    articulation_base_path = articulation_base_path.rstrip("/") or "/"
+    link_path_set = {link_path.rstrip("/") for link_path in link_paths}
 
     num_art_path_components = len(articulation_base_path.split("/"))
     art_path_len = len(articulation_base_path)
@@ -67,14 +82,17 @@ def find_link_meshes(
 
         is_instanced = prim.IsInstanceProxy()
 
-        # Find the length of the path of the link.
+        # Deepest ancestor-or-self whose path is a link. The mesh prim itself is
+        # eligible, which is how a link authored directly as a mesh is recorded.
         link_subpath: str | None = None
         link_path_len = art_path_len
+
+        segment_path_len = art_path_len
         for segment in path.split("/")[num_art_path_components:]:
-            link_path_len += 1 + len(segment)
-            if segment in link_names_set:
-                link_subpath = path[art_path_len:link_path_len]
-                break
+            segment_path_len += 1 + len(segment)
+            if path[:segment_path_len] in link_path_set:
+                link_subpath = path[art_path_len:segment_path_len]
+                link_path_len = segment_path_len
 
         if link_subpath is None:
             carb.log_warn(

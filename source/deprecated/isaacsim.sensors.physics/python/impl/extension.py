@@ -30,8 +30,7 @@ class Extension(omni.ext.IExt):
     """Extension for Isaac Sim physics sensors.
 
     Provides access to physics-based sensors including contact sensors and IMU sensors through
-    the Isaac Sim sensor interfaces. This extension manages the initialization and cleanup of
-    sensor interfaces required for physics simulation in Isaac Sim.
+    the Isaac Sim sensor interfaces.
     """
 
     def on_startup(self, ext_id: str) -> None:

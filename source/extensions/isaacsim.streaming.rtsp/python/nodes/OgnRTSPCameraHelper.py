@@ -18,14 +18,13 @@
 from __future__ import annotations
 
 import traceback
-from typing import Optional
 
 import carb
 import omni.graph.core as og
 import omni.usd
 from isaacsim.core.nodes import BaseWriterNode
+from isaacsim.streaming.rtsp import RTSPStreamWriter
 from isaacsim.streaming.rtsp.impl.render_var_utils import ensure_render_var_on_product
-from isaacsim.streaming.rtsp.impl.rtsp_writer import RTSPStreamWriter
 from pxr import Usd
 
 # AOVs that `RTSPStreamWriter` requests via `AnnotatorRegistry.get_annotator`.
@@ -37,7 +36,7 @@ from pxr import Usd
 _WRITER_AOVS: tuple[str, ...] = ("LdrColor",)
 
 
-def _resolve_srtx_sensor_set_name(render_product_path: str) -> Optional[str]:
+def _resolve_srtx_sensor_set_name(render_product_path: str) -> str | None:
     """Resolve the SRTX sensor-set name for a render product, or ``None``.
 
     Args:

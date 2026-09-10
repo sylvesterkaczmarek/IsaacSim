@@ -259,7 +259,7 @@ def _decompose(m: wp.mat44f) -> tuple[wp.vec3f, wp.quatf, wp.vec3f]:
         m: The 4x4 transformation matrix to decompose.
 
     Returns:
-        A tuple containing (position, rotation, scale) where position and scale are vec3f and rotation is quatf.
+        A tuple containing (position, rotation, scale).
     """
     # extract position
     position = wp.vec3f(m[3, 0], m[3, 1], m[3, 2])

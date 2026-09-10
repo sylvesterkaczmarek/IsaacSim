@@ -31,7 +31,6 @@ class PhysicsMaterial(object):
         static_friction: Static friction coefficient.
         dynamic_friction: Dynamic friction coefficient.
         restitution: Restitution (bounciness) coefficient.
-
     """
 
     def __init__(
@@ -69,8 +68,7 @@ class PhysicsMaterial(object):
         """USD prim path for the material.
 
         Returns:
-            The prim path string.
-
+            The prim path.
         """
         return self._prim_path
 
@@ -79,8 +77,7 @@ class PhysicsMaterial(object):
         """USD prim object for the material.
 
         Returns:
-            The Usd.Prim object.
-
+            The prim object.
         """
         return self._prim
 
@@ -90,7 +87,6 @@ class PhysicsMaterial(object):
 
         Returns:
             The material name.
-
         """
         return self._name
 
@@ -99,8 +95,7 @@ class PhysicsMaterial(object):
         """USD material object for the physics material.
 
         Returns:
-            The UsdShade.Material object.
-
+            The material object.
         """
         return self._material
 
@@ -109,7 +104,6 @@ class PhysicsMaterial(object):
 
         Args:
             friction: The dynamic friction coefficient value.
-
         """
         attr = self._material_api.GetDynamicFrictionAttr()
         if attr.Get() is None:
@@ -123,7 +117,6 @@ class PhysicsMaterial(object):
 
         Returns:
             The dynamic friction coefficient value.
-
         """
         attr = self._material_api.GetDynamicFrictionAttr()
         value = attr.Get()
@@ -137,7 +130,6 @@ class PhysicsMaterial(object):
 
         Args:
             friction: The static friction coefficient value.
-
         """
         attr = self._material_api.GetStaticFrictionAttr()
         if attr.Get() is None:
@@ -151,7 +143,6 @@ class PhysicsMaterial(object):
 
         Returns:
             The static friction coefficient value.
-
         """
         attr = self._material_api.GetStaticFrictionAttr()
         value = attr.Get()
@@ -165,7 +156,6 @@ class PhysicsMaterial(object):
 
         Args:
             restitution: The restitution coefficient value.
-
         """
         attr = self._material_api.GetRestitutionAttr()
         if attr.Get() is None:
@@ -179,7 +169,6 @@ class PhysicsMaterial(object):
 
         Returns:
             The restitution coefficient value.
-
         """
         attr = self._material_api.GetRestitutionAttr()
         value = attr.Get()

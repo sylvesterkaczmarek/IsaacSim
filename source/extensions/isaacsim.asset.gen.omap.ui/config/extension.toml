@@ -1,5 +1,5 @@
 [package]
-version = "2.6.1"
+version = "2.6.5"
 category = "Simulation"
 title = "UI components for the Isaac Sim Occupancy Map"
 description = "UI components for the Isaac Sim Occupancy Map provides UI for 2D Occupancy Map Generation"

@@ -44,7 +44,7 @@ from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.storage.native import get_assets_root_path_async
 from pxr import Sdf
 
-FRANKA_USD_REL_PATH = "Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+FRANKA_USD_REL_PATH = "Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 
 
 async def setup_stage_with_franka() -> str:
@@ -85,6 +85,9 @@ def author_actuators_on_franka(franka_path: str) -> None:
     ``franka_path`` is the articulation root prim path (e.g. ``"/panda"`` when
     the Franka USD has been opened as the active stage and its default prim
     is ``/panda``).
+
+    Args:
+        franka_path: Path of the Franka articulation root prim.
     """
     # <start-author-actuators-snippet>
     from isaacsim.core.experimental.actuators import (
@@ -119,7 +122,11 @@ def author_actuators_on_franka(franka_path: str) -> None:
 # 3. Saving the stage so the actuators travel with the asset
 # ============================================================================
 def export_stage(out_path: pathlib.Path) -> None:
-    """Flatten the current stage to a single USD file at `out_path`."""
+    """Flatten the current stage to a single USD file at `out_path`.
+
+    Args:
+        out_path: Destination path for the flattened USD stage.
+    """
     # <start-export-stage-snippet>
     stage = stage_utils.get_current_stage(backend="usd")
     stage.Export(out_path.as_posix())
@@ -127,7 +134,11 @@ def export_stage(out_path: pathlib.Path) -> None:
 
 
 def print_authored_actuators_usda(franka_path: str) -> None:
-    """Print the USDA text for the authored ``{franka_path}/Actuators`` subtree."""
+    """Print the USDA text for the authored ``{franka_path}/Actuators`` subtree.
+
+    Args:
+        franka_path: Path of the Franka articulation root prim.
+    """
     stage = stage_utils.get_current_stage(backend="usd")
     src_layer = stage.GetRootLayer()
     actuators_path = Sdf.Path(f"{franka_path}/Actuators")
@@ -147,6 +158,9 @@ def print_authored_actuators_usda(franka_path: str) -> None:
 def discover_actuators_from_usd(franka_path: str) -> ArticulationActuators:
     """Construct `ArticulationActuators` from every `NewtonActuator` prim under ``franka_path``.
 
+    Args:
+        franka_path: Path of the articulation containing authored Newton actuators.
+
     Returns:
         The `ArticulationActuators` instance built from the USD-authored actuators.
     """
@@ -164,7 +178,11 @@ def discover_actuators_from_usd(franka_path: str) -> ArticulationActuators:
 # 5. Round-trip: author → save → re-open → discover
 # ============================================================================
 def round_trip_demo(out_path: pathlib.Path) -> None:
-    """Run an end-to-end demo: author actuators, save, re-open, and discover."""
+    """Run an end-to-end demo: author actuators, save, re-open, and discover.
+
+    Args:
+        out_path: Destination path for the flattened stage used in the round trip.
+    """
     # Asset loading is async so the app stays responsive during Nucleus fetch.
     franka_path = simulation_app.run_coroutine(setup_stage_with_franka())
     author_actuators_on_franka(franka_path)

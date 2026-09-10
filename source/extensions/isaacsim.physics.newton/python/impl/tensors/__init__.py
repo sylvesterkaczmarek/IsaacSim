@@ -13,31 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Isaac Sim Newton Tensors Extension.
+"""Deprecated legacy Python implementation of the Newton tensor API.
 
-This extension provides a tensor-based interface for Newton physics simulation in Isaac Sim.
-It supports multiple tensor frameworks (NumPy, PyTorch, Warp) and provides views for
-articulations, rigid bodies, and contact sensors.
+This implementation is retained for source compatibility but is no longer exported as
+``isaacsim.physics.newton.tensors``. Use the API provided by the
+``isaacsim.physics.newton.tensors`` extension instead.
 """
 
-from . import kernels
-from .articulation_view import NewtonArticulationView
-from .backend import ArticulationSet, NewtonSimView, RigidBodySet, RigidContactSet
-from .rigid_body_view import NewtonRigidBodyView
-from .rigid_contact_view import NewtonRigidContactView
-from .tensor_api import NewtonSimulationView, create_simulation_view
-from .utils import find_matching_paths
+import warnings
 
-__all__ = [
-    "create_simulation_view",
-    "NewtonSimulationView",
-    "NewtonSimView",
-    "ArticulationSet",
-    "RigidBodySet",
-    "RigidContactSet",
-    "NewtonArticulationView",
-    "NewtonRigidBodyView",
-    "NewtonRigidContactView",
-    "find_matching_paths",
-    "kernels",
-]
+__all__: list[str] = []
+
+warnings.warn(
+    "isaacsim.physics.newton.impl.tensors is deprecated; use the isaacsim.physics.newton.tensors extension instead",
+    DeprecationWarning,
+    stacklevel=2,
+)

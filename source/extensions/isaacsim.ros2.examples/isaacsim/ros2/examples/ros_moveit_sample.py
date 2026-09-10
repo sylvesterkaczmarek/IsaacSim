@@ -31,9 +31,11 @@ from isaacsim.core.experimental.utils import stage as stage_utils
 from isaacsim.core.rendering_manager import ViewportManager
 from isaacsim.core.simulation_manager import PhysicsScene
 from isaacsim.examples.browser import get_instance as get_browser_instance
-from isaacsim.gui.components.ui_utils import setup_ui_headers
+from isaacsim.gui.components import setup_ui_headers
 from isaacsim.storage.native import get_assets_root_path
 from pxr import Gf
+
+__all__ = []
 
 MENU_NAME = "Franka MoveIt"
 MENU_CATEGORY = "ROS2/MoveIt"
@@ -145,13 +147,13 @@ class Extension(omni.ext.IExt):
         Args:
             stage_path: USD prim path where the Franka robot will be added.
         """
-        usd_path = "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        usd_path = "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
         asset_path = self._assets_root_path + usd_path
         prim = self._stage.DefinePrim(stage_path, "Xform")
         prim.GetReferences().AddReference(asset_path)
 
-        prim.GetVariantSet("Gripper").SetVariantSelection("AlternateFinger")
-        prim.GetVariantSet("Mesh").SetVariantSelection("Quality")
+        prim.GetVariantSet("Gripper").SetVariantSelection("alternatefinger")
+        prim.GetVariantSet("Mesh").SetVariantSelection("quality")
 
         rot_mat = Gf.Matrix3d(Gf.Rotation((0, 0, 1), 90))
         omni.kit.commands.execute(

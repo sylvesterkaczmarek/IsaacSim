@@ -20,11 +20,11 @@ This module provides the AcousticSensor class for operating single RTX-based aco
 
 from __future__ import annotations
 
-from ._sensor_base import _SensorRuntime
+from ._sensor_base import SensorRuntime
 from .acoustic import Acoustic
 
 
-class AcousticSensor(_SensorRuntime):
+class AcousticSensor(SensorRuntime):
     """Runtime class for operating a single RTX-based acoustic sensor.
 
     Wraps an :class:`Acoustic` authoring object, attaches Replicator annotators,

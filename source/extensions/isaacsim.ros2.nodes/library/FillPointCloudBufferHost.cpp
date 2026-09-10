@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "../cuda/FillPointCloudBuffer.cuh"
-
 #include <carb/tasking/ITasking.h>
+
+#include <isaacsim/ros2/nodes/FillPointCloudBufferHost.hpp>
 
 #include <cstring>
 #include <tuple>
@@ -29,7 +29,7 @@ namespace nodes
 {
 
 void fillPointCloudBufferHost(uint8_t* buffer,
-                              const float3* pointCloudData,
+                              const float* pointCloudData,
                               const std::vector<std::tuple<void*, size_t, size_t>>& orderedFields,
                               const size_t pointWidth,
                               const size_t numPoints)
@@ -39,24 +39,36 @@ void fillPointCloudBufferHost(uint8_t* buffer,
         return;
     }
 
+    // With no metadata and a packed layout the interleave degenerates to one contiguous copy
+    if (orderedFields.empty() && pointWidth == kPointCloudXyzBytes)
+    {
+        memcpy(buffer, pointCloudData, numPoints * kPointCloudXyzBytes);
+        return;
+    }
+
     auto tasking = carb::getCachedInterface<carb::tasking::ITasking>();
 
-    // Single parallel pass: each iteration handles one point's full copy (xyz + all fields)
-    // Cache-friendly for writes since each iteration writes a contiguous pointWidth block
-    tasking->parallelFor(size_t(0), numPoints,
-                         [buffer, pointCloudData, &orderedFields, pointWidth](size_t i)
-                         {
-                             uint8_t* dst = buffer + i * pointWidth;
-                             // Copy xyz
-                             memcpy(dst, reinterpret_cast<const uint8_t*>(&pointCloudData[i]), sizeof(float3));
-                             // Copy each metadata field for this point
-                             for (const auto& [data, dataSize, offset] : orderedFields)
-                             {
-                                 memcpy(dst + offset, reinterpret_cast<const uint8_t*>(data) + i * dataSize, dataSize);
-                             }
-                         });
+    // Parallel batches of points: each invocation handles a contiguous span so the per-point
+    // copy loop stays local and inlinable (parallelFor would dispatch per index through the
+    // C ABI). Writes are cache-friendly since each point writes a contiguous pointWidth block.
+    tasking->applyRangeBatch(
+        numPoints, 0,
+        [buffer, pointCloudData, &orderedFields, pointWidth](size_t begin, size_t end)
+        {
+            for (size_t i = begin; i < end; ++i)
+            {
+                uint8_t* dst = buffer + i * pointWidth;
+                // Copy xyz
+                memcpy(dst, reinterpret_cast<const uint8_t*>(pointCloudData + i * 3), kPointCloudXyzBytes);
+                // Copy each metadata field for this point
+                for (const auto& [data, dataSize, offset] : orderedFields)
+                {
+                    memcpy(dst + offset, reinterpret_cast<const uint8_t*>(data) + i * dataSize, dataSize);
+                }
+            }
+        });
 }
 
-}
-}
-}
+} // namespace nodes
+} // namespace ros2
+} // namespace isaacsim

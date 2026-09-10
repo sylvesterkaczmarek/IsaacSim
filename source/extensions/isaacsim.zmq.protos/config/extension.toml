@@ -1,0 +1,49 @@
+[core]
+reloadable = false
+order = 0
+
+[package]
+version = "1.0.0"
+category = "Simulation"
+title = "ZMQ Protos"
+description = "Protobuf message schemas (and their generated C++/Python bindings) for the Isaac Sim ZMQ bridge"
+keywords = ["isaac", "ZMQ", "protobuf", "schemas", "communication"]
+changelog = "docs/CHANGELOG.md"
+readme = "docs/Overview.md"
+preview_image = "data/preview.png"
+icon = "data/icon.png"
+writeTarget.kit = true
+writeTarget.platform = true
+
+# Put the bundled protobuf/pyzmq runtime on sys.path before importing the package,
+# so the generated *_pb2 schemas re-exported from __init__ can import google.protobuf.
+[[python.module]]
+path = "pip_prebundle"
+
+[[python.module]]
+name = "isaacsim.zmq.protos"
+
+[[python.module]]
+name = "isaacsim.zmq.protos.tests"
+
+# libz must load before the plugin (protobuf uses zlib for compression)
+[[native.library]]
+path = "bin/lib/libz.so.1"
+recursive = false
+
+[[test]]
+name = "startup"
+dependencies = [
+    "isaacsim.test.utils",
+]
+args = [
+    "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+
+[[test]]
+dependencies = [
+    "isaacsim.test.utils",
+]
+args = [
+    "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]

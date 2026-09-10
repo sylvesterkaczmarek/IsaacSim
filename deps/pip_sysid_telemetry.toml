@@ -1,0 +1,24 @@
+# Pip prebundle for isaacsim.robot_setup.sysid telemetry ingestion.
+#
+# Keep this focused on direct telemetry readers rather than framework SDKs.
+
+[[dependency]]
+python = "../_build/target-deps/python"
+packages = [
+    # Direct dependencies ----------------------------------------------------
+    "mcap==1.3.0",     # SWIPAT filed under: https://nvbugs/5610950 # Used by: isaacsim.robot_setup.sysid JSON MCAP ingestion
+    "rosbags==0.11.0", # SWIPAT filed under: https://nvbugs/5675909 # Used by: isaacsim.robot_setup.sysid ROS 2 SQLite and binary MCAP ingestion
+    # Transitive dependencies from the approved Real2Sim/NuRec stack. NumPy
+    # and typing_extensions are excluded because existing Isaac Sim prebundles
+    # provide compatible versions.
+    "lz4==4.4.5",          # SWIPAT filed under: https://nvbugs/5675909 # Used by: dependency of rosbags
+    "ruamel.yaml==0.19.1", # SWIPAT filed under: https://nvbugs/5675909 # Used by: dependency of rosbags
+    "zstandard==0.25.0",   # SWIPAT filed under: https://nvbugs/5675909 # Used by: dependency of rosbags
+]
+target = "../_build/target-deps/pip_sysid_telemetry_prebundle"
+platforms = ["*-x86_64", "linux-aarch64"]
+download_only = false
+install_dependencies = false
+append_to_install_folder = true
+gather_licenses_path = "../_build/PACKAGE-LICENSES/PIP-prebundled-LICENSES.txt"
+extra_args = ["--extra-index-url", "https://pypi.org/simple"]

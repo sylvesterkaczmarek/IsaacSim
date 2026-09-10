@@ -41,6 +41,10 @@ class MyBenchmark(BaseIsaacBenchmarkAsync):
         await super().tearDown()
 ```
 
+## ROS 2 Benchmark Environment
+
+For benchmark scripts that enable ROS 2 Bridge functionality, use the standard Isaac Sim launchers so the bundled ROS 2 runtime is configured automatically when `ROS_DISTRO` is unset. On Linux, the launcher selects Humble on Ubuntu 22.04 and Jazzy on Ubuntu 24.04. If the benchmark depends on custom ROS 2 message packages, a robot workspace, `package://` resources, a custom RMW implementation, or a non-default ROS 2 distribution, source that ROS 2 environment before launching Isaac Sim.
+
 ## Functionality
 
 ### Phase-Based Measurement
@@ -66,6 +70,11 @@ Both classes provide specialized methods for USD stage loading that ensure compl
 ### Custom Measurements
 
 The framework supports storing custom measurement data alongside the standard metrics, enabling domain-specific performance analysis through the `store_custom_measurement` method.
+
+Supported custom measurement types depend on the selected metrics backend. `JSONFileMetrics` preserves
+`SingleMeasurement`, `BooleanMeasurement`, `DictMeasurement`, and `ListMeasurement` values. `OmniPerfKPIFile`
+writes only scalar `SingleMeasurement` values; passing another measurement type logs a warning and omits that value
+from the KPI output.
 
 ## Configuration
 

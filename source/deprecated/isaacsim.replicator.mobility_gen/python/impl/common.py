@@ -35,7 +35,7 @@ class Buffer:
 
     Args:
         value: The data value to store in the buffer.
-        tags: List of string tags for categorizing and filtering the buffer.
+        tags: Tags for categorizing and filtering the buffer.
     """
 
     def __init__(self, value: object = None, tags: list[str] | None = None) -> None:
@@ -277,8 +277,8 @@ class Module:
     def enable_rgb_rendering(self) -> None:
         """Enable RGB rendering for this module.
 
-        This class only needs to be overwritten for Camera implementations, which
-        perform the logic of enabling rendering.  By default, this method
+        This method only needs to be overwritten for Camera implementations, which
+        perform the logic of enabling rendering. By default, this method
         traverses all child modules to enable rendering.
         """
         for child in self.children().values():
@@ -287,8 +287,8 @@ class Module:
     def enable_segmentation_rendering(self) -> None:
         """Enable segmentation rendering for this module.
 
-        This class only needs to be overwritten for Camera implementations, which
-        perform the logic of enabling rendering.  By default, this method
+        This method only needs to be overwritten for Camera implementations, which
+        perform the logic of enabling rendering. By default, this method
         traverses all child modules to enable rendering.
         """
         for child in self.children().values():
@@ -297,8 +297,8 @@ class Module:
     def enable_depth_rendering(self) -> None:
         """Enable depth rendering for this module.
 
-        This class only needs to be overwritten for Camera implementations, which
-        perform the logic of enabling rendering.  By default, this method
+        This method only needs to be overwritten for Camera implementations, which
+        perform the logic of enabling rendering. By default, this method
         traverses all child modules to enable rendering.
         """
         for child in self.children().values():
@@ -307,8 +307,8 @@ class Module:
     def enable_instance_id_segmentation_rendering(self) -> None:
         """Enable instance ID segmentation rendering for this module.
 
-        This class only needs to be overwritten for Camera implementations, which
-        perform the logic of enabling rendering.  By default, this method
+        This method only needs to be overwritten for Camera implementations, which
+        perform the logic of enabling rendering. By default, this method
         traverses all child modules to enable rendering.
         """
         for child in self.children().values():
@@ -317,8 +317,8 @@ class Module:
     def enable_normals_rendering(self) -> None:
         """Enable normals rendering for this module.
 
-        This class only needs to be overwritten for Camera implementations, which
-        perform the logic of enabling rendering.  By default, this method
+        This method only needs to be overwritten for Camera implementations, which
+        perform the logic of enabling rendering. By default, this method
         traverses all child modules to enable rendering.
         """
         for child in self.children().values():
@@ -346,8 +346,8 @@ class Module:
             scenario.write_replay_data()
 
         This method is overwritten by some classes to perform the logic
-        of updating Isaac Sim.  For example, the Robot class uses this
-        method to update it's pose and joint positions in the simulation.
+        of updating Isaac Sim. For example, the Robot class uses this
+        method to update its pose and joint positions in the simulation.
 
         By default, this method traverses all children recursively to
         write the child's replay data.
@@ -364,9 +364,9 @@ class Module:
         the module state reflects the simulation.
 
         For example, for the camera class this method will update
-        image state buffers.  For the robot class, this method will read
+        image state buffers. For the robot class, this method will read
         the position, orientation, joint positions and joint velocities
-        and update the corresponding state buffers.  By default, this
+        and update the corresponding state buffers. By default, this
         method traverses all children to update their state.
         """
         for child in self.children().values():
@@ -382,7 +382,7 @@ class Module:
         state dictionary to be loaded.
 
         This method only updates the state buffer values, and does not modify the
-        simulation.  This is accomplished using other methods.
+        simulation. This is accomplished using other methods.
 
         Args:
             state_dict: The state dictionary containing buffer values to load.

@@ -146,10 +146,10 @@ class ComboListModel(ui.AbstractItemModel):
                 self._items.append(ComboListItem(item))
 
     def get_item_children(self, item: object) -> None:
-        """Returns all child items of the given item.
+        """Returns all child items in the combo list model.
 
         Args:
-            item: The parent item to get children for.
+            item: Item argument accepted by the item model.
 
         Returns:
             List of all child items in the model.
@@ -157,14 +157,14 @@ class ComboListModel(ui.AbstractItemModel):
         return self._items
 
     def get_item_value_model(self, item: object, column_id: int) -> None:
-        """Returns the value model for a specific item and column.
+        """Returns the value model for an item, or the current index model when no item is provided.
 
         Args:
             item: The item to get the value model for.
-            column_id: The column identifier.
+            column_id: Column identifier accepted by the item model.
 
         Returns:
-            The value model for the specified item and column, or the current index model if item is None.
+            The item's value model, or the current index model when item is None.
         """
         if item is None:
             return self._current_index
@@ -174,7 +174,7 @@ class ComboListModel(ui.AbstractItemModel):
         """Current index of the selected item.
 
         Returns:
-            The current selected index as an integer.
+            The current selected index.
         """
         return self._current_index.get_value_as_int()
 
@@ -190,12 +190,12 @@ class ComboListModel(ui.AbstractItemModel):
         """Current string value of the selected item.
 
         Returns:
-            The string representation of the currently selected item.
+            The string value of the currently selected item.
         """
         return self._items[self._current_index.get_value_as_int()].model.get_value_as_string()
 
     def set_current_string(self, string: str) -> None:
-        """Sets the current selection by matching the provided string.
+        """Sets the current selection to the first item with a matching string value.
 
         Args:
             string: The string value to match and select.
@@ -209,7 +209,7 @@ class ComboListModel(ui.AbstractItemModel):
         """Current selected item.
 
         Returns:
-            The currently selected item object.
+            The currently selected item value.
         """
         return self._items[self._current_index.get_value_as_int()].item
 
@@ -231,10 +231,10 @@ class ComboListModel(ui.AbstractItemModel):
         self._item_changed(None)
 
     def selection_changed(self, index: object) -> None:
-        """Handles selection change events.
+        """Handles selection change events by notifying item model listeners.
 
         Args:
-            index: The new selected index.
+            index: Selection change callback argument.
         """
         #     """
         #     reset progress, parse progress on each page, and turn the ones that are updated to inprogress.
@@ -258,7 +258,7 @@ def create_combo_list_model(items_list: list, index: int) -> None:
 
     Args:
         items_list: List of items to populate the combo box.
-        index: Default index of the selected item.
+        index: Initial index of the selected item.
 
     Returns:
         A ComboListModel instance for use in UI combo box widgets.
@@ -330,6 +330,11 @@ class ButtonWithIcon:
 
     @enabled.setter
     def enabled(self, value: Any) -> None:
+        """Sets the enabled state for the button, rectangle, icon image, and label.
+
+        Args:
+            value: Value assigned to the enabled state.
+        """
         self.button.enabled = value
         self.rect.enabled = value
         self.image.enabled = value
@@ -387,7 +392,8 @@ class FileSorter:
             filepath: Path to the file to classify.
 
         Returns:
-            Classification value: SIM_READY (1) for sim-ready files, MODEL (2) for 3D model files, or INVALID (0) for unsupported files.
+            Classification value where SIM_READY (1) identifies sim-ready files, MODEL (2) identifies 3D model files,
+            and INVALID (0) identifies unsupported files.
         """
         extension = FileSorter.get_file_extension(filepath)
 
@@ -439,11 +445,11 @@ class FileSorter:
 def open_extension(ext_name: str, action_id: str = None) -> None:
     """Opens the extension with the given name.
 
-    Enables the extension if it's not already enabled and executes its action.
+    Enables the extension if it is not already enabled and executes its action.
 
     Args:
         ext_name: Name of the extension to open.
-        action_id: Specific action ID to execute. If None, uses default action ID based on extension name.
+        action_id: Specific action ID to execute instead of the generated action ID.
     """
     import omni.kit.app
 
@@ -461,14 +467,14 @@ def open_extension(ext_name: str, action_id: str = None) -> None:
 
 @Singleton
 class FilteredFileDialog:
-    """A singleton file dialog that filters files based on specified formats.
+    """A singleton file dialog that filters files based on the specified formats.
 
     This dialog provides a filtered file picker interface that only displays files with extensions
-    matching the specified formats. It uses the Omniverse Kit file picker system to create a
+    matching the specified formats. It uses the Omniverse Kit SDK file picker system to create a
     consistent file selection experience with custom filtering capabilities.
 
     Args:
-        formats: List of file extensions to filter by (e.g., [".urdf", ".xml"]).
+        formats: List of file extensions to filter by, such as [".urdf", ".xml"].
         handler: Callback function to handle file selection events.
     """
 
@@ -493,7 +499,7 @@ class FilteredFileDialog:
         return os.path.splitext(item.path)[1].lower() in self.formats
 
     def _initialize_filepicker(self) -> None:
-        """Initialize the file picker dialog with current formats and handler."""
+        """Initializes the file picker dialog with current formats and handler."""
         self._filepicker = FilePickerDialog(
             "Select File",
             allow_multi_selection=False,
@@ -505,7 +511,7 @@ class FilteredFileDialog:
         self._filepicker.hide()
 
     def __call__(self, formats: list[str], handler: Callable) -> None:
-        """Update the dialog with new file formats and handler.
+        """Updates the dialog with new file formats and handler.
 
         Args:
             formats: List of file extensions to filter.
@@ -516,11 +522,11 @@ class FilteredFileDialog:
         self._initialize_filepicker()
 
     def open_dialog(self) -> None:
-        """Show the file picker dialog."""
+        """Shows the file picker dialog."""
         self._filepicker.show()
 
     def close_dialog(self) -> None:
-        """Hide the file picker dialog."""
+        """Hides the file picker dialog."""
         self._filepicker.hide()
 
 

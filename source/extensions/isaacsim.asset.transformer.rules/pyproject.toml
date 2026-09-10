@@ -15,14 +15,12 @@
 
 [project]
 name = "isaacsim-asset-transformer-rules"
-version = "1.0.0"
+version = "1.7.18"
 description = "Rule implementations for the Isaac Sim Asset Transformer"
 requires-python = ">=3.12"
 dependencies = [
-    "isaacsim-asset-transformer==1.0.0",
-    "isaacsim-asset-importer-utils==1.0.0",
-    "isaacsim-robot-schema==1.0.0",
-    "usd-exchange>=2.2.2",
+    "isaacsim-robot-schema==6.1.0",
+    "usd-exchange==2.3.0",
 ]
 readme = "docs/Overview.md"
 license = "Apache-2.0"

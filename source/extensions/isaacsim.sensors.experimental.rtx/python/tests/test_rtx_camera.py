@@ -50,11 +50,20 @@ class TestRtxCamera(omni.kit.test.AsyncTestCase):
         with self.assertRaises(ValueError):
             RtxCamera("/World/xform")
 
-    async def test_wrap_missing_schema_raises(self) -> None:
-        """Reject wrapping a Camera prim that lacks the OmniSensor schema."""
+    async def test_wrap_missing_schema_applies_schema(self) -> None:
+        """Apply the OmniSensor schema when wrapping a Camera prim that lacks it."""
+        prim = stage_utils.define_prim("/World/cam", "Camera")
+        self.assertFalse(prim.HasAPI("OmniSensorAPI"))
+        cam = RtxCamera("/World/cam")
+        self.assertEqual(cam.paths[0], "/World/cam")
+        self.assertTrue(cam.prims[0].HasAPI("OmniSensorAPI"))
+        self.assertTrue(cam.prims[0].HasAttribute("omni:sensor:tickRate"))
+
+    async def test_wrap_missing_schema_with_tick_rate(self) -> None:
+        """Author a tick rate while wrapping a Camera prim that lacks the OmniSensor schema."""
         stage_utils.define_prim("/World/cam", "Camera")
-        with self.assertRaises(ValueError):
-            RtxCamera("/World/cam")
+        cam = RtxCamera("/World/cam", tick_rate=30.0)
+        self.assertAlmostEqual(cam.prims[0].GetAttribute("omni:sensor:tickRate").Get(), 30.0)
 
     async def test_wrap_with_tick_rate(self) -> None:
         """Apply a tick rate override while wrapping an existing RTX camera prim."""

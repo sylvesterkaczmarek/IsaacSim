@@ -15,6 +15,6 @@
 
 """User interface components and extensions for robotic grasping functionality in Isaac Sim."""
 
-from .grasping_ui_extension import *
+from .grasping_ui_extension import GraspingUIExtension as GraspingUIExtension
 
 __all__ = []

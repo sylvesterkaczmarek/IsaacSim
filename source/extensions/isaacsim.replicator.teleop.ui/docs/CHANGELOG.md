@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.4.4] - 2026-08-25
+### Changed
+- Subscribe to timeline play/stop through Events 2.0 instead of the deprecated timeline event stream.
+
+## [0.4.3] - 2026-08-24
+### Fixed
+- Loading a teleop profile now clears omitted IK and floating prim paths instead of keeping the previous profile's values.
+
+## [0.4.2] - 2026-08-10
+### Fixed
+- Wait for stage-driven material and menu updates to settle before opening the Teleop window in the floating-controller test.
+
+## [0.4.1] - 2026-07-30
+### Fixed
+- Release the extension instance when the Teleop UI shuts down.
+
+## [0.4.0] - 2026-07-15
+### Added
+- Debug squeeze sliders for controller-driven multi-finger grasp input.
+- **Visual Cues** panel with a single shadow-free cylinder per controller, configurable reference height and appearance, optional prim overrides, and profile persistence.
+- Partial-support UI for platforms without Isaac Teleop: live Connect is disabled while frame markers, Debug Mode, profiles, and supported controllers remain available.
+
+### Changed
+- Live **Connect** expects CloudXR to be started in a separate terminal; there are no in-process CloudXR lifecycle controls.
+- Clarify that **Custom Anchor** is read-only and shared by XR rendering, markers, and teleop targets. Rotation labels now describe initial-yaw hold versus absolute-yaw following, and Offset is documented in anchor-local axes.
+
+### Fixed
+- Make the debug-mode UI discoverable on Windows without the optional Isaac Teleop package.
+- Route desktop **Connect** and **Disconnect** through the complete teleop command lifecycle so markers, tracking space, controllers, and the XR anchor are set up and torn down consistently.
+
 ## [0.3.4] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

@@ -1,5 +1,58 @@
 # Changelog
 
+## [1.7.18] - 2026-09-03
+### Changed
+- Replace machine-local paths in bundled USD test fixture metadata with portable paths.
+
+## [1.7.17] - 2026-08-28
+### Fixed
+- Remove routed PhysX drive and joint-state schemas from MuJoCo overlays.
+
+## [1.7.16] - 2026-08-20
+### Changed
+- Pin `usd-exchange` to version 2.3.0 for reproducible standalone installs.
+
+## [1.7.15] - 2026-08-13
+### Fixed
+- Preserve relationship target order during prim routing, keeping MuJoCo fixed-tendon coefficients associated with the correct joints.
+
+## [1.7.14] - 2026-07-30
+### Added
+- `PhysxToMjcConversionRule`: converts PhysX joints/articulation to MuJoCo/Newton schemas, with `physx_to_mjc_conversion.json` profile and tests. It takes no custom parameters: it edits the working stage (from the input source) in place, or authors the conversion into a separate overlay layer when the rule's `destination` is a USD file.
+
+### Changed
+- `physx_asset_to_mjc` no longer expands D6/spherical joints; it warns and leaves them untouched to preserve the articulation structure.
+
+## [1.7.13] - 2026-07-16
+### Added
+- New URL-safe path helpers in `utils` for `omniverse://` handling.
+- UDIM regression tests in `test_materials.py`.
+- Remote-aware resolution tests in `test_utils.py`; identity-strip tests in `test_variants.py`.
+
+### Fixed
+- `MaterialsRoutingRule` now downloads and embeds UDIM texture families locally.
+- `FlattenRule` no longer leaks source paths into generated layers.
+- `VariantRoutingRule` no longer leaks identity-only Xformable opinions onto targets.
+- `VariantRoutingRule` now resolves variant dependencies from remote Nucleus URLs.
+- `utils.norm_path` and resolution helpers now handle remote URLs safely.
+
+## [1.7.12] - 2026-07-09
+### Added
+- `InterfaceConnectionRule`: new `clear_default_variant_sets` param to leave listed variant sets unselected. `isaacsim_structure.json` uses it for `Physics`
+
+### Changed
+- Updated isaacsim_structure.json rule to not set a default physx variant
+
+### Removed
+- Removed the already deactivated "Delete Newton Redundant APIs" rule from isaacsim_structure.json
+
+### Fixed
+- `InterfaceConnectionRule._generate_folder_variants` now only sets a default variant selection when the requested variant exists in the variant set
+
+## [1.7.11] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [1.7.10] - 2026-06-10
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

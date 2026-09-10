@@ -23,7 +23,9 @@ from isaacsim.core.utils.stage import get_current_stage, get_current_stage_id
 
 
 class IsaacSimSpawnPrim(omni.kit.commands.Command):
-    """Command to spawn a new prim in the stage and set its transform. This uses dynamic_control to properly handle physics objects and articulation.
+    """Command to spawn a new prim in the stage and set its transform.
+
+    This uses dynamic_control to properly handle physics objects and articulation.
 
     Typical usage example:
 
@@ -84,7 +86,7 @@ class IsaacSimSpawnPrim(omni.kit.commands.Command):
 
 
 class IsaacSimTeleportPrim(omni.kit.commands.Command):
-    """Command to set a transform of a prim. This uses dynamic_control to properly handle physics objects and articulation.
+    """Command to set the transform of a prim. This uses dynamic_control to properly handle physics objects and articulation.
 
     Typical usage example:
 
@@ -132,7 +134,7 @@ class IsaacSimTeleportPrim(omni.kit.commands.Command):
 
 
 class IsaacSimScalePrim(omni.kit.commands.Command):
-    """Command to set a scale of a prim.
+    """Command to set the scale of a prim.
 
     Typical usage example:
 
@@ -161,18 +163,18 @@ class IsaacSimScalePrim(omni.kit.commands.Command):
         """Execute the prim scaling operation by applying the specified scale values.
 
         Returns:
-            True if the scaling operation was successful.
+            True when the scaling command completes.
         """
         if self._scale is not None:
             transforms.set_scale(self._stage_id, str(self._prim_path), self._scale)
         return True
 
     def undo(self) -> None:
-        """Revert the prim scaling operation."""
+        """No-op undo operation for the prim scaling command."""
 
 
 class IsaacSimDestroyPrim(omni.kit.commands.Command):
-    """Command to delete a prim. This variant has less overhead than other commands as it doesn't store an undo operation.
+    """Command to delete a prim. This variant has less overhead than other commands because it does not store an undo operation.
 
     Typical usage example:
 
@@ -192,17 +194,13 @@ class IsaacSimDestroyPrim(omni.kit.commands.Command):
             if name != "self":
                 setattr(self, f"_{name}", value)
 
-    def do(self) -> bool:
-        """Delete the prim from the stage.
-
-        Returns:
-            True if the deletion command was executed.
-        """
+    def do(self) -> None:
+        """Delete the prim from the stage."""
         delete_cmd = omni.usd.commands.DeletePrimsCommand([self._prim_path])
         delete_cmd.do()
 
     def undo(self) -> None:
-        """No-op undo operation as this command doesn't support undo functionality."""
+        """No-op undo operation because this command does not support undo functionality."""
 
 
 omni.kit.commands.register_all_commands_in_module(__name__)

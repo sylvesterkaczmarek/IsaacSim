@@ -31,7 +31,11 @@ from isaacsim.replicator.teleop import (
     LocomotionProfile,
     TeleopProfile,
     TeleopSettingsProfile,
+    VisualCueSideProfile,
+    VisualCuesProfile,
     get_builtin_grasp_configs,
+    get_builtin_teleop_profiles_dir,
+    get_last_teleop_profile_path,
     load_grasp_config,
     load_teleop_profile,
     normalize_grasp_config_path,
@@ -42,6 +46,13 @@ from isaacsim.replicator.teleop import (
 
 class TestTeleopProfiles(omni.kit.test.AsyncTestCase):
     """Verify teleop profiles round-trip through YAML."""
+
+    async def test_autosave_path_is_outside_builtin_profiles(self) -> None:
+        """Autosave state must never overwrite an installed built-in profile."""
+        autosave = os.path.realpath(get_last_teleop_profile_path())
+        builtin = os.path.realpath(get_builtin_teleop_profiles_dir())
+        self.assertTrue(autosave.endswith(os.path.join("IsaacSim", "teleop", "last_profile.yaml")))
+        self.assertNotEqual(os.path.commonpath([autosave, builtin]), builtin)
 
     async def test_teleop_profile_round_trip(self) -> None:
         """Verify a fully populated TeleopProfile round-trips through YAML."""
@@ -90,7 +101,14 @@ class TestTeleopProfiles(omni.kit.test.AsyncTestCase):
                     prim_path="/World/HandLeft",
                     config_path="builtin://xarm_grasp",
                 ),
-                right=GraspSideProfile(),
+                right=GraspSideProfile(
+                    enabled=True,
+                    prim_path="/World/HandRight",
+                    config_path="builtin://dex3_grasp",
+                    drive_mode="retargeted",
+                    retargeter_kind="trihand",
+                    joint_aliases={"index_proximal": "right_hand_index_0_joint"},
+                ),
             ),
             locomotion=LocomotionProfile(
                 enabled=True,
@@ -99,6 +117,13 @@ class TestTeleopProfiles(omni.kit.test.AsyncTestCase):
                     "linear_step": 0.01,
                     "angular_step": 0.02,
                 },
+            ),
+            visual_cues=VisualCuesProfile(
+                reference_z=0.05,
+                opacity=0.5,
+                size=0.03,
+                left=VisualCueSideProfile(enabled=True, prim_path=""),
+                right=VisualCueSideProfile(enabled=False, prim_path="/World/ToolTip"),
             ),
         )
 
@@ -121,7 +146,17 @@ class TestTeleopProfiles(omni.kit.test.AsyncTestCase):
             self.assertTrue(loaded.grasp.left.enabled)
             self.assertEqual(loaded.grasp.left.prim_path, "/World/HandLeft")
             self.assertEqual(loaded.grasp.left.config_path, "builtin://xarm_grasp")
+            self.assertEqual(loaded.grasp.right.drive_mode, "retargeted")
+            self.assertEqual(loaded.grasp.right.retargeter_kind, "trihand")
+            self.assertEqual(
+                loaded.grasp.right.joint_aliases,
+                {"index_proximal": "right_hand_index_0_joint"},
+            )
             self.assertEqual(loaded.locomotion.settings["prim_path"], "/World/Base")
+            self.assertAlmostEqual(loaded.visual_cues.reference_z, 0.05)
+            self.assertAlmostEqual(loaded.visual_cues.opacity, 0.5)
+            self.assertTrue(loaded.visual_cues.left.enabled)
+            self.assertEqual(loaded.visual_cues.right.prim_path, "/World/ToolTip")
 
     async def test_extra_keys_are_ignored(self) -> None:
         """Files with unknown keys (e.g. from a newer schema) load without error."""
@@ -208,6 +243,32 @@ class TestTeleopProfiles(omni.kit.test.AsyncTestCase):
 
             self.assertEqual({name for name, _path in found}, {"alpha", "beta"})
             self.assertEqual({os.path.basename(path) for _name, path in found}, {"alpha.yaml", "beta.yml"})
+
+    async def test_builtin_retargeted_floating_profile(self) -> None:
+        """The selectable floating Dex3 profile enables TriHand aliases."""
+        profiles = dict(scan_teleop_profiles(get_builtin_teleop_profiles_dir()))
+        self.assertIn("floating_xarm_dex3_retargeted", profiles)
+
+        loaded, errors = load_teleop_profile(profiles["floating_xarm_dex3_retargeted"])
+        self.assertEqual(errors, [])
+        self.assertIsNotNone(loaded)
+        assert loaded is not None
+
+        self.assertEqual(loaded.grasp.left.drive_mode, "trigger")
+        self.assertEqual(loaded.grasp.right.drive_mode, "retargeted")
+        self.assertEqual(loaded.grasp.right.retargeter_kind, "trihand")
+        self.assertEqual(
+            loaded.grasp.right.joint_aliases,
+            {
+                "thumb_rotation": "right_hand_thumb_0_joint",
+                "thumb_proximal": "right_hand_thumb_1_joint",
+                "thumb_distal": "right_hand_thumb_2_joint",
+                "index_proximal": "right_hand_index_0_joint",
+                "index_distal": "right_hand_index_1_joint",
+                "middle_proximal": "right_hand_middle_0_joint",
+                "middle_distal": "right_hand_middle_1_joint",
+            },
+        )
 
     async def test_builtin_grasp_config_paths_are_portable(self) -> None:
         """Built-in grasp configs should round-trip through a stable symbolic URI."""

@@ -1,7 +1,12 @@
-FROM nvcr.io/nvidia/omniverse/hub_workstation_cache:2.0.0 AS hub-cache
+FROM nvcr.io/nvidia/omniverse/hub_workstation_cache:2.2.0 AS hub-cache
 FROM nvcr.io/nvidia/base/ubuntu:noble-20251013
 
 ENV NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=all
+
+# MuJoCo's GLFW loader needs to spawn Python to inspect its bundled library,
+# but Kit's embedded Python has no executable path. Use EGL in this headless
+# container so MuJoCo and Newton do not depend on that subprocess probe.
+ENV MUJOCO_GL=egl
 
 # Disable hardware-specific library optimizations in dynamic linker for wider compatibility (legacy Debian/Ubuntu)
 RUN touch /etc/ld.so.nohwcap

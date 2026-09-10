@@ -31,7 +31,7 @@ from isaacsim.asset.exporter.urdf.converter import UsdToUrdfConverter
 from isaacsim.core.experimental.utils.stage import is_stage_loading
 from isaacsim.storage.native import get_assets_root_path
 
-UR10E_ASSET = "Isaac/Robots/UniversalRobots/ur10e/ur10e.usd"
+UR10E_ASSET = "Isaac/Robots_Multiphysics/UniversalRobots/ur10e/ur10e.usda"
 
 parser = argparse.ArgumentParser(description="Export a USD robot to URDF using Isaac Sim.")
 parser.add_argument("--usd-path", required=False, default=None, help="Path or Nucleus URI to the USD file to export.")
@@ -61,6 +61,12 @@ parser.add_argument(
     help="Variant selection to apply on the root prim before export (repeatable). Example: --variant Physics=PhysX --variant LOD=high",
 )
 parser.add_argument(
+    "--export-duplicate-ghost-links",
+    action=argparse.BooleanOptionalAction,
+    default=False,
+    help="Export site ghost links that collide with existing link names using numeric suffixes.",
+)
+parser.add_argument(
     "--test",
     action=argparse.BooleanOptionalAction,
     default=False,
@@ -70,7 +76,11 @@ args, unknown = parser.parse_known_args()
 
 
 def _open_stage(usd_path: str) -> None:
-    """Open a USD stage and block until fully loaded."""
+    """Open a USD stage and block until fully loaded.
+
+    Args:
+        usd_path: Path or URL of the USD stage to open.
+    """
     omni.usd.get_context().open_stage(usd_path)
     simulation_app.update()
     simulation_app.update()
@@ -81,12 +91,14 @@ def _open_stage(usd_path: str) -> None:
 def _validate_urdf(output_path: str) -> bool:
     """Run basic structural validation on the exported URDF.
 
+    Args:
+        output_path: Path of the exported URDF file to validate.
+
     Returns:
         True when validation passes.
 
     Raises:
         RuntimeError: On any validation failure.
-
     """
     if not os.path.exists(output_path):
         raise RuntimeError(f"URDF file was not created: {output_path}")
@@ -191,6 +203,7 @@ def main() -> int:
             mesh_dir_name="meshes",
             mesh_path_prefix=args.mesh_prefix,
             variant_selections=variant_selections,
+            export_duplicate_ghost_links=args.export_duplicate_ghost_links,
         )
         result_path = converter.convert(output_path)
 

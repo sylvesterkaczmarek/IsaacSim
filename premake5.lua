@@ -16,6 +16,44 @@
 -- Shared build scripts from repo_build package
 repo_build = require("omni/repo/build")
 
+-- Translate the deprecated FatalCompileWarnings flag used by older fetched Kit
+-- build helpers. This keeps project generation warning-free without modifying
+-- Packman-managed files, and can be removed once those helpers use the current
+-- Premake API directly.
+local isaacsim_flags = flags
+local isaacsim_removeflags = removeflags
+
+local function translate_fatal_compile_warnings(values, handler, fatal_handler)
+    if type(values) ~= "table" then
+        handler(values)
+        return
+    end
+
+    local translated_values = {}
+    local has_fatal_compile_warnings = false
+    for _, value in ipairs(values) do
+        if value == "FatalCompileWarnings" then
+            has_fatal_compile_warnings = true
+        else
+            table.insert(translated_values, value)
+        end
+    end
+    if #translated_values > 0 then
+        handler(translated_values)
+    end
+    if has_fatal_compile_warnings then
+        fatal_handler { "All" }
+    end
+end
+
+function flags(values)
+    translate_fatal_compile_warnings(values, isaacsim_flags, fatalwarnings)
+end
+
+function removeflags(values)
+    translate_fatal_compile_warnings(values, isaacsim_removeflags, removefatalwarnings)
+end
+
 -- Repo root
 root = repo_build.get_abs_path(".")
 
@@ -33,8 +71,7 @@ function isaacsim_build_settings()
     rtti("On")
     defines { "__STDC_VERSION__=0" } -- Define this to zero to prevent errors
     
-    -- Remove FatalCompileWarnings flag to avoid warnings being treated as errors
-    removeflags { "FatalCompileWarnings" }
+    removefatalwarnings { "All" }
 
     filter { "system:windows" }
     defines {
@@ -58,6 +95,7 @@ function isaacsim_kit_settings()
     -- Setup include paths. Add kit SDK include paths too.
     includedirs {
         "%{root}/_build/target-deps/gsl/include",
+        "%{root}/_build/target-deps/rtx_plugins/include",
     }
 
     -- Carbonite carb lib
@@ -75,11 +113,44 @@ function setup_isaacsim_folder_links()
     if not os.isdir(root .. "/_build/PACKAGE-LICENSES") then os.mkdir(root .. "/_build/PACKAGE-LICENSES") end
 
 
+    repo_build.prebuild_copy {
+        { "_build/generated/ThirdPartyNotices.txt", bin_dir .. "/ThirdPartyNotices.txt" },
+    }
+
     repo_build.prebuild_link {
         { "source/python_packages", "_build/%{platform}/%{config}/python_packages" },
         { "source/standalone_examples", "_build/%{platform}/%{config}/standalone_examples" },
         { "source/tools", "_build/%{platform}/%{config}/tools" },
     }
+
+    -- Agent skills and pointer guides. Assemble a public-only skills/ tree plus the AGENTS.md
+    -- and CLAUDE.md guides in the build output so they ship in both the binary and pip packages
+    -- without users cloning the repo. Dev-only skills under skills/_internal are skipped, and the
+    -- public index/guide are shipped under their canonical names (the internal repo keeps
+    -- SKILLS.public.md / AGENTS.public.md; the public repo already uses SKILLS.md / AGENTS.md).
+    -- Per-directory entries keep the skill list current as skills are added.
+    local cfg_dst = "_build/%{platform}/%{config}"
+    local agent_stage = {}
+    for _, skill_dir in ipairs(os.matchdirs(root .. "/skills/*")) do
+        local skill_name = path.getname(skill_dir)
+        if skill_name ~= "_internal" then
+            table.insert(agent_stage, { "skills/" .. skill_name, cfg_dst .. "/skills/" .. skill_name })
+        end
+    end
+    if os.isfile(root .. "/skills/SKILLS.public.md") then
+        table.insert(agent_stage, { "skills/SKILLS.public.md", cfg_dst .. "/skills/SKILLS.md" })
+    elseif os.isfile(root .. "/skills/SKILLS.md") then
+        table.insert(agent_stage, { "skills/SKILLS.md", cfg_dst .. "/skills/SKILLS.md" })
+    end
+    if os.isfile(root .. "/AGENTS.public.md") then
+        table.insert(agent_stage, { "AGENTS.public.md", cfg_dst .. "/AGENTS.md" })
+    elseif os.isfile(root .. "/AGENTS.md") then
+        table.insert(agent_stage, { "AGENTS.md", cfg_dst .. "/AGENTS.md" })
+    end
+    if os.isfile(root .. "/CLAUDE.md") then
+        table.insert(agent_stage, { "CLAUDE.md", cfg_dst .. "/CLAUDE.md" })
+    end
+    repo_build.prebuild_copy(agent_stage)
 
     if os.target() == "linux" then
         repo_build.prebuild_link {
@@ -93,6 +164,7 @@ function setup_isaacsim_folder_links()
     end
 
     repo_build.prebuild_copy {
+        { "LICENSE", "_build/%{platform}/%{config}/APACHE-2.0-LICENSE.txt" },
         { "source/scripts/python/shared/*", "_build/%{platform}/%{config}" },
         { "source/scripts/python/%{platform}/*", "_build/%{platform}/%{config}" },
         { "source/scripts/jupyter_kernel", "_build/%{platform}/%{config}/jupyter_kernel" },

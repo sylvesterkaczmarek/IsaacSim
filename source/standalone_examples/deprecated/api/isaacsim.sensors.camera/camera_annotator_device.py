@@ -34,6 +34,7 @@ import numpy as np
 import omni.timeline
 import warp as wp
 from isaacsim.core.experimental.objects import DomeLight, GroundPlane
+from isaacsim.core.experimental.utils.semantics import add_labels
 from isaacsim.core.experimental.utils.transform import euler_angles_to_quaternion
 from isaacsim.sensors.camera import Camera
 
@@ -41,7 +42,18 @@ from isaacsim.sensors.camera import Camera
 def test_camera_annotator_data(
     test_name: str, data: np.ndarray, expected_class: type, expected_dtype: type, expected_shape: tuple
 ) -> bool:
-    """Validate camera annotator data against expected type, dtype, and shape."""
+    """Validate camera annotator data against expected type, dtype, and shape.
+
+    Args:
+        test_name: Label to include in the validation output.
+        data: Camera annotator output to validate.
+        expected_class: Required container class for the output.
+        expected_dtype: Required element data type for the output.
+        expected_shape: Required dimensions for the output.
+
+    Returns:
+        Whether the output has the expected container class, data type, and shape.
+    """
     print(f"{test_name}: data.shape: {data.shape}; dtype: {data.dtype}; type: {type(data)}")
     success = True
     if not isinstance(data, expected_class):
@@ -58,7 +70,17 @@ def test_camera_annotator_data(
 
 # Function to test RGBA output for different camera configurations
 def test_rgba_output(camera_default: Camera, camera_cpu: Camera, camera_cuda: Camera, rgba_shape: tuple) -> bool:
-    """Tests the RGBA output for cameras with different annotator devices."""
+    """Validate RGBA output for cameras with different annotator devices.
+
+    Args:
+        camera_default: Camera configured to use the default annotator device.
+        camera_cpu: Camera configured to use the CPU annotator device.
+        camera_cuda: Camera configured to use the CUDA annotator device.
+        rgba_shape: Expected dimensions of each RGBA image.
+
+    Returns:
+        Whether every device selection returned valid RGBA output.
+    """
     print("=" * 80)
     print("Testing: rgba")
 
@@ -183,7 +205,17 @@ def test_rgba_output(camera_default: Camera, camera_cpu: Camera, camera_cuda: Ca
 
 # Function to test RGB output for different camera configurations
 def test_rgb_output(camera_default: Camera, camera_cpu: Camera, camera_cuda: Camera, rgb_shape: tuple) -> bool:
-    """Tests the RGB output for cameras with different annotator devices."""
+    """Validate RGB output for cameras with different annotator devices.
+
+    Args:
+        camera_default: Camera configured to use the default annotator device.
+        camera_cpu: Camera configured to use the CPU annotator device.
+        camera_cuda: Camera configured to use the CUDA annotator device.
+        rgb_shape: Expected dimensions of each RGB image.
+
+    Returns:
+        Whether every device selection returned valid RGB output.
+    """
     print("=" * 80)
     print("Testing: rgb")
 
@@ -309,7 +341,17 @@ def test_rgb_output(camera_default: Camera, camera_cpu: Camera, camera_cuda: Cam
 
 # Function to test Depth output for different camera configurations
 def test_depth_output(camera_default: Camera, camera_cpu: Camera, camera_cuda: Camera, depth_shape: tuple) -> bool:
-    """Tests the Depth output for cameras with different annotator devices."""
+    """Validate depth output for cameras with different annotator devices.
+
+    Args:
+        camera_default: Camera configured to use the default annotator device.
+        camera_cpu: Camera configured to use the CPU annotator device.
+        camera_cuda: Camera configured to use the CUDA annotator device.
+        depth_shape: Expected dimensions of each depth image.
+
+    Returns:
+        Whether every device selection returned valid depth output.
+    """
     print("=" * 80)
     print("Testing: depth")
 
@@ -434,7 +476,17 @@ def test_depth_output(camera_default: Camera, camera_cpu: Camera, camera_cuda: C
 def test_pointcloud_output(
     camera_default: Camera, camera_cpu: Camera, camera_cuda: Camera, pointcloud_shape: tuple
 ) -> bool:
-    """Tests the Pointcloud output for cameras with different annotator devices."""
+    """Validate point-cloud output for cameras with different annotator devices.
+
+    Args:
+        camera_default: Camera configured to use the default annotator device.
+        camera_cpu: Camera configured to use the CPU annotator device.
+        camera_cuda: Camera configured to use the CUDA annotator device.
+        pointcloud_shape: Expected dimensions of each point cloud.
+
+    Returns:
+        Whether every device and coordinate-frame selection returned valid point-cloud output.
+    """
     print("=" * 80)
     print("Testing: pointcloud")
 
@@ -570,7 +622,17 @@ def test_pointcloud_output(
 def test_pointcloud_from_depth_output(
     camera_default: Camera, camera_cpu: Camera, camera_cuda: Camera, pointcloud_shape: tuple
 ) -> bool:
-    """Tests the Pointcloud (computed from depth) output for cameras with different annotator devices."""
+    """Validate depth-derived point clouds for cameras with different annotator devices.
+
+    Args:
+        camera_default: Camera configured to use the default annotator device.
+        camera_cpu: Camera configured to use the CPU annotator device.
+        camera_cuda: Camera configured to use the CUDA annotator device.
+        pointcloud_shape: Expected dimensions of each point cloud.
+
+    Returns:
+        Whether every device and coordinate-frame selection returned a valid depth-derived point cloud.
+    """
     print("=" * 80)
     print("Testing: pointcloud - from depth (remove pointcloud from frame)")
 
@@ -705,7 +767,16 @@ def test_pointcloud_from_depth_output(
 
 # Function to test current frame output for different camera configurations
 def test_current_frame_output(camera_default: Camera, camera_cpu: Camera, camera_cuda: Camera) -> bool:
-    """Tests the current frame output for cameras with different annotator devices."""
+    """Validate current-frame annotator containers for each camera device.
+
+    Args:
+        camera_default: Camera configured to use the default annotator device.
+        camera_cpu: Camera configured to use the CPU annotator device.
+        camera_cuda: Camera configured to use the CUDA annotator device.
+
+    Returns:
+        Whether each annotator used the container class supported by its selected device.
+    """
     print("=" * 80)
     print("Testing: current frame")
     annotators_without_cuda_support = {"bounding_box_2d_tight", "bounding_box_2d_loose", "bounding_box_3d"}
@@ -837,6 +908,7 @@ camera_cuda = Camera(
 dome_light = DomeLight("/World/DomeLight")
 dome_light.set_intensities(500)
 GroundPlane("/World/defaultGroundPlane", sizes=100.0)
+add_labels("/World/defaultGroundPlane", labels="ground_plane")
 
 if args.test:
     import omni.usd

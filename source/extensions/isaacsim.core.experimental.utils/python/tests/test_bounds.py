@@ -20,6 +20,7 @@ import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
 import omni.kit.test
 from isaacsim.core.experimental.objects import Cube
+from isaacsim.core.experimental.prims import XformPrim
 from pxr import UsdGeom
 
 
@@ -97,6 +98,125 @@ class TestBounds(omni.kit.test.AsyncTestCase):
         expected = np.array([-0.5, -0.5, -0.5, 5.5, 0.5, 0.5])
         np.testing.assert_allclose(aabb, expected, atol=self.tolerance)
 
+    async def test_compute_aabb_include_nested_children_in_root_frames(self) -> None:
+        """Test child bounds are aggregated in the root prim's local coordinate frames."""
+        parent = stage_utils.define_prim("/World/Parent", "Xform")
+        XformPrim(
+            "/World/Parent",
+            positions=np.array([[20.0, 0.0, 0.0]]),
+            reset_xform_op_properties=True,
+        )
+        stage_utils.define_prim("/World/Parent/Group", "Xform")
+        XformPrim(
+            "/World/Parent/Group",
+            translations=np.array([[-10.0, 0.0, 0.0]]),
+            reset_xform_op_properties=True,
+        )
+        Cube("/World/Parent/Group/Cube", sizes=2.0, translations=np.array([[-2.0, 0.0, 0.0]]))
+
+        local_aabb = bounds_utils.compute_aabb(parent, include_children=True, space="local")
+        untransformed_aabb = bounds_utils.compute_aabb(parent, include_children=True, space="untransformed")
+
+        np.testing.assert_allclose(local_aabb, [7.0, -1.0, -1.0, 9.0, 1.0, 1.0], atol=self.tolerance)
+        np.testing.assert_allclose(
+            untransformed_aabb,
+            [-13.0, -1.0, -1.0, -11.0, 1.0, 1.0],
+            atol=self.tolerance,
+        )
+
+    async def test_compute_aabb_untransformed_translated_cube(self) -> None:
+        """Test compute_aabb in the untransformed frame ignores the prim's own transform."""
+        cube = Cube("/World/Cube", sizes=1.0, positions=np.array([[10, 0, 0]]))
+        aabb = bounds_utils.compute_aabb(cube.prims[0], space="untransformed")
+        expected = np.array([-0.5, -0.5, -0.5, 0.5, 0.5, 0.5])
+        np.testing.assert_allclose(aabb, expected, atol=self.tolerance)
+
+    async def test_compute_aabb_local_translated_cube(self) -> None:
+        """Test compute_aabb in the local frame applies the prim's own transform."""
+        cube = Cube("/World/Cube", sizes=1.0, positions=np.array([[10, 0, 0]]))
+        aabb = bounds_utils.compute_aabb(cube.prims[0], space="local")
+        expected = np.array([9.5, -0.5, -0.5, 10.5, 0.5, 0.5])
+        np.testing.assert_allclose(aabb, expected, atol=self.tolerance)
+
+    async def test_compute_aabb_invalid_space(self) -> None:
+        """Test compute_aabb raises ValueError for an unsupported space."""
+        Cube("/World/Cube", sizes=1.0)
+        with self.assertRaises(ValueError):
+            bounds_utils.compute_aabb("/World/Cube", space="invalid")
+
+    async def test_compute_bound_range_identity_cube(self) -> None:
+        """Test compute_bound_range on a unit cube at the origin."""
+        Cube("/World/Cube", sizes=1.0)
+        midpoint, size = bounds_utils.compute_bound_range("/World/Cube")
+        np.testing.assert_allclose(midpoint, [0.0, 0.0, 0.0], atol=self.tolerance)
+        np.testing.assert_allclose(size, [1.0, 1.0, 1.0], atol=self.tolerance)
+
+    async def test_compute_bound_range_translated_cube(self) -> None:
+        """Test compute_bound_range with a cube offset from the origin."""
+        cube = Cube("/World/Cube", sizes=1.0, positions=np.array([[10, 0, 0]]))
+        midpoint, size = bounds_utils.compute_bound_range(cube.prims[0], space="world")
+        np.testing.assert_allclose(midpoint, [10.0, 0.0, 0.0], atol=self.tolerance)
+        np.testing.assert_allclose(size, [1.0, 1.0, 1.0], atol=self.tolerance)
+
+    async def test_compute_bound_range_spaces_with_ancestor_transform(self) -> None:
+        """Test compute_bound_range expresses results in the requested coordinate frame."""
+        stage_utils.define_prim("/World/Parent", "Xform")
+        XformPrim(
+            "/World/Parent",
+            positions=np.array([[10.0, 0.0, 0.0]]),
+            reset_xform_op_properties=True,
+        )
+        cube = Cube("/World/Parent/Cube", sizes=1.0, translations=np.array([[2.0, 0.0, 0.0]]))
+
+        world_midpoint, _ = bounds_utils.compute_bound_range(cube.prims[0], space="world")
+        local_midpoint, _ = bounds_utils.compute_bound_range(cube.prims[0], space="local")
+        untransformed_midpoint, _ = bounds_utils.compute_bound_range(cube.prims[0], space="untransformed")
+
+        np.testing.assert_allclose(world_midpoint, [12.0, 0.0, 0.0], atol=self.tolerance)
+        np.testing.assert_allclose(local_midpoint, [2.0, 0.0, 0.0], atol=self.tolerance)
+        np.testing.assert_allclose(untransformed_midpoint, [0.0, 0.0, 0.0], atol=self.tolerance)
+
+    async def test_compute_bound_range_rotated_cube_is_axis_aligned(self) -> None:
+        """Test compute_bound_range aligns a rotated bound with the selected frame's axes."""
+        angle = np.radians(45.0)
+        orientation = np.array([[np.cos(angle / 2), 0.0, 0.0, np.sin(angle / 2)]])
+        cube = Cube(
+            "/World/Cube",
+            sizes=1.0,
+            orientations=orientation,
+            scales=np.array([[2.0, 1.0, 1.0]]),
+        )
+
+        midpoint, size = bounds_utils.compute_bound_range(cube.prims[0], space="world")
+        expected_xy_size = 3.0 / np.sqrt(2.0)
+        np.testing.assert_allclose(midpoint, [0.0, 0.0, 0.0], atol=self.tolerance)
+        np.testing.assert_allclose(size, [expected_xy_size, expected_xy_size, 1.0], atol=self.tolerance)
+
+    async def test_compute_bound_range_untransformed_translated_cube(self) -> None:
+        """Test compute_bound_range in the untransformed frame ignores the prim's own transform."""
+        cube = Cube("/World/Cube", sizes=1.0, positions=np.array([[10, 0, 0]]))
+        midpoint, size = bounds_utils.compute_bound_range(cube.prims[0], space="untransformed")
+        np.testing.assert_allclose(midpoint, [0.0, 0.0, 0.0], atol=self.tolerance)
+        np.testing.assert_allclose(size, [1.0, 1.0, 1.0], atol=self.tolerance)
+
+    async def test_compute_bound_range_invalid_space(self) -> None:
+        """Test compute_bound_range raises ValueError for an unsupported space."""
+        Cube("/World/Cube", sizes=1.0)
+        with self.assertRaises(ValueError):
+            bounds_utils.compute_bound_range("/World/Cube", space="invalid")
+
+    async def test_compute_bound_volume_identity_cube(self) -> None:
+        """Test compute_bound_volume on a unit cube."""
+        Cube("/World/Cube", sizes=1.0)
+        volume = bounds_utils.compute_bound_volume("/World/Cube", space="local")
+        self.assertAlmostEqual(volume, 1.0, delta=self.tolerance)
+
+    async def test_compute_bound_volume_invalid_space(self) -> None:
+        """Test compute_bound_volume raises ValueError for an unsupported space."""
+        Cube("/World/Cube", sizes=1.0)
+        with self.assertRaises(ValueError):
+            bounds_utils.compute_bound_volume("/World/Cube", space="invalid")
+
     # -- compute_combined_aabb --
 
     async def test_compute_combined_aabb_two_cubes(self) -> None:
@@ -160,6 +280,34 @@ class TestBounds(omni.kit.test.AsyncTestCase):
         centroid, axes, half_extent = bounds_utils.compute_obb(cube.prims[0])
         np.testing.assert_allclose(centroid, [5.0, 10.0, 15.0], atol=self.tolerance)
         np.testing.assert_allclose(half_extent, [0.5, 0.5, 0.5], atol=self.tolerance)
+
+    async def test_compute_obb_spaces_with_ancestor_transform(self) -> None:
+        """Test compute_obb expresses its result in the requested coordinate frame."""
+        stage_utils.define_prim("/World/Parent", "Xform")
+        XformPrim(
+            "/World/Parent",
+            positions=np.array([[10.0, 0.0, 0.0]]),
+            reset_xform_op_properties=True,
+        )
+        cube = Cube("/World/Parent/Cube", sizes=1.0, translations=np.array([[2.0, 0.0, 0.0]]))
+
+        world_centroid, _, _ = bounds_utils.compute_obb(cube.prims[0], space="world")
+        local_centroid, _, _ = bounds_utils.compute_obb(cube.prims[0], space="local")
+        untransformed_centroid, untransformed_axes, untransformed_half_extent = bounds_utils.compute_obb(
+            cube.prims[0], space="untransformed"
+        )
+
+        np.testing.assert_allclose(world_centroid, [12.0, 0.0, 0.0], atol=self.tolerance)
+        np.testing.assert_allclose(local_centroid, [2.0, 0.0, 0.0], atol=self.tolerance)
+        np.testing.assert_allclose(untransformed_centroid, [0.0, 0.0, 0.0], atol=self.tolerance)
+        np.testing.assert_allclose(untransformed_axes, np.eye(3), atol=self.tolerance)
+        np.testing.assert_allclose(untransformed_half_extent, [0.5, 0.5, 0.5], atol=self.tolerance)
+
+    async def test_compute_obb_invalid_space(self) -> None:
+        """Test compute_obb raises ValueError for an unsupported space."""
+        Cube("/World/Cube", sizes=1.0)
+        with self.assertRaises(ValueError):
+            bounds_utils.compute_obb("/World/Cube", space="invalid")
 
     async def test_compute_obb_rotated_cube(self) -> None:
         """Test compute_obb with a cube rotated 45 degrees around Z."""

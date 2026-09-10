@@ -152,7 +152,14 @@ img = Image.fromarray(camera.get_rgba()[:, :, :3])
 
 # Optional step, draw the 3D points to the image plane using the OpenCV fisheye model
 def draw_points_opencv(points3d: np.ndarray) -> None:
-    """Draw 3D points projected onto the image plane using OpenCV."""
+    """Draw 3D points projected onto the image plane using OpenCV.
+
+    Add the projected markers to the module-global PIL image in place. If OpenCV cannot be imported, print an
+    installation hint and leave the image unchanged.
+
+    Args:
+        points3d: Camera-frame points to project and overlay on the rendered image.
+    """
     try:
         # To install, run python.sh -m pip install opencv-python
         import cv2

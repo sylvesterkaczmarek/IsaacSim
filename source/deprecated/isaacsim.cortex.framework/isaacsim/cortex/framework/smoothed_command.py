@@ -45,16 +45,22 @@ class TargetAdapter(ABC):
         """Retrieve the position target.
 
         Returns:
-            The postion target in robot base coordinates.
+            The position target in robot base coordinates.
+
+        Raises:
+            NotImplementedError: Raised when the target adapter does not implement this method.
         """
         raise NotImplementedError()
 
     @abstractmethod
     def has_rotation(self) -> bool:
-        """Reports whether a the target has a rotational component.
+        """Reports whether the target has a rotational component.
 
         Returns:
             True if the target has a rotation component, False otherwise.
+
+        Raises:
+            NotImplementedError: Raised when the target adapter does not implement this method.
         """
         raise NotImplementedError()
 
@@ -62,11 +68,14 @@ class TargetAdapter(ABC):
     def get_rotation_matrix(self) -> np.array:
         """Retrieve the rotational target as a rotation matrix.
 
-        If has_rotation() returns true, this method should return the target rotation matrix in
+        If has_rotation() returns True, this method should return the target rotation matrix in
         robot base coordinates. Otherwise, the behavior is undefined.
 
         Returns:
             The rotation matrix.
+
+        Raises:
+            NotImplementedError: Raised when the target adapter does not implement this method.
         """
         raise NotImplementedError()
 
@@ -76,21 +85,21 @@ class SmoothedCommand:
 
     The API includes:
     - reset(): Clear the current smoothed target data.
-    - update(): Updating the data given a new target.
+    - update(): Update the data given a new target.
 
     A command consists of a position target, an optional rotation matrix target, and a posture
-    config. The smoothed command is stored in members x (position), R (rotation matrix), q (posture
+    config. The smoothed command is stored in members x (position), R (rotation matrix), and q (posture
     config), directly accessible. On the first update of any given component, the component is set
-    directly to the value provided. On subsequent updates the current value is averaged with the new
+    directly to the value provided. On subsequent updates, the current value is averaged with the new
     value, creating an exponentially weighted average of values received. If a particular component
-    is never received (e.g. the posture config, or the rotation matrix) the corresponding member is
+    is never received (e.g. the posture config or the rotation matrix), the corresponding member is
     never initialized and remains None.
 
-    Rotation recursive averaging is done by averaging the matrices themselves then projecting using
-    math_util.proj_R(), which converts the (invalid) rotation matrix to a quaternion, normalizes,
-    then converts back to a matrix.
+    Rotation recursive averaging is done by averaging the matrices themselves and then projecting using
+    math_util.proj_R(), which converts the invalid rotation matrix to a quaternion, normalizes it,
+    and then converts it back to a matrix.
 
-    If use_distance_based_smoothing_regulation is set to True (default) the degree of smoothing
+    If use_distance_based_smoothing_regulation is set to True, the degree of smoothing
     diminishes to a minimum value of 0.5 as the system approaches the target. This feature is
     optimized for discrete jumps in targets. When a large jump is detected, the smoothing increases
     immediately to the interpolation_alpha provided on initialization, but then decreases to the
@@ -100,7 +109,7 @@ class SmoothedCommand:
     Args:
         interpolation_alpha: The value the interpolator is set to on initialization or when a
             discrete jump is detected. The value should be between 0 and 1. Larger values mean more
-            smoothing. A value of 0 does no smoothing, a value of 1 keeps only the first value.
+            smoothing. A value of 0 does no smoothing, and a value of 1 keeps only the first value.
         use_distance_based_smoothing_regulation: If True, reduces the alpha as a function of
             distance down to a minimum value of min_alpha.
         min_alpha: If use_distance_based_smoothing_regulation is True, this is the min_alpha
@@ -130,13 +139,10 @@ class SmoothedCommand:
         self.interpolation_alpha = self.init_interpolation_alpha
 
     def update(self, target: TargetAdapter, posture_config: np.ndarray, eff_x: np.ndarray, eff_R: np.ndarray) -> None:
-        """Update the smoothed target given the current command (target, posture_config) and the.
-
-        current end-effector frame (eff_{x,R}).
+        """Update the smoothed target using the current command and current end-effector frame.
 
         Args:
-            target: A target object implementing the TargetAdapter API. (It need not have a rotational
-                target.)
+            target: Target object implementing the TargetAdapter API. It need not have a rotational target.
             posture_config: The posture configuration for this command. None is valid.
             eff_x: The position component of the current end-effector frame.
             eff_R: The rotational component of the current end-effector frame.

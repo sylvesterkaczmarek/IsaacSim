@@ -36,13 +36,21 @@ simulation_context.initialize_physics()
 
 
 def step_callback(step_size: float) -> None:
-    """Print the physics step size on each simulation step."""
+    """Print the physics step size on each simulation step.
+
+    Args:
+        step_size: Duration of the completed physics step to print.
+    """
     print("simulate with step: ", step_size)
     return
 
 
 def render_callback(event: object) -> None:
-    """Print the rendering delta time on each render update."""
+    """Print the rendering delta time on each render update.
+
+    Args:
+        event: Render event whose payload contains the elapsed rendering time.
+    """
     print("update app with step: ", event.payload["dt"])
 
 

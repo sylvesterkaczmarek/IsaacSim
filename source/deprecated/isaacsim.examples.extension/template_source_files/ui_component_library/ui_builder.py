@@ -18,7 +18,7 @@
 import os
 
 import omni.ui as ui
-from isaacsim.gui.components.element_wrappers import (
+from isaacsim.gui.components import (
     Button,
     CheckBox,
     CollapsableFrame,

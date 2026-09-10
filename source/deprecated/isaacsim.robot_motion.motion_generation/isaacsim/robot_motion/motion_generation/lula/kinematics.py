@@ -30,17 +30,15 @@ from .interface_helper import LulaInterfaceHelper
 
 
 class LulaKinematicsSolver(KinematicsSolver):
-    """A Lula-based implementation of the KinematicsSolver interface. Lula uses a URDF file describing the robot and.
-
-    a custom yaml file that specifies the cspace of the robot and other parameters.
+    """A Lula-based implementation of the KinematicsSolver interface. Lula uses a URDF file describing the robot and a custom YAML file that specifies the cspace of the robot and other parameters.
 
     This class provides functions beyond the KinematicsSolver interface for getting and setting solver parameters.
     Inverse kinematics is solved quickly by first approximating a solution with cyclic coordinate descent (CCD) and then
-    refining the solution with a second-order method (bfgs). As such, parameters for both solvers are available and changeable
-    as properties of this class.
+    refining the solution with a second-order method (BFGS). As such, parameters for both solvers are available and
+    changeable as properties of this class.
 
     Args:
-        robot_description_path: Path to a robot description yaml file describing the cspace of the robot and other
+        robot_description_path: Path to a robot description YAML file describing the cspace of the robot and other
             relevant parameters.
         urdf_path: Path to a URDF file describing the robot.
         robot_description: An initialized lula.RobotDescription object. Other Lula-based classes such as RmpFlow may use
@@ -85,6 +83,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @bfgs_cspace_limit_biasing.setter
     def bfgs_cspace_limit_biasing(self, value: bool) -> None:
+        """Sets whether configuration space limit biasing is enabled for the BFGS solver.
+
+        Args:
+            value: Whether configuration space limit biasing is enabled.
+        """
         self._ik_config.bfgs_cspace_limit_biasing = value
 
     @property
@@ -98,6 +101,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @bfgs_cspace_limit_biasing_weight.setter
     def bfgs_cspace_limit_biasing_weight(self, value: float) -> None:
+        """Sets the weight applied to configuration space limit biasing in the BFGS solver.
+
+        Args:
+            value: Weight applied to configuration space limit biasing.
+        """
         self._ik_config.bfgs_cspace_limit_biasing_weight = value
 
     @property
@@ -111,6 +119,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @bfgs_cspace_limit_penalty_region.setter
     def bfgs_cspace_limit_penalty_region(self, value: float) -> None:
+        """Sets the size of the penalty region for configuration space limits in the BFGS solver.
+
+        Args:
+            value: Size of the penalty region for configuration space limits.
+        """
         self._ik_config.bfgs_cspace_limit_penalty_region = value
 
     @property
@@ -124,6 +137,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @bfgs_gradient_norm_termination.setter
     def bfgs_gradient_norm_termination(self, value: float) -> None:
+        """Sets the gradient norm threshold for terminating the BFGS solver.
+
+        Args:
+            value: Gradient norm threshold for terminating the BFGS solver.
+        """
         self._ik_config.bfgs_gradient_norm_termination = value
 
     @property
@@ -137,6 +155,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @bfgs_gradient_norm_termination_coarse_scale_factor.setter
     def bfgs_gradient_norm_termination_coarse_scale_factor(self, value: float) -> None:
+        """Sets the scale factor applied to the gradient norm termination threshold for coarse BFGS iterations.
+
+        Args:
+            value: Scale factor applied to the gradient norm termination threshold for coarse BFGS iterations.
+        """
         self._ik_config.bfgs_gradient_norm_termination_coarse_scale_factor = value
 
     @property
@@ -150,6 +173,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @bfgs_max_iterations.setter
     def bfgs_max_iterations(self, value: int) -> None:
+        """Sets the maximum number of iterations allowed for the BFGS solver.
+
+        Args:
+            value: Maximum number of BFGS iterations.
+        """
         self._ik_config.bfgs_max_iterations = value
 
     @property
@@ -163,6 +191,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @bfgs_orientation_weight.setter
     def bfgs_orientation_weight(self, value: float) -> None:
+        """Sets the weight applied to orientation error in the BFGS solver cost function.
+
+        Args:
+            value: BFGS orientation weight value.
+        """
         self._default_bfgs_orientation_weight = value
 
     @property
@@ -176,6 +209,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @bfgs_position_weight.setter
     def bfgs_position_weight(self, value: float) -> None:
+        """Sets the weight applied to position error in the BFGS solver cost function.
+
+        Args:
+            value: BFGS position weight value.
+        """
         self._ik_config.bfgs_position_weight = value
 
     @property
@@ -189,6 +227,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @ccd_bracket_search_num_uniform_samples.setter
     def ccd_bracket_search_num_uniform_samples(self, value: int) -> None:
+        """Sets the number of uniform samples used in the bracket search for the CCD solver.
+
+        Args:
+            value: Number of CCD bracket search uniform samples.
+        """
         self._ik_config.ccd_bracket_search_num_uniform_samples = value
 
     @property
@@ -202,6 +245,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @ccd_descent_termination_delta.setter
     def ccd_descent_termination_delta(self, value: float) -> None:
+        """Sets the termination threshold for the descent phase of the CCD solver.
+
+        Args:
+            value: CCD descent termination delta value.
+        """
         self._ik_config.ccd_descent_termination_delta = value
 
     @property
@@ -215,6 +263,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @ccd_max_iterations.setter
     def ccd_max_iterations(self, value: int) -> None:
+        """Sets the maximum number of iterations for the cyclic coordinate descent (CCD) solver.
+
+        Args:
+            value: Maximum number of CCD iterations.
+        """
         self._ik_config.ccd_max_iterations = value
 
     @property
@@ -228,6 +281,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @ccd_orientation_weight.setter
     def ccd_orientation_weight(self, value: float) -> None:
+        """Sets the weight applied to orientation error in the cyclic coordinate descent (CCD) solver cost function.
+
+        Args:
+            value: CCD orientation weight value.
+        """
         self._default_ccd_orientation_weight = value
 
     @property
@@ -241,6 +299,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @ccd_position_weight.setter
     def ccd_position_weight(self, value: float) -> None:
+        """Sets the weight applied to position error in the cyclic coordinate descent (CCD) solver cost function.
+
+        Args:
+            value: CCD position weight value.
+        """
         self._ik_config.ccd_position_weight = value
 
     @property
@@ -254,6 +317,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @irwin_hall_sampling_order.setter
     def irwin_hall_sampling_order(self, value: int) -> None:
+        """Sets the order for Irwin-Hall sampling used in inverse kinematics initial seed generation.
+
+        Args:
+            value: Irwin-Hall sampling order.
+        """
         self._ik_config.irwin_hall_sampling_order = value
 
     @property
@@ -267,6 +335,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @max_num_descents.setter
     def max_num_descents(self, value: int) -> None:
+        """Sets the maximum number of descent iterations allowed during inverse kinematics solving.
+
+        Args:
+            value: Maximum number of descent iterations.
+        """
         self._ik_config.max_num_descents = value
 
     @property
@@ -280,6 +353,11 @@ class LulaKinematicsSolver(KinematicsSolver):
 
     @sampling_seed.setter
     def sampling_seed(self, value: int) -> None:
+        """Sets the random seed used for sampling during inverse kinematics solving.
+
+        Args:
+            value: Random sampling seed value.
+        """
         self._ik_config.sampling_seed = value
 
     def set_robot_base_pose(self, robot_position: np.array, robot_orientation: np.array) -> None:
@@ -310,12 +388,12 @@ class LulaKinematicsSolver(KinematicsSolver):
     def compute_forward_kinematics(
         self, frame_name: str, joint_positions: np.array, position_only: Optional[bool] = False
     ) -> tuple[np.array, np.array]:
-        """Compute the position of a given frame in the robot relative to the USD stage global frame.
+        """Computes the position of a robot frame relative to the USD stage global frame.
 
         Args:
-            frame_name: Name of robot frame on which to calculate forward kinematics
-            joint_positions: Joint positions for the joints returned by get_joint_names()
-            position_only: Lula Kinematics ignore this flag and always computes both position and orientation
+            frame_name: Name of robot frame on which to calculate forward kinematics.
+            joint_positions: Joint positions for the joints returned by get_joint_names().
+            position_only: Flag ignored by Lula Kinematics, which always computes both position and orientation.
 
         Returns:
             A tuple of (frame_positions, frame_rotation) where frame_positions is a (3x1) vector describing the
@@ -333,25 +411,28 @@ class LulaKinematicsSolver(KinematicsSolver):
         position_tolerance: float = None,
         orientation_tolerance: float = None,
     ) -> tuple[np.array, bool]:
-        """Compute joint positions such that the specified robot frame will reach the desired translations and rotations.
+        """Computes joint positions such that the specified robot frame reaches the desired translation and rotation.
 
-        Lula Kinematics interpret the orientation tolerance as being the maximum rotation separating any standard axes.
-        e.g. For a tolerance of .1: The X axes, Y axes, and Z axes of the rotation matrices may independently be as far as .1 radians apart.
+        Lula Kinematics interprets the orientation tolerance as the maximum rotation separating any standard axes.
+        For a tolerance of .1, the X axes, Y axes, and Z axes of the rotation matrices may independently be as far
+        as .1 radians apart.
 
         Default values for position and orientation tolerances may be seen and changed with setter and getter functions.
 
         Args:
-            frame_name: name of the target frame for inverse kinematics
-            target_position: target translation of the target frame (in stage units) relative to the USD stage origin
-            target_orientation: target orientation of the target frame relative to the USD stage global frame.
-            warm_start: a starting position that will be used when solving the IK problem.  If default cspace seeds have been set,
-                the warm start will be given priority, but the default seeds will still be used.
-            position_tolerance: l-2 norm of acceptable position error (in stage units) between the target and achieved translations.
-            orientation_tolerance: magnitude of rotation (in radians) separating the target orientation from the achieved orienatation.
-                orientation_tolerance is well defined for values between 0 and pi.
+            frame_name: Name of the target frame for inverse kinematics.
+            target_position: Target translation of the target frame in stage units relative to the USD stage origin.
+            target_orientation: Target orientation of the target frame relative to the USD stage global frame.
+            warm_start: A starting position that will be used when solving the IK problem. If default cspace seeds have
+                been set, the warm start will be given priority, but the default seeds will still be used.
+            position_tolerance: l-2 norm of acceptable position error in stage units between the target and achieved
+                translations.
+            orientation_tolerance: Magnitude of rotation in radians separating the target orientation from the achieved
+                orientation. orientation_tolerance is well defined for values between 0 and pi.
 
         Returns:
-            A tuple containing (joint_positions, success) where joint_positions are in the order specified by get_joint_names() which result in the target frame achieving the desired position and success is True if the solver converged to a solution within the given tolerances.
+            A tuple containing (joint_positions, success) where joint_positions are in the order specified by
+            get_joint_names() and success is True if the solver converged to a solution within the given tolerances.
         """
         if position_tolerance is None:
             self._ik_config.position_tolerance = self._default_position_tolerance
@@ -396,24 +477,24 @@ class LulaKinematicsSolver(KinematicsSolver):
         """Lula Inverse Kinematics do not support collision avoidance with USD obstacles.
 
         Returns:
-            Always False
+            Always False.
         """
         return False
 
     def set_default_orientation_tolerance(self, tolerance: float) -> None:
-        """Default orientation tolerance to be used when calculating IK when none is specified.
+        """Sets the default orientation tolerance used when calculating IK when none is specified.
 
         Args:
-            tolerance: magnitude of rotation (in radians) separating the target orientation from the achieved orienatation.
+            tolerance: Magnitude of rotation in radians separating the target orientation from the achieved orientation.
                 orientation_tolerance is well defined for values between 0 and pi.
         """
         self._default_orientation_tolerance = tolerance
 
     def set_default_position_tolerance(self, tolerance: float) -> None:
-        """Default position tolerance to be used when calculating IK when none is specified.
+        """Sets the default position tolerance used when calculating IK when none is specified.
 
         Args:
-            tolerance: l-2 norm of acceptable position error (in stage units) between the target and achieved translations
+            tolerance: l-2 norm of acceptable position error in stage units between the target and achieved translations.
         """
         self._default_position_tolerance = tolerance * self._meters_per_unit
 
@@ -421,7 +502,7 @@ class LulaKinematicsSolver(KinematicsSolver):
         """Set a list of cspace seeds that the solver may use as starting points for solutions.
 
         Args:
-            seeds: An N x num_dof list of cspace seeds
+            seeds: An N x num_dof list of cspace seeds.
         """
         self._default_cspace_seeds = seeds
 
@@ -429,7 +510,7 @@ class LulaKinematicsSolver(KinematicsSolver):
         """Default orientation tolerance to be used when calculating IK when none is specified.
 
         Returns:
-            magnitude of rotation (in radians) separating the target orientation from the achieved orienatation.
+            Magnitude of rotation in radians separating the target orientation from the achieved orientation.
             orientation_tolerance is well defined for values between 0 and pi.
         """
         return self._default_orientation_tolerance
@@ -438,7 +519,7 @@ class LulaKinematicsSolver(KinematicsSolver):
         """Default position tolerance to be used when calculating IK when none is specified.
 
         Returns:
-            l-2 norm of acceptable position error (in stage units) between the target and achieved translations
+            l-2 norm of acceptable position error in stage units between the target and achieved translations.
         """
         return self._default_position_tolerance / self._meters_per_unit
 
@@ -446,7 +527,7 @@ class LulaKinematicsSolver(KinematicsSolver):
         """List of cspace seeds that the solver may use as starting points for solutions.
 
         Returns:
-            An N x num_dof list of cspace seeds
+            An N x num_dof list of cspace seeds.
         """
         return self._default_cspace_seeds
 
@@ -454,7 +535,9 @@ class LulaKinematicsSolver(KinematicsSolver):
         """Default upper and lower joint limits of the active joints.
 
         Returns:
-            A tuple containing (default_lower_joint_position_limits, default_upper_joint_position_limits) where default_lower_joint_position_limits are Default lower position limits of active joints and default_upper_joint_position_limits are Default upper position limits of active joints
+            A tuple containing (default_lower_joint_position_limits, default_upper_joint_position_limits) where
+            default_lower_joint_position_limits are default lower position limits of active joints and
+            default_upper_joint_position_limits are default upper position limits of active joints.
         """
         num_coords = self._kinematics.num_c_space_coords()
 
@@ -474,7 +557,7 @@ class LulaKinematicsSolver(KinematicsSolver):
         """Default velocity limits of the active joints.
 
         Returns:
-            Default velocity limits of the active joints
+            Default velocity limits of the active joints.
         """
         num_coords = self._kinematics.num_c_space_coords()
 

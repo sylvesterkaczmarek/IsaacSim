@@ -14,12 +14,12 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include <isaacsim/core/includes/BindingsPythonUtils.h>
-#include <isaacsim/core/simulation_manager/ISimulationManager.h>
-#include <isaacsim/core/simulation_manager/PhysicsScene.h>
+#include <isaacsim/core/includes/BindingsPythonUtils.hpp>
+#include <isaacsim/core/simulation_manager/ISimulationManager.hpp>
+#include <isaacsim/core/simulation_manager/PhysicsScene.hpp>
 #include <pybind11/functional.h>
 
 CARB_BINDINGS("isaacsim.core.simulation_manager.python")

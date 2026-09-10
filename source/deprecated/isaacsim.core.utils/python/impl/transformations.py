@@ -52,12 +52,12 @@ def pose_from_tf_matrix(transformation: np.ndarray) -> tuple[np.ndarray, np.ndar
     """Gets pose corresponding to input transformation matrix.
 
     Args:
-        transformation: Column-major transformation matrix. shape is (4, 4).
+        transformation: Column-major transformation matrix. Shape is (4, 4).
 
     Returns:
-        first index is translation corresponding to transformation. shape is (3, ).
-        second index is quaternion orientation corresponding to transformation.
-        quaternion is scalar-first (w, x, y, z). shape is (4, ).
+        First index is translation corresponding to transformation. Shape is (3, ).
+        Second index is quaternion orientation corresponding to transformation.
+        Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
     """
     mat = Gf.Transform()
     mat.SetMatrix(Gf.Matrix4d(np.transpose(transformation)))
@@ -73,7 +73,7 @@ def tf_matrices_from_poses(
 
     Args:
         translations: Translations with shape (N, 3).
-        orientations: Quaternion orientations (scalar first) with shape (N, 4).
+        orientations: Quaternion orientations in scalar-first order with shape (N, 4).
 
     Returns:
         Transformation matrices with shape (N, 4, 4).
@@ -107,8 +107,8 @@ def get_relative_transform(source_prim: Usd.Prim, target_prim: Usd.Prim) -> np.n
     """Get the relative transformation matrix from the source prim to the target prim.
 
     Args:
-        source_prim: source prim from which frame to compute the relative transform.
-        target_prim: target prim to which frame to compute the relative transform.
+        source_prim: Source prim from which frame to compute the relative transform.
+        target_prim: Target prim to which frame to compute the relative transform.
 
     Returns:
         Column-major transformation matrix with shape (4, 4).
@@ -133,14 +133,14 @@ def get_translation_from_target(
     """Get a translation with respect to the target's frame, from a translation in the source's frame.
 
     Args:
-        translation_from_source: translation from the frame of the prim at source_path. Shape is (3, ).
-        source_prim: prim path of the prim whose frame the original/untransformed translation
-                           (translation_from_source) is defined with respect to.
-        target_prim: prim path of the prim whose frame corresponds to the target frame that the returned
-                           translation will be defined with respect to.
+        translation_from_source: Translation from the frame of the prim at source_path. Shape is (3, ).
+        source_prim: Prim path of the prim whose frame the original/untransformed translation
+            (translation_from_source) is defined with respect to.
+        target_prim: Prim path of the prim whose frame corresponds to the target frame that the returned
+            translation will be defined with respect to.
 
     Returns:
-        translation with respect to the target's frame. Shape is (3, ).
+        Translation with respect to the target's frame. Shape is (3, ).
     """
     translation_from_source_homogenous = np.pad(translation_from_source, ((0, 1)), constant_values=1.0)
 
@@ -158,13 +158,13 @@ def get_world_pose_from_relative(
     """Get a pose defined in the world frame from a pose defined relative to the frame of the coord_prim.
 
     Args:
-        coord_prim: path of the prim whose frame the relative pose is defined with respect to.
-        relative_translation: translation relative to the frame of the prim at prim_path. Shape is (3, ).
-        relative_orientation: quaternion orientation relative to the frame of the prim at prim_path.
-                                           Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        coord_prim: Path of the prim whose frame the relative pose is defined with respect to.
+        relative_translation: Translation relative to the frame of the prim at prim_path. Shape is (3, ).
+        relative_orientation: Quaternion orientation relative to the frame of the prim at prim_path.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
 
     Returns:
-        first index is position in the world frame. Shape is (3, ). Second index is
+        First index is position in the world frame. Shape is (3, ). Second index is
         quaternion orientation in the world frame. Quaternion is scalar-first
         (w, x, y, z). Shape is (4, ).
     """
@@ -190,10 +190,10 @@ def get_transform_with_normalized_rotation(transform: np.ndarray) -> np.ndarray:
     """Get the transform after normalizing rotation component.
 
     Args:
-        transform: transformation matrix with shape (4, 4).
+        transform: Transformation matrix with shape (4, 4).
 
     Returns:
-        transformation matrix with normalized rotation with shape (4, 4).
+        Transformation matrix with normalized rotation with shape (4, 4).
     """
     transform_without_scale = np.copy(transform.astype(float))
 

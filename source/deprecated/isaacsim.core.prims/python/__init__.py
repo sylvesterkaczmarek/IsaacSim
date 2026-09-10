@@ -13,4 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides high-level wrappers for working with USD prims, geometry, rigid bodies, articulations, and particle systems."""
+
 from .impl import *

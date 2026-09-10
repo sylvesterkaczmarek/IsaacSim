@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.2] - 2026-08-03
+### Changed
+- Load the Robot Motion schema Python package and USD resources from the independently built `isaacsim-robot-motion-schema` wheel.
+
 ## [0.2.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

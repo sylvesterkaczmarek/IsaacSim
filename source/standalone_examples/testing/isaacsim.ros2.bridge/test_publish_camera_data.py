@@ -85,7 +85,12 @@ class TimestampChecker(Node):
         self.subscribed_types = {}
 
     def subscribe_dynamic(self, topic_name: str, msg_type_str: str) -> None:
-        """Subscribe to a topic dynamically by resolving the message type string."""
+        """Subscribe to a topic after resolving its ROS message type.
+
+        Args:
+            topic_name: ROS topic to monitor. An existing subscription for the topic is left unchanged.
+            msg_type_str: ROS message type identifier in ``package/submodule/name`` form.
+        """
         if topic_name in self.subscribed_types:
             return
         msg_type = self._import_message_type(msg_type_str)
@@ -98,7 +103,12 @@ class TimestampChecker(Node):
         self.subscribed_types[topic_name] = msg_type
 
     def check_timestamp(self, msg: Any, topic_name: str) -> None:
-        """Validate that message timestamps are unique and monotonically increasing."""
+        """Validate that message timestamps are unique and monotonically increasing.
+
+        Args:
+            msg: ROS message to inspect. Messages without a header are ignored.
+            topic_name: Topic used to maintain independent timestamp history.
+        """
         timestamp = getattr(msg, "header", None)
         if timestamp:
             time_val = (timestamp.stamp.sec, timestamp.stamp.nanosec)
@@ -151,7 +161,11 @@ class TimestampChecker(Node):
 
 
 def run_checker(checker: TimestampChecker) -> None:
-    """Spin the timestamp checker node until it is stopped."""
+    """Spin the timestamp checker node until it is stopped.
+
+    Args:
+        checker: Timestamp-checking node to spin until its stop event is set or ROS shuts down.
+    """
     while rclpy.ok() and not checker.event.is_set():
         rclpy.spin_once(checker, timeout_sec=0.1)
 
@@ -163,7 +177,14 @@ def run_checker(checker: TimestampChecker) -> None:
 
 # Paste functions from the tutorial here
 def publish_camera_tf(camera: Camera) -> None:
-    """Publish TF transforms for a camera prim using an OmniGraph action graph."""
+    """Publish TF transforms for a camera prim using an OmniGraph action graph.
+
+    Args:
+        camera: Camera whose USD prim supplies the published transform frames.
+
+    Raises:
+        ValueError: If the camera prim path is invalid.
+    """
     camera_prim = camera.prim_path
 
     if not omni.usd.get_context().get_stage().GetPrimAtPath(camera_prim).IsValid():
@@ -271,7 +292,12 @@ def publish_camera_tf(camera: Camera) -> None:
 
 
 def publish_camera_info(camera: Camera, freq: float) -> None:
-    """Publish camera info messages at the specified frequency."""
+    """Publish camera info messages at the specified frequency.
+
+    Args:
+        camera: Camera whose render product and calibration populate the message.
+        freq: Target publication frequency in hertz relative to the 60 Hz simulation gate.
+    """
     from isaacsim.ros2.core import read_camera_info
 
     # The following code will link the camera's render product and publish the data to the specified topic name.
@@ -310,7 +336,12 @@ def publish_camera_info(camera: Camera, freq: float) -> None:
 
 
 def publish_pointcloud_from_depth(camera: Camera, freq: float) -> None:
-    """Publish point cloud data generated from depth images at the specified frequency."""
+    """Publish point cloud data generated from depth images at the specified frequency.
+
+    Args:
+        camera: Camera whose depth render variable is converted to a point cloud.
+        freq: Target publication frequency in hertz relative to the 60 Hz simulation gate.
+    """
     # The following code will link the camera's render product and publish the data to the specified topic name.
     render_product = camera._render_product_path
     step_size = int(60 / freq)
@@ -335,7 +366,12 @@ def publish_pointcloud_from_depth(camera: Camera, freq: float) -> None:
 
 
 def publish_depth(camera: Camera, freq: float) -> None:
-    """Publish depth image data at the specified frequency."""
+    """Publish depth image data at the specified frequency.
+
+    Args:
+        camera: Camera whose distance-to-image-plane render variable is published.
+        freq: Target publication frequency in hertz relative to the 60 Hz simulation gate.
+    """
     # The following code will link the camera's render product and publish the data to the specified topic name.
     render_product = camera._render_product_path
     step_size = int(60 / freq)
@@ -357,7 +393,12 @@ def publish_depth(camera: Camera, freq: float) -> None:
 
 
 def publish_rgb(camera: Camera, freq: float) -> None:
-    """Publish RGB image data at the specified frequency."""
+    """Publish RGB image data at the specified frequency.
+
+    Args:
+        camera: Camera whose RGB render variable is published.
+        freq: Target publication frequency in hertz relative to the 60 Hz simulation gate.
+    """
     # The following code will link the camera's render product and publish the data to the specified topic name.
     render_product = camera._render_product_path
     step_size = int(60 / freq)

@@ -1,4 +1,4 @@
 {
   "triggerOnUpdates": true,
-  "ignorePatterns": "_build/**\n_repo/**\ntools/packman/**\n**/*.svg\n**/*.min.js"
+  "ignorePatterns": "_build/**\n_repo/**\ntools/packman/**\nlicenses/**\n**/*.svg\n**/*.min.js"
 }

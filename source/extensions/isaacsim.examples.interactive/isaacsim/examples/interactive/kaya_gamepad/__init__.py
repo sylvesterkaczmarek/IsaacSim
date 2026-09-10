@@ -16,6 +16,8 @@
 """Interactive example demonstrating gamepad control of a NVIDIA Kaya robot in Isaac Sim."""
 
 from isaacsim.examples.interactive.kaya_gamepad.kaya_gamepad import KayaGamepad
-from isaacsim.examples.interactive.kaya_gamepad.kaya_gamepad_extension import KayaGamepadExtension
+from isaacsim.examples.interactive.kaya_gamepad.kaya_gamepad_extension import (
+    KayaGamepadExtension as KayaGamepadExtension,
+)
 
-__all__ = ["KayaGamepad", "KayaGamepadExtension"]
+__all__ = ["KayaGamepad"]

@@ -40,7 +40,7 @@ class PrepareFiles:
     - Original robot file information when available
     - Preview of allocated robot files with color-coded status indicators
 
-    File status indicators use color coding where purple indicates existing files that will be overwritten,
+    File status indicators use color coding, where purple indicates existing files that will be overwritten,
     red indicates files without write permission, and default color indicates new files that can be created.
 
     The component integrates with the RobotRegistry to store configuration parameters and validates robot
@@ -49,8 +49,8 @@ class PrepareFiles:
 
     Args:
         visible: Whether the UI component should be visible when created.
-        *args: Variable length argument list passed to parent initialization.
-        **kwargs: Additional keyword arguments passed to parent initialization.
+        *args: Variable-length argument list accepted by initialization.
+        **kwargs: Additional keyword arguments accepted by initialization.
     """
 
     def __init__(self, visible: bool, *args: object, **kwargs: object) -> None:
@@ -341,7 +341,8 @@ class PrepareFiles:
     def _build_robot_files_frame(self) -> None:
         """Update the robot files frame with current file paths and validation status.
 
-        Validates robot name, constructs file paths, and updates UI labels with appropriate colors based on file existence and write permissions.
+        Validates robot name, constructs file paths, and updates UI labels with colors based on file existence and write
+        permissions.
         """
         robot_name = self._robot_name_widget.model.get_value_as_string()
         if not Sdf.Path.IsValidIdentifier(robot_name):
@@ -421,10 +422,8 @@ class PrepareFiles:
     def _preprocess_page(self) -> None:
         """Processes to run every time the page is shown.
 
-        Gets data from the registry and updates the widgets with current robot information, stage path, and original robot file path.
-
-        Returns:
-            None if the stage or robot is not available.
+        Gets data from the registry and updates the widgets with current robot information, stage path, and original robot
+        file path.
         """
         stage = omni.usd.get_context().get_stage()
         self._robot = RobotRegistry().get()

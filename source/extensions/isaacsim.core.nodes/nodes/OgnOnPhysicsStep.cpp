@@ -14,15 +14,15 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <carb/Defines.h>
 #include <carb/eventdispatcher/IEventDispatcher.h>
 #include <carb/logging/Logger.h>
 
-#include <isaacsim/core/includes/BaseResetNode.h>
-#include <isaacsim/core/nodes/ICoreNodes.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
+#include <isaacsim/core/nodes/ICoreNodes.hpp>
 #include <omni/timeline/TimelineTypes.h>
 #include <omni/usd/UsdContextIncludes.h>
 //

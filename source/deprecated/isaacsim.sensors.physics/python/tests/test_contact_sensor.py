@@ -101,17 +101,29 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
     # Convenience properties for ant configuration
     @property
     def leg_paths(self) -> list:
-        """Return leg paths."""
+        """Leg paths from the ant configuration.
+
+        Returns:
+            Leg paths.
+        """
         return self._ant_config.leg_paths
 
     @property
     def sensor_offsets(self) -> list:
-        """Return sensor offsets."""
+        """Sensor offsets from the ant configuration.
+
+        Returns:
+            Sensor offsets.
+        """
         return self._ant_config.sensor_offsets
 
     @property
     def color(self) -> list:
-        """Return color values."""
+        """Color values from the ant configuration.
+
+        Returns:
+            Color values.
+        """
         return self._ant_config.colors
 
     # After running each test
@@ -127,7 +139,11 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
 
     async def _add_sensor_prims(self) -> None:
-        """Helper to add contact sensors to ant legs. Requires ant to be loaded."""
+        """Helper to add contact sensors to ant legs. Requires ant to be loaded.
+
+        Raises:
+            AssertionError: If a contact sensor cannot be created.
+        """
         self.sensorGeoms = []
         for i in range(4):
             result, sensor = omni.kit.commands.execute(
@@ -146,7 +162,11 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
             self.assertIsNotNone(sensor)
 
     async def test_add_sensor_prim(self) -> None:
-        """Ensure contact sensors can be created on ant legs."""
+        """Ensure contact sensors can be created on ant legs.
+
+        Raises:
+            AssertionError: If a contact sensor cannot be created.
+        """
         await self._setup_ant()
         await self._add_sensor_prims()
 
@@ -156,7 +176,11 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
     # test raw contact value, z-normal ~ 1.0
     # move teh ground to -15, simulate 30 steps, test for no contact
     async def test_lost_contacts(self) -> None:
-        """Validate contact detection when ground moves in/out of reach."""
+        """Validate contact detection when ground moves in/out of reach.
+
+        Raises:
+            AssertionError: If contact state or raw contact data does not match the expected values.
+        """
         await self._setup_ant()
         await self._add_sensor_prims()
         xform = UsdGeom.Xformable(self._stage.GetPrimAtPath("/World/GroundPlane"))
@@ -172,7 +196,7 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         xform = UsdGeom.Xformable(self._stage.GetPrimAtPath("/World/GroundPlane"))
         xform_op = xform.GetOrderedXformOps()[0]
         xform_op.Set(Gf.Vec3d(0, 0, -0.78))
-        await step_simulation(1)  # simulate 60 steps, ant should touch ground
+        await step_simulation(1.5)  # simulate 90 steps, ant should touch ground
         contacts_raw = self._cs.get_contact_sensor_raw_data(self.leg_paths[0] + "/sensor")
         self.assertEqual(len(contacts_raw), 1)
 
@@ -193,7 +217,11 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         self.assertEqual(len(contacts_raw), 0)
 
     async def test_get_body_raw_data(self) -> None:
-        """Test raw contact data retrieval between rigid bodies without using ant."""
+        """Test raw contact data retrieval between rigid bodies without using ant.
+
+        Raises:
+            AssertionError: If block_1 does not contact block_0 within the expected number of updates.
+        """
         await stage_utils.create_new_stage_async()
         stage_utils.set_stage_units(meters_per_unit=1.0)
         SimulationManager.setup_simulation(dt=1.0 / self._physics_rate)
@@ -239,12 +267,16 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         self.assertTrue(count < 500)
 
     async def test_get_raw_data(self) -> None:
-        """Validate raw contact data from a sensor when the ant contacts ground."""
+        """Validate raw contact data from a sensor when the ant contacts ground.
+
+        Raises:
+            AssertionError: If raw contact data is missing, the queried body is absent, or the contact normal is unexpected.
+        """
         await self._setup_ant()
         await self._add_sensor_prims()
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
-        await step_simulation(1)  # simulate 60 steps, ant should touch ground
+        await step_simulation(1.5)  # simulate 90 steps, ant should touch ground
         contacts_raw = self._cs.get_contact_sensor_raw_data(self.leg_paths[0] + "/sensor")
         self.assertEqual(len(contacts_raw), 1)
 
@@ -257,7 +289,11 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         ## print(c)
 
     async def test_persistent_raw_data(self) -> None:
-        """Ensure raw contact data remains available during persistent contacts."""
+        """Ensure raw contact data remains available during persistent contacts.
+
+        Raises:
+            AssertionError: If persistent raw contact data is missing, the queried body is absent, or the contact normal is unexpected.
+        """
         await self._setup_ant()
         await self._add_sensor_prims()
         self._timeline.play()
@@ -274,7 +310,11 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         ## print(c)
 
     async def test_delayed_get_sensor_reading(self) -> None:
-        """Compare delayed sensor readings against raw impulse-derived force."""
+        """Compare delayed sensor readings against raw impulse-derived force.
+
+        Raises:
+            AssertionError: If the sensor reading is invalid or does not match the raw impulse-derived force.
+        """
         await self._setup_ant()
         await self._add_sensor_prims()
         await omni.kit.app.get_app().next_update_async()
@@ -302,81 +342,92 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
             self.assertEqual(sensor_reading.value, 0)
 
     async def test_contact_outside_range(self) -> None:
-        """Ensure sensors out of contact range report zero readings."""
-        await self._setup_ant()
-        self.sensorGeoms = []
+        """Ensure sensors out of contact range report zero readings.
 
-        # create 4 sensors at the center of the leg
-        for i in range(4):
-            result, sensor = omni.kit.commands.execute(
-                "IsaacSensorCreateContactSensor",
-                path="/sensor",
-                parent=self.leg_paths[i],
-                min_threshold=0,
-                max_threshold=10000000,
-                color=self.color[i],
-                radius=0.12,
-                sensor_period=-1,
-                translation=Gf.Vec3f(0, 0, 0),
-            )
-            self.sensorGeoms.append(sensor)
-            self.assertTrue(result)
-            self.assertIsNotNone(sensor)
+        Raises:
+            AssertionError: If an out-of-range sensor reports an invalid or nonzero reading.
+        """
+        await stage_utils.create_new_stage_async()
+        stage_utils.set_stage_units(meters_per_unit=1.0)
+        SimulationManager.setup_simulation(dt=1.0 / self._physics_rate)
+        Cube("/World/Cube", sizes=1.0, positions=[0.0, 0.0, 10.0])
+        GeomPrim("/World/Cube", apply_collision_apis=True)
+        RigidPrim("/World/Cube", masses=[1.0])
+
+        result, sensor = omni.kit.commands.execute(
+            "IsaacSensorCreateContactSensor",
+            path="/sensor",
+            parent="/World/Cube",
+            min_threshold=0,
+            max_threshold=10000000,
+            radius=0.12,
+            sensor_period=-1,
+            translation=Gf.Vec3f(0, 0, 0),
+        )
+        self.assertTrue(result)
+        self.assertIsNotNone(sensor)
 
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
-        await step_simulation(1)
 
-        for i in range(40):
+        for _ in range(40):
             await omni.kit.app.get_app().next_update_async()
-            sensor_reading = self._cs.get_sensor_reading(self.leg_paths[0] + "/sensor")
+            sensor_reading = self._cs.get_sensor_reading("/World/Cube/sensor")
             self.assertTrue(sensor_reading.is_valid)
             self.assertEqual(sensor_reading.value, 0)
 
     async def test_sensor_period(self) -> None:
-        """Verify sensor outputs update at the configured frequency."""
-        await self._setup_ant()
-        # create four sensors that run at 30hz
-        for i in range(4):
-            result, sensor = omni.kit.commands.execute(
-                "IsaacSensorCreateContactSensor",
-                path="/sensor",
-                parent=self.leg_paths[i],
-                min_threshold=0,
-                max_threshold=10000000,
-                color=self.color[i],
-                radius=0.12,
-                sensor_period=1.0 / 30.0,
-                translation=self.sensor_offsets[i],
-            )
-            self.assertTrue(result)
-            self.assertIsNotNone(sensor)
+        """Verify sensor outputs update at the configured frequency.
+
+        Raises:
+            AssertionError: If sensor creation fails or the number of updated readings does not match the configured frequency.
+        """
+        await stage_utils.create_new_stage_async()
+        stage_utils.set_stage_units(meters_per_unit=1.0)
+        SimulationManager.setup_simulation(dt=1.0 / self._physics_rate)
+        Cube("/World/Cube", sizes=1.0, positions=[0.0, 0.0, 10.0])
+        GeomPrim("/World/Cube", apply_collision_apis=True)
+        RigidPrim("/World/Cube", masses=[1.0])
+
+        result, sensor = omni.kit.commands.execute(
+            "IsaacSensorCreateContactSensor",
+            path="/sensor",
+            parent="/World/Cube",
+            min_threshold=0,
+            max_threshold=10000000,
+            radius=0.12,
+            sensor_period=1.0 / 30.0,
+            translation=Gf.Vec3f(0, 0, 0),
+        )
+        self.assertTrue(result)
+        self.assertIsNotNone(sensor)
 
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
-        # give it some time to reach the ground first
-        await step_simulation(1.5)
         await omni.kit.app.get_app().next_update_async()
         readings = []
 
-        for i in range(60):  # Simulate for one second
+        start_time = self._cs.get_sensor_reading("/World/Cube/sensor").time
+        for _ in range(240):
             await omni.kit.app.get_app().next_update_async()
-            raw = self._cs.get_contact_sensor_raw_data(self.leg_paths[0] + "/sensor")
-            # print(str(raw))
-            sensor_reading = self._cs.get_sensor_reading(self.leg_paths[0] + "/sensor")
-            # print(str(sensor_reading))
+            sensor_reading = self._cs.get_sensor_reading("/World/Cube/sensor")
 
             # the sensor is running at 30hz, while the sim is 60hz, so expecting every other reading to be new,
             # old reading should be identical, and have the same timestamp
             if not readings or readings[-1].time != sensor_reading.time:
                 readings.append(sensor_reading)
+            if sensor_reading.time - start_time >= 1.0:
+                break
 
         # tolerance +-1 reading (29, 30, 31 will be accepted)
-        # print(len(readings))
-        self.assertTrue(abs(len(readings) - 30) <= 1)
+        self.assertTrue(abs(len(readings) - 30) <= 1, f"Expected about 30 readings, got {len(readings)}")
 
     async def test_stop_start(self) -> None:
-        """Verify sensor readings are consistent across timeline stop/start."""
+        """Verify sensor readings are consistent across timeline stop/start.
+
+        Raises:
+            AssertionError: If contact state, value, or time changes after the timeline restarts.
+        """
         await self._setup_ant()
         await self._add_sensor_prims()
 
@@ -400,7 +451,11 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         self.assertEqual(init_reading.time, sensor_reading.time)
 
     async def test_sensor_latest_data(self) -> None:
-        """Ensure latest-data reads return monotonically increasing times."""
+        """Ensure latest-data reads return monotonically increasing times.
+
+        Raises:
+            AssertionError: If sensor creation fails or latest-data reading times do not increase.
+        """
         await self._setup_ant()
         # create four sensors that run at 30hz
         for i in range(4):
@@ -432,7 +487,11 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
             old_time = latest_sensor_reading.time
 
     async def test_wrong_sensor_path(self) -> None:
-        """Ensure invalid sensor paths return invalid readings."""
+        """Ensure invalid sensor paths return invalid readings.
+
+        Raises:
+            AssertionError: If an invalid sensor path returns a valid reading or a nonzero time.
+        """
         await self._setup_ant()
         await self._add_sensor_prims()
         await omni.kit.app.get_app().next_update_async()
@@ -447,7 +506,11 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
             self.assertEqual(latest_sensor_reading.time, 0)
 
     async def test_sensor_threshold(self) -> None:
-        """Verify min/max thresholds gate contact readings as expected."""
+        """Verify min/max thresholds gate contact readings as expected.
+
+        Raises:
+            AssertionError: If sensor creation fails or threshold-gated contact readings do not match expectations.
+        """
         await self._setup_ant()
         await self._add_sensor_prims()
         await omni.kit.app.get_app().next_update_async()
@@ -475,7 +538,7 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
         # give it some time to reach the ground first
-        await step_simulation(1.0)
+        await step_simulation(1.5)
 
         sensor_0 = self._cs.get_sensor_reading(self.leg_paths[0] + "/custom_sensor")  # expect contact
         sensor_1 = self._cs.get_sensor_reading(self.leg_paths[1] + "/custom_sensor")  # expect no contact
@@ -492,7 +555,11 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(float(sensor_3.value), 0.1, delta=1e-5)
 
     async def test_sensor_with_skip_parents(self) -> None:
-        """Verify sensors work when inserted under intermediate Xform prims."""
+        """Verify sensors work when inserted under intermediate Xform prims.
+
+        Raises:
+            AssertionError: If sensor creation fails or sensors under intermediate Xform prims do not report contact.
+        """
         await self._setup_ant()
         await self._add_sensor_prims()
         await omni.kit.app.get_app().next_update_async()
@@ -521,7 +588,7 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
         # give it some time to reach the ground first
-        await step_simulation(1.0)
+        await step_simulation(1.5)
 
         # all four sensors should have proper reading
         for i in range(4):
@@ -669,7 +736,7 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         await self._add_sensor_prims()
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
-        await step_simulation(1.0)
+        await step_simulation(1.5)
 
         contacts_raw = self._cs.get_contact_sensor_raw_data(self.leg_paths[0] + "/sensor")
         self.assertGreater(len(contacts_raw), 0)

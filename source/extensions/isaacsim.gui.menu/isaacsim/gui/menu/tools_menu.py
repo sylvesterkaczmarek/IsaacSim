@@ -104,6 +104,7 @@ class ToolsMenuExtension:
                                     MenuLayout.Item("Mesh Merge Tool"),
                                     MenuLayout.Item("Robot Assembler"),
                                     MenuLayout.Item("Robot Self-Collision Detector"),
+                                    MenuLayout.Item("System Identification"),
                                 ],
                             ),
                             MenuLayout.SubMenu(

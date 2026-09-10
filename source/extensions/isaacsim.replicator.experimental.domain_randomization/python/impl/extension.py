@@ -17,6 +17,7 @@
 
 from typing import Any
 
+import carb.eventdispatcher
 import omni.ext
 import omni.usd
 from isaacsim.replicator.experimental.domain_randomization.scripts import physics_view
@@ -28,9 +29,10 @@ class Extension(omni.ext.IExt):
     def on_startup(self) -> None:
         """Set up initial conditions for the Python part of the extension."""
         usd_context = omni.usd.get_context()
-        self._stage_event_sub = usd_context.get_stage_event_stream().create_subscription_to_pop(
-            self._on_stage_event,
-            name="isaacsim.replicator.experimental.domain_randomization",
+        self._stage_event_sub = carb.eventdispatcher.get_eventdispatcher().observe_event(
+            event_name=usd_context.stage_event_name(omni.usd.StageEventType.CLOSING),
+            on_event=self._on_stage_closing,
+            observer_name="isaacsim.replicator.experimental.domain_randomization._on_stage_closing",
         )
 
     def on_shutdown(self) -> None:
@@ -38,6 +40,6 @@ class Extension(omni.ext.IExt):
         self._stage_event_sub = None
         physics_view.cleanup()
 
-    def _on_stage_event(self, event: Any) -> None:
-        if event.type == int(omni.usd.StageEventType.CLOSING):
-            physics_view.cleanup()
+    def _on_stage_closing(self, _event: Any) -> None:
+        """Clear physics-view registries when the stage is closing."""
+        physics_view.cleanup()

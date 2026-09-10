@@ -136,6 +136,7 @@ class TestRecordingSession(omni.kit.test.AsyncTestCase):
         self.assertTrue(os.path.exists(os.path.join(recording_path, "stage.usd")))
         reader = MobilityGenReader(recording_path)
         self.assertGreater(len(reader), 0)
+        self.assertEqual(tuple(reader.read_occupancy_map().origin), occupancy_map.origin)
 
         state = reader.read_state_dict_common(0)
         self.assertIn("robot.position", state)

@@ -19,18 +19,40 @@ Uses omni.kit.renderer.capture swapchain capture. Works in both --no-window head
 and windowed modes.
 
 Injected globals (via isaacsim_send.py --arg):
-    output_path: str — File path for the output PNG (default: /tmp/app_capture.png).
+    output_path: str — File path for the output PNG (default: under tempfile.gettempdir()).
 """
+
+import tempfile
+from pathlib import Path
 
 # Defaults
 if "output_path" not in dir():
-    output_path = "/tmp/app_capture.png"  # noqa: F841
+    output_path = str(Path(tempfile.gettempdir()) / "app_capture.png")  # noqa: F841
+
+if not output_path or not str(output_path).endswith(".png"):
+    raise ValueError(f"output_path must be a non-empty .png path, got {output_path!r}")
 
 
 async def _capture():
+    """Capture the full app window to ``output_path``.
+
+    Raises:
+        RuntimeError: If the capture backend fails to write the screenshot.
+    """
+    import isaacsim.core.experimental.utils.app as app_utils
+
+    if not app_utils.is_extension_enabled("isaacsim.test.utils"):
+        if not app_utils.enable_extension("isaacsim.test.utils"):
+            raise RuntimeError("Failed to enable extension isaacsim.test.utils")
+        await app_utils.update_app_async(steps=5)
+
     from isaacsim.test.utils.image_capture import capture_app_screenshot_async
 
-    await capture_app_screenshot_async(output_path)
+    try:
+        await capture_app_screenshot_async(output_path)
+    except Exception as exc:  # noqa: BLE001 — report a clear cause to the remote caller
+        raise RuntimeError(f"app screenshot capture failed for {output_path}: {exc}") from exc
+    print(f"Saved app screenshot: {output_path}")
 
 
 await _capture()

@@ -13,4 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .impl.extension import *
+from .impl.extension import ROS2BridgeExtension as ROS2BridgeExtension
+
+__all__ = []

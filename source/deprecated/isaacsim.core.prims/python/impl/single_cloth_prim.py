@@ -31,6 +31,9 @@ class SingleClothPrim:
     Args:
         *args: Unused positional arguments.
         **kwargs: Unused keyword arguments.
+
+    Raises:
+        NotImplementedError: Always raised because SingleClothPrim is no longer available.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

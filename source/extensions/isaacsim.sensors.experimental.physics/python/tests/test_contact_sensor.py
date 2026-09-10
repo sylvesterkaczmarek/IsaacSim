@@ -36,7 +36,7 @@ from isaacsim.sensors.experimental.physics import Contact, ContactSensor, Contac
 from isaacsim.storage.native import get_assets_root_path_async
 from pxr import Gf, PhysicsSchemaTools, Usd, UsdGeom, UsdPhysics
 
-from .common import reset_timeline, setup_ant_scene, step_simulation
+from .common import is_physx_engine, reset_timeline, setup_ant_scene, step_simulation
 
 # Having a test class dervived from omni.kit.test.AsyncTestCase declared on the root of module will make it auto-discoverable by omni.kit.test
 
@@ -215,6 +215,13 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         contacts_raw = self._get_contact_sensor(self.leg_paths[0] + "/sensor").get_raw_data()
         self.assertEqual(len(contacts_raw), 0)
 
+        if not is_physx_engine():
+            # Newton builds static colliders when simulation starts and does not
+            # support live transform updates for them. The remaining assertions
+            # move the active ground collider to create and then lose contact, so
+            # that portion is currently meaningful only for PhysX.
+            return
+
         xform = UsdGeom.Xformable(self._stage.GetPrimAtPath("/World/GroundPlane"))
         xform_op = xform.GetOrderedXformOps()[0]
         xform_op.Set(Gf.Vec3d(0, 0, -0.78))
@@ -236,6 +243,44 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         await step_simulation(0.5)
         contacts_raw = self._get_contact_sensor(self.leg_paths[0] + "/sensor").get_raw_data()
         self.assertEqual(len(contacts_raw), 0)
+
+    async def test_contacts_clear_after_static_collider_removal(self) -> None:
+        """Clear contact data after rebuilding a scene without the supporting collider."""
+        await stage_utils.create_new_stage_async()
+        stage_utils.set_stage_units(meters_per_unit=1.0)
+        SimulationManager.setup_simulation(dt=1.0 / self._physics_rate)
+
+        GroundPlane("/World/GroundPlane", sizes=10.0)
+        Cube("/World/Cube", sizes=1.0, positions=[0.0, 0.0, 0.5])
+        GeomPrim("/World/Cube", apply_collision_apis=True)
+        RigidPrim("/World/Cube", masses=[1.0])
+        sensor = ContactSensor(
+            Contact.create(
+                "/World/Cube/contact_sensor",
+                min_threshold=0.0,
+                max_threshold=10000000.0,
+                radius=-1.0,
+            )
+        )
+
+        self._timeline.play()
+        await step_simulation(2.0)
+        self.assertTrue(sensor.get_sensor_reading().in_contact)
+        self.assertGreater(len(sensor.get_raw_data()), 0)
+
+        # Removing static geometry while simulation is active is unsupported by
+        # Newton. Stop first so both engines rebuild from the same authored scene.
+        self._timeline.stop()
+        await omni.kit.app.get_app().next_update_async()
+        stage_utils.get_current_stage().RemovePrim("/World/GroundPlane")
+        self._timeline.play()
+        await step_simulation(0.25)
+
+        reading = sensor.get_sensor_reading()
+        self.assertTrue(reading.is_valid)
+        self.assertFalse(reading.in_contact)
+        self.assertEqual(reading.value, 0.0)
+        self.assertEqual(sensor.get_raw_data(), [])
 
     async def test_get_body_raw_data(self) -> None:
         """Test raw contact data retrieval between rigid bodies without using ant."""
@@ -281,7 +326,7 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         await self._add_sensor_prims()
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
-        await step_simulation(1)  # simulate 60 steps, ant should touch ground
+        await step_simulation(1.5)  # simulate 90 steps, ant should touch ground
         contacts_raw = self._get_contact_sensor(self.leg_paths[0] + "/sensor").get_raw_data()
         self.assertEqual(len(contacts_raw), 1)
 
@@ -388,7 +433,14 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         sensor_reading = self._get_contact_sensor(self.leg_paths[0] + "/sensor").get_sensor_reading()
 
         self.assertEqual(init_reading.in_contact, sensor_reading.in_contact)
-        self.assertEqual(init_reading.value, sensor_reading.value)
+        # A timeline restart performs an independent solver run. Compare the
+        # resulting force with a tight tolerance instead of requiring bitwise
+        # equality from floating-point contact reduction.
+        self.assertAlmostEqual(
+            float(init_reading.value),
+            float(sensor_reading.value),
+            delta=max(0.005 * abs(float(init_reading.value)), 1e-4),
+        )
         self.assertEqual(init_reading.time, sensor_reading.time)
 
     # number of readings aggregated from node is same as number output from sensor
@@ -490,7 +542,7 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
         # give it some time to reach the ground first
-        await step_simulation(1.0)
+        await step_simulation(1.5)
 
         sensor_0 = self._get_contact_sensor(self.leg_paths[0] + "/custom_sensor").get_sensor_reading()  # expect contact
         sensor_1 = self._get_contact_sensor(
@@ -516,12 +568,14 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         await self._add_sensor_prims()
         await omni.kit.app.get_app().next_update_async()
 
-        # create four sensors with in an Xform. The offset needed to reach the tip of the leg is (40,0,0)
-        # Break this down to (20,0,0) to the xform, (20,0,0) to the sensor.
+        # Create four sensors under an intermediate Xform. The per-foot offset that
+        # reaches the ankle tip is split in half between the Xform and the sensor,
+        # so the sensor still resolves the full offset relative to the foot body.
         for i in range(4):
+            half_offset = self.sensor_offsets[i][0] / 2.0
             xform_path = self.leg_paths[i] + "/xform"
             stage_utils.define_prim(xform_path, "Xform")
-            XformPrim(xform_path, translations=[20, 0, 0], reset_xform_op_properties=True)
+            XformPrim(xform_path, translations=[half_offset], reset_xform_op_properties=True)
 
             sensor = ContactSensor(
                 Contact.create(
@@ -530,7 +584,7 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
                     max_threshold=100.0,
                     color=self.color[i],
                     radius=0.12,
-                    translations=[[20.0, 0.0, 0.0]],
+                    translations=[half_offset],
                 )
             )
             self.assertIsNotNone(sensor)
@@ -538,7 +592,7 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
         # give it some time to reach the ground first
-        await step_simulation(1.0)
+        await step_simulation(1.5)
 
         # all four sensors should have proper reading
         for i in range(4):
@@ -601,7 +655,7 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         await reset_timeline(self._timeline)
 
         # Allow settling time for cubes to come into contact
-        await step_simulation(10 * SimulationManager.get_physics_dt())
+        await step_simulation(30 * SimulationManager.get_physics_dt())
 
         # Get latest contact data
         bottom_data = bottom_sensor.get_data()
@@ -691,7 +745,7 @@ class TestContactSensor(omni.kit.test.AsyncTestCase):
         await self._add_sensor_prims()
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
-        await step_simulation(1.0)
+        await step_simulation(1.5)
 
         contacts_raw = self._get_contact_sensor(self.leg_paths[0] + "/sensor").get_raw_data()
         self.assertGreater(len(contacts_raw), 0)
@@ -767,15 +821,37 @@ class TestContactSensorRuntimeData(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
         await omni.kit.app.get_app().next_update_async()
         await omni.kit.app.get_app().next_update_async()
-        self.assertTrue("contacts" not in data)
+        # `get_data` hands back an independent frame, so each toggle has to be observed on a
+        # freshly fetched frame rather than on the dict captured above.
+        self.assertTrue("contacts" not in self._contact_sensor.get_data())
         self._contact_sensor.add_raw_contact_data_to_frame()
         await omni.kit.app.get_app().next_update_async()
         await omni.kit.app.get_app().next_update_async()
-        self.assertTrue("contacts" in data)
+        self.assertTrue("contacts" in self._contact_sensor.get_data())
         self._contact_sensor.remove_raw_contact_data_from_frame()
         await omni.kit.app.get_app().next_update_async()
         await omni.kit.app.get_app().next_update_async()
-        self.assertTrue("contacts" not in data)
+        self.assertTrue("contacts" not in self._contact_sensor.get_data())
+        return
+
+    async def test_data_frame_is_independent(self) -> None:
+        """Verify `get_data` returns a frame no later call can disturb."""
+        await omni.kit.app.get_app().next_update_async()
+        await omni.kit.app.get_app().next_update_async()
+
+        first = self._contact_sensor.get_data()
+        second = self._contact_sensor.get_data()
+        self.assertIsNot(first, second)
+
+        # Rebinding a key on an earlier result must not touch a later one. Asserting against
+        # the already-held `second` rather than a fresh call is what makes this non-vacuous:
+        # a fresh call refreshes from a valid reading and would mask aliasing.
+        force = second["force"]
+        first["force"] = -12345.0
+        self.assertEqual(second["force"], force)
+
+        # Nor may it leak into the sensor's own bookkeeping and be re-served to a later caller.
+        self.assertNotEqual(self._contact_sensor.get_data()["force"], -12345.0)
         return
 
     async def test_timeline_reset(self) -> None:

@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.2.2] - 2026-07-28
+### Changed
+- Point the deprecation warning to `isaacsim.robot_motion.examples`.
+
 ## [2.2.1] - 2026-04-23
 ### Deprecated
 - Extension deprecated in favor of `isaacsim.robot.experimental.manipulators.examples`

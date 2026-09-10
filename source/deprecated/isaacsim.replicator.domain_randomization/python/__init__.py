@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Exposes the implementation APIs for isaacsim.replicator.domain_randomization."""
+
 from .impl import *
 from .scripts import context as context
 from .scripts import gate as gate

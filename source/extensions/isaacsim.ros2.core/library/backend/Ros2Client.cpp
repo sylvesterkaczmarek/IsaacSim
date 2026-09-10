@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "Ros2Impl.h"
+#include "Ros2Impl.hpp"
 
-#include <isaacsim/ros2/core/Ros2Macros.h>
+#include <isaacsim/ros2/core/Ros2Macros.hpp>
 #include <rcl/client.h>
 #include <rcl/rcl.h>
 

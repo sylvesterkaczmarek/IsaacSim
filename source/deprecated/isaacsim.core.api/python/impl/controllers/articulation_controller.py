@@ -22,9 +22,9 @@ from isaacsim.core.utils.types import ArticulationAction, ArticulationActions
 
 
 class ArticulationController(object):
-    """PD Controller of all degrees of freedom of an articulation, can apply position targets, velocity targets and efforts.
+    """PD controller of all degrees of freedom of an articulation. Can apply position targets, velocity targets, and efforts.
 
-    Checkout the required tutorials at https://docs.isaacsim.omniverse.nvidia.com/latest/index.html
+    Check out the required tutorials at https://docs.isaacsim.omniverse.nvidia.com/latest/index.html
     """
 
     def __init__(self) -> None:
@@ -39,12 +39,16 @@ class ArticulationController(object):
 
         Args:
             articulation_view: The articulation view to control.
-
         """
         self._articulation_view = articulation_view
         return
 
     def _require_initialized(self) -> None:
+        """Validate that the controller has an articulation view.
+
+        Raises:
+            RuntimeError: If the articulation view is not initialized.
+        """
         if self._articulation_view is None:
             raise RuntimeError("ArticulationController is not initialized. Call initialize() first.")
 
@@ -56,7 +60,6 @@ class ArticulationController(object):
 
         Raises:
             RuntimeError: If the articulation view is not initialized.
-
         """
         self._require_initialized()
         applied_actions = self.get_applied_action()
@@ -122,7 +125,6 @@ class ArticulationController(object):
 
         Raises:
             Exception: If the articulation view is not initialized.
-
         """
         if kps is not None:
             kps = self._articulation_view._backend_utils.expand_dims(kps, 0)
@@ -138,8 +140,7 @@ class ArticulationController(object):
             Exception: If the articulation view is not initialized.
 
         Returns:
-            Tuple of (kps, kds) proportional and derivative gains.
-
+            The current proportional and derivative gains as (kps, kds).
         """
         kps, kds = self._articulation_view.get_gains()
         return kps[0], kds[0]
@@ -148,11 +149,10 @@ class ArticulationController(object):
         """Switch the control mode for all DOFs.
 
         Args:
-            mode: The control mode ("position", "velocity", or "effort").
+            mode: The control mode, such as "position", "velocity", or "effort".
 
         Raises:
             Exception: If the articulation view is not initialized.
-
         """
         self._require_initialized()
         self._articulation_view.switch_control_mode(mode=mode)
@@ -163,11 +163,10 @@ class ArticulationController(object):
 
         Args:
             dof_index: Index of the DOF to switch control mode for.
-            mode: The control mode ("position", "velocity", or "effort").
+            mode: The control mode, such as "position", "velocity", or "effort".
 
         Raises:
             Exception: If the articulation view is not initialized.
-
         """
         self._require_initialized()
         self._articulation_view.switch_dof_control_mode(dof_index=dof_index, mode=mode)
@@ -181,7 +180,6 @@ class ArticulationController(object):
 
         Raises:
             Exception: If the articulation view is not initialized.
-
         """
         values = self._articulation_view._backend_utils.create_tensor_from_list(
             [values], dtype="float32", device=self._articulation_view._device
@@ -196,8 +194,7 @@ class ArticulationController(object):
             Exception: If the articulation view is not initialized.
 
         Returns:
-            Array of maximum effort values for each joint.
-
+            Maximum effort values for each joint, or None if the articulation view returns no values.
         """
         result = self._articulation_view.get_max_efforts()
         if result is not None:
@@ -216,8 +213,7 @@ class ArticulationController(object):
             Exception: If the articulation view is not initialized.
 
         Returns:
-            The result from the underlying articulation view's set_effort_modes method.
-
+            Result from the articulation view's set_effort_modes method.
         """
         return self._articulation_view.set_effort_modes(mode=mode, joint_indices=joint_indices)
 
@@ -228,8 +224,7 @@ class ArticulationController(object):
             Exception: If the articulation view is not initialized.
 
         Returns:
-            List of effort mode strings for each joint.
-
+            Effort mode strings for each joint.
         """
         result = self._articulation_view.get_effort_modes()
         if result is not None:
@@ -244,8 +239,7 @@ class ArticulationController(object):
             Exception: If the articulation view is not initialized.
 
         Returns:
-            Tuple of (lower_limits, upper_limits) arrays.
-
+            A tuple of (lower_limits, upper_limits) arrays.
         """
         result = self._articulation_view.get_dof_limits()
         if result is not None:
@@ -257,11 +251,10 @@ class ArticulationController(object):
         """Get the last applied articulation action.
 
         Raises:
-            Exception: If the articulation view is not initialized.
+            RuntimeError: If the articulation view is not initialized.
 
         Returns:
             Last applied action.
-
         """
         self._require_initialized()
         applied_actions = self._articulation_view.get_applied_actions()

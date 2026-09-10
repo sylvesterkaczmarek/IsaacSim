@@ -14,11 +14,11 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #if !defined(_WIN32)
-#    include <isaacsim/ros2/core/IpcBufferManager.h>
+#    include <isaacsim/ros2/core/IpcBufferManager.hpp>
 #endif
 
 #include <carb/RenderingTypes.h>
@@ -28,13 +28,15 @@
 #include <carb/thread/Mutex.h>
 #include <carb/thread/SetName.h>
 
-#include <isaacsim/core/includes/Buffer.h>
-#include <isaacsim/core/includes/ScopedCudaDevice.h>
-#include <isaacsim/ros2/core/Ros2Node.h>
+#include <isaacsim/core/includes/Buffer.hpp>
+#include <isaacsim/core/includes/ScopedCudaDevice.hpp>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
 
 #include <OgnROS2PublishImageDatabase.h>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <future>
 #include <queue>
 #include <thread>
 
@@ -78,6 +80,7 @@ public:
 
     std::shared_ptr<Ros2Publisher> publisher;
     std::shared_ptr<Ros2ImageMessage> message;
+    std::shared_ptr<std::promise<void>> completionPromise;
 };
 
 class PublishNitrosBridgeImageThreadData
@@ -135,7 +138,7 @@ public:
 
     void setQueueThreadSleepUs(int64_t durationUs)
     {
-        m_queueThreadSleepUs = durationUs;
+        m_queueThreadSleepUs.store(durationUs);
     }
 
     void enqueueAndStart(const PublishImageThreadData& data)
@@ -198,7 +201,7 @@ private:
     bool m_workerThreadShutdown = false;
     bool m_workerThreadCreated = false;
     // How long the queue thread sleeps between publishes
-    int64_t m_queueThreadSleepUs = 1000; // Default: 1ms = 1000us
+    std::atomic<int64_t> m_queueThreadSleepUs{ 1000 }; // Default: 1ms = 1000us
 };
 
 class OgnROS2PublishImage : public Ros2Node
@@ -317,6 +320,10 @@ public:
             CARB_PROFILE_ZONE(1, "[IsaacSim] wait for previous publish");
             // Wait for last message to publish before starting next
             state.m_tasks.wait();
+            if (state.m_queuePublish.valid())
+            {
+                state.m_queuePublish.wait();
+            }
         }
         // Check if subscription count is 0
         if (!state.m_publishWithoutVerification && !state.m_publisher.get()->getSubscriptionCount())
@@ -384,14 +391,27 @@ public:
             }
             else if (state.m_publishWithQueueThread)
             {
+                // The render product owns the GPU input pointer only for the current graph evaluation.
+                if (!copyImageData(publishImageThreadData))
+                {
+                    return false;
+                }
+                auto completionPromise = std::make_shared<std::promise<void>>();
+                auto queuePublish = completionPromise->get_future();
+                publishImageThreadData.completionPromise = completionPromise;
                 // Enqueue request and start worker thread if needed (single lock acquisition)
                 PublishImageWorkerThread::getInstance().enqueueAndStart(publishImageThreadData);
+                state.m_queuePublish = std::move(queuePublish);
             }
             else
             {
-                // In order to get the benefits of using a separate stream, do the work in a new thread
+                // Copy while the render product's GPU input pointer is valid, then publish in a task.
+                if (!copyImageData(publishImageThreadData))
+                {
+                    return false;
+                }
                 tasking->addTask(carb::tasking::Priority::eHigh, state.m_tasks,
-                                 [data = publishImageThreadData]() mutable { return publishImageHelper(data); });
+                                 [data = publishImageThreadData]() mutable { publishImageMessage(data); });
             }
         }
         return true;
@@ -423,9 +443,9 @@ public:
         return threadData;
     }
 
-    static bool publishImageHelper(PublishImageThreadData& data)
+    static bool copyImageData(PublishImageThreadData& data)
     {
-        CARB_PROFILE_ZONE(1, "[IsaacSim] Publish Image Thread");
+        CARB_PROFILE_ZONE(1, "[IsaacSim] Copy Image Data");
         isaacsim::core::includes::ScopedDevice scopedDev(data.cudaDeviceIndex);
 
         // If the device doesn't match and we have created a stream, destroy it
@@ -482,11 +502,25 @@ public:
             CUDA_CHECK(cudaStreamSynchronize(*data.stream));
         }
 
-        {
-            CARB_PROFILE_ZONE(1, "[IsaacSim] image publisher publish");
-            data.publisher.get()->publish(data.message->getPtr());
-        }
         return true;
+    }
+
+    static bool publishImageHelper(PublishImageThreadData& data)
+    {
+        CARB_PROFILE_ZONE(1, "[IsaacSim] Publish Image Thread");
+        if (!copyImageData(data))
+        {
+            return false;
+        }
+
+        publishImageMessage(data);
+        return true;
+    }
+
+    static void publishImageMessage(PublishImageThreadData& data)
+    {
+        CARB_PROFILE_ZONE(1, "[IsaacSim] image publisher publish");
+        data.publisher.get()->publish(data.message->getPtr());
     }
 
     PublishNitrosBridgeImageThreadData buildNitrosBridgeThreadData(OgnROS2PublishImageDatabase& db,
@@ -724,9 +758,10 @@ public:
             // Wait for last message to publish before starting next
             m_tasks.wait();
             m_nitrosBridgeTasks.wait();
-
-            auto& workerThread = PublishImageWorkerThread::getInstance();
-            workerThread.shutdown();
+            if (m_queuePublish.valid())
+            {
+                m_queuePublish.wait();
+            }
         }
         if (m_streamNotCreated == false)
         {
@@ -767,6 +802,7 @@ private:
     std::string m_frameId = "sim_camera";
 
     carb::tasking::TaskGroup m_tasks;
+    std::future<void> m_queuePublish;
     cudaStream_t m_stream;
     int m_streamDevice = -1;
     bool m_streamNotCreated = true;
@@ -812,11 +848,15 @@ void PublishImageWorkerThread::_workerThreadFunction()
         }
 
         // Process the request without holding the lock
-        OgnROS2PublishImage::publishImageHelper(data);
+        OgnROS2PublishImage::publishImageMessage(data);
+        if (data.completionPromise)
+        {
+            data.completionPromise->set_value();
+        }
 
         // Configurable delay with no resources held.  This is done to allow other higher priority threads to run
         // between publish tasks.
-        carb::cpp::this_thread::sleep_for(std::chrono::microseconds(m_queueThreadSleepUs));
+        carb::cpp::this_thread::sleep_for(std::chrono::microseconds(m_queueThreadSleepUs.load()));
     }
 }
 

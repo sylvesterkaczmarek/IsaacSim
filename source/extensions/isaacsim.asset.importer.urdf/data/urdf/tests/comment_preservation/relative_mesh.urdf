@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="test">
+  <!-- arbitrary robot comment -->
+  <link name="base">
+    <visual>
+      <geometry><mesh filename="meshes/body.obj"/></geometry>
+      <!-- isaac:source_geometry {"type": "Capsule"} -->
+    </visual>
+  </link>
+</robot>

@@ -1,0 +1,11 @@
+# Dependencies for the standalone zmq_server.py tool. Install into the build's Python with:
+#   ./python.sh -m pip install -r tools/zmq_bridge/requirements.txt
+#
+# ovui is the standalone distribution of Omniverse's omni.ui (import namespace `omni.ui`); the glfw
+# wheel provides libglfw.so.3 for ovui's native OpenGL backend. Both publish Linux x86_64 and
+# aarch64 wheels, so the viewer installs on DGX Spark / Jetson aarch64 as well as x86_64.
+ovui==0.1.1
+glfw==2.10.0
+protobuf
+pyzmq
+warp-lang

@@ -16,6 +16,7 @@
 """Utility functions for the grasping UI including prim selection, visualization, and grasp phase management."""
 
 import carb
+import isaacsim.core.experimental.utils.stage as stage_utils
 import isaacsim.replicator.grasping.grasping_utils as grasping_utils
 import isaacsim.replicator.grasping.sampler_utils as sampler_utils
 import numpy as np
@@ -67,7 +68,11 @@ def get_valid_prim_from_path(prim_path: str) -> Usd.Prim | None:
     if not Sdf.Path.IsValidPathString(prim_path):
         carb.log_warn(f"Prim path '{prim_path}' is not a valid path format.")
         return None
-    stage = omni.usd.get_context().get_stage()
+    try:
+        stage = stage_utils.get_current_stage()
+    except ValueError:
+        carb.log_warn("Cannot resolve prim: no USD stage is available.")
+        return None
     prim = stage.GetPrimAtPath(prim_path)
     if not prim.IsValid():
         carb.log_warn(f"Prim at path '{prim_path}' is not valid or does not exist in the stage.")

@@ -20,6 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import isaacsim.core.experimental.utils.prim as prim_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.usd
 from isaacsim.core.experimental.prims import Articulation
 from pxr import Sdf, Usd, UsdGeom, UsdPhysics
@@ -27,6 +29,13 @@ from pxr import Sdf, Usd, UsdGeom, UsdPhysics
 from .controllers.grasp import load_grasp_config
 from .coordinate_utils import CoordinateSystem
 from .markers_manager import MarkersManager
+from .retargeting_grasp import (
+    GraspDriveMode,
+    GraspRetargeterKind,
+    parse_grasp_drive_mode,
+    parse_grasp_retargeter_kind,
+    validate_trihand_joint_aliases,
+)
 from .teleop_profiles import TeleopProfile
 from .xr_anchor_manager import AnchorRotationMode
 
@@ -92,21 +101,19 @@ def resolve_teleop_profile(profile: TeleopProfile) -> TeleopResolutionReport:
     Returns:
         The requested value.
     """
-    usd_context = omni.usd.get_context()
-    stage = usd_context.get_stage()
-    if stage is None:
+    if not stage_utils.is_stage_set() and omni.usd.get_context().get_stage() is None:
         return TeleopResolutionReport(
             stage_state=STAGE_STATE_NO_STAGE,
             stage_message="No stage is open.",
         )
 
-    _, _, remaining = usd_context.get_stage_loading_status()
-    if remaining > 0:
+    if stage_utils.is_stage_loading():
         return TeleopResolutionReport(
             stage_state=STAGE_STATE_LOADING,
             stage_message="Stage is still loading.",
         )
 
+    stage = stage_utils.get_current_stage()
     report = TeleopResolutionReport(
         stage_state=STAGE_STATE_READY,
         stage_message="Stage is ready.",
@@ -116,6 +123,7 @@ def resolve_teleop_profile(profile: TeleopProfile) -> TeleopResolutionReport:
     _validate_ik_profile(profile, report)
     _validate_grasp_profile(profile, report)
     _validate_locomotion_profile(profile, stage, report)
+    _validate_visual_cues_profile(profile, stage, report)
     return report
 
 
@@ -144,7 +152,9 @@ def _validate_session_settings(profile: TeleopProfile, stage: Usd.Stage, report:
     if not profile.session.tracking_space_enabled or not tracking_space_path:
         return
 
-    if tracking_space_path.startswith(MarkersManager.MARKERS_SCOPE):
+    if tracking_space_path == MarkersManager.MARKERS_SCOPE or tracking_space_path.startswith(
+        f"{MarkersManager.MARKERS_SCOPE}/"
+    ):
         report.issues.append(
             TeleopResolverIssue(
                 source="Session Tracking Space",
@@ -196,7 +206,7 @@ def _validate_floating_profile(profile: TeleopProfile, stage: Usd.Stage, report:
         prim = _get_stage_prim(stage, prim_path, f"Floating {side_name}", report)
         if prim is None:
             continue
-        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+        if not prim_utils.has_api(prim, UsdPhysics.RigidBodyAPI):
             report.issues.append(
                 TeleopResolverIssue(
                     source=f"Floating {side_name}",
@@ -293,13 +303,48 @@ def _validate_grasp_profile(profile: TeleopProfile, report: TeleopResolutionRepo
 
     validator = GraspController()
     for side_name, side in (("Left", profile.grasp.left), ("Right", profile.grasp.right)):
+        source = f"Grasp {side_name}"
+        severity = SEVERITY_ERROR if side.enabled else SEVERITY_WARNING
+        try:
+            drive_mode = parse_grasp_drive_mode(side.drive_mode)
+        except ValueError:
+            drive_mode = None
+            report.issues.append(
+                TeleopResolverIssue(
+                    source=source,
+                    severity=severity,
+                    message=f"Unknown grasp drive_mode '{side.drive_mode}'.",
+                )
+            )
+
+        retargeter_kind = None
+        if drive_mode == GraspDriveMode.RETARGETED:
+            try:
+                retargeter_kind = parse_grasp_retargeter_kind(side.retargeter_kind)
+            except ValueError:
+                report.issues.append(
+                    TeleopResolverIssue(
+                        source=source,
+                        severity=severity,
+                        message=f"Unknown grasp retargeter_kind '{side.retargeter_kind}'.",
+                    )
+                )
+            if retargeter_kind != GraspRetargeterKind.TRIHAND:
+                report.issues.append(
+                    TeleopResolverIssue(
+                        source=source,
+                        severity=severity,
+                        message="retargeted drive_mode requires retargeter_kind 'trihand'.",
+                    )
+                )
+
         prim_path = side.prim_path.strip()
         has_config_path = bool(side.config_path.strip())
         if not prim_path:
             if side.enabled or has_config_path:
                 report.issues.append(
                     TeleopResolverIssue(
-                        source=f"Grasp {side_name}",
+                        source=source,
                         severity=SEVERITY_ERROR,
                         message="No grasp prim path is configured.",
                     )
@@ -310,25 +355,44 @@ def _validate_grasp_profile(profile: TeleopProfile, report: TeleopResolutionRepo
         if not validation.is_valid:
             report.issues.append(
                 TeleopResolverIssue(
-                    source=f"Grasp {side_name}",
+                    source=source,
                     severity=SEVERITY_ERROR,
                     message="; ".join(validation.errors) if validation.errors else "Invalid grasp prim.",
                 )
             )
 
         if has_config_path:
-            _, errors = load_grasp_config(side.config_path)
+            config, errors = load_grasp_config(side.config_path)
         else:
+            config = None
             errors = ["No grasp config is selected."]
 
         if errors:
             report.issues.append(
                 TeleopResolverIssue(
-                    source=f"Grasp {side_name}",
-                    severity=SEVERITY_ERROR if side.enabled else SEVERITY_WARNING,
+                    source=source,
+                    severity=severity,
                     message="; ".join(errors),
                 )
             )
+
+        if drive_mode == GraspDriveMode.RETARGETED:
+            available_joint_names = None
+            if validation.is_valid:
+                available_joint_names = {Sdf.Path(path).name for path in validation.drive_joint_paths}
+            alias_errors = validate_trihand_joint_aliases(
+                config,
+                side.joint_aliases,
+                available_joint_names=available_joint_names,
+            )
+            for message in alias_errors:
+                report.issues.append(
+                    TeleopResolverIssue(
+                        source=source,
+                        severity=severity,
+                        message=message,
+                    )
+                )
 
 
 def _validate_locomotion_profile(profile: TeleopProfile, stage: Usd.Stage, report: TeleopResolutionReport) -> None:
@@ -345,6 +409,14 @@ def _validate_locomotion_profile(profile: TeleopProfile, stage: Usd.Stage, repor
         return
 
     _validate_xformable_path(stage, "Locomotion", prim_path, report)
+
+
+def _validate_visual_cues_profile(profile: TeleopProfile, stage: Usd.Stage, report: TeleopResolutionReport) -> None:
+    for side_name, side in (("Left", profile.visual_cues.left), ("Right", profile.visual_cues.right)):
+        prim_path = side.prim_path.strip()
+        if not prim_path:
+            continue
+        _validate_xformable_path(stage, f"Visual Cues {side_name}", prim_path, report)
 
 
 def _validate_xformable_path(stage: Usd.Stage, source: str, path: str, report: TeleopResolutionReport) -> None:

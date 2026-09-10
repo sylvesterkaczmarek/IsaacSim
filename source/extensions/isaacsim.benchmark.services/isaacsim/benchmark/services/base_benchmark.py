@@ -378,6 +378,15 @@ class _BaseIsaacBenchmarkCore:
             phase_name: The phase name to which the measurement belongs.
             custom_measurement: The measurement object to store.
         """
+        if isinstance(self._metrics, backend.OmniPerfKPIFile) and not isinstance(
+            custom_measurement, measurements.SingleMeasurement
+        ):
+            carb.log_warn(
+                "OmniPerfKPIFile supports only SingleMeasurement custom measurements. "
+                f"{type(custom_measurement).__name__} '{custom_measurement.name}' for phase '{phase_name}' "
+                "will not be written; use JSONFileMetrics to preserve this measurement type."
+            )
+
         # Check if the phase already exists
         existing_phase = next((phase for phase in self._test_phases if phase.phase_name == phase_name), None)
 
@@ -505,6 +514,9 @@ class BaseIsaacBenchmark(_BaseIsaacBenchmarkCore):
 
     def store_custom_measurement(self, phase_name: str, custom_measurement: measurements.Measurement) -> None:
         """Store a custom measurement for the current benchmark.
+
+        ``OmniPerfKPIFile`` writes only ``SingleMeasurement`` custom measurements.
+        Other measurement types produce a warning and are omitted from its KPI output.
 
         Args:
             phase_name: The phase name to which the measurement belongs.
@@ -671,6 +683,9 @@ class BaseIsaacBenchmarkAsync(_BaseIsaacBenchmarkCore, omni.kit.test.AsyncTestCa
 
     async def store_custom_measurement(self, phase_name: str, custom_measurement: measurements.Measurement) -> None:
         """Store a custom measurement for the current benchmark.
+
+        ``OmniPerfKPIFile`` writes only ``SingleMeasurement`` custom measurements.
+        Other measurement types produce a warning and are omitted from its KPI output.
 
         Args:
             phase_name: The phase name to which the measurement belongs.

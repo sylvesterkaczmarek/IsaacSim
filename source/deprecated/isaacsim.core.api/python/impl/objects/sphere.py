@@ -31,24 +31,24 @@ from pxr import Gf, UsdGeom
 
 
 class VisualSphere(SingleGeometryPrim):
-    """High level wrapper to create/encapsulate a visual sphere.
+    """High level wrapper to create or encapsulate a visual sphere.
 
     .. note::
 
-        Visual spheres (Sphere shape) have no collisions (Collider API) or rigid body dynamics (Rigid Body API)
+        Visual spheres (Sphere shape) have no collisions (Collider API) or rigid body dynamics (Rigid Body API).
 
     Args:
         prim_path: Prim path of the Prim to encapsulate or create.
-        name: Shortname to be used as a key by Scene class.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: Position in the world frame of the prim. shape is (3, ).
+        position: Position in the world frame of the prim. Shape is (3, ).
         translation: Translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: Quaternion orientation in the world/ local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world or local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: Local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: Set to false for an invisible prim in the stage while rendering.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim dimensions. Shape is (3, ).
+        visible: Set to False for an invisible prim in the stage while rendering.
         color: Color of the visual shape.
         radius: Sphere radius.
         visual_material: Visual material to be applied to the held prim.
@@ -65,7 +65,6 @@ class VisualSphere(SingleGeometryPrim):
         >>> prim = VisualSphere(prim_path="/World/Xform/Sphere", color=np.array([1.0, 0.0, 0.0]))
         >>> prim
         <isaacsim.core.api.objects.sphere.VisualSphere object at 0x7f4e3eb3ea70>
-
     """
 
     def __init__(
@@ -122,14 +121,13 @@ class VisualSphere(SingleGeometryPrim):
         """Set the sphere radius.
 
         Args:
-            radius: sphere radius
+            radius: Sphere radius.
 
         Example:
 
         .. code-block:: python
 
             >>> prim.set_radius(2.0)
-
         """
         self.geom.GetRadiusAttr().Set(radius)
         return
@@ -146,7 +144,6 @@ class VisualSphere(SingleGeometryPrim):
 
             >>> prim.get_radius()
             1.0
-
         """
         return self.geom.GetRadiusAttr().Get()
 
@@ -156,25 +153,25 @@ class FixedSphere(VisualSphere):
 
     .. note::
 
-        Fixed spheres (Sphere shape) have collisions (Collider API) but no rigid body dynamics (Rigid Body API)
+        Fixed spheres (Sphere shape) have collisions (Collider API) but no rigid body dynamics (Rigid Body API).
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create
-        name: shortname to be used as a key by Scene class.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. shape is (3, ).
-        translation: translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
+        position: Position in the world frame of the prim. Shape is (3, ).
+        translation: Translation in the local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world/local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        color: color of the visual shape.
-        radius: sphere radius.
-        visual_material: visual material to be applied to the held prim.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to false for an invisible prim in the stage while rendering.
+        color: Color of the visual shape.
+        radius: Sphere radius.
+        visual_material: Visual material to be applied to the held prim.
             If not specified, a default visual material will be added.
-        physics_material: physics material to be applied to the held prim.
+        physics_material: Physics material to be applied to the held prim.
             If not specified, a default physics material will be added.
 
     Example:
@@ -188,7 +185,6 @@ class FixedSphere(VisualSphere):
         >>> prim = FixedSphere(prim_path="/World/Xform/Sphere", color=np.array([1.0, 0.0, 0.0]))
         >>> prim
         <isaacsim.core.api.objects.sphere.FixedSphere object at 0x7f4e433f2140>
-
     """
 
     def __init__(
@@ -248,27 +244,27 @@ class DynamicSphere(SingleRigidPrim, FixedSphere):
         Dynamic spheres (Sphere shape) have collisions (Collider API) and rigid body dynamics (Rigid Body API)
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create
-        name: shortname to be used as a key by Scene class.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. shape is (3, ).
-        translation: translation in the local frame of the prim
+        position: Position in the world frame of the prim. shape is (3, ).
+        translation: Translation in the local frame of the prim
             (with respect to its parent prim). shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
+        orientation: Quaternion orientation in the world/local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        color: color of the visual shape.
-        radius: sphere radius.
-        visual_material: visual material to be applied to the held prim.
+            Quaternion is scalar-first (w, x, y, z). shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. shape is (3, ).
+        visible: Set to False for an invisible prim in the stage while rendering.
+        color: Color of the visual shape.
+        radius: Sphere radius.
+        visual_material: Visual material to be applied to the held prim.
             If not specified, a default visual material will be added.
-        physics_material: physics material to be applied to the held prim.
+        physics_material: Physics material to be applied to the held prim.
             If not specified, a default physics material will be added.
-        mass: mass in kg.
-        density: density.
-        linear_velocity: linear velocity in the world frame.
-        angular_velocity: angular velocity in the world frame.
+        mass: Mass in kg.
+        density: Density.
+        linear_velocity: Linear velocity in the world frame.
+        angular_velocity: Angular velocity in the world frame.
 
     Example:
 
@@ -277,11 +273,10 @@ class DynamicSphere(SingleRigidPrim, FixedSphere):
         >>> from isaacsim.core.api.objects import DynamicSphere
         >>> import numpy as np
         >>>
-        >>> # create a red dynamic sphere of mass 1kg at the given path
+        >>> # create a red dynamic sphere of mass 1 kg at the given path
         >>> prim = DynamicSphere(prim_path="/World/Xform/Sphere", color=np.array([1.0, 0.0, 0.0]), mass=1.0)
         >>> prim
         <isaacsim.core.api.objects.sphere.DynamicSphere object at 0x7f4deaf8f010>
-
     """
 
     def __init__(

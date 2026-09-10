@@ -24,12 +24,13 @@ Controls:
 
 from __future__ import annotations
 
+import carb.eventdispatcher
 import carb.settings
 import omni.timeline
 import omni.ui as ui
 from isaacsim.gui.components.ui_utils import get_style
 from isaacsim.replicator.teleop import LocomotionProfile, TeleopManager
-from isaacsim.replicator.teleop.controllers import LocomotionController
+from isaacsim.replicator.teleop.controllers import LocomotionController, LocomotionDriveMode
 
 from .ui_helpers import (
     CLR_DIM,
@@ -63,6 +64,9 @@ def set_status(label: ui.Label | None, text: str, color: int = CLR_DIM, emit_ter
 
 _SETTINGS_PREFIX = "/persistent/exts/isaacsim.replicator.teleop/locomotion"
 
+_DRIVE_MODES = (LocomotionDriveMode.AUTO, LocomotionDriveMode.TELEPORT, LocomotionDriveMode.VELOCITY)
+_DRIVE_MODE_LABELS = ("Auto", "Teleport (kinematic)", "Velocity (physics)")
+
 
 class LocomotionPanel:
     """Panel for kinematic slide locomotion via VR controller input.
@@ -91,15 +95,24 @@ class LocomotionPanel:
         self._enable_btn: ui.Button | None = None
         self._clear_btn: ui.Button | None = None
         self._status_label: ui.Label | None = None
+        self._drive_mode_combo: ui.ComboBox | None = None
         self._linear_step_slider: ui.FloatSlider | None = None
         self._angular_step_slider: ui.FloatSlider | None = None
+        self._linear_speed_slider: ui.FloatSlider | None = None
+        self._angular_speed_slider: ui.FloatSlider | None = None
         self._configured: bool = False
         self._desired_enabled: bool = False
         self._is_playing: bool = False
-        self._timeline_sub = (
-            omni.timeline.get_timeline_interface()
-            .get_timeline_event_stream()
-            .create_subscription_to_pop(self._on_timeline_event, name="LocomotionPanel_timeline")
+        event_dispatcher = carb.eventdispatcher.get_eventdispatcher()
+        self._timeline_play_sub = event_dispatcher.observe_event(
+            event_name=omni.timeline.GLOBAL_EVENT_PLAY,
+            on_event=self._on_timeline_play,
+            observer_name="LocomotionPanel._on_timeline_play",
+        )
+        self._timeline_stop_sub = event_dispatcher.observe_event(
+            event_name=omni.timeline.GLOBAL_EVENT_STOP,
+            on_event=self._on_timeline_stop,
+            observer_name="LocomotionPanel._on_timeline_stop",
         )
 
         self._settings.set_default_string(f"{_SETTINGS_PREFIX}/path", "")
@@ -124,13 +137,26 @@ class LocomotionPanel:
             "Meta-style controllers)."
         )
         angular_step_tooltip = "Turn angle per app update at full right-thumbstick left/right yaw input."
+        drive_mode_tooltip = (
+            "How the base is moved. Auto picks Velocity for a dynamic (non-kinematic) rigid-body target and "
+            "Teleport otherwise. Teleport writes the world pose kinematically and carries parented children even "
+            "when they are not physically jointed. Velocity commands a physics velocity on the base rigid body, "
+            "producing real contacts; only physically jointed payloads follow, and a plain Xform or kinematic body "
+            "cannot be velocity-driven (it falls back to Teleport)."
+        )
+        linear_speed_tooltip = (
+            "Maximum base linear speed (m/s) at full input in Velocity mode. Applies to forward/backward and "
+            "left/right slide, plus vertical motion from the right face buttons."
+        )
+        angular_speed_tooltip = "Maximum base yaw rate (rad/s) at full right-thumbstick yaw input in Velocity mode."
         enable_tooltip = (
             "Enable or disable slide locomotion for the next Play session. During Play, enabled locomotion reads "
             "the left thumbstick for slide motion, the right thumbstick for turn, and the right face buttons for "
             "vertical movement. Press the left primary face button (`X` on Meta-style controllers) to toggle "
             "Carry Tracking Space. When enabled, locomotion also moves the Session panel's Tracking Space prim "
-            "with the base, including turn rotation around the base pivot; the current toggle state is printed to "
-            "the terminal."
+            "with the base, including turn rotation around the base pivot. Custom anchors must already have a "
+            "writable translate/orient/scale xform stack; Teleop never rewrites one automatically. The current "
+            "toggle state is printed to the terminal."
         )
         clear_tooltip = "Clear the configured locomotion state and keep the saved base path."
 
@@ -155,6 +181,19 @@ class LocomotionPanel:
                 self._configure_btn = path_btns.get("apply")
                 self._plus_btn = path_btns.get("plus")
                 self._del_btn = path_btns.get("delete")
+
+                with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
+                    ui.Spacer(width=INDENT)
+                    ui.Label("Drive Mode:", width=85, tooltip=drive_mode_tooltip)
+                    self._drive_mode_combo = ui.ComboBox(
+                        _DRIVE_MODES.index(self._loco.drive_mode),
+                        *_DRIVE_MODE_LABELS,
+                        width=ui.Fraction(1),
+                        tooltip=drive_mode_tooltip,
+                    )
+                    self._drive_mode_combo.model.add_item_changed_fn(
+                        lambda m, _i: self._on_drive_mode_changed(m.get_item_value_model().as_int)
+                    )
 
                 with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
                     ui.Spacer(width=INDENT)
@@ -188,6 +227,36 @@ class LocomotionPanel:
 
                 with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
                     ui.Spacer(width=INDENT)
+                    ui.Label("Lin Speed:", width=85, tooltip=linear_speed_tooltip)
+                    self._linear_speed_slider = ui.FloatSlider(
+                        min=0.0,
+                        max=5.0,
+                        step=0.05,
+                        width=ui.Fraction(1),
+                        tooltip=linear_speed_tooltip,
+                    )
+                    self._linear_speed_slider.model.set_value(self._loco.linear_speed)
+                    self._linear_speed_slider.model.add_value_changed_fn(
+                        lambda m: self._loco.set_linear_speed(m.get_value_as_float())
+                    )
+
+                with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
+                    ui.Spacer(width=INDENT)
+                    ui.Label("Ang Speed:", width=85, tooltip=angular_speed_tooltip)
+                    self._angular_speed_slider = ui.FloatSlider(
+                        min=0.0,
+                        max=5.0,
+                        step=0.05,
+                        width=ui.Fraction(1),
+                        tooltip=angular_speed_tooltip,
+                    )
+                    self._angular_speed_slider.model.set_value(self._loco.angular_speed)
+                    self._angular_speed_slider.model.add_value_changed_fn(
+                        lambda m: self._loco.set_angular_speed(m.get_value_as_float())
+                    )
+
+                with ui.HStack(spacing=ROW_SPACING, height=ROW_HEIGHT):
+                    ui.Spacer(width=INDENT)
                     self._enable_btn = ui.Button(
                         "Enable",
                         width=55,
@@ -210,24 +279,33 @@ class LocomotionPanel:
     # Timeline-driven UI locking
     # ------------------------------------------------------------------
 
-    def _on_timeline_event(self, event: object) -> None:
-        if event.type == int(omni.timeline.TimelineEventType.PLAY):
-            self._is_playing = True
-            self._sync_controls()
-            if self._loco.is_running:
-                self._tm.set_locomotion_tracking(True)
-                set_status(self._status_label, "Active", CLR_GREEN, emit_terminal=True)
-        elif event.type == int(omni.timeline.TimelineEventType.STOP):
-            self._is_playing = False
-            self._sync_controls()
-            if self._configured:
-                set_status(self._status_label, "Standby", CLR_YELLOW, emit_terminal=True)
-            else:
-                set_status(self._status_label, "", CLR_DIM)
+    def _on_timeline_play(self, _event: object) -> None:
+        self._is_playing = True
+        self._sync_controls()
+        if self._loco.is_running:
+            self._tm.set_locomotion_tracking(True)
+            set_status(self._status_label, "Active", CLR_GREEN, emit_terminal=True)
+
+    def _on_timeline_stop(self, _event: object) -> None:
+        self._is_playing = False
+        self._sync_controls()
+        if self._configured:
+            set_status(self._status_label, "Standby", CLR_YELLOW, emit_terminal=True)
+        else:
+            set_status(self._status_label, "", CLR_DIM)
 
     # ------------------------------------------------------------------
     # Callbacks
     # ------------------------------------------------------------------
+
+    def _on_drive_mode_changed(self, index: int) -> None:
+        """Apply the selected drive mode to the controller.
+
+        Args:
+            index: Selected combo item index into ``_DRIVE_MODES``.
+        """
+        index = max(0, min(index, len(_DRIVE_MODES) - 1))
+        self._loco.set_drive_mode(_DRIVE_MODES[index])
 
     def _on_configure(self) -> None:
         """Validate the base path and transitions to configured state."""
@@ -297,8 +375,7 @@ class LocomotionPanel:
 
     def _sync_controls(self) -> None:
         path_editable = (not self._is_playing) and (not self._configured)
-        enabled_for_play = self._loco.is_running or self._tm.is_locomotion_tracking
-        for widget in (self._path_field, self._plus_btn, self._del_btn, self._configure_btn):
+        for widget in (self._path_field, self._plus_btn, self._del_btn, self._configure_btn, self._drive_mode_combo):
             if widget:
                 widget.enabled = path_editable
         if self._enable_btn:
@@ -316,8 +393,11 @@ class LocomotionPanel:
         path = self._path_field.model.get_value_as_string() if self._path_field else ""
         settings = {
             "prim_path": path,
+            "drive_mode": self._loco.drive_mode.value,
             "linear_step": self._loco.linear_step,
             "angular_step": self._loco.angular_step,
+            "linear_speed": self._loco.linear_speed,
+            "angular_speed": self._loco.angular_speed,
         }
         return LocomotionProfile(
             enabled=self._desired_enabled,
@@ -343,8 +423,18 @@ class LocomotionPanel:
         self._save("path", path)
         self._loco.set_prim_path(path)
 
+        try:
+            drive_mode = LocomotionDriveMode(str(profile.settings.get("drive_mode", self._loco.drive_mode.value)))
+        except ValueError:
+            drive_mode = LocomotionDriveMode.AUTO
+        self._loco.set_drive_mode(drive_mode)
+        if self._drive_mode_combo:
+            self._drive_mode_combo.model.get_item_value_model().set_value(_DRIVE_MODES.index(drive_mode))
+
         linear_step = float(profile.settings.get("linear_step", self._loco.linear_step))
         angular_step = float(profile.settings.get("angular_step", self._loco.angular_step))
+        linear_speed = float(profile.settings.get("linear_speed", self._loco.linear_speed))
+        angular_speed = float(profile.settings.get("angular_speed", self._loco.angular_speed))
         if self._linear_step_slider:
             self._linear_step_slider.model.set_value(linear_step)
         else:
@@ -353,6 +443,14 @@ class LocomotionPanel:
             self._angular_step_slider.model.set_value(angular_step)
         else:
             self._loco.set_angular_step(angular_step)
+        if self._linear_speed_slider:
+            self._linear_speed_slider.model.set_value(linear_speed)
+        else:
+            self._loco.set_linear_speed(linear_speed)
+        if self._angular_speed_slider:
+            self._angular_speed_slider.model.set_value(angular_speed)
+        else:
+            self._loco.set_angular_speed(angular_speed)
 
         if not path:
             self._sync_controls()
@@ -390,5 +488,6 @@ class LocomotionPanel:
                 set_status(self._status_label, "", CLR_DIM)
 
     def destroy(self) -> None:
-        """Release the timeline subscription."""
-        self._timeline_sub = None
+        """Release the timeline subscriptions."""
+        self._timeline_play_sub = None
+        self._timeline_stop_sub = None

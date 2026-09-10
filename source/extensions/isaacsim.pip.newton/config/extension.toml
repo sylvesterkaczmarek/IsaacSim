@@ -4,7 +4,7 @@ order = -1000
 reloadable = false
 
 [package]
-version = "0.6.1"
+version = "0.11.0"
 category = "Internal"
 title = "Newton Physics Pip Archive"
 description = "Pip packages for the Newton physics engine"
@@ -30,4 +30,8 @@ name = "isaacsim.pip.newton"
 [[test]]
 dependencies = [
     "omni.warp.core"
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]

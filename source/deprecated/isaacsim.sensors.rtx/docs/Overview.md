@@ -4,93 +4,196 @@
 This extension is deprecated in favor of `isaacsim.sensors.experimental.rtx`.
 ```
 
-The isaacsim.sensors.rtx extension provides APIs for creating and managing RTX-based sensors in Isaac Sim, including RTX Lidar, RTX Radar, and RTX Idealized Depth Sensors (IDS). These sensors leverage RTX ray tracing technology for high-fidelity sensor simulation in robotics applications.
+`**isaacsim.sensors.rtx**` provides Python APIs for RTX-based sensor simulation, including creation commands for RTX Lidar, RTX Radar, and RTX IDS sensors. It is mainly used to create sensor prims from configs or USD assets, then collect sensor output through annotators and writers. RTX Radar creation has one important requirement: Motion BVH must be enabled, otherwise {class}`IsaacSensorCreateRtxRadar <isaacsim.sensors.rtx.IsaacSensorCreateRtxRadar>` logs a warning and does not create a prim.
 
-## Migration
+## Concepts
 
-New code should use the `isaacsim.sensors.experimental.rtx` extension. The mappings below cover the most common call sites; see the **Multitick Rendering** section of the Isaac Sim sensors documentation for the full migration guide, including the multi-tick rendering changes that ship with Isaac Sim 6.0.
+### Sensor creation commands
 
-| 5.x (this extension)                                  | 6.0 replacement (`isaacsim.sensors.experimental.rtx`)                                                                  |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `IsaacSensorCreateRtxLidar` Kit command               | {class}`Lidar.create(path, config=...) <isaacsim.sensors.experimental.rtx.Lidar>`                                      |
-| `IsaacSensorCreateRtxRadar` Kit command               | {class}`Radar(path, ...) <isaacsim.sensors.experimental.rtx.Radar>`                                                    |
-| `IsaacSensorCreateRtxIDS` Kit command                 | No equivalent in `isaacsim.sensors.experimental.rtx` today; may be supported in a future release. In the meantime, continue to use this deprecated command or author the IDS occupancy prim directly in USD. |
-| `LidarRtx` runtime class                              | {class}`LidarSensor <isaacsim.sensors.experimental.rtx.LidarSensor>` wrapping a {class}`Lidar <isaacsim.sensors.experimental.rtx.Lidar>` authoring object |
-| `omni:sensor:Core:auxOutputType` USD attribute (Lidar) | `_replicator:rendervar:GenericModelOutput:channels = ["FULL"]` on the `OmniLidar` prim, or `aux_output_level="FULL"` on the constructor |
-| `omni:sensor:WpmDmat:auxOutputType` USD attribute (Radar) | `_replicator:rendervar:GenericModelOutput:channels = ["BASIC"]` on the `OmniRadar` prim, or `aux_output_level="BASIC"` on the constructor |
-| `IsaacExtractRTXSensorPointCloudNoAccumulator` annotator | `IsaacCreateRTXLidarScanBuffer` with `omni:sensor:Core:accumulateOutputs = false` on the prim, or the `IsaacExtractRTXSensorPointCloud` annotator from `isaacsim.sensors.rtx.nodes` |
-| `RtxLidarDebugDrawPointCloudBuffer` writer            | Same writer; still registered alongside the experimental extension                                                     |
-| Implicit "render every frame" sensor scheduling       | Set `omni:sensor:tickRate` on the prim. For `OmniLidar` it must equal `omni:sensor:Core:scanRateBaseHz`, otherwise the lidar emits partial scans every frame (see the **Multitick Rendering** documentation, which notes that the `OmniLidar` tick rate must match its scan rate) |
+The extension exposes command classes for creating RTX sensor prims:
 
-The deprecated extension still ships and continues to publish RTX sensor data to ROS 2/UCX/HSB pipelines for backward compatibility, but new features are added only to `isaacsim.sensors.experimental.rtx`.
+- {class}`IsaacSensorCreateRtxLidar <isaacsim.sensors.rtx.IsaacSensorCreateRtxLidar>`
+- {class}`IsaacSensorCreateRtxRadar <isaacsim.sensors.rtx.IsaacSensorCreateRtxRadar>`
+- {class}`IsaacSensorCreateRtxIDS <isaacsim.sensors.rtx.IsaacSensorCreateRtxIDS>`
+
+These commands inherit from `**omni.kit.commands.Command**`, so they can be executed through the Kit command system and support undo by deleting the created prim.
+
+The shared creation parameters include:
+
+- `path`: target path for the sensor prim
+- `parent`: parent prim path
+- `config`: named sensor configuration
+- `usd_path`: USD asset path for the sensor
+- `translation`: sensor placement
+- `orientation`: sensor orientation
+- `visibility`: sensor visibility
+- `variant`: sensor variant selection
+- `force_camera_prim`: forces direct camera prim creation
+
+If both `config` and `usd_path` are provided, `config` takes precedence.
+
+### Lidar frames
+
+{class}`LidarRtx <isaacsim.sensors.rtx.LidarRtx>` is the main runtime API for working with an RTX Lidar sensor. It wraps an existing Lidar prim and provides access to the current frame through `get_current_frame()`.
+
+A frame contains timing information, frame number information, and data from any attached annotators. The exact contents depend on which annotators are attached.
+
+### Annotators and writers
+
+Annotators add sensor outputs to the current frame. Writers are used for output handling or visualization workflows.
+
+Supported `LidarRtx.attach_annotator()` values include:
+
+- `IsaacComputeRTXLidarFlatScan`
+- `IsaacExtractRTXSensorPointCloudNoAccumulator`
+- `IsaacCreateRTXLidarScanBuffer`
+- `StableIdMap`
+- `GenericModelOutput`
+
+Writers are attached by name with `attach_writer()`, such as `RtxLidarDebugDrawPointCloud`.
 
 ## Key Components
 
-### Sensor Creation Commands
+### {class}`LidarRtx <isaacsim.sensors.rtx.LidarRtx>`
 
-The extension provides specialized command classes that inherit from `IsaacSensorCreateRtxSensor` for creating different types of RTX sensors:
+{class}`LidarRtx <isaacsim.sensors.rtx.LidarRtx>` provides the Python interface for creating and managing an RTX-based Lidar sensor object in a simulation script.
 
-- **{class}`IsaacSensorCreateRtxLidar <isaacsim.sensors.rtx.IsaacSensorCreateRtxLidar>`**: Creates RTX Lidar sensors with configurable parameters for point cloud generation
-- **{class}`IsaacSensorCreateRtxRadar <isaacsim.sensors.rtx.IsaacSensorCreateRtxRadar>`**: Creates RTX Radar sensors with motion compensation capabilities (requires Motion BVH)
-- **{class}`IsaacSensorCreateRtxIDS <isaacsim.sensors.rtx.IsaacSensorCreateRtxIDS>`**: Creates RTX Idealized Depth Sensors with occupancy detection features
+It accepts a `prim_path`, optional transform values, and an optional `config_file_name`. The prim at `prim_path` must be an `OmniLidar` or have the required sensor API, otherwise construction raises an exception.
 
-These commands support multiple creation methods including USD references, Replicator API integration, or direct camera prim creation based on the configuration and available APIs.
+Common operations include:
 
-### {class}`LidarRtx <isaacsim.sensors.rtx.LidarRtx>` Sensor Interface
+- `initialize()` to prepare sensor data acquisition
+- `get_current_frame()` to read the latest frame data
+- `attach_annotator()` and `detach_annotator()` to control frame outputs
+- `attach_writer()` and `detach_writer()` to connect writers
+- `pause()`, `resume()`, and `is_paused()` to control data acquisition
+- `enable_visualization()` and `disable_visualization()` for Lidar point cloud visualization
+- `get_render_product_path()` to inspect the render product used by the sensor
 
-The {class}`LidarRtx <isaacsim.sensors.rtx.LidarRtx>` class provides a comprehensive interface for RTX-based Lidar sensors, extending the base sensor API with RTX-specific functionality:
+### {class}`IsaacSensorCreateRtxLidar <isaacsim.sensors.rtx.IsaacSensorCreateRtxLidar>`
+
+{class}`IsaacSensorCreateRtxLidar <isaacsim.sensors.rtx.IsaacSensorCreateRtxLidar>` creates an RTX Lidar prim. After creation, it applies Lidar-specific output settings, including keeping invalid points, accumulating outputs, and mapping `auxOutputType` to the Replicator `RenderVar` channels attribute.
+
+Use this command when you want to create the sensor prim first, then wrap it with {class}`LidarRtx <isaacsim.sensors.rtx.LidarRtx>` for frame access.
+
+```{note}
+This extension is deprecated. Prefer the experimental RTX sensor APIs, where
+`Lidar(..., aux_output_level="EXTRA")` and `Radar(..., aux_output_level="BASIC")`
+author the metadata needed by GenericModelOutput.
+
+For this legacy command API, set aux output attributes such as
+`omni:sensor:Core:auxOutputType` at sensor creation time and before creating the
+render product or attaching GenericModelOutput/ScanBuffer annotators. Changing
+`auxOutputType` after the sensor prim has already been authored is not a
+supported way to reconfigure an existing GenericModelOutput RenderVar; recreate
+the render product/annotator path or use the experimental API instead.
+```
+
+### {class}`IsaacSensorCreateRtxRadar <isaacsim.sensors.rtx.IsaacSensorCreateRtxRadar>`
+
+{class}`IsaacSensorCreateRtxRadar <isaacsim.sensors.rtx.IsaacSensorCreateRtxRadar>` creates an RTX Radar prim. It checks Motion BVH settings before creating the sensor. If Motion BVH is not enabled, the command returns `None`.
+
+For a valid Radar prim, it maps Radar `auxOutputType` to the `RenderVar` channels attribute.
+
+### {class}`IsaacSensorCreateRtxIDS <isaacsim.sensors.rtx.IsaacSensorCreateRtxIDS>`
+
+{class}`IsaacSensorCreateRtxIDS <isaacsim.sensors.rtx.IsaacSensorCreateRtxIDS>` creates an RTX Idealized Depth Sensor. If no config is provided, it uses `idsoccupancy` as the default configuration.
+
+## Functionality
+
+### Create RTX sensors
+
+The creation commands can be executed through `**omni.kit.commands**`. This is useful when sensor creation should participate in the command and undo system.
+
+```python
+import omni.kit.commands
+from pxr import Gf
+
+# Use a supported Lidar config name for your installation.
+config_name = "..."
+
+prim = omni.kit.commands.execute(
+    "IsaacSensorCreateRtxLidar",
+    path="/World/Lidar",
+    config=config_name,
+    translation=Gf.Vec3d(0.0, 0.0, 1.0),
+    orientation=Gf.Quatd(1.0, 0.0, 0.0, 0.0),
+    visibility=False,
+)
+
+print(prim.GetPath())
+```
+
+### Read Lidar data
+
+After a Lidar prim exists, use {class}`LidarRtx <isaacsim.sensors.rtx.LidarRtx>` to attach annotators and read the current frame.
 
 ```python
 from isaacsim.sensors.rtx import LidarRtx
 
-# Create and configure a Lidar sensor
-lidar = LidarRtx(prim_path="/World/Lidar", name="my_lidar")
+lidar = LidarRtx(prim_path="/World/Lidar")
+lidar.attach_annotator("IsaacComputeRTXLidarFlatScan")
 lidar.initialize()
 
-# Attach annotators for data collection
-lidar.attach_annotator("IsaacComputeRTXLidarFlatScan")
-lidar.attach_annotator("IsaacCreateRTXLidarScanBuffer")
+frame = lidar.get_current_frame()
 
-# Get sensor data
-frame_data = lidar.get_current_frame()
+print(frame.keys())
+print(frame.get("rendering_time"))
 ```
 
-### Annotators and Writers
+### Visualize Lidar output
 
-The extension supports various annotators for different data collection modes:
+{class}`LidarRtx <isaacsim.sensors.rtx.LidarRtx>` can attach writers for visualization or output workflows. For point cloud debug drawing, attach a writer such as `RtxLidarDebugDrawPointCloud`.
 
-- **IsaacComputeRTXLidarFlatScan**: Generates flat scan data with point clouds and metadata
-- **IsaacExtractRTXSensorPointCloudNoAccumulator**: Extracts point cloud data without accumulation
-- **IsaacCreateRTXLidarScanBuffer**: Creates structured scan buffers for processing
-- **StableIdMap**: Provides stable object identification mapping
-- **{class}`GenericModelOutput <isaacsim.sensors.rtx.generic_model_output.GenericModelOutput>`**: Outputs standardized sensor data format
+```python
+from isaacsim.sensors.rtx import LidarRtx
 
-Writers enable visualization and debug capabilities, such as `RtxLidarDebugDrawPointCloud` for real-time point cloud visualization.
+lidar = LidarRtx(prim_path="/World/Lidar")
+lidar.attach_writer("RtxLidarDebugDrawPointCloud")
+lidar.enable_visualization()
+```
+
+### Decode object IDs and labels
+
+{class}`LidarRtx <isaacsim.sensors.rtx.LidarRtx>` includes helper methods for working with object identity outputs from `StableIdMap` and `GenericModelOutput`.
+
+```python
+from isaacsim.sensors.rtx import LidarRtx
+
+lidar = LidarRtx(prim_path="/World/Lidar")
+lidar.attach_annotator("StableIdMap")
+lidar.attach_annotator("IsaacCreateRTXLidarScanBuffer")
+lidar.initialize()
+
+frame = lidar.get_current_frame()
+
+stable_id_data = frame.get("StableIdMap")
+scan_buffer = frame.get("IsaacCreateRTXLidarScanBuffer")
+
+if stable_id_data is not None and scan_buffer is not None:
+    stable_id_to_label = LidarRtx.decode_stable_id_mapping(stable_id_data)
+    object_ids = LidarRtx.get_object_ids(scan_buffer["objectId"])
+
+    labels = [stable_id_to_label.get(object_id) for object_id in object_ids]
+    print(labels)
+```
+
+## Configuration
+
+The extension defines sensor-related settings that affect RTX sensor output behavior:
+
+- `app.sensors.nv.lidar.outputBufferOnGPU`: controls whether the renderer keeps the Lidar return buffer on GPU for post-processing.
+- `app.sensors.nv.radar.outputBufferOnGPU`: controls whether the renderer keeps the Radar return buffer on GPU for post-processing.
+- `rtx.materialDb.nonVisualMaterialCSV.enabled`: enables non-visual materials using USD attributes.
+- `rtx.materialDb.nonVisualMaterialSemantics.prefix`: sets the USD attribute prefix used for non-visual material semantics.
+- `rtx.rtxsensor.useHydraTimeAlways`: uses Hydra time from `**omni.timeline**` in RTX sensor models when multi-tick rendering is disabled.
 
 ## Relationships
 
-### Generic Model Output
+{class}`LidarRtx <isaacsim.sensors.rtx.LidarRtx>` inherits from `**isaacsim.core.api.sensors.base_sensor.BaseSensor**`, so it follows the same general sensor object pattern used by other Isaac Sim sensor APIs.
 
-The `isaacsim.sensors.rtx.generic_model_output` module defines a standardized data format for sensor outputs. It provides the {class}`GenericModelOutput <isaacsim.sensors.rtx.generic_model_output.GenericModelOutput>` class and associated enums for sensor modalities (LIDAR, RADAR, USS, IDS), coordinate types (CARTESIAN, SPHERICAL), and frame reference systems. This module enables consistent data exchange between different sensor types and external processing systems.
+The sensor creation classes inherit from `**omni.kit.commands.Command**`, which gives them command execution and undo behavior.
 
-### Nonvisual Materials
+The modules `**isaacsim.sensors.rtx.generic_model_output**` and `**isaacsim.sensors.rtx.sensor_checker**` forward their public symbols from `**isaacsim.sensors.experimental.rtx.generic_model_output**` and `**isaacsim.sensors.experimental.rtx.sensor_checker**`.
 
-The `isaacsim.sensors.rtx.nonvisual_materials` module provides functionality for applying and retrieving nonvisual material properties used by RTX sensors like LiDAR and radar. It includes {func}`apply_nonvisual_material <isaacsim.sensors.rtx.apply_nonvisual_material>` for setting material properties on USD prims, {func}`get_material_id <isaacsim.sensors.rtx.get_material_id>` for reading the current material assignment, and {func}`decode_material_id <isaacsim.sensors.rtx.decode_material_id>` for decomposing a material ID into its base, surface, and retroreflective categories. The module contains predefined dictionaries covering metals, non-metals, vegetation, and other material categories.
-
-### Sensor Checker
-
-The `isaacsim.sensors.rtx.sensor_checker` module provides validation utilities through the {class}`SensorCheckerUtil <isaacsim.sensors.rtx.sensor_checker.SensorCheckerUtil>` class. It validates sensor configurations, parameters, and AOV (Arbitrary Output Variable) data against predefined schemas, ensuring sensor models conform to expected specifications before deployment.
-
-## Functionality
-
-### Configuration Management
-
-The extension includes predefined sensor configurations accessible through `SUPPORTED_LIDAR_CONFIGS`, covering various real-world sensor models from manufacturers like Velodyne, Ouster, HESAI, and others. These configurations provide realistic sensor parameters for accurate simulation.
-
-### Data Processing Pipeline
-
-RTX sensors support a flexible data processing pipeline through the annotator system. Users can attach multiple annotators to collect different types of sensor data simultaneously, such as point clouds, depth maps, intensity values, and object identification information.
-
-### Motion Compensation
-
-RTX Radar sensors include motion compensation capabilities when Motion BVH is enabled, providing accurate velocity measurements for moving objects in the simulation environment.
+The extension is backed by a Carbonite C++ plugin (`isaacsim.sensors.rtx.plugin`) with an `_isaacsim_sensors_rtx` Python binding module. The plugin registers the OmniGraph nodes that implement the RTX sensor annotators, such as `IsaacComputeRTXLidarFlatScan` and `IsaacCreateRTXLidarScanBuffer`, which {class}`LidarRtx <isaacsim.sensors.rtx.LidarRtx>` attaches to read sensor output.

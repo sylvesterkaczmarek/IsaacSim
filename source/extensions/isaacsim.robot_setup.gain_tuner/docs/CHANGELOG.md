@@ -1,5 +1,93 @@
 # Changelog
 
+## [3.10.0] - 2026-08-30
+### Added
+- `joint_schema_attrs`: the advanced joint params (armature, joint friction, max joint velocity) as per-backend values. `resolve_joint_param` / `resolve_joint_params` return a `JointParamResolution` naming every schema's authored value, the schema the given backend and solver actually resolve, the effective value, and which authored values are shadowed or never read. Reads follow Newton's real schema-resolver order rather than assuming one schema per backend: under Newton an unauthored `newton:armature` / `newton:velocityLimit` falls back to `physxJoint:*`, `newton:friction` has no PhysX fallback at all, and under the MuJoCo solver `mjc:armature` and `mjc:frictionloss` resolve ahead of PhysX. `resolver_chain` / `param_resolver_chain` / `candidate_param_chains` expose the chain, and report it as undetermined when the solver is unknown rather than assuming the non-MuJoCo order.
+- `author_joint_param` writes only the active backend's schema and leaves the other backend's authored value alone. The two solvers need different tuning, so a Newton/PhysX difference is an authoring choice rather than a conflict; `diverging_joint_params` reports such differences as a statement of fact, and `copy_joint_param_to_backend` copies one backend's value onto the other as an explicit opt-in action.
+- `JointParamSpec.engine_default` and `NEWTON_DEFAULT_ARMATURE`: the value each engine simulates for an unauthored param. Newton copies its `NewtonConfig.armature` onto `ModelBuilder.default_joint_cfg`, so an unauthored armature is 0.1 under Newton and 0.0 under PhysX, and neither backend clamps an unauthored velocity limit. Callers previously had to guess, and zero is right only for friction.
+- `SUPPORTED_BACKENDS` / `backend_supported` / `backend_display_label`, alongside `backend_write_schema` / `other_backend` / `newton_backend_selected` and the `BACKEND_*`, `SCHEMA_*`, `SOLVER_*` tokens.
+- `backend_reads_usd_while_playing`: whether authoring one of these params mid-run changes what is being simulated. Measured rather than documented, and the two backends differ -- PhysX applies a mid-run `physxJoint:*` write to the running articulation, while Newton builds its model once in `ModelBuilder.add_usd` and registers no USD notice handler, so a `newton:*` write is unread until the next play. Callers should say so rather than let the edit look applied.
+- `newton_solver_type`: the live Newton solver token, resolved from the stage's Newton physics scene when the solver config has not initialized yet. The resolver order depends on the solver, so this is required for a correct read, not just for display.
+- `JointParamResolution.resolved_from_fallback_schema`: whether the value in effect comes from a schema an edit would not write -- Newton simulating `physxJoint:armature` because `newton:armature` is unauthored. Nothing about the number says so, and the first edit moves it onto the backend's own schema, which then wins the chain, so callers can now state both.
+- `GainTuner.get_dof_effective_max_velocity` and `GainTuner.get_dof_engine_armature`: the velocity limit and armature the running engine actually uses, in the units both joint schemas store, or `None` before the timeline plays. The velocity sweeps scale their commands by the enforced limit, so a panel showing only the authored value could report one limit while the sweep excited the joint at another. `max_velocity_agrees` compares the two, tolerating the radian-to-degree conversion noise.
+- `GainTuner.invalidate_physics_views`: release the articulation handle and the recorded response while keeping the robot selection. Switching the active physics engine invalidates the tensor views behind the bound articulation without nulling the handle, so callers need a way to re-acquire; a recorded response also belongs to the solver that produced it.
+- `usd_layer_utils.is_physx_layer`: identify the `physx.usda` overlay alongside the existing physics/MuJoCo layer predicates.
+
+### Changed
+- `backend_write_schema` accepts only the two backends whose schemas are known, returning `None` for anything else. `SimulationManager.get_active_physics_engine` is typed to include `remotesim`, and a failed query reports nothing at all; both previously resolved to `physxJoint:*`, so an edit went to a schema with no evidence the running engine reads it. Callers are expected to disable the edit instead.
+- `max_velocity_agrees` reports an unauthored USD limit against an enforced one as a disagreement. An unauthored limit means unlimited, so treating it as "nothing to compare" disabled the check in exactly the case that produces a wrong reading. Genuinely unknowable comparisons -- either side `None`, or NaN -- stay quiet.
+- `get_dof_effective_max_velocity` distinguishes an unclamped joint from one it could not query: an infinite or practically infinite engine limit now reads as `inf` rather than `None`. Newton substitutes a finite 1e6 rad/s for an unclamped DOF, which is why the threshold is not a plain infinity test.
+- `gain_save_targets.build_gain_save_plan` persists the advanced joint params, routing the `newton:*` value to the selected (neutral `physics.usda`) target and the `physxJoint:*` value to the `physx.usda` overlay. Only explicitly authored values are saved: applying either joint schema makes all of its attributes resolvable at their fallbacks, so saving whatever resolved would have written an untouched joint's `maxJointVelocity` into the asset as an explicit `inf` overriding every weaker opinion.
+- Depends on `omni.usd.schema.newton`, which registers the codeless `NewtonJointAPI` the advanced joint params are read from and authored on.
+
+### Fixed
+- `GainTuner.stop_test`: return without touching the robot when no articulation is bound. Cancelling a test after the tuner was reset (stage close, robot swap, or an emptied robot dropdown) raised `AttributeError` instead of stopping cleanly.
+- `gain_save_targets.apply_gain_save_plan`: apply the joint API schema on the prim spec it writes the value to. `ApplyAPI` records `apiSchemas` in the stage's edit target rather than the payload layer, so a saved `physx.usda` held `physxJoint:*` values on a prim with no `PhysxJointAPI`, which consumers that iterate applied schemas ignore.
+- `newton_mujoco_solver_active` reported False before the first play. Newton's `solver_cfg.solver_type` is the placeholder `"None"` until the solver initializes, so the solver now falls back to the stage's Newton physics scene; it takes an optional `stage` for that.
+
+## [3.9.0] - 2026-08-28
+### Added
+- `divergence` module deciding where a recorded joint response stops being physically meaningful: `divergence_limit` derives a per-joint magnitude bound from the joint's own travel limits (falling back to its commanded peak for a continuous joint), and `clip_series_to_valid` truncates each recorded series at its first unusable sample. Used by the Gain Tuner charts, which previously carried this criterion in the UI extension.
+
+## [3.8.0] - 2026-08-27
+### Changed
+- Natural-frequency drive math now takes a required `is_angular` argument naming the drive's stored-gain convention, and the four conversions are renamed from `*_revolute_position` to `*_position_drive`.
+- Gains already saved into an asset are not corrected on load; re-author any drive whose gains were written through these conversions. Importer-authored gains are unaffected.
+
+### Fixed
+- Revolute drives tuned by natural frequency or damping ratio no longer author damping 180/pi times too large; angular stiffness and damping are both stored per degree, so both take the same scale.
+- The reported damping ratio no longer understates a revolute joint's true value by 180/pi, so a critically damped joint reads 1.0.
+- Prismatic drives tuned by natural frequency no longer have the angular per-degree scale applied to their linear gains.
+
+## [3.7.1] - 2026-08-25
+### Fixed
+- `gain_save_targets.list_gain_save_target_layers`: resolve save targets from the `payloads/Physics/` folder of the joints being tuned even when no joint authors a drive stiffness/damping. URDF/MJCF importer assets author only `maxForce`, leaving the gains at their schema fallbacks, and so offered an unresolved Save Target row instead of `physics.usda` / `physx.usda` / `mujoco.usda`. Discovery is anchored on those joints, so a scene holding several robots never offers one robot's physics layers as targets for another.
+- `gain_save_targets.build_gain_save_plan`: author gains at the target layer's own prim path. A robot referenced into a scene composes under the scene namespace (`/World/Robot/joint`) while its asset layers author `/Robot/joint`, so saving into the asset wrote a spec the asset never reads and silently discarded the tuning.
+
+## [3.7.0] - 2026-08-03
+### Added
+- Multi-backend gain sources: resolve each joint's active gains across PhysX DriveAPI, MuJoCo-native, and Newton actuators, reading Kp/Kd(/Ki) with source-appropriate labels. Only the active source is editable; MuJoCo-native gains are editable only while the Newton MuJoCo solver runs.
+- Source-aware gain saving: route DriveAPI gains to a chosen physics layer, optionally mirror them into MuJoCo params (off by default), and write Newton actuator gains to their own layer.
+- Command actuator- and MuJoCo-driven joints during the step, sinusoidal, snap-to-limits, and stress tests, classified from the gains that actually drive them.
+- Natural-frequency drive-math conversions and joint effective-inertia queries.
+- Discretization Sweep test mode: probe single-step position accuracy across a logarithmic physics-timestep ladder and classify each joint at a target dt; invalid dt bounds are rejected up front.
+- Public results-ingest API on `GainTuner`: `ingest_sweep_results`, `clear_test_results`, `get_robot_prim_path`, `snapshot_recorded_trajectory`.
+
+### Changed
+- `gain_sources`: narrow defensive `except` guards to the expected USD/value error types so unexpected failures surface.
+
+### Fixed
+- Resolve Kp/Kd to a well-defined drive-mode fallback so joints without an inferable drive mode no longer misreport their mode.
+
+## [3.6.2] - 2026-07-29
+### Removed
+- Remove unused bundled font assets.
+
+## [3.6.1] - 2026-07-14
+### Fixed
+- Carried the Newton mimic-joint detection and flat observed-joint plot fixes (from 3.5.7) into the split core library: `joint_drive_attrs.is_joint_mimic` now recognizes Newton `NewtonMimicAPI` joints (with mimic gain-attribute getters returning `None` for them), and `gains_tuner` copies observed joint samples so the built-in Step/Sinusoidal plots show the real trajectory.
+
+## [3.6.0] - 2026-07-14
+### Changed
+- Split UI and Kit dependencies into `isaacsim.robot_setup.gain_tuner.ui`; this extension now exposes the core tuning library (`GainTuner`, test runners, USD drive helpers).
+
+## [3.5.7] - 2026-07-14
+### Fixed
+- `is_joint_mimic`: recognize Newton `NewtonMimicAPI` mimic joints alongside legacy PhysX mimic joints, so they show as Mimic instead of regular driven joints; mimic gain-attribute getters return `None` for Newton mimic joints.
+- Built-in Step and Sinusoidal tests: fix observed-joint plot showing a flat line instead of the actual joint trajectory.
+
+## [3.5.6] - 2026-07-09
+### Fixed
+- Expose the `IExt` entry point from the Python module declared in `extension.toml`.
+
+## [3.5.5] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [3.5.4] - 2026-06-29
+### Changed
+- Classify the gain-tuner UI builder as an internal lifecycle implementation detail; it remains import-compatible but is no longer published Python API.
+
 ## [3.5.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

@@ -29,6 +29,7 @@
   - def get_enabled_rigid_bodies(self) -> wp.array
   - def set_enabled_gravities(self, enabled: bool | list | np.ndarray | wp.array)
   - def get_enabled_gravities(self) -> wp.array
+  - def remove_physics_apis(self)
   - def set_enabled_contact_tracking(self, enabled: bool | list | np.ndarray | wp.array)
   - def get_enabled_contact_tracking(self) -> wp.array
   - def get_net_contact_forces(self) -> wp.array
@@ -73,10 +74,6 @@
   - def __init__(self)
   - def shutdown(self)
 
-- class Extension(omni.ext.IExt)
-  - def on_startup(self, ext_id: str)
-  - def on_shutdown(self)
-
 ## Functions
 
 - def is_local_path(path: str) -> bool
@@ -89,9 +86,3 @@
 - def is_valid_usd_file(item: str, excludes: list) -> bool
 - async def resolve_asset_path_async(original_path: str) -> str | None
 - def Singleton(class_: type) -> callable
-
-## Variables
-
-- SERVICE_PREFIX: str
-- SERVICE_TYPES: List
-- ACTION_TYPES: List

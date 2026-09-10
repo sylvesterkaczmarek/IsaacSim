@@ -15,6 +15,7 @@
 
 """Tutorial module for UR10 robot trajectory generation demonstrations in Isaac Sim."""
 
-from .extension import *
+from .extension import Extension as Extension
+from .extension import UIBuilder as UIBuilder
 
-__all__ = ["UIBuilder", "Extension"]
+__all__ = []

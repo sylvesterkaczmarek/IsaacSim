@@ -49,11 +49,12 @@ if os.target() == "linux" then
 
     links {
         "isaacsim.hsb.core",
-        "emulation",
         "emulationcoe",
         "emulationroce",
         "emulation_sensors",
         "emulator_utils",
+        "emulation_common",
+        "emulation_host",
     }
 
     add_usd()

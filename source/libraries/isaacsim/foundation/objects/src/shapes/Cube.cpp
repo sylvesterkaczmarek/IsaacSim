@@ -1,0 +1,63 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include <isaacsim/foundation/objects/shapes/Cube.hpp>
+
+namespace isaacsim
+{
+namespace foundation
+{
+namespace objects
+{
+namespace shapes
+{
+
+Cube::Cube(const std::variant<std::string, std::vector<std::string>>& paths,
+           const std::optional<array::Array>& sizes,
+           const std::optional<ColorType>& colors,
+           const std::optional<array::Array>& positions,
+           const std::optional<array::Array>& translations,
+           const std::optional<array::Array>& orientations,
+           const std::optional<array::Array>& scales,
+           bool resetXformOpProperties)
+    : Shape(paths, /*shapeType=*/"Cube", colors, positions, translations, orientations, scales, resetXformOpProperties)
+{
+    // Initialize instance from arguments.
+    if (sizes.has_value())
+    {
+        this->setSizes(*sizes);
+    }
+}
+
+void Cube::setSizes(const array::Array& sizes, const std::optional<array::Array>& indices)
+{
+    int64_t batchSize = _resolveIndexedSize(indices);
+    this->setAttributeValues("size", sizes.broadcastTo(array::Shape({ batchSize, int64_t{ 1 } })), indices);
+}
+
+array::Array Cube::getSizes(const std::optional<array::Array>& indices)
+{
+    return std::get<array::Array>(this->getAttributeValues("size", indices));
+}
+
+void Cube::updateExtents()
+{
+    // TODO: Implement and call it when setting values.
+}
+
+} // namespace shapes
+} // namespace objects
+} // namespace foundation
+} // namespace isaacsim

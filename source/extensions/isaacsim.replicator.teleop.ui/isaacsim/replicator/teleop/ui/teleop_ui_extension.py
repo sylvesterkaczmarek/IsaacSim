@@ -34,7 +34,7 @@ class TeleopUIExtension(omni.ext.IExt, MenuHelperExtensionFull):
             ext_id: Extension identifier assigned by Kit.
         """
         self.menu_startup(
-            lambda: TeleopWindow(title=self.WINDOW_NAME),
+            lambda: TeleopWindow(title=TeleopUIExtension.WINDOW_NAME),
             self.WINDOW_NAME,
             self.WINDOW_NAME,
             self.MENU_GROUP,

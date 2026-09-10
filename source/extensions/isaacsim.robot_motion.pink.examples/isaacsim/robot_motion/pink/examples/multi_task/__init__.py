@@ -15,6 +15,7 @@
 
 """Provides PINK multi-task IK examples for robot motion in Isaac Sim."""
 
-from .extension import *
+from .extension import Extension as Extension
+from .extension import UIBuilder as UIBuilder
 
-__all__ = ["UIBuilder"]
+__all__ = []

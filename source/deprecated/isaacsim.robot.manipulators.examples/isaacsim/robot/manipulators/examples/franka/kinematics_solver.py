@@ -19,15 +19,14 @@ from __future__ import annotations
 
 import isaacsim.robot_motion.motion_generation.interface_config_loader as interface_config_loader
 from isaacsim.core.prims import SingleArticulation
-from isaacsim.robot_motion.motion_generation.articulation_kinematics_solver import ArticulationKinematicsSolver
-from isaacsim.robot_motion.motion_generation.lula.kinematics import LulaKinematicsSolver
+from isaacsim.robot_motion.motion_generation import ArticulationKinematicsSolver, LulaKinematicsSolver
 
 
 class KinematicsSolver(ArticulationKinematicsSolver):
-    """Kinematics Solver for Franka robot. This class loads a LulaKinematicsSolver object.
+    """Kinematics solver for the Franka robot. This class loads a LulaKinematicsSolver object.
 
     Args:
-        robot_articulation: An initialized Articulation object representing this Franka.
+        robot_articulation: An initialized SingleArticulation object representing this Franka.
         end_effector_frame_name: The name of the Franka end effector. If None, an end effector link will
             be automatically selected.
     """

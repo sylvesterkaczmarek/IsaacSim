@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.1] - 2026-08-11
+### Fixed
+- Declare the `isaacsim.core.simulation_manager` test dependency required by the rendering manager tests.
+
+## [0.5.0] - 2026-07-29
+### Added
+- Add an opt-in `ViewportManager.optimize_render_products()` API to balance camera render products across active GPUs.
+
+## [0.4.4] - 2026-06-29
+### Changed
+- Define the supported package-root Python API explicitly and remove the Kit lifecycle class from the public API inventory.
+
 ## [0.4.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

@@ -1,5 +1,5 @@
 [package]
-version = "1.2.3"
+version = "1.2.4"
 category = "Simulation"
 title = "Isaac Sim Conveyor belt utility"
 description="The Conveyor Belt Utility Extension provides an utility to turn Rigid bodies into conveyors in Omniverse Isaac Sim. It provides an Omnigraph Node that support configuring a mesh asset into a conveyor belt Rigid Body in simulation, and commands to create the conveyor belt Omnigraph programatically."
@@ -42,6 +42,8 @@ dependencies=[
 ]
 
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*[Error] [omni.graph.core.plugin] /TestGraph/Template_isaacsim_asset_gen_conveyor_IsaacConveyor: [/TestGraph] no prim path found for the conveyor*",
     "*[Error] [carb.glinterop.plugin] GLInteropContext::init: carb::windowing is not available*",
 ]

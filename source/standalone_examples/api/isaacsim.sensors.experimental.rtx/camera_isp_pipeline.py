@@ -117,7 +117,18 @@ _read_isp_ayuv = _camera_image_utils._read_isp_ayuv
 
 
 def _read_last_frame(bin_path: str, frame_bytes: int) -> bytes:
-    """Read the last *frame_bytes* from a (possibly multi-frame) binary file."""
+    """Read a trailing frame-sized byte slice from a binary file.
+
+    Args:
+        bin_path: Path of the binary capture file.
+        frame_bytes: Number of trailing bytes that constitute one frame.
+
+    Returns:
+        The final ``frame_bytes`` bytes without validating frame alignment.
+
+    Raises:
+        ValueError: If the file is smaller than one frame.
+    """
     file_size = os.path.getsize(bin_path)
     if file_size < frame_bytes:
         raise ValueError(f"file too small ({file_size} < {frame_bytes})")
@@ -127,7 +138,14 @@ def _read_last_frame(bin_path: str, frame_bytes: int) -> bytes:
 
 
 def _normalize_to_uint8(arr: np.ndarray) -> np.ndarray:
-    """Normalize a float/int array to uint8 [0, 255]."""
+    """Normalize a float/int array to uint8 [0, 255].
+
+    Args:
+        arr: Image values to scale relative to their positive maximum.
+
+    Returns:
+        Clipped image values spanning the unsigned 8-bit range.
+    """
     arr = np.nan_to_num(arr.astype(np.float64), nan=0.0, posinf=0.0, neginf=0.0)
     max_val = arr.max()
     if max_val > 0:
@@ -136,7 +154,14 @@ def _normalize_to_uint8(arr: np.ndarray) -> np.ndarray:
 
 
 def _convert_isp_bins_to_images(output_dir: str, height: int, width: int, cfa_pattern: str) -> None:
-    """Convert ISP introspection .bin files to .png images."""
+    """Convert ISP introspection .bin files to .png images.
+
+    Args:
+        output_dir: Directory containing ISP binary captures and receiving converted PNG files.
+        height: Image height used to decode each frame.
+        width: Image width used to decode each frame.
+        cfa_pattern: Bayer color-filter pattern used when demosaicing raw stages.
+    """
     import tempfile
 
     _RGBA_F16 = {"texread", "color", "isp"}

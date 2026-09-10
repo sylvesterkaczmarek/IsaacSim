@@ -14,12 +14,17 @@
 -- limitations under the License.
 
 local ext = get_current_extension_info()
+dofile(root .. "/tools/isaac_build/module_carrier.lua")
+
 project_ext(ext)
+stage_isaacsim_module_carrier(ext, "isaacsim.robot_motion.schema")
 
 repo_build.prebuild_link {
     { "config", ext.target_dir .. "/config" },
-    { "data", ext.target_dir .. "/data" },
     { "docs", ext.target_dir .. "/docs" },
-    { "isaacsim", ext.target_dir .. "/isaacsim" },
-    { "robot_motion_schema", ext.target_dir .. "/usd/schema/isaac/robot_motion_schema" },
+    { "data", ext.target_dir .. "/data" },
+}
+
+repo_build.prebuild_copy {
+    { "isaacsim/robot_motion/schema/tests", ext.target_dir .. "/isaacsim/robot_motion/schema/tests" },
 }

@@ -15,6 +15,7 @@
 
 """Demonstrate SDG performance with fabric writes and render wait options."""
 
+import argparse
 import os
 import time
 
@@ -23,17 +24,29 @@ from isaacsim import SimulationApp
 simulation_app = SimulationApp(launch_config={"headless": False})
 
 import carb.settings
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.replicator.core as rep
-import omni.usd
 
 NUM_CUBES = 100
 NUM_CAPTURES = 10
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--num-cubes", type=int, default=NUM_CUBES, help="Number of cubes to create.")
+parser.add_argument("--num-captures", type=int, default=NUM_CAPTURES, help="Number of capture steps per configuration.")
+args, _ = parser.parse_known_args()
 
-def run_example(wait_for_render: bool, write_to_fabric: bool) -> None:
-    """Run SDG with the given render wait and fabric write settings."""
+
+def run_example(wait_for_render: bool, write_to_fabric: bool, num_cubes: int, num_captures: int) -> None:
+    """Run SDG with the given render wait and fabric write settings.
+
+    Args:
+        wait_for_render: Whether each orchestrator step blocks for rendering to finish.
+        write_to_fabric: Whether Replicator writes randomized attributes through Fabric.
+        num_cubes: Number of cubes to randomize per frame.
+        num_captures: Number of randomized frames to capture.
+    """
     print(f"\n[SDG] Running with wait_for_render={wait_for_render}, write_to_fabric={write_to_fabric}")
-    omni.usd.get_context().new_stage()
+    stage_utils.create_new_stage()
     rep.orchestrator.set_capture_on_play(False)
 
     settings = carb.settings.get_settings()
@@ -46,7 +59,7 @@ def run_example(wait_for_render: bool, write_to_fabric: bool) -> None:
     rep.functional.create.xform(name="World")
     rep.functional.create.dome_light(intensity=500, parent="/World", name="DomeLight")
     cubes = rep.functional.create_batch.cube(
-        count=NUM_CUBES,
+        count=num_cubes,
         parent="/World",
         name="Cube",
         semantics={"class": "my_cube"},
@@ -71,10 +84,10 @@ def run_example(wait_for_render: bool, write_to_fabric: bool) -> None:
     capture_times_ms = []
     total_start = time.perf_counter()
 
-    for i in range(NUM_CAPTURES):
-        random_positions = rng.generator.uniform((-3.0, -3.0, -3.0), (3.0, 3.0, 3.0), size=(NUM_CUBES, 3))
-        random_rotations = rng.generator.uniform((0.0, 0.0, 0.0), (360.0, 360.0, 360.0), size=(NUM_CUBES, 3))
-        random_scales = rng.generator.uniform(0.1, 0.4, size=(NUM_CUBES, 3))
+    for i in range(num_captures):
+        random_positions = rng.generator.uniform((-3.0, -3.0, -3.0), (3.0, 3.0, 3.0), size=(num_cubes, 3))
+        random_rotations = rng.generator.uniform((0.0, 0.0, 0.0), (360.0, 360.0, 360.0), size=(num_cubes, 3))
+        random_scales = rng.generator.uniform(0.1, 0.4, size=(num_cubes, 3))
 
         rand_start = time.perf_counter()
         rep.functional.modify.pose(
@@ -108,28 +121,27 @@ def run_example(wait_for_render: bool, write_to_fabric: bool) -> None:
 
 
 # Run with different configurations to compare performance
-run_example(wait_for_render=True, write_to_fabric=False)
-run_example(wait_for_render=False, write_to_fabric=False)
-run_example(wait_for_render=False, write_to_fabric=True)
+run_example(wait_for_render=True, write_to_fabric=False, num_cubes=args.num_cubes, num_captures=args.num_captures)
+run_example(wait_for_render=False, write_to_fabric=False, num_cubes=args.num_cubes, num_captures=args.num_captures)
+run_example(wait_for_render=False, write_to_fabric=True, num_cubes=args.num_cubes, num_captures=args.num_captures)
 
 # <start-sdg-getting-started-05-test>
-import argparse
-import sys
-
-from isaacsim.core.utils.extensions import enable_extension
-
-enable_extension("isaacsim.test.utils")
-from isaacsim.test.utils.file_validation import validate_folder_contents
-
-parser = argparse.ArgumentParser()
-parser.add_argument(
+test_parser = argparse.ArgumentParser()
+test_parser.add_argument(
     "--test",
     action="store_true",
     help="Validate captured output files against expected counts and exit.",
 )
-args, _ = parser.parse_known_args()
+test_args, _ = test_parser.parse_known_args()
 
-if args.test:
+if test_args.test:
+    import sys
+
+    from isaacsim.core.utils.extensions import enable_extension
+
+    enable_extension("isaacsim.test.utils")
+    from isaacsim.test.utils.file_validation import validate_folder_contents
+
     # BasicWriter rgb-only writes 1 png per capture, one output dir per configuration.
     configurations = [
         (True, False),
@@ -141,7 +153,7 @@ if args.test:
         if not validate_folder_contents(
             path=out_dir,
             recursive=True,
-            expected_counts={"png": NUM_CAPTURES},
+            expected_counts={"png": args.num_captures},
             fail_on_empty_files=True,
         ):
             print(f"[SDG][Test][FAIL] Output validation failed for {out_dir}")

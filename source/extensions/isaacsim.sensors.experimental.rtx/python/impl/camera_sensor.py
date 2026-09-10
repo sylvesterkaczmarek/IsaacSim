@@ -19,11 +19,14 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+import carb
+import isaacsim.core.experimental.utils.prim as prim_utils
 import omni.replicator.core as rep
 import warp as wp
+from pxr import Usd
 
 from ._camera_common import CAMERA_ANNOTATOR_SPEC
-from ._sensor_base import _SensorRuntime
+from ._sensor_base import SensorRuntime
 from .rtx_camera import RtxCamera
 
 ANNOTATOR = Literal[
@@ -42,28 +45,15 @@ ANNOTATOR = Literal[
     "semantic_segmentation",
 ]
 
-# Annotators that must be attached on the host (CPU) Replicator pipeline.
-# - Bounding-box annotators have no GPU implementation.
-# - Single-view depth sensor render vars (DepthSensor*) must route through
-#   SdPostRenderVarToHost; the device-buffer node SdPostRenderVarTextureToBuffer
-#   logs "corrupted input renderVar" every frame for them.
-_CPU_ANNOTATORS = frozenset(
-    {
-        "bounding_box_2d_tight",
-        "bounding_box_2d_loose",
-        "bounding_box_3d",
-        "depth_sensor_distance",
-        "depth_sensor_imager",
-        "depth_sensor_point_cloud_color",
-        "depth_sensor_point_cloud_position",
-    }
-)
-
 # Annotators that return non-image data (no reshape to resolution).
 _PASSTHROUGH_ANNOTATORS = frozenset({"bounding_box_2d_tight", "bounding_box_2d_loose", "bounding_box_3d", "pointcloud"})
+_RTX_POST_AA_SCHEMA = "OmniRtxPostDebugSettingsAPI_1"
+_RTX_POST_AA_OP_ATTR = "omni:rtx:post:aa:op"
+_RTX_POST_AA_OFF_TOKEN = "none"
+_RTX_POST_AA_MIN_RESOLUTION = 300
 
 
-class CameraSensor(_SensorRuntime):
+class CameraSensor(SensorRuntime):
     """High level class for creating/wrapping and operating single camera sensor.
 
     Args:
@@ -71,6 +61,10 @@ class CameraSensor(_SensorRuntime):
             If a string path is provided, a :class:`RtxCamera` instance is created internally.
         resolution: Resolution of the sensor (following OpenCV/NumPy convention: ``(height, width)``).
         annotators: Annotator/sensor types to configure.
+        annotator_init_params: Per-annotator initialization parameters forwarded to Replicator annotators.
+            Semantic filtering is the exception: ``semanticTypes``/``semanticFilter`` applies to the whole
+            render product, so bounding box and segmentation annotators sharing one render product cannot
+            be filtered independently.
         writers: Writer types to attach.
         render_vars: Render variables to pass to the render product.
 
@@ -105,8 +99,9 @@ class CameraSensor(_SensorRuntime):
         self,
         path: str | RtxCamera,
         *,
-        resolution: tuple[int, int],
+        resolution: tuple[int, int] | None = None,
         annotators: ANNOTATOR | list[ANNOTATOR] | None = None,
+        annotator_init_params: dict[str, dict[str, Any]] | None = None,
         writers: str | list[str] | None = None,
         render_vars: list[str] | None = None,
     ) -> None:
@@ -115,9 +110,17 @@ class CameraSensor(_SensorRuntime):
         # Subclasses (e.g. SingleViewDepthCameraSensor) may set this first with an extended spec.
         if not hasattr(self, "_annotators_spec"):
             self._annotators_spec = {k: v for k, v in CAMERA_ANNOTATOR_SPEC.items() if k in ANNOTATOR.__args__}
-        super().__init__(path, annotators=annotators, writers=writers, render_vars=render_vars)
-        # Enforce square pixels on the underlying Camera prim
-        self.authoring_object.camera.enforce_square_pixels(self._resolution, modes="horizontal")
+        super().__init__(
+            path,
+            annotators=annotators,
+            annotator_init_params=annotator_init_params,
+            writers=writers,
+            render_vars=render_vars,
+        )
+        # Enforce square pixels on the underlying Camera prim.
+        # _resolution may have been updated by _on_asset_render_product_found during super().__init__.
+        if self._resolution is not None:
+            self.authoring_object.camera.enforce_square_pixels(self._resolution, modes="horizontal")
 
     @property
     def camera(self) -> Any:
@@ -137,31 +140,6 @@ class CameraSensor(_SensorRuntime):
         """
         return self._resolution
 
-    def attach_annotators(self, annotators: str | list[str]) -> dict[str, Any]:
-        """Attach annotators to the sensor.
-
-        Args:
-            annotators: Annotator/sensor types to attach.
-
-        Returns:
-            Mapping from annotator name to attached annotator instance.
-
-        Raises:
-            ValueError: If the specified annotator is not supported.
-        """
-        annotators = [annotators] if isinstance(annotators, str) else annotators
-        self._validate_annotators(annotators)
-        for annotator in annotators:
-            spec = self._get_annotator_spec(annotator)
-            device = "cpu" if annotator in _CPU_ANNOTATORS else "cuda"
-            self._annotators[annotator] = rep.AnnotatorRegistry.get_annotator(
-                spec["name"], device=device, do_array_copy=False
-            )
-        for annotator in annotators:
-            self._annotators[annotator].attach(self._hydra_texture.path)
-
-        return {annotator: self._annotators[annotator] for annotator in annotators}
-
     def get_data(self, annotator: str, *, out: wp.array | None = None) -> tuple[wp.array | None, dict[str, Any]]:
         """Fetch the specified annotator/sensor data for the camera.
 
@@ -171,8 +149,10 @@ class CameraSensor(_SensorRuntime):
 
         Returns:
             Two-elements tuple. 1) Array containing the fetched data.
-            If no data is available at the moment of calling the method, ``None`` is returned.
-            2) Dictionary containing additional information according to the requested annotator/sensor.
+            If no data is available at the moment of calling the method, ``None`` is returned
+            (annotator warm-up); use :meth:`has_data` to bound the wait. 2) Dictionary containing
+            additional information according to the requested annotator/sensor. Any information
+            reported alongside an empty warm-up payload is preserved.
 
         Raises:
             ValueError: If the specified annotator is not supported.
@@ -187,14 +167,22 @@ class CameraSensor(_SensorRuntime):
             data = data["data"]
         else:
             info = {}
-        if data is None or not data.shape[0]:
-            return None, {}
+        if not self._record_fetched_annotator_data(data):
+            return None, info
         if annotator in _PASSTHROUGH_ANNOTATORS:
             info["resolution"] = self._resolution
             return data, info
         spec = self._get_annotator_spec(annotator)
         input_channels = spec["channels"]
         output_channels = spec.get("output_channels", input_channels)
+        actual_size = int(data.size)
+        expected_size = int(self._resolution[0] * self._resolution[1] * input_channels)
+        if actual_size != expected_size:
+            raise RuntimeError(
+                f"Annotator '{annotator}' returned {actual_size} elements, expected {expected_size} for "
+                f"CameraSensor resolution {self._resolution} with {input_channels} input channel(s). "
+                f"Render product: '{self._hydra_texture.path}'."
+            )
         # Annotators attached on the host Replicator pipeline may return data
         # as a numpy.ndarray when a CUDA device is requested. Promote to a
         # Warp array on the requested device so reshape/slice/wp.copy work
@@ -209,17 +197,68 @@ class CameraSensor(_SensorRuntime):
             wp.copy(out, data[:, :, :output_channels] if "output_channels" in spec else data)
         return out, info
 
-    def _initialize_sensor(self, annotators: str | list[str], *, render_vars: list[str] | None = None) -> None:
-        """Initialize sensor by creating a resolution-aware render product and attaching annotators.
+    def _on_asset_render_product_found(self, render_product_prim: Usd.Prim) -> None:
+        """Adopt the pre-authored render product's resolution in place of any requested resolution.
+
+        Log a warning when the requested resolution differs from the authored value before replacing it.
 
         Args:
-            annotators: Annotator/sensor types to attach.
-            render_vars: Render variables to pass to the render product.
+            render_product_prim: Pre-authored render product prim.
         """
+        authored_resolution = render_product_prim.GetAttribute("resolution").Get()
+        rp_resolution = (int(authored_resolution[1]), int(authored_resolution[0]))
+        if self._resolution is not None and tuple(self._resolution) != rp_resolution:
+            carb.log_warn(
+                f"Requested resolution {tuple(self._resolution)} differs from the asset render product's "
+                f"authored resolution {rp_resolution}; using the asset's resolution."
+            )
+        self._resolution = rp_resolution
+
+    def _create_render_product_and_attach(
+        self,
+        annotators: str | list[str],
+        *,
+        render_vars: list[str] | None = None,
+        annotator_init_params: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
+        """Create a resolution-aware render product and attach annotators.
+
+        Args:
+            annotators: Annotators to attach to the render product.
+            render_vars: Render variable names to author, or ``None`` to use Replicator defaults.
+            annotator_init_params: Per-annotator initialization parameters forwarded to Replicator annotators.
+                Semantic filtering is the exception: ``semanticTypes``/``semanticFilter`` applies to the whole
+                render product, so bounding box and segmentation annotators sharing one render product cannot
+                be filtered independently.
+
+        Raises:
+            ValueError: If no sensor resolution is configured.
+        """
+        if self._resolution is None:
+            raise ValueError("'resolution' is required when creating a new render product.")
         self._hydra_texture = rep.create.render_product(
             camera=self.authoring_object.paths[0],
             resolution=(self._resolution[1], self._resolution[0]),  # (width, height)
             name=f"camera_sensor_{hash(self)}",
             render_vars=render_vars,
         )
-        self.attach_annotators(annotators)
+        self._disable_low_resolution_render_product_post_aa()
+        self.attach_annotators(annotators, annotator_init_params=annotator_init_params)
+
+    def _disable_low_resolution_render_product_post_aa(self) -> None:
+        """Disable post anti-aliasing on low-resolution sensor-owned render products."""
+        if min(self._resolution) >= _RTX_POST_AA_MIN_RESOLUTION:
+            return
+        render_product_prim = prim_utils.get_prim_at_path(self._hydra_texture.path)
+        if not render_product_prim.IsValid():
+            carb.log_warn(f"Unable to configure render settings for render product '{self._hydra_texture.path}'.")
+            return
+        if _RTX_POST_AA_SCHEMA not in render_product_prim.GetAppliedSchemas():
+            render_product_prim.ApplyAPI(_RTX_POST_AA_SCHEMA)
+        render_product_prim.GetAttribute(_RTX_POST_AA_OP_ATTR).Set(_RTX_POST_AA_OFF_TOKEN)
+        carb.log_warn(
+            f"Disabled post anti-aliasing for low-resolution CameraSensor render product "
+            f"'{self._hydra_texture.path}' at resolution {self._resolution}. RTX post-AA/DLSS requires input "
+            f"dimensions of at least {_RTX_POST_AA_MIN_RESOLUTION} pixels and can return buffers that do not match "
+            f"the authored sensor resolution below that floor."
+        )

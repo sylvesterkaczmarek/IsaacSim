@@ -27,25 +27,24 @@ class BaseSensor(SingleXFormPrim):
 
     .. note::
 
-        This class, which inherits from ``SingleXFormPrim``, does not currently add any new property/method to it.
-        Its definition is oriented to future implementations.
+        This class, which inherits from ``SingleXFormPrim``, does not currently add any new properties or methods to it.
+        Its definition is intended for future implementations.
 
     Args:
-        prim_path: Prim path of the Prim to encapsulate or create.
-        name: Shortname to be used as a key by Scene class.
-            Note: needs to be unique if the object is added to the Scene.
-        position: Position in the world frame of the prim. shape is (3, ).
+        prim_path: Prim path of the prim to encapsulate or create.
+        name: Short name to be used as a key by Scene class.
+            Note: must be unique if the object is added to the Scene.
+        position: Position in the world frame of the prim. Shape is (3, ).
         translation: Translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: Quaternion orientation in the world/ local frame of the prim
-            (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: Local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: Set to false for an invisible prim in the stage while rendering.
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world or local frame of the prim
+            (depends on whether translation or position is specified).
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to False for an invisible prim in the stage while rendering.
 
     Raises:
-        Exception: If translation and position defined at the same time.
-
+        Exception: If translation and position are defined at the same time.
     """
 
     def __init__(
@@ -71,7 +70,7 @@ class BaseSensor(SingleXFormPrim):
         return
 
     def initialize(self, physics_sim_view: object = None) -> None:
-        """Create a physics simulation view if not passed and using PhysX tensor API.
+        """Creates a physics simulation view if one is not passed when using the PhysX tensor API.
 
         .. note::
 
@@ -79,14 +78,13 @@ class BaseSensor(SingleXFormPrim):
             it will be automatically initialized when the world is reset (e.g., ``world.reset()``).
 
         Args:
-            physics_sim_view: current physics simulation view.
+            physics_sim_view: Current physics simulation view.
 
         Example:
 
         .. code-block:: python
 
             >>> prim.initialize()
-
         """
         SingleXFormPrim.initialize(self, physics_sim_view=physics_sim_view)
         return

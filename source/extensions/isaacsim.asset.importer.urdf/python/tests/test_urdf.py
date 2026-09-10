@@ -30,7 +30,8 @@ import numpy as np
 import omni.kit.test
 import pxr
 from isaacsim.asset.importer.urdf import URDFImporter, URDFImporterConfig
-from isaacsim.asset.importer.utils.impl.physx_types import PhysxAttr, PhysxSchema
+from isaacsim.asset.importer.utils import stage_utils as importer_stage_utils
+from isaacsim.asset.importer.utils.impl.physx_types import PhysxSchema
 from pxr import Gf, PhysicsSchemaTools, Sdf, UsdGeom, UsdPhysics, UsdShade
 
 
@@ -134,6 +135,7 @@ class TestUrdf(omni.kit.test.AsyncTestCase):
         collision_type: str | None = None,
         allow_self_collision: bool | None = None,
         merge_mesh: bool | None = None,
+        merge_fixed_joints: bool | None = None,
         debug_mode: bool | None = None,
     ) -> tuple[str, str]:
         """Import a URDF file with the new importer API.
@@ -145,6 +147,7 @@ class TestUrdf(omni.kit.test.AsyncTestCase):
             collision_type: Collision geometry type.
             allow_self_collision: Whether to enable self-collision.
             merge_mesh: Whether to merge meshes after conversion.
+            merge_fixed_joints: Whether to merge links connected by fixed joints.
             debug_mode: Whether to keep intermediate outputs.
 
         Returns:
@@ -161,6 +164,8 @@ class TestUrdf(omni.kit.test.AsyncTestCase):
             config.allow_self_collision = allow_self_collision
         if merge_mesh is not None:
             config.merge_mesh = merge_mesh
+        if merge_fixed_joints is not None:
+            config.merge_fixed_joints = merge_fixed_joints
         if debug_mode is not None:
             config.debug_mode = debug_mode
 
@@ -295,6 +300,20 @@ class TestUrdf(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(UsdGeom.GetStageMetersPerUnit(self._stage), 1.0)
         self._success = True
 
+    async def test_urdf_authors_time_code_range(self) -> None:
+        """Import URDF with a non-degenerate authored time-code range."""
+        urdf_path = os.path.normpath(
+            os.path.abspath(os.path.join(self._extension_path, "data", "urdf", "tests", "test_basic.urdf"))
+        )
+        output_path, _ = self._import_urdf(urdf_path, usd_path=self._tmpdir)
+        await omni.kit.app.get_app().next_update_async()
+
+        self._stage = importer_stage_utils.open_stage(output_path)
+        start_time_code, end_time_code, _ = importer_stage_utils.get_stage_time_code(self._stage)
+        self.assertEqual(start_time_code, 0.0)
+        self.assertEqual(end_time_code, 1_000_000.0)
+        self._success = True
+
     async def test_urdf_save_twice_to_file(self) -> None:
         """Import URDF twice to the same location and verify no conflicts."""
         urdf_path = os.path.normpath(
@@ -413,8 +432,8 @@ class TestUrdf(omni.kit.test.AsyncTestCase):
 
         elbowPrim = self._stage.GetPrimAtPath("/test_advanced/Physics/elbow_joint")
         self.assertNotEqual(elbowPrim.GetPath(), Sdf.Path.emptyPath)
-        self.assertAlmostEqual(elbowPrim.GetAttribute(PhysxAttr.JOINT_FRICTION.name).Get(), 0.1)
-        self.assertAlmostEqual(elbowPrim.GetAttribute("drive:angular:physics:damping").Get(), 0.1)
+        self.assertAlmostEqual(elbowPrim.GetAttribute("newton:friction").Get(), 0.1)
+        self.assertAlmostEqual(elbowPrim.GetAttribute("newton:damping").Get(), 0.00175, delta=1e-5)
 
         # check position of a link
         joint_pos = elbowPrim.GetAttribute("physics:localPos0").Get()
@@ -489,7 +508,9 @@ class TestUrdf(omni.kit.test.AsyncTestCase):
         self.assertTrue(prim_path, "/test_mimic")
 
         stage = omni.usd.get_context().get_stage()
-
+        prim = stage.GetPrimAtPath("/test_mimic")
+        prim.GetVariantSet("Physics").SetVariantSelection("physics")
+        await omni.kit.app.get_app().next_update_async()
         # Verify source joint exists and has no mimic API
         source_joint = stage.GetPrimAtPath("/test_mimic/Physics/source_joint")
         self.assertNotEqual(source_joint.GetPath(), Sdf.Path.emptyPath)
@@ -504,7 +525,7 @@ class TestUrdf(omni.kit.test.AsyncTestCase):
         self.assertFalse(a_mimic_joint.HasAPI(PhysxSchema.MIMIC_JOINT_API))
 
         self.assertAlmostEqual(a_mimic_joint.GetAttribute("newton:mimicCoef1").Get(), 1.5)
-        self.assertAlmostEqual(a_mimic_joint.GetAttribute("newton:mimicCoef0").Get(), 0.1)
+        self.assertAlmostEqual(a_mimic_joint.GetAttribute("newton:mimicCoef0").Get(), 5.729578018188477)
         ref_joint_targets = a_mimic_joint.GetRelationship("newton:mimicJoint").GetTargets()
         self.assertEqual(len(ref_joint_targets), 1)
         self.assertEqual(ref_joint_targets[0], source_joint.GetPath())
@@ -847,4 +868,36 @@ class TestUrdf(omni.kit.test.AsyncTestCase):
         self.assertTrue(os.path.exists(temp_usd_path), f"Temp USD file not found: {temp_usd_path}")
         self.assertTrue(os.path.exists(usdex_usd_path), f"USDEx USD file not found: {usdex_usd_path}")
         self.assertTrue(os.path.exists(output_path), f"Output path not found: {output_path}")
+        self._success = True
+
+    async def test_merge_fixed_joints_preserves_drive_breadcrumb(self) -> None:
+        """Merge preprocessing should retain drive and armature round-trip metadata."""
+        urdf_path = os.path.normpath(
+            os.path.join(self._extension_path, "data", "urdf", "tests", "test_roundtrip_drive.urdf")
+        )
+
+        output_path, _ = self._import_urdf(urdf_path, merge_fixed_joints=True, debug_mode=True)
+        robot_prim = self._stage.GetPrimAtPath("/test_roundtrip_drive")
+        robot_prim.GetVariantSet("Physics").SetVariantSelection("physx")
+        await omni.kit.app.get_app().next_update_async()
+
+        joint_prim = self._stage.GetPrimAtPath("/test_roundtrip_drive/Physics/drive_joint")
+        self.assertTrue(joint_prim.IsValid())
+        drive = UsdPhysics.DriveAPI.Get(joint_prim, "angular")
+        self.assertTrue(drive)
+        self.assertAlmostEqual(drive.GetStiffnessAttr().Get(), 1234.5)
+        self.assertAlmostEqual(drive.GetDampingAttr().Get(), 6.75)
+        self.assertAlmostEqual(drive.GetMaxForceAttr().Get(), 89.0)
+        self.assertAlmostEqual(drive.GetTargetPositionAttr().Get(), 0.125)
+
+        armature = joint_prim.GetAttribute("physxJoint:armature")
+        self.assertTrue(armature.IsValid())
+        self.assertAlmostEqual(armature.Get(), 0.25)
+
+        merged_urdf = os.path.join(self._tmpdir, "_debug_test_roundtrip_drive", "test_roundtrip_drive_merged.urdf")
+        self.assertTrue(os.path.isfile(merged_urdf))
+        with open(merged_urdf) as merged_file:
+            self.assertIn("isaac:source_drive", merged_file.read())
+
+        self.assertTrue(os.path.exists(output_path))
         self._success = True

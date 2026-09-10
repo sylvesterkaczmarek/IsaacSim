@@ -25,15 +25,18 @@ Provides per-side (left/right) controls:
 
 from __future__ import annotations
 
+import carb.eventdispatcher
 import carb.settings
 import omni.timeline
 import omni.ui as ui
 from isaacsim.gui.components.ui_utils import get_style
-from isaacsim.replicator.teleop import BimanualControllerProfile, ControllerSideProfile, TeleopManager
-from isaacsim.replicator.teleop.controllers import (
+from isaacsim.replicator.teleop import (
+    BimanualControllerProfile,
+    ControllerSideProfile,
     IKMethod,
     IKSolverType,
     RobotIKController,
+    TeleopManager,
 )
 from isaacsim.replicator.teleop.controllers._utils import (
     DEFAULT_ROTATION_OFFSET_DEG,
@@ -112,10 +115,16 @@ class IKPanel:
         self._desired_enabled: dict[str, bool] = {"left": False, "right": False}
         self._pending_ee_link: dict[str, str] = {"left": "", "right": ""}
         self._is_playing: bool = False
-        self._timeline_sub = (
-            omni.timeline.get_timeline_interface()
-            .get_timeline_event_stream()
-            .create_subscription_to_pop(self._on_timeline_event, name="IKPanel_timeline")
+        event_dispatcher = carb.eventdispatcher.get_eventdispatcher()
+        self._timeline_play_sub = event_dispatcher.observe_event(
+            event_name=omni.timeline.GLOBAL_EVENT_PLAY,
+            on_event=self._on_timeline_play,
+            observer_name="IKPanel._on_timeline_play",
+        )
+        self._timeline_stop_sub = event_dispatcher.observe_event(
+            event_name=omni.timeline.GLOBAL_EVENT_STOP,
+            on_event=self._on_timeline_stop,
+            observer_name="IKPanel._on_timeline_stop",
         )
 
         self._available_solvers: list[IKSolverType] = []
@@ -564,23 +573,23 @@ class IKPanel:
     # Timeline-driven UI locking
     # ------------------------------------------------------------------
 
-    def _on_timeline_event(self, event: object) -> None:
-        if event.type == int(omni.timeline.TimelineEventType.PLAY):
-            self._is_playing = True
-            for side in ("left", "right"):
-                self._sync_side_controls(side)
-                status = self._get_field(side, "status")
-                if self._ik.is_running(side):
-                    set_status(status, "Active", CLR_GREEN, emit_terminal=True, side=side)
-        elif event.type == int(omni.timeline.TimelineEventType.STOP):
-            self._is_playing = False
-            for side in ("left", "right"):
-                self._sync_side_controls(side)
-                status = self._get_field(side, "status")
-                if self._ik.is_configured(side):
-                    set_status(status, "Standby", CLR_YELLOW, emit_terminal=True, side=side)
-                else:
-                    set_status(status, "", CLR_DIM)
+    def _on_timeline_play(self, _event: object) -> None:
+        self._is_playing = True
+        for side in ("left", "right"):
+            self._sync_side_controls(side)
+            status = self._get_field(side, "status")
+            if self._ik.is_running(side):
+                set_status(status, "Active", CLR_GREEN, emit_terminal=True, side=side)
+
+    def _on_timeline_stop(self, _event: object) -> None:
+        self._is_playing = False
+        for side in ("left", "right"):
+            self._sync_side_controls(side)
+            status = self._get_field(side, "status")
+            if self._ik.is_configured(side):
+                set_status(status, "Standby", CLR_YELLOW, emit_terminal=True, side=side)
+            else:
+                set_status(status, "", CLR_DIM)
 
     # ------------------------------------------------------------------
     # Callbacks
@@ -778,15 +787,14 @@ class IKPanel:
         """
         w = self._widgets[side]
 
-        if "robot_path" in cfg:
-            path_field = w.get("path")
-            if path_field:
-                path_field.model.set_value(cfg["robot_path"])
-                self._save(side, "path", cfg["robot_path"])
-                self._ik.set_articulation_path(side, cfg["robot_path"])
+        robot_path = str(cfg.get("robot_path", ""))
+        path_field = w.get("path")
+        if path_field:
+            path_field.model.set_value(robot_path)
+            self._save(side, "path", robot_path)
+            self._ik.set_articulation_path(side, robot_path)
 
-        if "ee_link" in cfg:
-            self._pending_ee_link[side] = cfg["ee_link"]
+        self._pending_ee_link[side] = str(cfg.get("ee_link", ""))
 
         if "solver" in cfg:
             try:
@@ -943,7 +951,6 @@ class IKPanel:
             self._configured[side] = False
             desired_enabled = bool(side_profile.enabled)
             self._desired_enabled[side] = False
-            self._pending_ee_link[side] = ""
             self._apply_config_to_side(side, side_profile.settings)
 
             status = self._get_field(side, "status")
@@ -1180,5 +1187,6 @@ class IKPanel:
                     set_status(status, "", CLR_DIM)
 
     def destroy(self) -> None:
-        """Release the timeline subscription."""
-        self._timeline_sub = None
+        """Release the timeline subscriptions."""
+        self._timeline_play_sub = None
+        self._timeline_stop_sub = None

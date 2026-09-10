@@ -27,7 +27,6 @@ class VisualMaterial(object):
         prim: The USD prim object.
         shaders_list: List of shaders used by the material.
         material: The USD material object.
-
     """
 
     def __init__(
@@ -47,50 +46,45 @@ class VisualMaterial(object):
 
     @property
     def material(self) -> UsdShade.Material:
-        """Get the USD material object.
+        """USD material object associated with this VisualMaterial.
 
         Returns:
-            The UsdShade.Material object.
-
+            The USD material object.
         """
         return self._material
 
     @property
     def shaders_list(self) -> list[UsdShade.Shader]:
-        """Get the list of shaders used by the material.
+        """List of shaders used by the material.
 
         Returns:
-            List of UsdShade.Shader objects.
-
+            The shaders used by the material.
         """
         return self._shaders_list
 
     @property
     def name(self) -> str:
-        """Get the material name.
+        """Material name.
 
         Returns:
             The material name.
-
         """
         return self._name
 
     @property
     def prim_path(self) -> str:
-        """Get the USD prim path.
+        """USD prim path for the material.
 
         Returns:
             The prim path string.
-
         """
         return self._prim_path
 
     @property
     def prim(self) -> Usd.Prim:
-        """Get the USD prim object.
+        """USD prim object for the material.
 
         Returns:
-            The Usd.Prim object.
-
+            The USD prim object.
         """
         return self._prim

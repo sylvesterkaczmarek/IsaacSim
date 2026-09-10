@@ -177,7 +177,8 @@ def get_image_space_points(points: Any, view_proj_matrix: Any) -> np.ndarray:
 
     Args:
         points: Numpy array of N points (N, 3) in the world space. Points will be projected into the image space.
-        view_proj_matrix: Desired view projection matrix, transforming points from world frame to image space of desired camera.
+        view_proj_matrix: Desired view projection matrix, transforming points from world frame to image space of desired
+            camera.
 
     Returns:
         Numpy array of shape (N, 3) of points projected into the image space.
@@ -192,7 +193,7 @@ def get_image_space_points(points: Any, view_proj_matrix: Any) -> np.ndarray:
 
 
 def calculate_truncation_ratio_simple(corners: Any, img_width: int, img_height: int) -> float:
-    """Calculate the truncation ratio of a cuboid using a simplified bounding box method.
+    """Calculates the truncation ratio of a cuboid using a simplified bounding box method.
 
     Args:
         corners: (9, 2) numpy array containing the projected corners of the cuboid.
@@ -228,19 +229,22 @@ def calculate_truncation_ratio_simple(corners: Any, img_width: int, img_height: 
 class NumpyEncoder(json.JSONEncoder):
     """Custom JSON encoder that handles NumPy arrays.
 
-    This encoder extends the standard JSON encoder to properly serialize NumPy arrays by converting them to Python lists,
-    making them JSON-serializable. When encountering a NumPy array during JSON serialization, it automatically converts
-    the array to a list format that can be included in the JSON output.
+    This encoder extends the standard JSON encoder to properly serialize NumPy arrays by converting them to Python
+    lists, making them JSON-serializable. When encountering a NumPy array during JSON serialization, it automatically
+    converts the array to a list format that can be included in the JSON output.
     """
 
     def default(self, obj: Any) -> Any:
         """Converts NumPy arrays to Python lists for JSON serialization.
 
         Args:
-            obj: Object to serialize. If it's a NumPy array, converts to list.
+            obj: Object to serialize. If it is a NumPy array, converts to list.
 
         Returns:
             Python list if obj is a NumPy array, otherwise the result of the parent class default method.
+
+        Raises:
+            TypeError: If the parent class default method cannot serialize obj.
         """
         if isinstance(obj, np.ndarray):
             return obj.tolist()

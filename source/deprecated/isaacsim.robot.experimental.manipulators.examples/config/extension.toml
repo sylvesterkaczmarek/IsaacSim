@@ -1,0 +1,35 @@
+[package]
+version = "1.0.0"
+category = "example"
+title = "Manipulators Examples (Experimental, Deprecated)"
+description = "Deprecated import shims for manipulator examples. Use isaacsim.robot_motion.examples."
+keywords = ["manipulators", "grippers", "experimental"]
+changelog = "docs/CHANGELOG.md"
+readme = "docs/Overview.md"
+writeTarget.kit = true
+writeTarget.python = true
+
+[deprecation]
+warning = "Extension deprecated since Isaac Sim 6.1.0. Use isaacsim.robot_motion.examples instead."
+
+[dependencies]
+"isaacsim.robot_motion.examples" = {}
+
+[[python.module]]
+name = "isaacsim.robot.experimental.manipulators.examples"
+
+[[python.module]]
+name = "isaacsim.robot.experimental.manipulators.examples.tests"
+
+[fswatcher.patterns]
+include = ["*.py"]
+
+[[test]]
+timeout = 120
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
+[documentation]
+pages = ["docs/Overview.md", "docs/CHANGELOG.md"]

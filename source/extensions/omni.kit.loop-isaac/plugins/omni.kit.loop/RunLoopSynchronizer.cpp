@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "RunLoopSynchronizer.h"
+#include "RunLoopSynchronizer.hpp"
 
 #include <carb/dictionary/IDictionary.h>
 #include <carb/eventdispatcher/IEventDispatcher.h>

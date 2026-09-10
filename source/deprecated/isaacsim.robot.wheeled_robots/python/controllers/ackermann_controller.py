@@ -24,19 +24,19 @@ from isaacsim.core.utils.types import ArticulationAction
 
 
 class AckermannController(BaseController):
-    """This controller uses a bicycle model for Ackermann steering. The controller computes the left turning angle, right turning angle, and the rotation velocity of each wheel of a robot with no slip angle. The controller can be used to find the appropriate joint values of a wheeled robot with an Ackermann steering mechanism.
+    """This controller uses a bicycle model for Ackermann steering. The controller computes the left turning angle, right turning angle, and the rotation velocity of each wheel of a robot without slip angle. The controller can be used to find the appropriate joint values of a wheeled robot with an Ackermann steering mechanism.
 
     Args:
         name: Name identifier for the controller.
         wheel_base: Distance between front and rear axles in m.
         track_width: Distance between left and right wheels of the robot in m.
         front_wheel_radius: Radius of the front wheels of the robot in m.
-            Will equal back_wheel_radius if no value is inputted.
+            Will equal back_wheel_radius if no value is provided.
         back_wheel_radius: Radius of the back wheels of the robot in m.
-            Will equal front_wheel_radius if no value is inputted.
+            Will equal front_wheel_radius if no value is provided.
         max_wheel_velocity: Maximum angular velocity of the robot wheel in rad/s.
             Parameter is ignored if set to 0.0.
-        invert_steering: Set to true for rear wheel steering.
+        invert_steering: Set to True for rear wheel steering.
         max_wheel_rotation_angle: The maximum wheel steering angle for the steering wheels.
             Parameter is ignored if set to 0.0.
         max_acceleration: The maximum magnitude of acceleration for the robot in m/s^2.
@@ -86,10 +86,12 @@ class AckermannController(BaseController):
         """Calculate right and left wheel angles and angular velocity of each wheel given steering angle and desired forward velocity.
 
         Args:
-            command: [desired steering angle (rad), steering_angle_velocity (rad/s), desired velocity of robot (m/s), acceleration (m/s^2), delta time (s)]
+            command: [desired steering angle (rad), steering_angle_velocity (rad/s), desired velocity of robot (m/s),
+                acceleration (m/s^2), delta time (s)]
 
         Returns:
-            Articulation action containing joint velocities for front left, front right, back left, back right wheels and joint positions for left and right wheel angles.
+            Articulation action containing joint velocities for front left, front right, back left, back right wheels and
+            joint positions for left and right wheel angles.
         """
         if isinstance(command, list):
             command = np.array(command)

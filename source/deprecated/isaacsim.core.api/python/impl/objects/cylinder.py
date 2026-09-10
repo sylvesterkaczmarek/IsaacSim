@@ -31,29 +31,32 @@ from pxr import Gf, UsdGeom
 
 
 class VisualCylinder(SingleGeometryPrim):
-    """High level wrapper to create/encapsulate a visual cylinder.
+    """High-level wrapper to create or encapsulate a visual cylinder.
 
     .. note::
 
-        Visual cylinders (Cylinder shape) have no collisions (Collider API) or rigid body dynamics (Rigid Body API)
+        Visual cylinders (Cylinder shape) have no collisions (Collider API) or rigid body dynamics (Rigid Body API).
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create
-        name: shortname to be used as a key by Scene class.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. shape is (3, ).
-        translation: translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
+        position: Position in the world frame of the prim. Shape is (3, ).
+        translation: Translation in the local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world/local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        color: color of the visual shape.
-        radius: base radius.
-        height: cylinder height.
-        visual_material: visual material to be applied to the held prim.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to False for an invisible prim in the stage while rendering.
+        color: Color of the visual shape.
+        radius: Base radius.
+        height: Cylinder height.
+        visual_material: Visual material to be applied to the held prim.
             If not specified, a default visual material will be added.
+
+    Raises:
+        Exception: If the prim at ``prim_path`` cannot be parsed as a Cylinder object.
 
     Example:
 
@@ -71,7 +74,6 @@ class VisualCylinder(SingleGeometryPrim):
         ... )
         >>> prim
         <isaacsim.core.api.objects.cylinder.VisualCylinder object at 0x7f4e433f22c0>
-
     """
 
     def __init__(
@@ -136,14 +138,13 @@ class VisualCylinder(SingleGeometryPrim):
         """Set the base radius.
 
         Args:
-            radius: base radius
+            radius: Base radius.
 
         Example:
 
         .. code-block:: python
 
             >>> prim.set_radius(1.0)
-
         """
         self.geom.GetRadiusAttr().Set(radius)
         return
@@ -160,7 +161,6 @@ class VisualCylinder(SingleGeometryPrim):
 
             >>> prim.get_radius()
             0.5
-
         """
         return self.geom.GetRadiusAttr().Get()
 
@@ -168,14 +168,13 @@ class VisualCylinder(SingleGeometryPrim):
         """Set the cylinder height.
 
         Args:
-            height: cylinder height
+            height: Cylinder height.
 
         Example:
 
         .. code-block:: python
 
             >>> prim.set_height(2.0)
-
         """
         self.geom.GetHeightAttr().Set(height)
         return
@@ -192,30 +191,29 @@ class VisualCylinder(SingleGeometryPrim):
 
             >>> prim.get_height()
             1.0
-
         """
         return self.geom.GetHeightAttr().Get()
 
 
 class FixedCylinder(VisualCylinder):
-    """High level wrapper to create/encapsulate a fixed cylinder.
+    """High-level wrapper to create/encapsulate a fixed cylinder.
 
     .. note::
 
-        Fixed cylinders (Cylinder shape) have collisions (Collider API) but no rigid body dynamics (Rigid Body API)
+        Fixed cylinders (Cylinder shape) have collisions (Collider API) but no rigid body dynamics (Rigid Body API).
 
     Args:
         prim_path: Prim path of the Prim to encapsulate or create.
-        name: Shortname to be used as a key by Scene class.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
         position: Position in the world frame of the prim. Shape is (3, ).
         translation: Translation in the local frame of the prim
             (with respect to its parent prim). Shape is (3, ).
-        orientation: Quaternion orientation in the world/ local frame of the prim
+        orientation: Quaternion orientation in the world/local frame of the prim
             (depends if translation or position is specified).
             Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
         scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
-        visible: Set to false for an invisible prim in the stage while rendering.
+        visible: Set to False for an invisible prim in the stage while rendering.
         color: Color of the visual shape.
         radius: Base radius.
         height: Cylinder height.
@@ -240,7 +238,6 @@ class FixedCylinder(VisualCylinder):
         ... )
         >>> print(prim)
         <isaacsim.core.api.objects.cylinder.FixedCylinder object at 0x7f4f24144f40>
-
     """
 
     def __init__(
@@ -299,31 +296,31 @@ class DynamicCylinder(SingleRigidPrim, FixedCylinder):
 
     .. note::
 
-        Dynamic cylinders (Cylinder shape) have collisions (Collider API) and rigid body dynamics (Rigid Body API)
+        Dynamic cylinders (Cylinder shape) have collisions (Collider API) and rigid body dynamics (Rigid Body API).
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create
-        name: shortname to be used as a key by Scene class.
-                                Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. shape is (3, ).
-        translation: translation in the local frame of the prim
-                                                        (with respect to its parent prim). shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
-                                                        (depends if translation or position is specified).
-                                                        quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        color: color of the visual shape.
-        radius: base radius.
-        height: cylinder height.
-        visual_material: visual material to be applied to the held prim.
-                                If not specified, a default visual material will be added.
-        physics_material: physics material to be applied to the held prim.
-                                If not specified, a default physics material will be added.
-        mass: mass in kg.
-        density: density.
-        linear_velocity: linear velocity in the world frame.
-        angular_velocity: angular velocity in the world frame.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Shortname to be used as a key by Scene class.
+            Note: needs to be unique if the object is added to the Scene.
+        position: Position in the world frame of the prim. Shape is (3, ).
+        translation: Translation in the local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world/ local frame of the prim
+            (depends if translation or position is specified).
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to false for an invisible prim in the stage while rendering.
+        color: Color of the visual shape.
+        radius: Base radius.
+        height: Cylinder height.
+        visual_material: Visual material to be applied to the held prim.
+            If not specified, a default visual material will be added.
+        physics_material: Physics material to be applied to the held prim.
+            If not specified, a default physics material will be added.
+        mass: Mass in kg.
+        density: Density.
+        linear_velocity: Linear velocity in the world frame.
+        angular_velocity: Angular velocity in the world frame.
 
     Example:
 
@@ -332,7 +329,7 @@ class DynamicCylinder(SingleRigidPrim, FixedCylinder):
         >>> from isaacsim.core.api.objects import DynamicCylinder
         >>> import numpy as np
         >>>
-        >>> # create a red fixed cylinder of mass 1kg at the given path
+        >>> # create a red dynamic cylinder of mass 1kg at the given path
         >>> prim = DynamicCylinder(
         ...     prim_path="/World/Xform/Cylinder",
         ...     radius=0.5,
@@ -342,7 +339,6 @@ class DynamicCylinder(SingleRigidPrim, FixedCylinder):
         ... )
         >>> prim
         <isaacsim.core.api.objects.cylinder.DynamicCylinder object at 0x7f4e8f5c4a60>
-
     """
 
     def __init__(

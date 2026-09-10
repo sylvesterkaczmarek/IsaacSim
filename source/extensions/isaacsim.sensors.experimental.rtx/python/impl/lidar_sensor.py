@@ -20,11 +20,11 @@ This module provides the LidarSensor class for operating single RTX-based lidar 
 
 from __future__ import annotations
 
-from ._sensor_base import _SensorRuntime
+from ._sensor_base import SensorRuntime
 from .lidar import Lidar
 
 
-class LidarSensor(_SensorRuntime):
+class LidarSensor(SensorRuntime):
     """Runtime class for operating a single RTX-based lidar sensor.
 
     Wraps a :class:`Lidar` authoring object, attaches Replicator annotators,

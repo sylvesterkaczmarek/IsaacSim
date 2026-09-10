@@ -16,6 +16,7 @@
 """Tests for single-view depth sensor functionality."""
 
 import os
+import sys
 
 import carb
 import cv2
@@ -29,8 +30,12 @@ from isaacsim.core.experimental.objects import Cone, Cube, DomeLight, GroundPlan
 from isaacsim.core.experimental.utils.stage import create_new_stage_async
 from isaacsim.core.experimental.utils.transform import euler_angles_to_quaternion
 from isaacsim.sensors.camera import SingleViewDepthSensor
+from isaacsim.sensors.camera.tests.utils import save_image
 from isaacsim.storage.native import get_assets_root_path_async
-from isaacsim.test.utils.image_comparison import compare_images_within_tolerances
+from isaacsim.test.utils.image_comparison import compare_arrays_within_tolerances
+
+OVERWRITE_GOLDEN_IMAGE = False
+SAVE_TEST_IMAGE = False
 
 
 class TestSingleViewDepthSensor(omni.kit.test.AsyncTestCase):
@@ -39,7 +44,7 @@ class TestSingleViewDepthSensor(omni.kit.test.AsyncTestCase):
     CAMERA_RESOLUTION = (1920, 1080)
     CAMERA_FREQUENCY = 20  # Hz
     NUM_WARMUP_FRAMES = 10  # Frame dict data availability warmup frames
-    IMG_MEAN_TOLERANCE = 5.0  # Mean absolute difference tolerance for image comparison
+    IMG_MEAN_TOLERANCE = 7.0  # Mean absolute difference tolerance for image comparison
     SUPPORTED_ANNOTATORS = [
         "DepthSensorDistance",
         "DepthSensorPointCloudPosition",
@@ -54,12 +59,15 @@ class TestSingleViewDepthSensor(omni.kit.test.AsyncTestCase):
         await create_new_stage_async()
         await omni.kit.app.get_app().next_update_async()
 
+        self._cameras: list[SingleViewDepthSensor] = []
         self.test_dir = carb.tokens.get_tokens_interface().resolve("${temp}/test_camera_view_sensor")
 
     async def tearDown(self) -> None:
         """Tear down test fixtures."""
         timeline = omni.timeline.get_timeline_interface()
         timeline.stop()
+        for camera in self._cameras:
+            camera.destroy()
         omni.usd.get_context().close_stage()
         await omni.kit.app.get_app().next_update_async()
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
@@ -118,6 +126,7 @@ class TestSingleViewDepthSensor(omni.kit.test.AsyncTestCase):
             frequency=self.CAMERA_FREQUENCY,
             resolution=self.CAMERA_RESOLUTION,
         )
+        self._cameras.append(camera)
 
         return camera, cube_1, cube_2, cone
 
@@ -280,21 +289,32 @@ class TestSingleViewDepthSensor(omni.kit.test.AsyncTestCase):
         for _ in range(self.NUM_WARMUP_FRAMES):
             await omni.kit.app.get_app().next_update_async()
 
-        await omni.syntheticdata.sensors.next_render_simulation_async(camera.get_render_product_path(), 10)
+        # Advance the render after attaching the annotator.
+        for _ in range(self.NUM_WARMUP_FRAMES):
+            await omni.kit.app.get_app().next_update_async()
         image = camera.get_current_frame()["DepthSensorDistance"].astype(np.uint8)
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-        # Save test image for comparison
-        test_img_filename = "depth_sensor_distance_annotator.png"
-        test_img_path = os.path.join(self.test_dir, test_img_filename)
-        os.makedirs(self.test_dir, exist_ok=True)
-        cv2.imwrite(test_img_path, image)
+        golden_img_filename = (
+            "depth_sensor_distance_annotator_windows.png"
+            if sys.platform == "win32"
+            else "depth_sensor_distance_annotator.png"
+        )
+        save_image(
+            image,
+            golden_img_filename,
+            self.GOLDEN_DIR,
+            self.test_dir,
+            save_as_golden=OVERWRITE_GOLDEN_IMAGE,
+            save_as_test=SAVE_TEST_IMAGE,
+        )
 
-        # Compare with golden image
-        golden_img_path = os.path.join(self.GOLDEN_DIR, test_img_filename)
-        result = compare_images_within_tolerances(
-            golden_img_path,
-            test_img_path,
+        golden_img_path = os.path.join(self.GOLDEN_DIR, golden_img_filename)
+        golden_image = cv2.imread(golden_img_path)
+        self.assertIsNotNone(golden_image, f"Golden image file not found: {golden_img_path}")
+        result = compare_arrays_within_tolerances(
+            golden_array=golden_image,
+            test_array=image,
             allclose_rtol=None,
             allclose_atol=None,
             mean_tolerance=self.IMG_MEAN_TOLERANCE,

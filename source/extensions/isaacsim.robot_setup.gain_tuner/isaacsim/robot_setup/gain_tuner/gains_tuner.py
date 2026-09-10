@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from enum import IntEnum
@@ -30,9 +31,19 @@ import pxr
 import usd.schema.isaac.robot_schema as robot_schema
 import usd.schema.isaac.robot_schema.utils as rs_utils
 from isaacsim.core.experimental.prims import Articulation
+from omni.physics.tensors import DofType
 from pxr import Gf, Sdf, Usd, UsdPhysics
 
 from .base import RobotTest, TestResult
+from .gain_save_targets import build_mjc_gain_map
+from .gain_sources import (
+    GainSource,
+    active_gain_source,
+    build_actuator_gain_map,
+    has_physics_drive,
+    mjc_params_to_drive_gains,
+    newton_mujoco_solver_active,
+)
 
 
 class GainsTestMode(IntEnum):
@@ -48,6 +59,8 @@ class GainsTestMode(IntEnum):
     """Test mode that commands joints to their lower and upper limits to verify reachability."""
     STRESS_TEST = 4
     """Stress test that bombards joints with extreme random commands to surface solver instabilities."""
+    DISCRETIZATION = 5
+    """dt physics sweep that measures how position-control accuracy degrades as the physics timestep coarsens."""
 
 
 class JointMode(IntEnum):
@@ -59,6 +72,187 @@ class JointMode(IntEnum):
     """Velocity control mode where joints are commanded to specific velocity targets."""
     NONE = 2
     """No control mode active for the joint."""
+
+
+MAX_VELOCITY_AGREEMENT_REL_TOL = 1e-3
+"""Relative tolerance for comparing a USD velocity limit against the engine's.
+
+The engine reports angular limits in radians per second and the joint schemas
+store degrees per second, so any comparison round-trips through a conversion in
+float32-backed data.  A tolerance of 0.1% keeps that noise from being reported as
+a disagreement while staying far tighter than any limit a user would author on
+purpose.
+"""
+
+
+UNLIMITED_VELOCITY_THRESHOLD = 1.0e6
+"""Engine velocity limit at or above which no practical limit is being enforced.
+
+Neither backend reports an unlimited DOF as infinite.  Newton substitutes its
+``ModelBuilder`` default of ``1e6`` for both an authored ``inf`` and an unauthored
+limit (``newton.utils.import_usd`` maps ``inf`` to None and then to
+``default_joint_cfg.velocity_limit``), and PhysX reports its own ceiling.  In the
+tensor API's own units ``1e6`` is over nine million revolutions per minute, so any
+limit that large is a stand-in for "unclamped" rather than a limit a user
+authored.
+"""
+
+
+def max_velocity_agrees(usd_value: float | None, engine_value: float | None) -> bool:
+    """Return whether a USD velocity limit matches the one the engine enforces.
+
+    Args:
+        usd_value: The limit the active backend's chain resolves, in schema units
+            (degrees per second for rotational DOFs).  ``math.inf`` for a limit
+            that is unlimited -- whether authored as ``inf`` or left unauthored,
+            since the engine default for both is no clamp.  None only when the
+            USD side could not be resolved at all, which is the case when the
+            running solver, and therefore the resolver chain, is unknown.
+        engine_value: The limit from
+            :meth:`GainTuner.get_dof_effective_max_velocity`, in the same units,
+            ``math.inf`` when the engine enforces no limit, or None when there is
+            no engine truth yet (before the timeline plays).
+
+    Returns:
+        True when the two agree within :data:`MAX_VELOCITY_AGREEMENT_REL_TOL`, and
+        when one side is genuinely unknowable.  An unauthored USD limit against a
+        finite enforced one is a disagreement, not an absence\\: the field then
+        reads as unlimited while the engine clamps the joint, which is exactly the
+        case worth reporting.
+
+    Example:
+
+    .. code-block:: python
+
+        >>> import math
+        >>> from isaacsim.robot_setup.gain_tuner import max_velocity_agrees
+
+        >>> max_velocity_agrees(180.0, 180.00001)
+        True
+        >>> max_velocity_agrees(180.0, 90.0)
+        False
+        >>> max_velocity_agrees(math.inf, 107.0)
+        False
+    """
+    if usd_value is None or engine_value is None:
+        return True
+    if math.isnan(usd_value) or math.isnan(engine_value):
+        return True
+    if math.isinf(usd_value) or math.isinf(engine_value):
+        return math.isinf(usd_value) and math.isinf(engine_value)
+    return math.isclose(usd_value, engine_value, rel_tol=MAX_VELOCITY_AGREEMENT_REL_TOL, abs_tol=1e-9)
+
+
+def _joint_mode_from_gains(kp: float | None, kd: float | None) -> JointMode:
+    """Classify a control mode from a joint's effective proportional/derivative gains.
+
+    A non-zero proportional gain (stiffness / Kp) means position control; a zero
+    proportional gain with a non-zero derivative gain (damping / Kd) means
+    velocity control; otherwise the joint is not driven.
+
+    Args:
+        kp: Effective proportional gain (stiffness / Kp), or None.
+        kd: Effective derivative gain (damping / Kd), or None.
+
+    Returns:
+        The classified :class:`JointMode`.
+    """
+    if kp:
+        return JointMode.POSITION
+    if kd:
+        return JointMode.VELOCITY
+    return JointMode.NONE
+
+
+def resolve_active_source_gains(
+    tested_dof_indices: list[int],
+    dof_joint_map: dict[int, "pxr.Usd.Prim"],
+    actuator_map: dict[str, object],
+    mjc_map: dict[str, object],
+    *,
+    mujoco_solver_active: bool = False,
+    dof_drive_axis: dict[int, object] | None = None,
+) -> dict[int, tuple[float, float]]:
+    """Resolve effective (Kp, Kd) for DOFs whose active source is an actuator / mjc.
+
+    A Newton actuator (backend-independent) or an active MuJoCo actuator drives its
+    joint through gains that the physics tensor's DriveAPI stiffness/damping does
+    **not** reflect (the actuator runtime zeros the DriveAPI gains).  For each
+    tested DOF whose resolved active source (per
+    :func:`isaacsim.robot_setup.gain_tuner.gain_sources.active_gain_source`) is a
+    Newton actuator or MuJoCo-native gains, this returns the effective ``(kp, kd)``
+    read from that source so the DOF can be classified and commanded correctly.
+
+    Args:
+        tested_dof_indices: DOF indices under test.
+        dof_joint_map: Map of DOF index -> joint prim.
+        actuator_map: Map of joint path -> ``ActuatorGains`` (Newton actuators).
+        mjc_map: Map of joint path -> ``MjcGainSource`` (MuJoCo-native gains).
+        mujoco_solver_active: Whether the live Newton solver is the MuJoCo solver.
+        dof_drive_axis: Optional map of DOF index -> D6 drive-axis token.
+
+    Returns:
+        Dict mapping DOF index -> ``(kp, kd)`` for actuator- / mjc-active DOFs only
+        (DriveAPI-driven DOFs are omitted and fall back to the tensor gains).
+    """
+    overrides: dict[int, tuple[float, float]] = {}
+    dof_drive_axis = dof_drive_axis or {}
+    for dof_idx in tested_dof_indices:
+        joint = dof_joint_map.get(dof_idx)
+        if joint is None:
+            continue
+        joint_path = joint.GetPath().pathString
+        actuator = actuator_map.get(joint_path)
+        mjc = mjc_map.get(joint_path)
+        has_pd = has_physics_drive(joint, dof_drive_axis.get(dof_idx))
+        active = active_gain_source(
+            has_pd, actuator is not None, mjc is not None, mujoco_solver_active=mujoco_solver_active
+        )
+        if active == GainSource.ACTUATOR and actuator is not None:
+            overrides[dof_idx] = (actuator.kp or 0.0, actuator.kd or 0.0)
+        elif active == GainSource.MUJOCO and mjc is not None:
+            gain_prm = mjc.gain_prm_attr.Get() if (mjc.gain_prm_attr and mjc.gain_prm_attr.IsValid()) else None
+            bias_prm = mjc.bias_prm_attr.Get() if (mjc.bias_prm_attr and mjc.bias_prm_attr.IsValid()) else None
+            overrides[dof_idx] = mjc_params_to_drive_gains(gain_prm, bias_prm)
+    return overrides
+
+
+def classify_joint_modes(
+    tested_dof_indices: list[int],
+    drive_stiffness: list[float] | np.ndarray,
+    drive_damping: list[float] | np.ndarray,
+    active_source_gains: dict[int, tuple[float, float]] | None = None,
+) -> dict[int, JointMode]:
+    """Classify each tested DOF into a :class:`JointMode`.
+
+    By default the mode is read from the DriveAPI stiffness/damping (from the
+    physics tensor's ``get_dof_gains``).  ``active_source_gains`` overrides those
+    gains for DOFs whose active source is a Newton actuator or an active MuJoCo
+    actuator, so such joints are classified POSITION (or VELOCITY when only a
+    damping-like gain is present) and therefore get commanded during tests instead
+    of being dropped as un-driven.
+
+    Args:
+        tested_dof_indices: DOF indices under test.
+        drive_stiffness: Per-DOF DriveAPI stiffness (indexed by DOF index).
+        drive_damping: Per-DOF DriveAPI damping (indexed by DOF index).
+        active_source_gains: Optional map of DOF index -> ``(kp, kd)`` overriding
+            the DriveAPI gains for actuator- / mjc-active DOFs (see
+            :func:`resolve_active_source_gains`).
+
+    Returns:
+        Dict mapping each tested DOF index -> its :class:`JointMode`.
+    """
+    active_source_gains = active_source_gains or {}
+    modes: dict[int, JointMode] = {}
+    for dof_idx in tested_dof_indices:
+        if dof_idx in active_source_gains:
+            kp, kd = active_source_gains[dof_idx]
+        else:
+            kp = drive_stiffness[dof_idx]
+            kd = drive_damping[dof_idx]
+        modes[dof_idx] = _joint_mode_from_gains(kp, kd)
+    return modes
 
 
 @dataclass
@@ -459,10 +653,16 @@ class GainTuner:
                 carb.log_warn(f"GainTuner: inertia-updated callback failed: {exc}")
 
     def stop_test(self) -> None:
-        """Stop the current test and reset the articulation to default state."""
+        """Stop the current test and reset the articulation to default state.
+
+        Does nothing to the robot when no articulation is bound, so the call stays
+        safe before :meth:`setup` and after :meth:`reset`.
+        """
         if self._active_test is not None:
             self._active_test.stop()
             self._active_test = None
+        if self._articulation is None:
+            return
         self._articulation.reset_to_default_state()
 
     # ======================== Test Registry ========================
@@ -694,6 +894,124 @@ class GainTuner:
             The DOF type enumeration value.
         """
         return self._articulation.dof_types[dof_index]
+
+    def get_dof_effective_max_velocity(self, dof_index: int) -> float | None:
+        """Get the velocity limit the engine enforces on a DOF, in schema units.
+
+        The velocity sweeps in :meth:`step_sinusoid` and :meth:`step_step` scale
+        their commands by the engine's limit, not by the USD opinion the Advanced
+        panel resolves.  Where the two disagree -- most often because the limit is
+        authored on a schema the running backend's resolver chain does not read --
+        the panel would report one limit while the sweep excited the joint at
+        another.  This exposes the value the sweep actually uses so the panel can
+        show it and say which one is in force.
+
+        The tensor API reports angular limits in radians per second while both
+        joint schemas store degrees per second, so rotational DOFs are converted
+        to degrees here: the result is directly comparable with
+        :func:`~isaacsim.robot_setup.gain_tuner.resolve_joint_param`.
+
+        Args:
+            dof_index: Index of the DOF.
+
+        Returns:
+            The enforced limit in the schemas' units (degrees per second for
+            rotational DOFs, linear units per second otherwise),
+            :data:`math.inf` when the engine enforces no practical limit (see
+            :data:`UNLIMITED_VELOCITY_THRESHOLD`), or None when no articulation is
+            bound or the physics view cannot be queried -- which is the case until
+            the timeline has played.  None means "no engine truth", never
+            "unlimited", so a caller can tell the two apart.
+
+        Example:
+
+        .. code-block:: python
+
+            >>> gains_tuner.get_dof_effective_max_velocity(0)  # doctest: +NO_CHECK
+            180.0
+        """
+        if self._articulation is None:
+            return None
+        try:
+            max_velocity = float(self._articulation.get_dof_max_velocities(dof_indices=[dof_index]).numpy().item())
+        except Exception:
+            # The physics view is unavailable until the timeline plays, and the
+            # USD fallback path needs a resolvable DOF prim; either way there is
+            # no engine truth to report yet.
+            return None
+        if not math.isfinite(max_velocity) or abs(max_velocity) >= UNLIMITED_VELOCITY_THRESHOLD:
+            return math.inf
+        if self._articulation.dof_types[dof_index] == DofType.Rotation:
+            max_velocity = math.degrees(max_velocity)
+        return max_velocity
+
+    def get_dof_engine_armature(self, dof_index: int) -> float | None:
+        """Get the armature the running engine simulates a DOF with.
+
+        A joint that authors no armature is still simulated with one -- Newton
+        applies its ``ModelBuilder`` default rather than zero -- so the engine is
+        the only source that can say what the value actually is.  Both backends
+        store armature unscaled, so no unit conversion is applied.
+
+        Args:
+            dof_index: Index of the DOF.
+
+        Returns:
+            The armature in effect, or None when no articulation is bound, the
+            physics view cannot be queried (the case until the timeline has
+            played), or the backend does not report armature.
+
+        Example:
+
+        .. code-block:: python
+
+            >>> gains_tuner.get_dof_engine_armature(0)  # doctest: +NO_CHECK
+            0.1
+        """
+        if self._articulation is None:
+            return None
+        try:
+            armature = float(self._articulation.get_dof_armatures(dof_indices=[dof_index]).numpy().item())
+        except Exception:
+            # No physics view before the first play, and not every backend
+            # implements the armature tensor.
+            return None
+        return armature if math.isfinite(armature) else None
+
+    def invalidate_physics_views(self) -> None:
+        """Drop the state owned by the physics engine, keeping the robot selection.
+
+        Switching the active physics engine invalidates the tensor views behind the
+        bound articulation, but leaves this object's handle non-None, so the
+        no-articulation guards do not catch it and the next ``get_dof_*`` call
+        reaches into an invalidated view.  This releases the handle so the caller
+        can re-acquire one against the new engine, and discards the recorded
+        response, which belongs to the solver that produced it and must not be
+        charted alongside samples from another.
+
+        The robot prim path and joint entries are kept, so the caller can re-bind
+        the same robot instead of making the user pick it again.
+
+        Example:
+
+        .. code-block:: python
+
+            >>> gains_tuner.invalidate_physics_views()  # doctest: +NO_CHECK
+        """
+        self._articulation = None
+        self._articulation_root = None
+        self._initialized = False
+        self._joint_position_commands = []
+        self._joint_velocity_commands = []
+        self._observed_joint_positions = []
+        self._observed_joint_velocities = []
+        self._command_times = []
+        self._data_ready = False
+        self._test_timestep = 0
+        self._gains_test_generator = None
+        self._active_test = None
+        self._test_result_metrics = {}
+        self.step = 0
 
     def __del__(self) -> None:
         """Clean up resources."""
@@ -993,6 +1311,15 @@ class GainTuner:
         """
         return self._articulation
 
+    def get_articulation_root(self) -> str | None:
+        """Get the resolved articulation root prim path.
+
+        Returns:
+            The articulation root path, or None if no robot is loaded. Useful for
+            locating the robot's ``Actuators`` scope when reading actuator gains.
+        """
+        return self._articulation_root
+
     def get_all_joint_indices(self) -> list[int]:
         """Get all joint DOF indices.
 
@@ -1000,6 +1327,23 @@ class GainTuner:
             List of all joint indices.
         """
         return self._all_joint_indices
+
+    def get_joint_accumulated_inertia(self, joint: object) -> float:
+        """Get the effective inertia (or mass) about a joint's motion axis.
+
+        The value is populated by :meth:`compute_joints_accumulated_inertia`,
+        which requires the articulation's physics tensors to be available (the
+        timeline must have played at least one step).  It is used as the
+        equivalent inertia ``m_eq`` in the natural-frequency drive conversions.
+
+        Args:
+            joint: The joint prim to look up.
+
+        Returns:
+            The accumulated inertia (revolute, kg*m^2) or mass (prismatic, kg) for
+            the joint, or 0.0 when it has not been computed yet.
+        """
+        return self._joint_accumulated_inertia.get(joint, 0.0)
 
     def get_joint_entries(self) -> list[JointListEntry]:
         """Get the list of joint entries.
@@ -1041,6 +1385,82 @@ class GainTuner:
             no registered test has been run.
         """
         return self._test_result_metrics
+
+    def get_robot_prim_path(self) -> str | None:
+        """Get the prim path of the robot passed to :meth:`setup`.
+
+        Returns:
+            The robot prim path, or None when no robot has been set up. This is
+            the path the caller selected, which may differ from the resolved
+            articulation root returned by :meth:`get_articulation_root`.
+        """
+        return self._robot_prim_path
+
+    def snapshot_recorded_trajectory(
+        self,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Snapshot the full recorded trajectory arrays from the last test run.
+
+        Returns the complete (all-DOF) command and observed arrays, unlike
+        :meth:`get_joint_states_from_gains_test`, which slices a single joint.
+        Useful for orchestrators (such as the dt sweep) that must retain a level's
+        trajectory before a subsequent run overwrites it, then restore it later via
+        :meth:`ingest_sweep_results`.
+
+        Returns:
+            Tuple of (position_commands, velocity_commands, observed_positions,
+            observed_velocities, timestamps) referencing the current arrays.
+        """
+        return (
+            self._joint_position_commands,
+            self._joint_velocity_commands,
+            self._observed_joint_positions,
+            self._observed_joint_velocities,
+            self._command_times,
+        )
+
+    def ingest_sweep_results(
+        self,
+        metrics: dict[int, dict],
+        trajectory: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None,
+    ) -> None:
+        """Install externally-aggregated sweep results as the tuner's current results.
+
+        The dt physics sweep runs the single-level probe repeatedly from the UI
+        layer, aggregates the per-level samples outside the tuner, and then hands
+        the combined per-joint metrics back here so the charts and detail panels
+        read them through the normal :meth:`get_test_result_metrics` /
+        :meth:`get_joint_states_from_gains_test` API. Pass ``trajectory`` (as
+        returned by :meth:`snapshot_recorded_trajectory`) to also restore a chosen
+        level's recorded arrays for the Position / Effort charts.
+
+        Args:
+            metrics: Per-DOF aggregated metrics dict to expose as the test results.
+            trajectory: Optional full trajectory arrays to restore; when provided,
+                the recorded arrays are replaced and the data-ready flag is set so
+                the plotting API reports the results as available.
+        """
+        self._test_result_metrics = metrics
+        if trajectory is not None:
+            (
+                self._joint_position_commands,
+                self._joint_velocity_commands,
+                self._observed_joint_positions,
+                self._observed_joint_velocities,
+                self._command_times,
+            ) = trajectory
+            self._data_ready = True
+
+    def clear_test_results(self) -> None:
+        """Clear the last test's results so stale metrics are no longer reported.
+
+        Resets the per-joint metrics and marks the recorded data as not ready, so
+        :meth:`is_data_ready` returns False and results panels fall back to their
+        empty state. Used when switching test modes, where the previous mode's
+        metric set no longer applies.
+        """
+        self._test_result_metrics = {}
+        self._data_ready = False
 
     def set_test_duration(self, duration: float) -> None:
         """Set the test duration.
@@ -1176,20 +1596,55 @@ class GainTuner:
         indices = self.test_params["joint_indices"]
         stiffnesses, dampings = [gains.list() for gains in self._articulation.get_dof_gains()]
 
-        self.joint_modes = {}
-        for index in range(len(indices)):
-            dof_idx = indices[index]
-            if stiffnesses[dof_idx] != 0:
-                mode = JointMode.POSITION
-            elif dampings[dof_idx] != 0:
-                mode = JointMode.VELOCITY
-            else:
-                mode = JointMode.NONE
-            self.joint_modes[dof_idx] = mode
+        # Joints driven by a Newton actuator (backend-independent) or by an active
+        # MuJoCo actuator have their DriveAPI stiffness/damping zeroed by the
+        # application-side actuator runtime, so ``get_dof_gains`` reports them as
+        # un-driven.  Reclassify those DOFs from their actuator / mjc gains so they
+        # are commanded (position/velocity) during every test type.
+        active_source_gains = self._resolve_test_active_source_gains(indices)
+        self.joint_modes = classify_joint_modes(indices, stiffnesses, dampings, active_source_gains)
 
         self._test_timestep = 0
         self._data_ready = False
         self._gains_test_generator = self._gains_test_generator_fn()
+
+    def _resolve_test_active_source_gains(self, tested_dof_indices: list[int]) -> dict[int, tuple[float, float]]:
+        """Resolve effective actuator / mjc gains for the tested DOFs (best-effort).
+
+        Builds the Newton-actuator and MuJoCo-native gain maps from the live stage
+        and returns, for each actuator- / mjc-active DOF, the effective ``(kp, kd)``
+        used to classify its control mode.  Returns an empty map (DriveAPI-only
+        classification) when no such sources are authored or the stage is missing.
+
+        Args:
+            tested_dof_indices: DOF indices under test.
+
+        Returns:
+            Dict mapping DOF index -> ``(kp, kd)`` for actuator- / mjc-active DOFs.
+        """
+        try:
+            stage = omni.usd.get_context().get_stage()
+        except Exception:
+            stage = None
+        if stage is None or not self._joints:
+            return {}
+        try:
+            actuator_map = build_actuator_gain_map(stage, self._articulation_root) if self._articulation_root else {}
+            mjc_map = build_mjc_gain_map(stage)
+            if not actuator_map and not mjc_map:
+                return {}
+            dof_drive_axis = {entry.dof_index: entry.drive_axis for entry in self._joint_entries}
+            return resolve_active_source_gains(
+                list(tested_dof_indices),
+                dict(self._joints),
+                actuator_map,
+                mjc_map,
+                mujoco_solver_active=newton_mujoco_solver_active(),
+                dof_drive_axis=dof_drive_axis,
+            )
+        except Exception as exc:
+            carb.log_warn(f"GainTuner: failed to resolve actuator/mjc gains for test classification: {exc}")
+            return {}
 
     def _compute_gains_test_dof_error_terms(self, joint_index: int) -> tuple[float, float]:
         """Compute RMSE error terms for a single DOF.
@@ -1391,8 +1846,8 @@ class GainTuner:
 
             yield ()
 
-            self._observed_joint_positions.append(self._articulation.get_dof_positions().numpy()[0])
-            self._observed_joint_velocities.append(self._articulation.get_dof_velocities().numpy()[0])
+            self._observed_joint_positions.append(self._articulation.get_dof_positions().numpy()[0].copy())
+            self._observed_joint_velocities.append(self._articulation.get_dof_velocities().numpy()[0].copy())
 
     def _record_test_sample(self, position_targets: np.ndarray, velocity_targets: np.ndarray) -> None:
         """Record a single test sample.
@@ -1403,8 +1858,8 @@ class GainTuner:
         """
         self._joint_position_commands.append(np.copy(position_targets))
         self._joint_velocity_commands.append(np.copy(velocity_targets))
-        self._observed_joint_positions.append(self._articulation.get_dof_positions().numpy()[0])
-        self._observed_joint_velocities.append(self._articulation.get_dof_velocities().numpy()[0])
+        self._observed_joint_positions.append(self._articulation.get_dof_positions().numpy()[0].copy())
+        self._observed_joint_velocities.append(self._articulation.get_dof_velocities().numpy()[0].copy())
         self._command_times.append(self._test_timestep)
 
     def _finalize_test_data(self) -> None:

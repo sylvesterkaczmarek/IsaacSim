@@ -36,6 +36,9 @@ def get_type(dtype: str) -> Any:
 
     Returns:
         Corresponding Warp data type constant.
+
+    Raises:
+        ValueError: If dtype is not supported.
     """
     if dtype == "float32":
         return wp.float32
@@ -66,6 +69,9 @@ def convert(data: object, device: object, dtype: str = "float32", indexed: bool 
 
     Returns:
         Converted Warp array or indexed array.
+
+    Raises:
+        ValueError: If dtype is not supported.
     """
     arr = None
     if not isinstance(data, wp.array) and not isinstance(data, wp.indexedarray):
@@ -90,6 +96,9 @@ def create_zeros_tensor(shape: object, dtype: str, device: object = None) -> wp.
 
     Returns:
         Warp array filled with zeros.
+
+    Raises:
+        ValueError: If dtype is not supported.
     """
     return wp.zeros(shape=tuple(shape), device=device, dtype=get_type(dtype))
 
@@ -106,6 +115,9 @@ def create_tensor_from_list(data: list, dtype: str, device: object = None) -> wp
 
     Returns:
         Warp array created from the list data.
+
+    Raises:
+        ValueError: If dtype is not supported.
     """
     return wp.array(data, device=device, dtype=get_type(dtype))
 
@@ -199,6 +211,9 @@ def move_data(data: object, device: object) -> wp.array | wp.indexedarray:
 
     Returns:
         Array moved to the specified device.
+
+    Raises:
+        TypeError: If data is not a Warp array or indexed array.
     """
     if isinstance(data, wp.array):
         return data.to(device)
@@ -257,7 +272,7 @@ def to_list(data: wp.array | wp.indexedarray | "torch.Tensor" | Any) -> list:
     """Convert data to a Python list.
 
     Handles conversion from Warp arrays, indexed arrays, and PyTorch tensors to Python lists.
-    Returns the input unchanged if it's already in a compatible format.
+    Returns the input unchanged if it is already in a compatible format.
 
     Args:
         data: Data to convert to a list.
@@ -281,7 +296,7 @@ def to_numpy(data: Any) -> np.ndarray | Any:
     Returns the original data if conversion fails.
 
     Args:
-        data: Data to convert to NumPy array.
+        data: Data to convert to a NumPy array.
 
     Returns:
         NumPy array if conversion succeeds, otherwise the original data.
@@ -431,6 +446,9 @@ def assign(src: object, dst: object, indices: object) -> wp.array:
 
     Returns:
         The destination array with assigned values.
+
+    Raises:
+        TypeError: If src or dst is not a supported Warp array or indexed array.
     """
     # TODO: warp kernels not working on cpu
     device = dst.device

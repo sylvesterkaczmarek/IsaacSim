@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.4.4] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [2.4.3] - 2026-04-28
 ### Fixed
 - `lidar_info.py` example crashed with `AttributeError` when calling `AddTranslateOp` on the lidar prim; wrap the prim in `UsdGeom.Xformable` before adding the op.

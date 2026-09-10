@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.1] - 2026-08-18
+### Changed
+- Help button now opens the Robot Wizard migration guide
+
 ## [0.3.0] - 2026-04-20
 ### Deprecated
 - Extension deprecated and moved to source/deprecated

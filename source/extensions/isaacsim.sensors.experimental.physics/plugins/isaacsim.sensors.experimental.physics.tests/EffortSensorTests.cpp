@@ -14,7 +14,7 @@
 // limitations under the License.
 
 #include <doctest/doctest.h>
-#include <isaacsim/sensors/experimental/physics/IEffortSensor.h>
+#include <isaacsim/sensors/experimental/physics/IEffortSensor.hpp>
 
 using namespace isaacsim::sensors::experimental::physics;
 

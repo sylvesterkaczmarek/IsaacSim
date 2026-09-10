@@ -21,6 +21,7 @@ from typing import Any
 
 import carb
 import carb.events
+import isaacsim.core.experimental.utils.prim as prim_utils
 from isaacsim.replicator.behavior.global_variables import EXPOSED_ATTR_NS, EXTENSION_NAME
 from isaacsim.replicator.behavior.utils.behavior_utils import (
     check_if_exposed_variables_should_be_removed,
@@ -29,7 +30,7 @@ from isaacsim.replicator.behavior.utils.behavior_utils import (
     remove_exposed_variables,
 )
 from omni.behavior.scripting.core import BehaviorScript
-from pxr import Sdf, Usd
+from pxr import Sdf
 
 
 class ExampleCustomEventBehavior(BehaviorScript):
@@ -132,12 +133,16 @@ class ExampleCustomEventBehavior(BehaviorScript):
         self._event_name_out = self._get_exposed_variable("event:output")
 
         # Get the prims to apply the behavior to
-        if self._include_children:
-            self._valid_prims = [prim for prim in Usd.PrimRange(self.prim) if prim.IsValid()]
-        elif self.prim.IsValid():
-            self._valid_prims = [self.prim]
+        if self.prim and self.prim.IsValid():
+            if self._include_children:
+                self._valid_prims = prim_utils.get_all_matching_child_prims(
+                    self.prim, predicate=lambda prim, _: prim.IsValid(), include_self=True
+                )
+            else:
+                self._valid_prims = [self.prim]
         else:
             self._valid_prims = []
+        if not self._valid_prims:
             carb.log_warn(f"[{self.prim_path}] No valid prims found.")
 
     def _reset(self) -> None:

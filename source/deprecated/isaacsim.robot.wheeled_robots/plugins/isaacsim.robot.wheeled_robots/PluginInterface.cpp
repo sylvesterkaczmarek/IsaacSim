@@ -20,7 +20,7 @@
 #include <carb/PluginUtils.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/robot/wheeled_robots/IWheeledRobots.h>
+#include <isaacsim/robot/wheeled_robots/IWheeledRobots.hpp>
 
 namespace
 {

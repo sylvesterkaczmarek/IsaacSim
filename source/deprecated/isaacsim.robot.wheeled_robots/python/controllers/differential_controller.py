@@ -21,15 +21,17 @@ from isaacsim.core.utils.types import ArticulationAction
 
 
 class DifferentialController(BaseController):
-    r"""This controller uses a unicycle model of a differential drive. The Controller consumes a command in the form of a linear and angular velocity, and then computes the circular arc that satisfies this command given the distance between the wheels. This can then be used to compute the necessary angular velocities of the joints that will propel the midpoint between the wheels along the curve. The conversion is.
+    r"""This controller uses a unicycle model of a differential drive.
+
+    The controller consumes a command in the form of a linear and angular velocity, and then computes the circular arc that satisfies this command given the distance between the wheels. This can then be used to compute the necessary angular velocities of the joints that will propel the midpoint between the wheels along the curve. The conversion is:
 
     .. math::
 
-        \omega_R = \frac{1}{2r}(2V + \omega b)
+        \\omega_R = \frac{1}{2r}(2V + \\omega b)
 
-        \omega_L = \frac{1}{2r}(2V - \omega b)
+        \\omega_L = \frac{1}{2r}(2V - \\omega b)
 
-    where :math:`\omega` is the desired angular velocity, :math:`V` is the desired linear velocity, :math:`r` is the radius of the wheels, and :math:`b` is the distance between them.
+    where :math:`\\omega` is the desired angular velocity, :math:`V` is the desired linear velocity, :math:`r` is the radius of the wheels, and :math:`b` is the distance between them.
 
     Args:
         name: Name identifier for the controller.
@@ -38,6 +40,10 @@ class DifferentialController(BaseController):
         max_linear_speed: Limits the maximum linear speed that will be produced by the controller.
         max_angular_speed: Limits the maximum angular speed that will be produced by the controller.
         max_wheel_speed: Limits the maximum wheel speed that will be produced by the controller.
+
+    Raises:
+        ValueError: If wheel_radius is not positive.
+        AssertionError: If max_linear_speed, max_angular_speed, or max_wheel_speed is negative.
     """
 
     def __init__(
@@ -70,6 +76,9 @@ class DifferentialController(BaseController):
 
         Returns:
             The articulation action to be applied to the robot.
+
+        Raises:
+            Exception: If command does not contain exactly two values.
         """
         if isinstance(command, list):
             command = np.array(command)

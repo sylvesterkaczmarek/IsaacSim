@@ -23,7 +23,7 @@ The extension provides two primary robot categories with distinct control approa
 
 **Wheeled Robots**: {class}`WheeledMobilityGenRobot <isaacsim.replicator.mobility_gen.examples.WheeledMobilityGenRobot>` serves as the base class for differential drive robots using DifferentialController for wheel-based movement. {class}`JetbotRobot <isaacsim.replicator.mobility_gen.examples.JetbotRobot>` and {class}`CarterRobot <isaacsim.replicator.mobility_gen.examples.CarterRobot>` extend this foundation with platform-specific configurations including wheel parameters, camera positioning, occupancy mapping settings, and control gains for different operational modes.
 
-**Policy-Controlled Robots**: {class}`PolicyMobilityGenRobot <isaacsim.replicator.mobility_gen.examples.PolicyMobilityGenRobot>` provides the foundation for robots using reinforcement learning policies for locomotion. {class}`H1Robot <isaacsim.replicator.mobility_gen.examples.H1Robot>` implements humanoid bipedal locomotion using H1FlatTerrainPolicy, while {class}`SpotRobot <isaacsim.replicator.mobility_gen.examples.SpotRobot>` provides quadruped navigation capabilities through SpotFlatTerrainPolicy. These robots feature sophisticated terrain navigation and articulation management.
+**Policy-Controlled Robots**: {class}`PolicyMobilityGenRobot <isaacsim.replicator.mobility_gen.examples.PolicyMobilityGenRobot>` provides the foundation for robots using reinforcement learning policies for locomotion. {class}`H1Robot <isaacsim.replicator.mobility_gen.examples.H1Robot>` and {class}`SpotRobot <isaacsim.replicator.mobility_gen.examples.SpotRobot>` deploy their locomotion policies through `RobotPolicyRunner`. These robots feature sophisticated terrain navigation and articulation management.
 
 All robot implementations include front-facing {class}`HawkCamera <isaacsim.replicator.mobility_gen.examples.HawkCamera>` integration for visual perception, configurable occupancy mapping for navigation, and support for chase cameras with adjustable positioning and tilt angles.
 
@@ -51,4 +51,4 @@ The robots feature integrated collision detection through buffered occupancy map
 
 ## Dependencies
 
-The extension integrates with isaacsim.replicator.mobility_gen for core mobility generation functionality, isaacsim.robot.policy.examples for reinforcement learning policies (H1FlatTerrainPolicy, SpotFlatTerrainPolicy), and isaacsim.robot.wheeled_robots for differential drive control systems.
+The extension integrates with isaacsim.replicator.mobility_gen for core mobility generation functionality, isaacsim.robot.policy.examples for reinforcement learning policies, and isaacsim.robot.wheeled_robots for differential drive control systems.

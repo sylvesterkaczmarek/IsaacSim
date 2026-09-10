@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <isaacsim/core/simulation_manager/UsdNoticeListener.h>
+#include <isaacsim/core/simulation_manager/UsdNoticeListener.hpp>
 #include <physxSchema/physxSceneAPI.h>
 ///
 #include <omni/usd/UsdContext.h>

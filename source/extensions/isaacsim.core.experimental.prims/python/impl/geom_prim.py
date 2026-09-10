@@ -587,6 +587,54 @@ class GeomPrim(XformPrim):
             GeomPrim.ensure_api([self.prims[index]], UsdPhysics.MeshCollisionAPI)
             GeomPrim.ensure_api([self.prims[index]], PhysxSchema.PhysxCollisionAPI)
 
+    def remove_collision_apis(self, *, indices: int | list | np.ndarray | wp.array | None = None) -> None:
+        """Remove collision APIs to disable collision detection for prims.
+
+        Backends: :guilabel:`usd`.
+
+        This method removes the APIs applied by :py:meth:`apply_collision_apis`, and (for mesh
+        prims) any mesh-approximation and cooked-data APIs that may have been authored:
+
+        - USD: ``UsdPhysics.CollisionAPI`` and ``UsdPhysics.MeshCollisionAPI``
+        - PhysX: ``PhysxSchema.PhysxCollisionAPI`` and (meshes) the convex/triangle mesh
+          approximation APIs and ``PhysxSchema.PhysxCookedDataAPI`` instances
+
+        Removing an API that is not applied is a no-op, so it is safe to call on any prim.
+
+        Args:
+            indices: Indices of prims to process (shape ``(N,)``). If not defined, all wrapped prims are processed.
+
+        Raises:
+            AssertionError: Wrapped prims are not valid.
+
+        Example:
+
+        .. code-block:: python
+
+            >>> # remove the collision APIs from all prims
+            >>> prims.remove_collision_apis()
+        """
+        assert self.valid, _MSG_PRIM_NOT_VALID
+        # USD API
+        indices = ops_utils.resolve_indices(indices, count=len(self), device="cpu")
+        for index in indices.numpy():
+            prim = self.prims[index]
+            prim.RemoveAPI(UsdPhysics.CollisionAPI)
+            prim.RemoveAPI(PhysxSchema.PhysxCollisionAPI)
+            # MeshCollisionAPI is applied to every prim by apply_collision_apis (not just meshes),
+            # so it must be removed unconditionally to avoid leaving stale state on non-mesh prims.
+            prim.RemoveAPI(UsdPhysics.MeshCollisionAPI)
+            if prim.IsA(UsdGeom.Mesh):
+                prim.RemoveAPI(PhysxSchema.PhysxConvexHullCollisionAPI)
+                prim.RemoveAPI(PhysxSchema.PhysxConvexDecompositionCollisionAPI)
+                prim.RemoveAPI(PhysxSchema.PhysxTriangleMeshSimplificationCollisionAPI)
+                prim.RemoveAPI(PhysxSchema.PhysxTriangleMeshCollisionAPI)
+                prim.RemoveAPI(PhysxSchema.PhysxSphereFillCollisionAPI)
+                prim.RemoveAPI(PhysxSchema.PhysxSDFMeshCollisionAPI)
+                prim.RemoveAPI(PhysxSchema.PhysxCookedDataAPI, PhysxSchema.Tokens.convexHull)
+                prim.RemoveAPI(PhysxSchema.PhysxCookedDataAPI, PhysxSchema.Tokens.convexDecomposition)
+                prim.RemoveAPI(PhysxSchema.PhysxCookedDataAPI, PhysxSchema.Tokens.triangleMesh)
+
     def apply_physics_materials(
         self,
         materials: type["PhysicsMaterial"] | list[type["PhysicsMaterial"]],

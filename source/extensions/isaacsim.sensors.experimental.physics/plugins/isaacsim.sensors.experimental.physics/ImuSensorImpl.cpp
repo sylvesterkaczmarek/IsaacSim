@@ -14,24 +14,25 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "ImuSensorImpl.h"
+#include "ImuSensorImpl.hpp"
 
 #include <carb/events/EventsUtils.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/core/experimental/prims/IPrimDataReader.h>
-#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.h>
-#include <isaacsim/core/includes/UsdUtilities.h>
-#include <isaacsim/core/simulation_manager/ISimulationManager.h>
-#include <isaacsim/robot/schema/sensor_tokens.h>
+#include <isaacsim/core/experimental/prims/IPrimDataReader.hpp>
+#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.hpp>
+#include <isaacsim/core/includes/UsdUtilities.hpp>
+#include <isaacsim/core/simulation_manager/ISimulationManager.hpp>
+#include <isaacsim/robot/schema/sensor_tokens.hpp>
 #include <omni/fabric/FabricUSD.h>
 #include <omni/physics/simulation/IPhysicsSimulation.h>
 #include <omni/physics/simulation/IPhysicsStageUpdate.h>
 #include <omni/usd/UsdContext.h>
 #include <pxr/usd/usdGeom/metrics.h>
+#include <pxr/usd/usdGeom/tokens.h>
 #include <pxr/usd/usdPhysics/rigidBodyAPI.h>
 #include <pxr/usd/usdPhysics/scene.h>
 #if defined(_WIN32)
@@ -111,7 +112,20 @@ static omni::math::linalg::vec3d readGravityFromStage(pxr::UsdStageRefPtr stage,
         unitScale = 1.0;
     }
 
+    // UsdPhysicsScene's gravityDirection defaults to (0, 0, 0), which the USD Physics
+    // specification defines as a request to use the negative stage up axis rather than -Z.
+    // Resolving it here is what keeps the gravity reaction term on the same axis the physics
+    // engine accelerates along when the stage is not Z-up.
     omni::math::linalg::vec3d dir(0.0, 0.0, -1.0);
+    const pxr::TfToken upAxis = pxr::UsdGeomGetStageUpAxis(stage);
+    if (upAxis == pxr::UsdGeomTokens->x)
+    {
+        dir.Set(-1.0, 0.0, 0.0);
+    }
+    else if (upAxis == pxr::UsdGeomTokens->y)
+    {
+        dir.Set(0.0, -1.0, 0.0);
+    }
     double mag = 9.80665;
 
     pxr::UsdPrim scenePrim;
@@ -149,7 +163,10 @@ static omni::math::linalg::vec3d readGravityFromStage(pxr::UsdStageRefPtr stage,
         double dirLen = std::sqrt(dirAttr[0] * dirAttr[0] + dirAttr[1] * dirAttr[1] + dirAttr[2] * dirAttr[2]);
         if (std::isfinite(dirLen) && dirLen > 1e-10)
         {
-            dir.Set(static_cast<double>(dirAttr[0]), static_cast<double>(dirAttr[1]), static_cast<double>(dirAttr[2]));
+            // The specification requires the authored direction to be normalized before use, so
+            // its length must not scale the gravity magnitude.
+            dir.Set(static_cast<double>(dirAttr[0]) / dirLen, static_cast<double>(dirAttr[1]) / dirLen,
+                    static_cast<double>(dirAttr[2]) / dirLen);
         }
     }
 
@@ -779,7 +796,6 @@ void ImuSensorImpl::_processSensor(ImplData& impl, const std::string& primPath, 
     omni::math::linalg::quatd qWb = rotMatrix.ExtractRotation();
     const omni::math::linalg::vec3d imaginary = qWb.GetImaginary();
 
-    omni::math::linalg::vec3d vB = rWb.TransformDir(vW);
     omni::math::linalg::vec3d wB = rWb.TransformDir(wW);
     sensor.gravitySensorFrame = rWb.TransformDir(sensor.gravity);
 
@@ -787,9 +803,13 @@ void ImuSensorImpl::_processSensor(ImplData& impl, const std::string& primPath, 
     ImuRawData& raw = sensor.rawAt(0);
     raw.time = static_cast<float>(sensor.timeSeconds);
     raw.dt = static_cast<float>(sensor.timeDelta);
-    raw.linearVelocityX = static_cast<float>(vB[0]);
-    raw.linearVelocityY = static_cast<float>(vB[1]);
-    raw.linearVelocityZ = static_cast<float>(vB[2]);
+    // Buffer the linear velocity in the world frame. Rotating it into the sensor frame first
+    // and differencing that would measure d/dt(R^T v) = R^T a - w x (R^T v), silently dropping
+    // the transport term: a body circling with its axes locked to the trajectory has a constant
+    // sensor-frame velocity, so its whole centripetal acceleration would read as zero.
+    raw.linearVelocityX = static_cast<float>(vW[0]);
+    raw.linearVelocityY = static_cast<float>(vW[1]);
+    raw.linearVelocityZ = static_cast<float>(vW[2]);
     raw.angularVelocityX = static_cast<float>(wB[0]);
     raw.angularVelocityY = static_cast<float>(wB[1]);
     raw.angularVelocityZ = static_cast<float>(wB[2]);
@@ -833,9 +853,16 @@ void ImuSensorImpl::_processSensor(ImplData& impl, const std::string& primPath, 
                     timeDiff;
         }
     }
-    reading.linearAccelerationX = sumX / sensor.linearAccelerationFilterSize;
-    reading.linearAccelerationY = sumY / sensor.linearAccelerationFilterSize;
-    reading.linearAccelerationZ = sumZ / sensor.linearAccelerationFilterSize;
+    // The differences above are world-frame accelerations, so the rolling average stays in the
+    // world frame and only the averaged result is rotated into the sensor frame the reading is
+    // reported in. The gravity reaction term getSensorReading adds later is already in that frame.
+    omni::math::linalg::vec3d accelerationWorld(sumX / sensor.linearAccelerationFilterSize,
+                                                sumY / sensor.linearAccelerationFilterSize,
+                                                sumZ / sensor.linearAccelerationFilterSize);
+    omni::math::linalg::vec3d accelerationSensorFrame = rWb.TransformDir(accelerationWorld);
+    reading.linearAccelerationX = static_cast<float>(accelerationSensorFrame[0]);
+    reading.linearAccelerationY = static_cast<float>(accelerationSensorFrame[1]);
+    reading.linearAccelerationZ = static_cast<float>(accelerationSensorFrame[2]);
 
     float sumW = 0.0f;
     sumX = 0.0f;

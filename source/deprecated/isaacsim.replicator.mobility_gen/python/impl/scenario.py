@@ -61,17 +61,24 @@ class MobilityGenScenario(Module):
         return cls(robot, occupancy_map)
 
     def reset(self) -> NoReturn:
-        """Reset the scenario to its initial state."""
+        """Reset the scenario to its initial state.
+
+        Raises:
+            NotImplementedError: Always raised by the base class.
+        """
         raise NotImplementedError
 
     def step(self, step_size: float) -> bool:
-        """Advances the scenario by one step.
+        """Advance the scenario by one step.
 
         Args:
             step_size: The size of the step to take.
 
         Returns:
-            True if the step was successful.
+            True if the scenario is complete, False otherwise.
+
+        Raises:
+            NotImplementedError: Always raised by the base class.
         """
         raise NotImplementedError
 

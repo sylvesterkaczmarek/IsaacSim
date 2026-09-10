@@ -1,5 +1,5 @@
 [package]
-version = "0.1.4"
+version = "0.1.5"
 category = "Streaming"
 title = "RTSP Streaming OmniGraph Nodes"
 description = "Provides OmniGraph nodes for streaming camera render products over RTSP using kit-livestream."
@@ -10,13 +10,12 @@ preview_image = "data/preview.png"
 icon = "data/icon.png"
 
 [dependencies]
+"filter:platform"."linux-x86_64"."omni.replicator.srtx" = { optional = true, version = "1.1.2" }
 "isaacsim.core.nodes" = {}
 "omni.graph" = {}
 "omni.kit.livestream.core" = {}
 "omni.kit.livestream.rtsp" = {}
 "omni.replicator.core" = {}
-"filter:platform"."linux-x86_64"."omni.replicator.srtx" = { optional = true, version = "1.1.2" }
-
 
 [[python.module]]
 name = "isaacsim.streaming.rtsp"
@@ -34,6 +33,7 @@ name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]
@@ -94,6 +94,7 @@ pythonTests.include = [
     "isaacsim.streaming.rtsp.tests.test_rtsp_camera_helper.*",
     "isaacsim.streaming.rtsp.tests.test_rtsp_writer.*",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

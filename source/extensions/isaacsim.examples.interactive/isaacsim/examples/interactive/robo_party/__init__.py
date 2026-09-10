@@ -16,6 +16,6 @@
 """Interactive multi-robot demonstration extension showcasing simultaneous operation of different robot types."""
 
 from isaacsim.examples.interactive.robo_party.robo_party import RoboParty
-from isaacsim.examples.interactive.robo_party.robo_party_extension import RoboPartyExtension
+from isaacsim.examples.interactive.robo_party.robo_party_extension import RoboPartyExtension as RoboPartyExtension
 
-__all__ = ["RoboParty", "RoboPartyExtension"]
+__all__ = ["RoboParty"]

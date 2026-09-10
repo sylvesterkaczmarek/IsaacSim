@@ -322,7 +322,11 @@ class OsmoKPIFile(MetricsBackendInterface):
 
 
 class OmniPerfKPIFile(MetricsBackendInterface):
-    """Write KPI metrics for upload to a PostgreSQL database."""
+    """Write scalar KPI metrics for upload to a PostgreSQL database.
+
+    Only ``SingleMeasurement`` instances are written from each test phase's
+    measurements. All metadata types are written.
+    """
 
     def __init__(self) -> None:
         self._test_phases: list[measurements.TestPhase] = []
@@ -344,7 +348,7 @@ class OmniPerfKPIFile(MetricsBackendInterface):
     def finalize(self, metrics_output_folder: str, randomize_filename_prefix: bool = False, **kwargs: Any) -> None:
         """Write metrics to output file(s).
 
-        Measurement metrics and metadata are written to an output JSON file, at path
+        Each test phase's ``SingleMeasurement`` metrics and metadata are written to an output JSON file, at path
         `[metrics_output_folder]/[optional random prefix]kpis_{test_name}.json`.
 
         Args:

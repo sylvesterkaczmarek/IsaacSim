@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.6] - 2026-08-05
+### Changed
+- Use `joint_target_q` / `joint_target_qd` on Newton actuator control adapters
+
+## [0.1.5] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [0.1.4] - 2026-07-07
+### Changed
+- Publish only actuator domain APIs; keep the Kit lifecycle class import-compatible but out of the supported Python API.
+
+## [0.1.3] - 2026-07-02
+### Fixed
+- `ArticulationActuators.from_actuators` now accepts device argument instead of using the wp default device.
+
 ## [0.1.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

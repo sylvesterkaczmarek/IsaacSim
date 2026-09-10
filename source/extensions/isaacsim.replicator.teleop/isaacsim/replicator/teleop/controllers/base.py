@@ -22,8 +22,9 @@ Provides shared functionality used by all controller types:
 
 from __future__ import annotations
 
+import isaacsim.core.experimental.utils.prim as prim_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 from isaacsim.core.experimental.prims import Articulation
-from isaacsim.core.experimental.utils.stage import get_current_stage
 from pxr import Sdf, UsdPhysics
 
 
@@ -88,14 +89,14 @@ def find_owning_articulation_root(prim_path: str) -> str | None:
     except Exception:
         pass
 
-    stage = get_current_stage()
+    stage = stage_utils.get_current_stage()
     if not stage:
         return None
 
     path = Sdf.Path(prim_path)
     while path != Sdf.Path.absoluteRootPath:
         prim = stage.GetPrimAtPath(path)
-        if prim and prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+        if prim and prim_utils.has_api(prim, UsdPhysics.ArticulationRootAPI):
             return str(path)
         path = path.GetParentPath()
     return None

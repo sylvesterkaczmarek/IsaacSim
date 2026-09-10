@@ -64,17 +64,16 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from typing import Optional
 
-from isaacsim.core.api import World
-from isaacsim.core.api.simulation_context import SimulationContext
+from isaacsim.core.api import SimulationContext, World
 from isaacsim.core.prims import SingleArticulation
 from isaacsim.cortex.framework.df import DfBehavior, DfLogicalState, DfNetwork
 from isaacsim.cortex.framework.tools import SteadyRate
 
 
 class LogicalStateMonitor:
-    """A logical state monitor which can be added to the CortexWorld.
+    """A logical state monitor that can be added to the CortexWorld.
 
-    This object interfaces a DfLogicalState object, which owns its own monitors, to the CortexWorld.
+    This object interfaces with a DfLogicalState object, which owns its own monitors, to the CortexWorld.
 
     Args:
         name: The name used to index this logical state monitor.
@@ -104,13 +103,13 @@ class LogicalStateMonitor:
 
 
 class Behavior:
-    """A behavior which can be added to the CortexWorld.
+    """A behavior that can be added to the CortexWorld.
 
-    A behavior can be any object implementing the DfBehavior interface.
+    A behavior can be any object that implements the DfBehavior interface.
 
     Args:
         name: A name for this behavior used to reference the behavior.
-        df_behavior: The behavior being added implementing the DfBehavior interface.
+        df_behavior: The behavior being added that implements the DfBehavior interface.
     """
 
     def __init__(self, name: str, df_behavior: DfBehavior) -> None:
@@ -135,38 +134,46 @@ class Behavior:
 
 
 class CommandableArticulation(ABC, SingleArticulation):
-    """A commandable articulation is an articulation with a collection of commanders controlling.
-
-    the joints. These commanders should be stepped through a call to step_commanders().
-    """
+    """A commandable articulation is an articulation with a collection of commanders controlling the joints. These commanders should be stepped through a call to step_commanders()."""
 
     @abstractmethod
     def step_commanders(self) -> None:
-        """Deriving classes should override this method to define how commanders are stepped each.
+        """Define how commanders are stepped each cycle.
 
-        cycle. This method is called once per cycle.
+        This method is called once per cycle.
+
+        Raises:
+            NotImplementedError: This abstract method must be implemented by deriving classes.
         """
         raise NotImplementedError()
 
     @abstractmethod
     def reset_commanders(self) -> None:
-        """Reset each of the commanders associated with this articulation."""
+        """Reset each of the commanders associated with this articulation.
+
+        Raises:
+            NotImplementedError: This abstract method must be implemented by deriving classes.
+        """
         raise NotImplementedError()
 
     def pre_step(self) -> None:
         """Step the commanders governing this commandable articulation.
 
-        The Cortex pipeline is processed before (pre_) stepping physics. Commanders are stepped
-        after behaviors.
+        The Cortex pipeline is processed before (pre_) stepping physics. Commanders are stepped after behaviors.
+
+        Raises:
+            NotImplementedError: The commanders have not implemented stepping.
         """
         self.step_commanders()
 
     def post_reset(self) -> None:
         """Reset the underlying articulation and its commanders.
 
-        The Cortex pipeline is reset after (post_) resetting physics. Commanders are reset after
-        logical state monitors and behaviors, and the underlying articulation is reset before the
-        commanders.
+        The Cortex pipeline is reset after (post_) resetting physics. Commanders are reset after logical state monitors and
+        behaviors, and the underlying articulation is reset before the commanders.
+
+        Raises:
+            NotImplementedError: The commanders have not implemented resetting.
         """
         super().post_reset()
         self.reset_commanders()
@@ -195,37 +202,32 @@ class CortexWorld(World):
         self._robots = OrderedDict()
 
     def add_logical_state_monitor(self, logical_state_monitor: LogicalStateMonitor) -> None:
-        """Add a logical state monitor to the Cortex world. Multiple logical state monitors can be.
+        """Adds a logical state monitor to the Cortex world.
 
-        added (with unique names). They are each stepped in the order added during the logical state
-        monitoring phase of the Cortex pipeline.
+        Multiple logical state monitors with unique names can be added. They are each stepped in the order added during the logical state monitoring phase of the Cortex pipeline.
 
         Args:
-            logical_state_monitor: The LogicalStateMonitor object representing the monitor(s) being added.
+            logical_state_monitor: LogicalStateMonitor object representing the monitor being added.
         """
         self._logical_state_monitors[logical_state_monitor.name] = logical_state_monitor
 
     def add_behavior(self, behavior: Behavior) -> None:
-        """Add a behavior to the Cortex world. Multiple behaviors can be added (with unique names).
+        """Adds a behavior to the Cortex world.
 
-        They are stepped in the order added during the behavior (decisions) phase of the Cortex
-        pipeline.
+        Multiple behaviors with unique names can be added. They are stepped in the order added during the behavior decisions phase of the Cortex pipeline.
 
         Args:
-            behavior: The Behavior object representing the behavior being added.
+            behavior: Behavior object representing the behavior being added.
         """
         self._behaviors[behavior.name] = behavior
 
     def add_decider_network(self, decider_network: DfNetwork, name: Optional[str] = None) -> None:
-        """Add a decider network to the Cortex world along with any logical state monitors bundled.
-
-        with it.
+        """Adds a decider network to the Cortex world along with any logical state monitors bundled with it.
 
         Args:
-            decider_network: The decider network being added.
-            name:
-                An optional name to give the logical state monitors and decider network behavior.
-                The name field can be used to add multiple decider networks (using unique names)
+            decider_network: Decider network being added.
+            name: Name to give the logical state monitors and decider network behavior.
+                The name field can be used to add multiple decider networks with unique names
                 that are stepped simultaneously.
         """
         self.add_logical_state_monitor(LogicalStateMonitor(name, decider_network.context))
@@ -233,33 +235,31 @@ class CortexWorld(World):
         self.reset_cortex()
 
     def add_robot(self, robot: CommandableArticulation) -> CommandableArticulation:
-        """Add a commandable robot (articulation) to the Cortex world. Multiple robots (with unique.
+        """Adds a commandable robot articulation to the Cortex world and scene.
 
-        names) can be added and their underlying commanders are stepped in the order they're added
-        in the command API (policy) phase of the Cortex pipeline.
+        Multiple robots with unique names can be added. Their underlying commanders are stepped in the order they are added in the command API policy phase of the Cortex pipeline.
 
         Args:
-            robot: The commandable robot being added.
+            robot: Commandable robot being added.
 
         Returns:
-            The robot that was added.
+            The added robot.
         """
         self._robots[robot.name] = robot
         self.scene.add(robot)
         return robot
 
     def step(self, render: bool = True, step_sim: bool = True) -> None:
-        """Step the Cortex pipeline and the underlying simulator.
+        """Steps the Cortex pipeline and the underlying simulator.
 
-        The Cortex pipeline is stepped in the order: logical state monitoring, behavior, and robot
-        commanders. The Cortex pipeline is processed before stepping the simulator.
+        The Cortex pipeline is stepped in the order of logical state monitoring, behavior, and robot commanders. The Cortex pipeline is processed before stepping the simulator.
 
         Args:
-            render:
-                A flag defining whether to render this cycle. Defaults to True.
-            step_sim:
-                A flag defining whether to step the simulation (physics) this cycle. Defaults to
-                True.
+            render: Whether to render this cycle.
+            step_sim: Whether to step the simulation physics this cycle.
+
+        Raises:
+            Exception: If the data logger is started without a data frame logging function.
         """
         if self._task_scene_built:
             for task in self._current_tasks.values():
@@ -290,22 +290,20 @@ class CortexWorld(World):
         return
 
     def reset(self, soft: bool = False) -> None:
-        """Resets both the underlying world and the Cortex pipeline. The world is reset before the.
+        """Resets both the underlying world and the Cortex pipeline.
 
-        cortex pipeline is. See reset_cortex() for documentation on Cortex resetting.
+        The world is reset before the Cortex pipeline. See ``reset_cortex()`` for documentation on Cortex resetting.
 
         Args:
-            soft: If True, performs a soft reset. Defaults to False.
+            soft: Whether to perform a soft reset.
         """
         super().reset(soft)
         self.reset_cortex()
 
     def reset_cortex(self) -> None:
-        """Resets the cortex pipeline only.
+        """Resets the Cortex pipeline only.
 
-        The commanders are reset first in case logical state monitors or behaviors need to use any
-        of that reset information. Then logical state monitors are reset to reset the logical state,
-        which might be referenced by reset behaviors. Finally, the behaviors are reset last.
+        Commanders are reset first in case logical state monitors or behaviors need to use their reset information. Logical state monitors are then reset to reset the logical state, which might be referenced by reset behaviors. Behaviors are reset last.
         """
         for robot in self._robots.values():
             robot.reset_commanders()
@@ -322,23 +320,19 @@ class CortexWorld(World):
         play_on_entry: bool = False,
         is_done_cb: bool | None = None,
     ) -> None:
-        """Run the Cortex loop runner.
+        """Runs the Cortex loop runner.
 
-        This method will block until Omniverse is exited. It steps everything in the world,
-        including tasks, logical state monitors, behaviors, and robot commanders, every cycle.
-        Cycles are run in real time (at the rate given by the physics dt (usually 60hz)). To loop as
-        fast as possible (not real time), set loop_fast to True.
+        This method blocks until Omniverse is exited or ``is_done_cb`` returns True. It steps everything in the world, including tasks, logical state monitors, behaviors, and robot commanders, every cycle. Cycles are run in real time at the rate given by the physics dt, usually 60 Hz. Set ``loop_fast`` to True to loop as fast as possible instead of in real time.
 
         Args:
-            simulation_app: The simulation application handle for this python app.
-            render: If true (default), it renders every cycle.
-            loop_fast: Loop as fast as possible without maintaining real-time. (Defaults to false
-                (i.e. running in real time).
-            play_on_entry: When True, resets the world on entry. This starts the simulation playing
-                immediately. Defaults to False so the user needs to press play to start it up.
-            is_done_cb: A function pointer which should return True or False defining whether it's
-                finished. Then True, it breaks out of the loop immediately and returns from the
-                method.
+            simulation_app: Simulation application handle for this Python app.
+            render: Whether to render every cycle.
+            loop_fast: Whether to loop as fast as possible without maintaining real time.
+            play_on_entry: Whether to reset the world on entry and start the simulation playing immediately.
+            is_done_cb: Function called each cycle. When it returns True, the loop exits immediately.
+
+        Raises:
+            Exception: If stepping raises because the data logger is started without a data frame logging function.
         """
         physics_dt = self.get_physics_dt()
         rate_hz = 1.0 / physics_dt

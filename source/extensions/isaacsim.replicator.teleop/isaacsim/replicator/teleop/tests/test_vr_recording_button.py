@@ -24,7 +24,8 @@ snapshot.
 from dataclasses import dataclass
 
 import carb.eventdispatcher
-import omni.kit.app
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
 import omni.usd
 from isaacsim.replicator.episode_recorder import EPISODE_BINDING_EVENT
@@ -77,16 +78,16 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
 
     async def setUp(self) -> None:
         """Set up the test fixture."""
-        await omni.kit.app.get_app().next_update_async()
-        omni.usd.get_context().new_stage()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
 
     async def tearDown(self) -> None:
         """Tear down the test fixture."""
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
-        while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+        if stage_utils.is_stage_set() or omni.usd.get_context().get_stage() is not None:
+            stage_utils.close_stage()
+            await app_utils.update_app_async()
+        while stage_utils.is_stage_loading():
+            await app_utils.update_app_async()
 
     async def test_rising_edge_dispatches_toggle_once_per_press(self) -> None:
         """Holding the button across frames only dispatches once; release + press dispatches again."""
@@ -102,7 +103,7 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             observer_name="TestVRRecordingButton.rising_edge",
         )
         try:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             teleop = _FakeTeleopManager()
             button = VRRecordingButton(teleop, button=VRButton.LEFT_SECONDARY, command="toggle")
             button.attach()
@@ -112,30 +113,30 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             right = _FakeController(inputs=_FakeInputs())
 
             teleop.tick(left, right)
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             self.assertEqual(len(received_events), 0)
 
             left.inputs.secondary_click = True
             teleop.tick(left, right)
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             self.assertEqual(len(received_events), 1)
             self.assertEqual(received_events[-1].get("command"), "toggle")
 
             teleop.tick(left, right)
             teleop.tick(left, right)
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             self.assertEqual(len(received_events), 1, "Held button must not re-dispatch.")
 
             left.inputs.secondary_click = False
             teleop.tick(left, right)
             left.inputs.secondary_click = True
             teleop.tick(left, right)
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             self.assertEqual(len(received_events), 2)
 
             button.destroy()
         finally:
-            event_sub = None
+            del event_sub
 
     async def test_right_primary_does_not_trigger_left_button(self) -> None:
         """A right-controller button press must not fire a left-bound :class:`VRRecordingButton`."""
@@ -151,7 +152,7 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             observer_name="TestVRRecordingButton.right_primary",
         )
         try:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             teleop = _FakeTeleopManager()
             button = VRRecordingButton(teleop, button=VRButton.LEFT_SECONDARY, command="toggle")
             button.attach()
@@ -163,12 +164,12 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             teleop.tick(left, right)
             right.inputs.secondary_click = False
             teleop.tick(left, right)
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             self.assertEqual(len(received_events), 0)
 
             button.destroy()
         finally:
-            event_sub = None
+            del event_sub
 
     async def test_detach_stops_dispatch(self) -> None:
         """After :meth:`detach`, further button presses do not dispatch events."""
@@ -184,7 +185,7 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             observer_name="TestVRRecordingButton.detach",
         )
         try:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             teleop = _FakeTeleopManager()
             button = VRRecordingButton(teleop, button=VRButton.LEFT_SECONDARY)
             button.attach()
@@ -192,7 +193,7 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             left = _FakeController(inputs=_FakeInputs(secondary_click=True))
             right = _FakeController(inputs=_FakeInputs())
             teleop.tick(left, right)
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             self.assertEqual(len(received_events), 1)
 
             button.detach()
@@ -202,10 +203,10 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             teleop.tick(left, right)
             left.inputs.secondary_click = True
             teleop.tick(left, right)
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             self.assertEqual(len(received_events), 1)
         finally:
-            event_sub = None
+            del event_sub
 
     async def test_custom_command_and_payload(self) -> None:
         """Custom ``command`` and ``command_payload`` are forwarded verbatim in the event payload."""
@@ -221,7 +222,7 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             observer_name="TestVRRecordingButton.custom_payload",
         )
         try:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             teleop = _FakeTeleopManager()
             button = VRRecordingButton(
                 teleop,
@@ -235,7 +236,7 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             right = _FakeController(inputs=_FakeInputs())
             right.inputs.primary_click = True
             teleop.tick(left, right)
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
 
             self.assertEqual(len(received_events), 1)
             payload = received_events[-1]
@@ -244,7 +245,7 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
 
             button.destroy()
         finally:
-            event_sub = None
+            del event_sub
 
     async def test_session_id_getter_none_suppresses_dispatch(self) -> None:
         """A session-scoped button should stay quiet until a recorder session is available."""
@@ -260,7 +261,7 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             observer_name="TestVRRecordingButton.no_session",
         )
         try:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             teleop = _FakeTeleopManager()
             button = VRRecordingButton(
                 teleop,
@@ -272,12 +273,12 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             left = _FakeController(inputs=_FakeInputs(secondary_click=True))
             right = _FakeController(inputs=_FakeInputs())
             teleop.tick(left, right)
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
 
             self.assertEqual(received_events, [])
             button.destroy()
         finally:
-            event_sub = None
+            del event_sub
 
     async def test_attach_detach_dispatches_binding_lifecycle_events(self) -> None:
         """Attach must broadcast an ``attach`` binding event; detach must broadcast ``detach``."""
@@ -293,14 +294,14 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             observer_name="TestVRRecordingButton.binding_lifecycle",
         )
         try:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             teleop = _FakeTeleopManager()
             button = VRRecordingButton(teleop, button=VRButton.LEFT_SECONDARY, command="toggle")
 
             self.assertEqual(received_events, [], "No binding event should fire before attach()")
 
             button.attach()
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             self.assertEqual(len(received_events), 1, "Attach must dispatch one binding event")
             attach_payload = received_events[-1]
             self.assertEqual(attach_payload.get("action"), "attach")
@@ -310,10 +311,10 @@ class TestVRRecordingButton(omni.kit.test.AsyncTestCase):
             self.assertIn("Left Secondary", attach_payload.get("label") or "")
 
             button.detach()
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
             self.assertEqual(len(received_events), 2, "Detach must dispatch a follow-up binding event")
             detach_payload = received_events[-1]
             self.assertEqual(detach_payload.get("action"), "detach")
             self.assertEqual(detach_payload.get("binding_id"), "vr_left_secondary")
         finally:
-            event_sub = None
+            del event_sub

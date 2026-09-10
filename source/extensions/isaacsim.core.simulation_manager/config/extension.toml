@@ -1,5 +1,5 @@
 [package]
-version = "1.15.6"
+version = "1.17.1"
 category = "Simulation"
 title = "Isaac Sim Core Simulation Manager"
 description = "The Core Simulation Manager extension provides a set of APIs to control and query the simulation's state and the different callbacks available."
@@ -34,6 +34,8 @@ recursive = false
 [settings]
 # Default physics engine to use (`physx` or `newton`).
 exts."isaacsim.core.simulation_manager".default_engine = "physx"
+# Enable the default timeline and stage lifecycle callbacks.
+exts."isaacsim.core.simulation_manager".enable_default_callbacks = true
 
 [[test]]
 name = "physx"
@@ -95,6 +97,8 @@ args = [
 ]
 
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*[Error] [isaacsim.core.simulation_manager.impl.simulation_manager] Engine 'invalid_engine' not found. Available: PhysX*",
 ]
 
@@ -170,7 +174,10 @@ pythonTests.include = [
     "isaacsim.core.simulation_manager.tests.test_physics_scene.TestPhysicsScene*",
     "isaacsim.core.simulation_manager.tests.test_physics_scene.TestNewtonMjcScene*",
 ]
+
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*[Error] [isaacsim.core.simulation_manager.impl.simulation_manager] Engine 'invalid_engine' not found. Available: PhysX*",
 ]
 

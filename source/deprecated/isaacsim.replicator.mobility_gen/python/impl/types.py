@@ -37,7 +37,7 @@ class Point2d:
 class Pose2d(Point2d):
     """A 2D pose representation with position and orientation.
 
-    Inherits from Point2d and adds rotation angle.
+    Inherits from Point2d and adds a rotation angle.
 
     Args:
         x: X coordinate position.

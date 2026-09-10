@@ -19,6 +19,7 @@ import omni.kit.test
 import omni.timeline
 import omni.usd
 from isaacsim.sensors.experimental.physics import Contact, ContactSensor
+from isaacsim.sensors.physics.examples.contact_sensor import disable_articulation_sleep
 from isaacsim.storage.native import get_assets_root_path
 
 
@@ -42,6 +43,8 @@ class TestContactSensorExample(omni.kit.test.AsyncTestCase):
 
         await omni.usd.get_context().open_stage_async(assets_root + "/Isaac/Robots/IsaacSim/Ant/ant_colored.usd")
         await omni.kit.app.get_app().next_update_async()
+
+        disable_articulation_sleep("/Ant")
 
         stage = omni.usd.get_context().get_stage()
         self.assertIsNotNone(stage)

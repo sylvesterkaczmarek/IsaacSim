@@ -33,16 +33,9 @@ import omni.ui as ui
 import omni.usd
 from isaacsim.core.prims import SingleArticulation
 from isaacsim.core.utils.prims import get_prim_object_type
+from isaacsim.gui.components import btn_builder, float_builder, setup_ui_headers, state_btn_builder, str_builder
 from isaacsim.gui.components.menu import make_menu_item_description
-from isaacsim.gui.components.ui_utils import (
-    add_line_rect_flourish,
-    btn_builder,
-    float_builder,
-    get_style,
-    setup_ui_headers,
-    state_btn_builder,
-    str_builder,
-)
+from isaacsim.gui.components.ui_utils import add_line_rect_flourish, get_style
 from isaacsim.gui.components.widgets import DynamicComboBoxModel
 from omni.kit.menu.utils import MenuItemDescription, add_menu_items, remove_menu_items
 from omni.kit.window.extensions import SimpleCheckBox
@@ -205,6 +198,11 @@ class Extension(omni.ext.IExt):
         gc.collect()
 
     def _on_window(self, visible: bool) -> None:
+        """Handles Lula Test Widget window visibility changes.
+
+        Args:
+            visible: Whether the window is visible.
+        """
         if self._window.visible:
             # Subscribe to Stage and Timeline Events
             self._usd_context = omni.usd.get_context()
@@ -247,12 +245,14 @@ class Extension(omni.ext.IExt):
             self._stage_event_sub_sim_stop = None
 
     def _menu_callback(self) -> None:
+        """Toggles the Lula Test Widget window and refreshes articulation selection when the timeline is playing."""
         self._window.visible = not self._window.visible
         # Update the Selection Box if the Timeline is already playing
         if self._timeline.is_playing():
             self._refresh_selection_combobox()
 
     def _build_ui(self) -> None:
+        """Builds the Lula Test Widget UI and docks the window beside the Viewport."""
         # if not self._window:
         with self._window.frame:
             with ui.VStack(spacing=5, height=0):
@@ -283,12 +283,12 @@ class Extension(omni.ext.IExt):
         self._task = asyncio.ensure_future(dock_window())
 
     def _on_selection(self, prim_path: str) -> None:
-        """Creates an Articulation Object from the selected articulation prim path.
+        """Creates an Articulation object from the selected articulation prim path.
 
-           Updates the UI with the Selected articulation.
+        Updates the UI with the selected articulation.
 
         Args:
-            prim_path: path to selected articulation
+            prim_path: Path to the selected articulation.
         """
         if prim_path == self._prev_art_prim_path:
             return
@@ -323,6 +323,12 @@ class Extension(omni.ext.IExt):
             # carb.log_warn("Resetting Articulation Inspector")
 
     def _on_combobox_selection(self, model: Any = None, val: Any = None) -> None:
+        """Handles articulation combobox selection and selects the chosen articulation prim path.
+
+        Args:
+            model: Combobox callback model.
+            val: Combobox callback value.
+        """
         # index = model.get_item_value_model().as_int
         index = self._models["ar_selection_model"].get_item_value_model().as_int
         if index >= 0 and index < len(self.articulation_list):
@@ -332,6 +338,7 @@ class Extension(omni.ext.IExt):
             self._on_selection(item)
 
     def _refresh_selection_combobox(self) -> None:
+        """Refreshes the articulation selection combobox from the current Stage and preserves the current selection."""
         self.articulation_list = self.get_all_articulations()
         if self._prev_art_prim_path is not None and self._prev_art_prim_path not in self.articulation_list:
             self._reset_ui()
@@ -347,6 +354,7 @@ class Extension(omni.ext.IExt):
                 )
 
     def _clear_selection_combobox(self) -> None:
+        """Clears the selected articulation state and resets the articulation selection combobox."""
         self._selected_index = None
         self._selected_prim_path = None
         self.articulation_list = []
@@ -355,10 +363,10 @@ class Extension(omni.ext.IExt):
         self._models["ar_selection_combobox"].model.add_item_changed_fn(self._on_combobox_selection)
 
     def get_all_articulations(self) -> list:
-        """Get all the articulation objects from the Stage.
+        """Gets all articulation prim paths from the Stage.
 
         Returns:
-            list(str): list of prim_paths as strings
+            List of prim paths as strings.
         """
         articulations = ["None"]
         if self._timeline.is_stopped():
@@ -375,12 +383,12 @@ class Extension(omni.ext.IExt):
         return articulations
 
     def get_articulation_values(self, articulation: object) -> None:
-        """Get and store the latest dof_properties from the articulation.
+        """Gets and stores articulation degree of freedom values for a new selection.
 
-           Update the Properties UI.
+        Updates cached DOF count, DOF names, and joint positions for the Properties UI.
 
         Args:
-            articulation: Selected Articulation
+            articulation: Selected Articulation.
         """
         # Update static dof properties on new selection
         if self.new_selection:
@@ -391,6 +399,7 @@ class Extension(omni.ext.IExt):
             self._joint_positions = articulation.get_joint_positions()
 
     def _refresh_ee_frame_combobox(self) -> None:
+        """Updates the end effector frame combobox from the loaded robot description and URDF files."""
         if self._robot_description_file is not None and self._robot_urdf_file is not None:
             self._test_scenarios.initialize_ik_solver(self._robot_description_file, self._robot_urdf_file)
             ee_frames = self._test_scenarios.get_ik_frames()
@@ -410,6 +419,12 @@ class Extension(omni.ext.IExt):
         self._ee_frame_options = ee_frames
 
     def _reset_scenario(self, model: Any = None, value: Any = None) -> None:
+        """Resets the active Lula test scenario after configuration or end effector frame changes.
+
+        Args:
+            model: UI model that triggered the reset.
+            value: UI callback value.
+        """
         self._enable_lula_dropdowns()
         self._set_enable_trajectory_panel(False)
 
@@ -417,7 +432,7 @@ class Extension(omni.ext.IExt):
             self.articulation.post_reset()
 
     def _refresh_ui(self, articulation: object) -> None:
-        """Updates the GUI with a new Articulation's properties.
+        """Updates the GUI with the selected Articulation properties.
 
         Args:
             articulation: The articulation to display in the UI.
@@ -429,7 +444,7 @@ class Extension(omni.ext.IExt):
             self._enable_load_button()
 
     def _reset_ui(self) -> None:
-        """Reset / Hide UI Elements."""
+        """Clears articulation selection and restores Lula UI panels and test scenarios to their reset state."""
         self._clear_selection_combobox()
         self._disable_lula_dropdowns()
         self._test_scenarios.full_reset()
@@ -441,19 +456,19 @@ class Extension(omni.ext.IExt):
     ##################################
 
     def _on_stage_selection_changed(self, event: object) -> None:
-        """Callback for Stage Selection Changed Event.
+        """Callback for Stage Selection Changed event that refreshes the articulation selection combobox.
 
         Args:
-            event: Event
+            event: Stage selection changed event.
         """
         # On every stage event check if any articulations have been added/removed from the Stage
         self._refresh_selection_combobox()
 
     def _on_stage_opened(self, event: object) -> None:
-        """Callback for Stage Opened Event.
+        """Callback for Stage Opened event that refreshes articulation selection and clears the physics subscription.
 
         Args:
-            event: Event
+            event: Stage opened event.
         """
         # On every stage event check if any articulations have been added/removed from the Stage
         self._refresh_selection_combobox()
@@ -461,10 +476,10 @@ class Extension(omni.ext.IExt):
         self._physics_subscription = None
 
     def _on_stage_closed(self, event: object) -> None:
-        """Callback for Stage Closed Event.
+        """Callback for Stage Closed event that refreshes articulation selection and clears the physics subscription.
 
         Args:
-            event: Event
+            event: Stage closed event.
         """
         # On every stage event check if any articulations have been added/removed from the Stage
         self._refresh_selection_combobox()
@@ -472,10 +487,10 @@ class Extension(omni.ext.IExt):
         self._physics_subscription = None
 
     def _on_timeline_play(self, event: object) -> None:
-        """Callback for Timeline Played Event.
+        """Callback for Timeline Played event that refreshes articulations and selects the current combobox item.
 
         Args:
-            event: Event
+            event: Timeline played event.
         """
         self._refresh_selection_combobox()
         index = self._models["ar_selection_model"].get_item_value_model().as_int
@@ -483,16 +498,16 @@ class Extension(omni.ext.IExt):
         self._on_selection(selected_articulation)
 
     def _on_timeline_stop(self, event: object) -> None:
-        """Callback for Timeline Stopped Event.
+        """Callback for Timeline Stopped event that deselects the current articulation when the timeline is stopped.
 
         Args:
-            event: Event
+            event: Timeline stopped event.
         """
         if self._timeline.is_stopped():
             self._on_selection("None")
 
     def _on_physics_step(self, step: float, context: object) -> None:
-        """Callback for Physics Step.
+        """Applies the next Lula test scenario control action to the selected articulation during a physics step.
 
         Args:
             step: Physics step size in seconds.
@@ -544,10 +559,7 @@ class Extension(omni.ext.IExt):
         setup_ui_headers(self._ext_id, __file__, title, doc_link, overview)
 
     def _build_selection_ui(self) -> None:
-        """Builds the selection panel UI with articulation dropdown, file pickers for robot description and URDF,.
-
-        and end effector frame selection controls.
-        """
+        """Builds the selection panel UI with articulation, robot description YAML, URDF, end effector frame, orientation target, and end effector visualization controls."""
         frame = ui.CollapsableFrame(
             title="Selection Panel",
             height=0,
@@ -707,10 +719,7 @@ class Extension(omni.ext.IExt):
                 )
 
     def _build_trajectory_generation_ui(self) -> None:
-        """Builds the Lula Trajectory Generator UI panel with custom trajectory creation and waypoint.
-
-        management controls.
-        """
+        """Builds the Lula Trajectory Generator UI panel with custom trajectory creation and waypoint management controls."""
         frame = ui.CollapsableFrame(
             title="Lula Trajectory Generator",
             height=0,
@@ -785,10 +794,7 @@ class Extension(omni.ext.IExt):
                         )
 
     def _build_rmpflow_ui(self) -> None:
-        """Builds the RmpFlow UI panel with configuration file selection, target following controls,.
-
-        and sinusoidal trajectory parameters.
-        """
+        """Builds the RmpFlow UI panel with configuration file selection, debugging mode, target following controls, and sinusoidal trajectory parameters."""
         frame = ui.CollapsableFrame(
             title="RmpFlow",
             height=0,
@@ -929,7 +935,7 @@ class Extension(omni.ext.IExt):
                         )
 
     def _disable_lula_dropdowns(self) -> None:
-        """Disables and collapses the Lula kinematics, trajectory, and RmpFlow UI panels."""
+        """Disables and collapses the Lula kinematics, trajectory, RmpFlow, and custom trajectory UI panels."""
         frame_names = ["kinematics_frame", "trajectory_frame", "rmpflow_frame", "trajectory_panel"]
         for n in frame_names:
             frame = self._models[n]
@@ -937,14 +943,11 @@ class Extension(omni.ext.IExt):
             frame.collapsed = True
 
     def _enable_load_button(self) -> None:
-        """Enables the config file load button when valid robot description file is selected."""
+        """Enables the config file load button after a valid robot description file is selected."""
         self._models["load_config_btn"].enabled = True
 
     def _enable_lula_dropdowns(self) -> None:
-        """Enables the Lula kinematics, trajectory, and RmpFlow UI panels when articulation and.
-
-        configuration files are loaded.
-        """
+        """Enables the Lula kinematics, trajectory, and RmpFlow UI panels after an articulation and configuration files are loaded."""
         if self.articulation is None or self._robot_description_file is None or self._robot_urdf_file is None:
             return
 
@@ -960,7 +963,7 @@ class Extension(omni.ext.IExt):
             self._test_scenarios.visualize_ee_frame(self.articulation, self._get_selected_ee_frame())
 
     def _set_enable_trajectory_panel(self, enable: bool) -> None:
-        """Enables or disables the trajectory panel frame.
+        """Enables or disables the trajectory panel frame and collapses it when disabled.
 
         Args:
             enable: Whether to enable the trajectory panel.
@@ -979,7 +982,7 @@ class Extension(omni.ext.IExt):
         self._models["rmpflow_follow_sinusoid_btn"].enabled = enable
 
     def _get_selected_ee_frame(self) -> str:
-        """Get the selected end effector frame name from the dropdown options.
+        """Gets the selected end effector frame name from the dropdown options.
 
         Returns:
             The name of the selected end effector frame.

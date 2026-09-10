@@ -1,0 +1,70 @@
+{
+    "ZMQCameraHelper": {
+        "version": 1,
+        "icon": "icons/isaac-sim.svg",
+        "description": "Helper node that attaches annotators to a render product and builds the OmniGraph pipeline to publish RGB and depth data via ZMQ",
+        "language": "Python",
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": "isaacZmq",
+        "metadata": {
+            "uiName": "ZMQ Camera Helper"
+        },
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "Triggering this causes the ZMQ sensor pipeline to be generated"
+            },
+            "ip": {
+                "type": "string",
+                "description": "Remote IP address of the ZMQ server",
+                "default": "localhost"
+            },
+            "port": {
+                "type": "uint",
+                "description": "Remote port number of the ZMQ server",
+                "default": 5561
+            },
+            "renderProductPath": {
+                "type": "token",
+                "description": "Path of the render product used for capturing data"
+            },
+            "resetSimulationTimeOnStop": {
+                "type": "bool",
+                "description": "If True the simulation time will reset when stop is pressed",
+                "uiName": "Reset Simulation Time On Stop",
+                "default": true
+            },
+            "useSystemTime": {
+                "type": "bool",
+                "description": "If True, system timestamp will be used instead of simulation timestamp",
+                "default": false
+            },
+            "frameSkipCount": {
+                "type": "uint",
+                "description": "Number of simulation frames to skip between publishes (0 = publish every frame)",
+                "default": 0
+            },
+            "publishRgb": {
+                "type": "bool",
+                "description": "Publish RGB color images",
+                "default": true
+            },
+            "publishDepth": {
+                "type": "bool",
+                "description": "Publish depth images (distance_to_camera)",
+                "default": true
+            },
+            "useIpc": {
+                "type": "bool",
+                "description": "When true (default), color/depth images are shared zero-copy via CUDA IPC (same host). When false, raw bytes are sent (works cross-host).",
+                "default": true
+            }
+        },
+        "outputs": {
+            "execOut": {
+                "type": "execution",
+                "description": "The output execution port"
+            }
+        }
+    }
+}

@@ -230,11 +230,11 @@ def sync_actuator_gains(newton_stage: Any, model: Any) -> None:
     )
 
     try:
-        import newton.solvers
+        import newton
 
         solver = getattr(newton_stage, "solver", None)
         if solver is not None:
-            solver.notify_model_changed(newton.solvers.SolverNotifyFlags.ACTUATOR_PROPERTIES)
+            solver.notify_model_changed(newton.ModelFlags.ACTUATOR_PROPERTIES)
     except (AttributeError, ImportError):
         pass
 
@@ -264,7 +264,7 @@ def sync_position_targets(newton_stage: Any, model: Any) -> None:
     wp.launch(
         _sync_ctrl_direct_targets,
         dim=(nworlds, dofs_per_world),
-        inputs=[dof_map, control.joint_target_pos, dofs_per_world, ctrls_per_world],
+        inputs=[dof_map, control.joint_target_q, dofs_per_world, ctrls_per_world],
         outputs=[mujoco_ctrl],
         device=model.device,
     )

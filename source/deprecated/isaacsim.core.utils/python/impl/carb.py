@@ -24,7 +24,7 @@ import carb
 
 
 def set_carb_setting(carb_settings: carb.settings.ISettings, setting: str, value: Any) -> None:
-    """Convenience to set the carb settings.
+    """Convenience function to set carb settings.
 
     Args:
         carb_settings: The interface to carb settings.
@@ -32,7 +32,7 @@ def set_carb_setting(carb_settings: carb.settings.ISettings, setting: str, value
         value: New value for the setting.
 
     Raises:
-        TypeError: If the type of value does not match setting type.
+        TypeError: If the type of value does not match a supported setting type.
 
     Example:
 
@@ -61,7 +61,7 @@ def get_carb_setting(carb_settings: carb.settings.ISettings, setting: str) -> An
 
     Args:
         carb_settings: The interface to carb settings.
-        setting: Name of setting to change.
+        setting: Name of setting to read.
 
     Returns:
         Value for the setting.

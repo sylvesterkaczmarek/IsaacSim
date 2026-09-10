@@ -11,6 +11,12 @@ Python API
 
     RobotPoser
     PoseResult
+    KinematicChain
+    Transform
+    Joint
+    IKSolver
+    IKSolverRegistry
+    IKSolverLM
 
 .. rubric:: *Functions*
 .. autosummary::
@@ -26,6 +32,8 @@ Python API
     delete_named_pose
     export_poses
     import_poses
+    pose_error
+    ik_lm
 
 |
 
@@ -40,6 +48,36 @@ Classes
     :show-inheritance:
 
 .. autoclass:: isaacsim.robot.poser.PoseResult
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: isaacsim.robot.poser.KinematicChain
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: isaacsim.robot.poser.Transform
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: isaacsim.robot.poser.Joint
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: isaacsim.robot.poser.IKSolver
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: isaacsim.robot.poser.IKSolverRegistry
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: isaacsim.robot.poser.IKSolverLM
     :members:
     :undoc-members:
     :show-inheritance:
@@ -68,3 +106,7 @@ Functions
 .. autofunction:: isaacsim.robot.poser.export_poses
 
 .. autofunction:: isaacsim.robot.poser.import_poses
+
+.. autofunction:: isaacsim.robot.poser.pose_error
+
+.. autofunction:: isaacsim.robot.poser.ik_lm

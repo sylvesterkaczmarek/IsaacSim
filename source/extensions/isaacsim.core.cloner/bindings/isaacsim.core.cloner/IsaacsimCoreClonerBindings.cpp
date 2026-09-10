@@ -16,7 +16,7 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/core/cloner/Cloner.h>
+#include <isaacsim/core/cloner/Cloner.hpp>
 
 CARB_BINDINGS("isaacsim.core.cloner.python")
 

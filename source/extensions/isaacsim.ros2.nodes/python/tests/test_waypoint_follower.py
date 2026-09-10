@@ -531,11 +531,9 @@ class TestRos2Nav2WaypointFollower(ROS2TestCase):
                         ("WaypointPrimPath", "omni.graph.nodes.ConstantString"),
                         ("WaypointCountConstant", "omni.graph.nodes.ConstantInt"),
                         ("ReadPrimLocalTransform", "omni.graph.nodes.ReadPrimLocalTransform"),
-                        ("TokenToTarget", "omni.graph.nodes.ToTarget"),
                         ("GetTranslation", "omni.graph.nodes.GetMatrix4Translation"),
                         ("GetRotationQuaternion", "omni.graph.nodes.GetMatrix4Quaternion"),
-                        ("ForEach", "omni.graph.action.ForEach"),
-                        ("GetPrimPaths", "omni.graph.nodes.GetPrimPaths"),
+                        ("ForEach", "omni.graph.action.ForEachTarget"),
                         ("GetPrims", "omni.replicator.core.OgnGetPrims"),
                     ],
                     keys.SET_VALUES: [
@@ -566,11 +564,9 @@ class TestRos2Nav2WaypointFollower(ROS2TestCase):
                         ("OnStageEvent.outputs:execOut", "GatherWaypointsScriptNode.inputs:reset_state"),
                         ("OnStageEvent.outputs:execOut", "ResetBranch.inputs:execIn"),
                         ("GetPrims.outputs:execOut", "ForEach.inputs:execIn"),
-                        ("GetPrims.outputs:prims", "GetPrimPaths.inputs:prims"),
-                        ("GetPrimPaths.outputs:primPaths", "ForEach.inputs:arrayIn"),
+                        ("GetPrims.outputs:prims", "ForEach.inputs:targets"),
                         ("ForEach.outputs:loopBody", "GatherWaypointsScriptNode.inputs:execIn"),
-                        ("ForEach.outputs:element", "TokenToTarget.inputs:value"),
-                        ("TokenToTarget.outputs:converted", "ReadPrimLocalTransform.inputs:prim"),
+                        ("ForEach.outputs:target", "ReadPrimLocalTransform.inputs:prim"),
                         ("ReadPrimLocalTransform.outputs:value", "GetTranslation.inputs:matrix"),
                         ("ReadPrimLocalTransform.outputs:value", "GetRotationQuaternion.inputs:matrix"),
                         ("GetTranslation.outputs:translation", "MakeArrayTranslation.inputs:input0"),
@@ -759,6 +755,13 @@ class TestRos2Nav2WaypointFollower(ROS2TestCase):
             print(f"Error comparing results: {e}")
             return False
 
+    async def _wait_for_action_graph_result(self, timeout_sec: float = 6.0) -> bool:
+        """Wait for the ScriptNode publisher loop to deliver the expected message."""
+        deadline = asyncio.get_running_loop().time() + timeout_sec
+        while not self.__result and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.1)
+        return self.__result
+
     async def test_waypoint_mode_action_graph(self) -> None:
         """Test waypoint mode action graph."""
         from std_msgs.msg import String
@@ -800,12 +803,13 @@ class TestRos2Nav2WaypointFollower(ROS2TestCase):
         await self.simulate_until_condition(lambda: False, max_frames=30)
         og.Controller.set(og.Controller.attribute(f"{self._og_path}/OnImpulseEvent.state:enableImpulse"), True)
         # The ScriptNode publisher uses a wall-clock loop with time.sleep().
-        # Keep this as a wall-clock wait so the async ROS executor can process the published messages.
-        await asyncio.sleep(2.0)
+        # Wait on the callback result instead of assuming the first 2 seconds include delivery.
+        condition_met = await self._wait_for_action_graph_result()
 
         self.stop_async_spinning(self.__node)
         self.__node.destroy_node()
 
+        self.assertTrue(condition_met, "Timed out waiting for waypoint mode ROS message.")
         self.assertTrue(self.__result, "Waypoint Mode Graph is not generated properly.")
 
     async def test_patrolling_mode_action_graph(self) -> None:
@@ -853,10 +857,11 @@ class TestRos2Nav2WaypointFollower(ROS2TestCase):
         await self.simulate_until_condition(lambda: False, max_frames=30)
         og.Controller.set(og.Controller.attribute(f"{self._og_path}/OnImpulseEvent.state:enableImpulse"), True)
         # The ScriptNode publisher uses a wall-clock loop with time.sleep().
-        # Keep this as a wall-clock wait so the async ROS executor can process the published messages.
-        await asyncio.sleep(2.0)
+        # Wait on the callback result instead of assuming the first 2 seconds include delivery.
+        condition_met = await self._wait_for_action_graph_result()
 
         self.stop_async_spinning(self.__node)
         self.__node.destroy_node()
 
+        self.assertTrue(condition_met, "Timed out waiting for patrolling mode ROS message.")
         self.assertTrue(self.__result, "Patrolling Mode Graph is not generated properly.")

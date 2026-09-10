@@ -28,7 +28,6 @@ class MeshMerger(object):
 
     Args:
         stage: The USD stage containing the meshes to merge.
-
     """
 
     def __init__(self, stage: object) -> None:
@@ -50,27 +49,47 @@ class MeshMerger(object):
 
     @property
     def total_meshes(self) -> int:
-        """Get the total number of meshes to be merged."""
+        """Total number of meshes to be merged.
+
+        Returns:
+            The mesh count.
+        """
         return self._total_meshes
 
     @property
     def total_subsets(self) -> int:
-        """Get the total number of geometry subsets across all meshes."""
+        """Total number of geometry subsets across all meshes.
+
+        Returns:
+            The geometry subset count.
+        """
         return self._total_subsets
 
     @property
     def total_materials(self) -> int:
-        """Get the total number of unique materials across all meshes."""
+        """Total number of unique materials across all meshes.
+
+        Returns:
+            The unique material count.
+        """
         return self._total_materials
 
     @property
     def meshes_to_merge(self) -> list:
-        """Get the list of mesh prims to be merged."""
+        """Mesh prims to be merged.
+
+        Returns:
+            The mesh prims selected for merging.
+        """
         return self._meshes_to_merge
 
     @property
     def clear_parent_xform(self) -> bool:
-        """Get whether to clear the parent transform when merging."""
+        """Whether to clear the parent transform when merging.
+
+        Returns:
+            True if the merged mesh origin is at world origin.
+        """
         return self._clear_parent_xform
 
     @clear_parent_xform.setter
@@ -80,13 +99,16 @@ class MeshMerger(object):
         Args:
             value: If True, the merged mesh origin is at world origin.
                 Otherwise, it keeps the origin at the parent's origin.
-
         """
         self._clear_parent_xform = value
 
     @property
     def deactivate_source(self) -> bool:
-        """Get whether to deactivate source prims after merging."""
+        """Whether to deactivate source prims after merging.
+
+        Returns:
+            True if source meshes are deactivated after merge.
+        """
         return self._deactivate_source
 
     @deactivate_source.setter
@@ -95,18 +117,25 @@ class MeshMerger(object):
 
         Args:
             value: If True, deactivates all source meshes after merge.
-
         """
         self._deactivate_source = value
 
     @property
     def selected_objects(self) -> list:
-        """Get the list of selected prim paths."""
+        """Selected prim paths.
+
+        Returns:
+            The selected prim paths.
+        """
         return self._selected_objects
 
     @property
     def combine_materials(self) -> bool:
-        """Get whether to combine materials into a single destination."""
+        """Whether to combine materials into a single destination.
+
+        Returns:
+            True if materials are combined into a single destination.
+        """
         return self._combine_materials
 
     @combine_materials.setter
@@ -115,13 +144,16 @@ class MeshMerger(object):
 
         Args:
             value: If True, materials are combined into the materials destination path.
-
         """
         self._combine_materials = value
 
     @property
     def materials_destination(self) -> str:
-        """Get the destination path for combined materials."""
+        """Destination path for combined materials.
+
+        Returns:
+            The prim path where combined materials are stored.
+        """
         return self._materials_destination
 
     @materials_destination.setter
@@ -130,7 +162,6 @@ class MeshMerger(object):
 
         Args:
             value: The prim path where combined materials will be stored.
-
         """
         changed = value != self._materials_destination
         self._materials_destination = value
@@ -139,7 +170,11 @@ class MeshMerger(object):
 
     @property
     def output_mesh(self) -> str:
-        """Get the output path for the merged mesh."""
+        """Output path for the merged mesh.
+
+        Returns:
+            The prim path for the merged mesh.
+        """
         return self._output_mesh
 
     @output_mesh.setter
@@ -150,7 +185,6 @@ class MeshMerger(object):
 
         Args:
             value: The desired prim path for the merged mesh.
-
         """
         self._output_mesh = omni.usd.get_stage_next_free_path(self._stage, value, False)
 
@@ -162,7 +196,6 @@ class MeshMerger(object):
 
         Args:
             mat: The UsdShade.Material to fix connections for.
-
         """
         shader_path = mat.GetPrim().GetChildren()[0].GetPath()
 
@@ -191,8 +224,7 @@ class MeshMerger(object):
 
         Args:
             selection: List of prim paths to process for merging.
-            stage: Optional USD stage to use. If None, uses the current stage.
-
+            stage: USD stage to use. If None, uses the current stage.
         """
         self._selected_objects = selection
         if stage:

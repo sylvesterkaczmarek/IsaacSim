@@ -40,6 +40,12 @@ from isaacsim.cortex.framework.cortex_utils import get_assets_root_path_or_die
 from isaacsim.cortex.framework.cortex_world import CortexWorld
 from isaacsim.cortex.framework.robot import CortexUr10
 
+# Pin this deprecated example to the Isaac Sim 6.0 asset retained for compatibility.
+LEGACY_UR10_TABLE_USD = (
+    "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/"
+    "Isaac/Samples/Leonardo/Stage/ur10_bin_stacking_short_suction.usd"
+)
+
 
 class Ur10Assets:
     """Store USD asset paths for the UR10 bin stacking scene."""
@@ -47,16 +53,18 @@ class Ur10Assets:
     def __init__(self) -> None:
         self.assets_root_path = get_assets_root_path_or_die()
 
-        self.ur10_table_usd = (
-            self.assets_root_path + "/Isaac/Samples/Leonardo/Stage/ur10_bin_stacking_short_suction.usd"
-        )
+        self.ur10_table_usd = LEGACY_UR10_TABLE_USD
         self.small_klt_usd = self.assets_root_path + "/Isaac/Props/KLT_Bin/small_KLT.usd"
         self.background_usd = self.assets_root_path + "/Isaac/Environments/Simple_Warehouse/warehouse.usd"
         self.rubiks_cube_usd = self.assets_root_path + "/Isaac/Props/Rubiks_Cube/rubiks_cube.usd"
 
 
 def print_diagnostics(diagnostic: Any) -> None:
-    """Print the current logical state of the bin stacking behavior."""
+    """Print the current logical state of the bin stacking behavior.
+
+    Args:
+        diagnostic: Bin-stacking diagnostic state to display.
+    """
     print("=========== logical state ==========")
     if diagnostic.bin_name:
         print("active bin info:")
@@ -73,7 +81,11 @@ def print_diagnostics(diagnostic: Any) -> None:
 
 
 def random_bin_spawn_transform() -> tuple[np.ndarray, Any]:
-    """Generate a random position and orientation for spawning a bin."""
+    """Generate a random position and orientation for spawning a bin.
+
+    Returns:
+        Randomized world position and quaternion for the new bin.
+    """
     x = random.uniform(-0.15, 0.15)
     y = 1.5
     z = -0.15
@@ -94,7 +106,13 @@ def random_bin_spawn_transform() -> tuple[np.ndarray, Any]:
 
 
 class BinStackingTask(BaseTask):
-    """Manage bin spawning and tracking for the stacking task."""
+    """Manage bin spawning and tracking for the stacking task.
+
+    Args:
+        env_path: Environment path accepted for interface compatibility and currently ignored; the task uses
+            ``/World/Ur10Table``.
+        assets: USD asset paths used to populate the stacking scene.
+    """
 
     def __init__(self, env_path: str, assets: Ur10Assets) -> None:
         super().__init__("bin_stacking")
@@ -121,7 +139,12 @@ class BinStackingTask(BaseTask):
         self.on_conveyor = None
 
     def pre_step(self, time_step_index: int, simulation_time: float) -> None:
-        """Spawn a new randomly oriented bin if the previous bin has been placed."""
+        """Spawn a new randomly oriented bin if the previous bin has been placed.
+
+        Args:
+            time_step_index: Current simulation step index. This task does not use it.
+            simulation_time: Current simulation time. This task does not use it.
+        """
         spawn_new = False
         if self.on_conveyor is None:
             spawn_new = True

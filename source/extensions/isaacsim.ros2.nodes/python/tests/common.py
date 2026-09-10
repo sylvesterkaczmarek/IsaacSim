@@ -89,7 +89,8 @@ def set_rotate(prim: Any, rot_mat: Any) -> None:
     elif "xformOp:transform" in properties:
         transform_attr = prim.GetAttribute("xformOp:transform")
         matrix = prim.GetAttribute("xformOp:transform").Get()
-        matrix.SetRotateOnly(rot_mat.ExtractRotation())
+        rotation = rot_mat.ExtractRotation() if hasattr(rot_mat, "ExtractRotation") else rot_mat
+        matrix.SetRotateOnly(rotation)
         transform_attr.Set(matrix)
     else:
         xform = UsdGeom.Xformable(prim)
@@ -242,15 +243,32 @@ async def add_carter_ros(assets_root_path: Any, prim_path: Any = "/Carter") -> A
     return prim_path
 
 
-async def add_nova_carter_ros(assets_root_path: Any) -> None:
+async def add_nova_carter_ros(assets_root_path: Any, enable_sensors: bool = True) -> None:
     """Add a Nova Carter robot with ROS 2 graphs to the stage.
 
     Args:
         assets_root_path: Isaac assets root path.
+        enable_sensors: Whether to enable camera and RTX sensor graph nodes.
     """
     result, error = await stage_utils.open_stage_async(
         assets_root_path + "/Isaac/Samples/ROS2/Robots/Nova_Carter_ROS.usd"
     )
+    if not result:
+        raise RuntimeError(f"Failed to open Nova Carter ROS stage: {error}")
+    if not enable_sensors:
+        sensor_node_types = {
+            "isaacsim.core.nodes.IsaacCreateRenderProduct",
+            "isaacsim.ros2.bridge.ROS2CameraHelper",
+            "isaacsim.ros2.bridge.ROS2RtxLidarHelper",
+            "isaacsim.ros2.bridge.ROS2RtxRadarHelper",
+        }
+        stage = omni.usd.get_context().get_stage()
+        for prim in stage.Traverse():
+            node_type = prim.GetAttribute("node:type")
+            if node_type.IsValid() and node_type.Get() in sensor_node_types:
+                enabled = prim.GetAttribute("inputs:enabled")
+                if enabled.IsValid():
+                    enabled.Set(False)
     await omni.kit.app.get_app().next_update_async()
 
 
@@ -261,8 +279,10 @@ async def add_franka(assets_root_path: Any) -> None:
         assets_root_path: Isaac assets root path.
     """
     result, error = await stage_utils.open_stage_async(
-        assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
     )
+    if not result:
+        raise RuntimeError(f"Failed to open Franka stage: {error}")
 
 
 def get_qos_profile(depth: int = 1, history: str = "keep_last") -> Any:

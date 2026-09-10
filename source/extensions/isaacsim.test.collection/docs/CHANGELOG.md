@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.6.13] - 2026-08-27
+### Fixed
+- Stabilize timeline advancement tests by committing stage FPS changes before simulation.
+
+## [2.6.12] - 2026-08-06
+### Changed
+- Refresh the Small Warehouse Digital Twin golden image for current RTX rendering.
+
+### Fixed
+- Configure iW Hub tests to use CPU PhysX for stable multiphysics asset validation.
+
+## [2.6.11] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [2.6.10] - 2026-06-29
+### Changed
+- Replace package-root star imports with explicit lifecycle imports.
+
+## [2.6.9] - 2026-06-23
+### Changed
+- Update utility snippets to use `isaacsim.core.experimental.utils.physics` helpers instead of `omni.physx.scripts.utils`
+
+### Removed
+- Remove the collision/rigid-body utility snippet tests now covered by `isaacsim.core.experimental.utils` `test_physics`
+
 ## [2.6.8] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

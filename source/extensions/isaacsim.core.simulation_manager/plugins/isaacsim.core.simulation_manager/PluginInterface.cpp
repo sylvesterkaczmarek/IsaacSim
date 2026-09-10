@@ -17,9 +17,9 @@
 #include <carb/eventdispatcher/IEventDispatcher.h>
 #include <carb/events/EventsUtils.h>
 
-#include <isaacsim/core/simulation_manager/ISimulationManager.h>
-#include <isaacsim/core/simulation_manager/TimeSampleStorage.h>
-#include <isaacsim/core/simulation_manager/UsdNoticeListener.h>
+#include <isaacsim/core/simulation_manager/ISimulationManager.hpp>
+#include <isaacsim/core/simulation_manager/TimeSampleStorage.hpp>
+#include <isaacsim/core/simulation_manager/UsdNoticeListener.hpp>
 #include <omni/ext/IExt.h>
 #include <omni/fabric/FabricUSD.h>
 #include <omni/fabric/IToken.h>
@@ -33,7 +33,7 @@
 #include <omni/physics/simulation/IPhysicsStageUpdate.h>
 #include <omni/usd/UsdContext.h>
 
-#include <RunLoopRunner.h>
+#include <RunLoopRunner.hpp>
 
 #if defined(_WIN32)
 #    include <usdrt/scenegraph/usd/usd/stage.h>
@@ -83,6 +83,23 @@ bool g_paused = false;
 double g_monotonicTimeAccumulated = 0.0;
 uint64_t g_monotonicStepCount = 0;
 uint32_t g_lastStepsPerSecond = 0;
+
+/// Single-slot cache for getSimulationTimeStepsPerSecond, keyed by (scene, simulation).
+/// Some physics backends resolve the query by walking stage prims on every call
+/// (O(stage size) per step), while the value itself only changes through explicit scene
+/// edits; the slot is re-queried after play-state, registry, or stage-attach changes.
+/// Interleaved stepping of several (scene, simulation) pairs misses the single slot on
+/// every step and falls back to the per-step query - the behavior before this cache.
+uint64_t g_stepsPerSecondCacheScenePath = 0;
+omni::physics::SimulationId g_stepsPerSecondCacheSimId = omni::physics::kInvalidSimulationId;
+uint32_t g_stepsPerSecondCached = 0;
+
+void invalidateStepsPerSecondCache()
+{
+    g_stepsPerSecondCached = 0;
+    g_stepsPerSecondCacheScenePath = 0;
+    g_stepsPerSecondCacheSimId = omni::physics::kInvalidSimulationId;
+}
 
 void updateMultiTickExternalSimulationTime()
 {
@@ -665,6 +682,7 @@ private:
  */
 void onResume(float currentTime, void* userData)
 {
+    invalidateStepsPerSecondCache();
     // Only write initial time data if storage exists
     if (g_timeStorage)
     {
@@ -691,8 +709,16 @@ void onPhysicsStep(float timeElapsed, const omni::physics::PhysicsStepContext& c
     // accumulated floating-point drift from repeated addition of float dt.
     // All physics backends must implement getSimulationStepCount() and
     // getSimulationTimeStepsPerSecond() on IPhysicsSimulation.
-    uint32_t stepsPerSecond = g_physicsSimulationInterface->getSimulationTimeStepsPerSecond(
-        context.simulationId, g_stageId.id, context.scenePath);
+    uint32_t stepsPerSecond = g_stepsPerSecondCached;
+    if (stepsPerSecond == 0 || context.scenePath != g_stepsPerSecondCacheScenePath ||
+        context.simulationId != g_stepsPerSecondCacheSimId)
+    {
+        stepsPerSecond = g_physicsSimulationInterface->getSimulationTimeStepsPerSecond(
+            context.simulationId, g_stageId.id, context.scenePath);
+        g_stepsPerSecondCached = stepsPerSecond;
+        g_stepsPerSecondCacheScenePath = context.scenePath;
+        g_stepsPerSecondCacheSimId = context.simulationId;
+    }
     uint64_t stepCount = g_physicsSimulationInterface->getSimulationStepCount(context.simulationId);
 
     g_simulationTime = static_cast<double>(stepCount) / static_cast<double>(stepsPerSecond);
@@ -744,6 +770,7 @@ void onSimulationRegistryEvent(omni::physics::SimulationRegistryEventType::Enum 
                                const char* simulationName,
                                void* userData)
 {
+    invalidateStepsPerSecondCache();
     if (eventType == omni::physics::SimulationRegistryEventType::eSIMULATION_REGISTERED)
     {
         // Re-subscribe to step events so the newly registered simulation receives the callback
@@ -764,6 +791,7 @@ void onSimulationRegistryEvent(omni::physics::SimulationRegistryEventType::Enum 
  */
 void onStop(void* userData)
 {
+    invalidateStepsPerSecondCache();
     // Clear time samples but keep storage object alive
     if (g_timeStorage)
     {
@@ -799,6 +827,7 @@ void onAttach(long int stageId, double metersPerUnit, void* userData)
     g_monotonicTimeAccumulated = 0.0;
     g_monotonicStepCount = 0;
     g_lastStepsPerSecond = 0;
+    invalidateStepsPerSecondCache();
 
     // Find the USD stage to validate it exists
     pxr::UsdStageWeakPtr stage = pxr::UsdUtilsStageCache::Get().Find(pxr::UsdStageCache::Id::FromLongInt(stageId));
@@ -826,6 +855,7 @@ void onAttach(long int stageId, double metersPerUnit, void* userData)
  */
 void onDetach(void* userData)
 {
+    invalidateStepsPerSecondCache();
     // Clean up time storage
     if (g_timeStorage)
     {

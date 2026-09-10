@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.10.12] - 2026-08-27
+### Fixed
+
+- Prevent Windows menu tests from failing on unrelated transient RTX DomeLight texture errors.
+
+## [2.10.11] - 2026-08-25
+### Fixed
+
+- Fixed screenshot capture, missing-path warnings for saved selections, and clipped buttons in the Create Selection Set dialog.
+
+## [2.10.10] - 2026-07-30
+### Added
+
+- Registered System Identification in the Tools menu.
+
+## [2.10.9] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [2.10.8] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [2.10.7] - 2026-06-26
+### Changed
+- Mark the menu package root as lifecycle-only with no public Python API.
+
+## [2.10.6] - 2026-06-26
+### Changed
+- Replace package-root star imports with explicit public API imports.
+
 ## [2.10.5] - 2026-05-19
 ### Fixed
 - Help menu: `OpenUSD Reference Guide`, `Warp Getting Started`, and `Warp Documentation` now render reliably in `isaacsim.exp.full.kit`. Previously they bound to `source=` items not provided by the app's dependency closure and rendered as orphan separators. Register the actions and `MenuItemDescription`s locally instead.

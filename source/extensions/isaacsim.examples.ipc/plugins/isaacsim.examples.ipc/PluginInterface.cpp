@@ -16,10 +16,10 @@
 #define CARB_EXPORTS
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "IExampleNodes.h"
+#include "IExampleNodes.hpp"
 
 #include <carb/Framework.h>
 #include <carb/PluginUtils.h>

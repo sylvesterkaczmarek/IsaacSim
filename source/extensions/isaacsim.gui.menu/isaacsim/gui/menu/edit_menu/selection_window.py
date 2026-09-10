@@ -34,7 +34,7 @@ class SelectionSetWindow:
         window = ui.Window(
             "Selection Set Name",
             width=300,
-            height=110,
+            height=0,
             flags=ui.WINDOW_FLAGS_NO_RESIZE | ui.WINDOW_FLAGS_NO_SCROLLBAR | ui.WINDOW_FLAGS_MODAL,
         )
 

@@ -463,7 +463,7 @@ class TestArticulation(omni.kit.test.AsyncTestCase):
     @parametrize(
         backends=["tensor"],
         operations=["wrap"],
-        supported_engines=["physx"],
+        supported_engines=["physx", "newton"],
         prim_class=Articulation,
         populate_stage_func=populate_stage,
     )
@@ -1341,8 +1341,10 @@ class TestArticulation(omni.kit.test.AsyncTestCase):
 
     async def test_articulation_metadata_consistent_fixed_base(self) -> None:
         """Fixed-base articulation (Franka): pre-physics metadata must match post-physics."""
-        await self._assert_articulation_metadata_consistent("Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd")
+        await self._assert_articulation_metadata_consistent(
+            "Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
+        )
 
     async def test_articulation_metadata_consistent_floating_base(self) -> None:
         """Floating-base articulation (Spot quadruped): pre-physics metadata must match post-physics."""
-        await self._assert_articulation_metadata_consistent("Isaac/Robots/BostonDynamics/spot/spot.usd")
+        await self._assert_articulation_metadata_consistent("Isaac/Robots_Multiphysics/BostonDynamics/spot/spot.usda")

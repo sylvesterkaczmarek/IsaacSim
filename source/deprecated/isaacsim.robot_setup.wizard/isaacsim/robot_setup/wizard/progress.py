@@ -74,10 +74,7 @@ class ProgressRegistry:
     """
 
     class _Event(set):
-        """A list of callable objects. Calling an instance of this will cause a.
-
-        call to each item in the list in ascending order by index.
-        """
+        """A list of callable objects. Calling an instance of this will cause a call to each item in the list in ascending order by index."""
 
         def __call__(self, *args: object, **kwargs: object) -> None:
             """Called when the instance is "called" as a function.
@@ -87,6 +84,9 @@ class ProgressRegistry:
             Args:
                 *args: Variable length argument list passed to each callback function.
                 **kwargs: Arbitrary keyword arguments passed to each callback function.
+
+            Raises:
+                Exception: Propagates exceptions raised by callback functions.
             """
             # Call all the saved functions
             for f in self:
@@ -103,7 +103,7 @@ class ProgressRegistry:
     class _EventSubscription:
         """Event subscription.
 
-        _Event has callback while this object exists.
+        _Event keeps the callback while this object exists.
 
         Args:
             event: The event object to subscribe to.
@@ -139,7 +139,7 @@ class ProgressRegistry:
         self._steps_dict = steps
 
     def get_progress_by_name(self, step_name: str) -> None:
-        """Get the steps.
+        """Get the progress state for a step.
 
         Args:
             step_name: Name of the step to retrieve.

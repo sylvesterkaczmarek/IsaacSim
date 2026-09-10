@@ -278,11 +278,10 @@
           }
         ],
         "default_variant_selections": {
-          "Physics": "physx",
-          "Gripper": "None",
-          "Left_Hand": "None",
-          "Right_Hand": "None"
-        }
+        },
+        "clear_default_variant_sets": [
+          "Physics"
+        ]
       },
       "enabled": true
     },
@@ -292,6 +291,7 @@
       "destination": "payloads/Physics",
       "params": {
         "stage_name": "mujoco.usda",
+        "input_stage_path": "payloads/Physics/physics.usda",
         "schema_patterns": [
           "PhysicsDriveAPI.*",
           "PhysicsJointStateAPI.*"
@@ -302,23 +302,6 @@
         "clear_properties": false
       },
       "enabled": true
-    },
-    {
-      "name": "Delete Newton Redundant APIs",
-      "type": "isaacsim.asset.transformer.rules.core.remove_schema.RemoveSchemaRule",
-      "destination": "payloads/Physics",
-      "params": {
-        "stage_name": "physx.usda",
-        "schema_patterns": [
-          "NewtonMimicAPI.*",
-          "NewtonArticulationRootAPI.*"
-        ],
-        "prim_path_patterns": [
-          ".*"
-        ],
-        "clear_properties": false
-      },
-      "enabled": false
     }
   ],
   "interface_asset_name": null,

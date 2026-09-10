@@ -33,9 +33,9 @@ class UR10(Robot):
     Args:
         prim_path: USD prim path for the robot.
         name: Name identifier for the robot.
-        usd_path: Path to custom USD file.
+        usd_path: Path to a custom USD file.
         position: Initial position of the robot.
-        orientation: Initial orientation as quaternion.
+        orientation: Initial orientation as a quaternion.
         end_effector_prim_name: Name of the end effector prim.
         attach_gripper: Whether to attach a gripper.
         gripper_usd: Path to gripper USD or "default".
@@ -110,7 +110,7 @@ class UR10(Robot):
         """Whether a gripper is attached to the robot.
 
         Returns:
-            True if gripper is attached, False otherwise.
+            True if a gripper is attached, False otherwise.
         """
         return self._attach_gripper
 
@@ -119,7 +119,7 @@ class UR10(Robot):
         """The robot's end effector prim.
 
         Returns:
-            The end effector as a SingleRigidPrim.
+            The end effector prim.
         """
         return self._end_effector
 

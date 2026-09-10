@@ -14,13 +14,13 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 
-#include <isaacsim/core/includes/Conversions.h>
-#include <isaacsim/sensors/physx/IPhysxSensorInterface.h>
+#include <isaacsim/core/includes/Conversions.hpp>
+#include <isaacsim/sensors/physx/IPhysxSensorInterface.hpp>
 #include <omni/fabric/FabricUSD.h>
 #include <pxr/base/gf/quatd.h>
 #include <pxr/base/gf/vec3d.h>

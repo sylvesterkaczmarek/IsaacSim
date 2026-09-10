@@ -1,10 +1,12 @@
 ---
 description: C++ coding style and conventions for Isaac Sim
 globs:
-  - "**/*.c"
   - "**/*.cpp"
-  - "**/*.h"
   - "**/*.hpp"
+  - "**/*.cc"
+  - "**/*.cxx"
+  - "**/*.hh"
+  - "**/*.hxx"
 ---
 
 # C++ Development Rules
@@ -17,7 +19,8 @@ You are a senior C++ developer with expertise in modern C++ (C++17), STL, and sy
 - Use object-oriented, procedural, or functional programming patterns as appropriate.
 - Leverage STL and standard algorithms for collection operations.
 - Use descriptive variable and method names (e.g., 'isUserSignedIn', 'calculateTotal').
-- Structure files into headers (*.h) and implementation files (*.cpp) with logical separation of concerns.
+- Structure files into C++ headers (`*.hpp`) and implementation files (`*.cpp`) with logical separation of concerns.
+- Reserve the `.h` extension for C-compatible headers.
 - Use US English for all names
 - Use full words (no abbreviations)
 - Method names must start with verbs
@@ -30,23 +33,28 @@ You are a senior C++ developer with expertise in modern C++ (C++17), STL, and sy
 - Place source's header first after license
 
 ## Naming Conventions
-- Headers: PascalCase.h
-- Sources: PascalCase.cpp
+- C++ headers: `PascalCase.hpp`
+- C headers: `PascalCase.h`
+- C++ sources: `PascalCase.cpp`
+- C sources: `PascalCase.c`
 - Classes/Structs/Enums: PascalCase
-- Constants: kCamelCase
+- Local constants: camelCase
+- Class and static constants: s_kCamelCase
+- Global constants: g_kCamelCase
 - Enum values: eCamelCase
 - Public functions: camelCase()
 - Private/Protected functions: _camelCase() (never combine leading underscore with an uppercase letter, e.g., `_Compute` is reserved by the C++ standard)
 - Public members: camelCase
 - Private/Protected members: m_camelCase
-- Private/Protected static members: s_camelCase
-- Global static or constant variables: g_camelCase
+- Static variables: s_camelCase
+- Global variables: g_camelCase
 - Local variables: camelCase
 - Macros: SCREAMING_SNAKE_CASE
 
 ## C++ Features Usage
 - Prefer modern C++ features (e.g., auto, range-based loops).
-- Use `std::unique_ptr` and `std::shared_ptr` for memory management; prefer smart pointers over raw pointers.
+- Use `std::unique_ptr` and `std::shared_ptr` for ownership. Raw pointers and references may express non-owning access
+  when their lifetime contract is clear.
 - Prefer `std::optional`, `std::variant`, and `std::any` for type-safe alternatives.
 - Use `constexpr` and `const` to optimize compile-time computations.
 - Use `std::string_view` for read-only string operations to avoid unnecessary copies.
@@ -71,20 +79,49 @@ You are a senior C++ developer with expertise in modern C++ (C++17), STL, and sy
 - No indentation inside namespaces
 - Use 'details' namespace for internal code
 - Use anonymous namespace in .cpp files
-- Use the extension name to generate the correct namespace, for example isaacsim.foo.bar becomes isaacsim::foo::bar
+- Derive the namespace from the owning API name; for example, `isaacsim.foo.bar` becomes `isaacsim::foo::bar`.
 
 ## Syntax and Formatting
 - Follow a consistent coding style, such as Google C++ Style Guide or your team's standards.
-- Place braces on the same line for control structures, methods, and classes.
-- Place namespace opening braces on the next line.
+- Use Allman braces, consistent with the repository's `.clang-format`: place each opening brace on the line after the
+  declaration or control statement.
+- Apply this to namespaces, classes, structures, unions, enums, functions, control statements, and `extern` blocks.
+  Braced initializer and short lambda expressions remain formatter-controlled.
 - Use west-const style (`const int` not `int const`).
 - Use clear and consistent commenting practices.
 
+```cpp
+// Correct: Allman braces.
+class Example
+{
+public:
+    void run()
+    {
+        if (enabled)
+        {
+            process();
+        }
+    }
+};
+
+// Incorrect: attached braces.
+class Example {
+public:
+    void run() {
+        if (enabled) {
+            process();
+        }
+    }
+};
+```
+
 ## Error Handling and Validation
-- Use exceptions for error handling (e.g., `std::runtime_error`, `std::invalid_argument`).
+- Follow the API's documented error model. Use exceptions only when the public contract permits them; use explicit
+  result values for no-throw or C-compatible boundaries.
 - Use RAII for resource management to avoid memory leaks.
 - Validate inputs at function boundaries.
-- Log errors using a logging library (e.g., spdlog, Boost.Log).
+- Use the logging facility selected by the owning component. Do not introduce a logging dependency solely for one
+  message.
 
 ## Performance Optimization
 - Avoid unnecessary heap allocations; prefer stack-based objects where possible.
@@ -115,9 +152,9 @@ You are a senior C++ developer with expertise in modern C++ (C++17), STL, and sy
 Follow the official ISO C++ standards and guidelines for best practices in modern C++ development.
 
 ## Isaac Sim specific rules
-- If a file includes `<pch/UsdPCH.h>` then it must be the very first include in the file and be wrapped in a clang-format off block:
+- If a file includes `<pch/UsdPCH.hpp>` then it must be the very first include in the file and be wrapped in a clang-format off block:
 ```cpp
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 ```

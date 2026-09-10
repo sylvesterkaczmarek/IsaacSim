@@ -151,6 +151,9 @@ class TestAboutWindow(OmniUiTest):
             await self.finalize_test(golden_img_dir=self._golden_img_dir, golden_img_name="test_about_ui.png")
         except Exception as e:
             carb.log_warn(f"Could not run test because carb::windowing is not available: {e}")
+        finally:
+            about_window.destroy()
+            await omni.kit.app.get_app().next_update_async()
 
     async def test_menu_callback_keeps_window_alive(self) -> None:
         """Verify the menu callback keeps the created About window alive.
@@ -162,8 +165,11 @@ class TestAboutWindow(OmniUiTest):
         about = isaacsim.app.about.get_instance()
         self.assertIsNotNone(about, "isaacsim.app.about extension is not loaded")
 
-        # Drop any reference left from a previous test so we observe a clean cycle.
-        about._about_window = None
+        # Destroy any window retained by the extension so we observe a clean cycle.
+        if about._about_window is not None:
+            about._about_window.destroy()
+            about._about_window = None
+            await omni.kit.app.get_app().next_update_async()
 
         about._on_menu_show_about()
         for _ in range(2):
@@ -190,10 +196,9 @@ class TestAboutWindow(OmniUiTest):
         )
 
         # Clean up so the next test starts from a known state.
-        about._about_window.visible = False
+        about._about_window.destroy()
         about._about_window = None
-        for _ in range(2):
-            await omni.kit.app.get_app().next_update_async()
+        await omni.kit.app.get_app().next_update_async()
 
     async def test_about_clipboard_format(self) -> None:
         """Verify the clipboard text includes the Kit SDK version row.
@@ -262,13 +267,12 @@ class TestAboutWindow(OmniUiTest):
                 for _ in range(2):
                     await omni.kit.app.get_app().next_update_async()
             finally:
-                about_window.visible = False
-                for _ in range(2):
-                    await omni.kit.app.get_app().next_update_async()
                 try:
                     await self.finalize_test_no_image()
                 except Exception as cleanup_exc:  # noqa: BLE001
                     carb.log_warn(f"finalize_test_no_image raised during cleanup: {cleanup_exc}")
+                about_window.destroy()
+                await omni.kit.app.get_app().next_update_async()
         finally:
             if stub_installed:
                 sys.modules.pop("pyperclip", None)

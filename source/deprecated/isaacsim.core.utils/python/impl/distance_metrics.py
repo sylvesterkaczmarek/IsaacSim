@@ -35,6 +35,9 @@ def _standardize_transform_matrix(t1: np.ndarray | Gf.Matrix4d) -> np.ndarray:
 
     Returns:
         Standardized 4x4 matrix.
+
+    Raises:
+        ValueError: If the input transformation matrix is not 4x4.
     """
     if np.shape(t1) != (4, 4):
         raise ValueError(f"Input transformation matrix has the wrong shape: {np.shape(t1)} != (4, 4).")
@@ -61,6 +64,9 @@ def _standardize_rotation_matrix(r1: np.ndarray | Gf.Matrix3d | Gf.Matrix4d) -> 
 
     Returns:
         Standardized 3x3 matrix.
+
+    Raises:
+        ValueError: If the input matrix is not 3x3 or 4x4.
     """
     if np.shape(r1) == (4, 4):
         r1 = _standardize_transform_matrix(r1)
@@ -81,13 +87,16 @@ def _standardize_translation_vector(t1: np.ndarray | Gf.Matrix4d) -> np.ndarray:
     """Extract translation vector from input and convert it to numpy array.
 
     If input matrix is a 4x4 matrix, then the translation component is extracted.
-    Otherwise, it is checked that is a 3-dimensional vector and flattened into an array.
+    Otherwise, it is checked that it is a 3-dimensional vector and flattened into an array.
 
     Args:
         t1: Input 3-D vector or transformation matrix.
 
     Returns:
         Standardized 3-dimensional array.
+
+    Raises:
+        ValueError: If the input translation vector is not 3-dimensional.
     """
     if np.shape(t1) == (4, 4):
         t1 = _standardize_transform_matrix(t1)
@@ -135,6 +144,10 @@ def weighted_translational_distance(
 
     Returns:
         The weighted norm of the difference (t1-t2).
+
+    Raises:
+        ValueError: If either translation input is not a 3d vector or 4x4 transformation matrix, or if
+            weight_matrix has an incompatible shape.
     """
     t1 = _standardize_translation_vector(t1)
     t2 = _standardize_translation_vector(t2)
@@ -148,8 +161,8 @@ def rotational_distance_angle(
     """Computes the weighted distance between two rotations using inner product.
 
     Note:
-        If r1 and r2 are GfMatrix3d() objects, the transformation matrices will be transposed in the distance
-        calculations.
+        If r1 and r2 are Gf.Matrix3d() or Gf.Matrix4d() objects, the transformation matrices will be transposed
+        in the distance calculations.
 
     Args:
         r1: Rotation matrices or 4x4 transformation matrices.
@@ -157,6 +170,9 @@ def rotational_distance_angle(
 
     Returns:
         The magnitude of the angle of rotation from r1 to r2.
+
+    Raises:
+        ValueError: If either rotation input is not 3x3 or 4x4.
     """
     r1 = _standardize_rotation_matrix(r1)
     r2 = _standardize_rotation_matrix(r2)
@@ -171,8 +187,8 @@ def rotational_distance_identity_matrix_deviation(
     """Computes the distance between two rotations using deviation from identity matrix.
 
     Note:
-        If r1 and r2 are GfMatrix3d() objects, the transformation matrices will be transposed in the distance
-        calculations.
+        If r1 and r2 are Gf.Matrix3d() or Gf.Matrix4d() objects, the transformation matrices will be transposed
+        in the distance calculations.
 
     Args:
         r1: Rotation matrices or 4x4 transformation matrices.
@@ -180,6 +196,9 @@ def rotational_distance_identity_matrix_deviation(
 
     Returns:
         The Frobenius norm ||I-r1*r2^T||, where I is the identity matrix.
+
+    Raises:
+        ValueError: If either rotation input is not 3x3 or 4x4.
     """
     r1 = _standardize_rotation_matrix(r1)
     r2 = _standardize_rotation_matrix(r2)
@@ -197,8 +216,8 @@ def rotational_distance_single_axis(
     """Computes the distance between two rotations w.r.t. input axis.
 
     Note:
-        If r1 and r2 are GfMatrix3d() objects, the transformation matrices will be transposed in the distance
-        calculations.
+        If r1 and r2 are Gf.Matrix3d() or Gf.Matrix4d() objects, the transformation matrices will be transposed
+        in the distance calculations.
 
     Usage:
         If the robot were holding a cup aligned with its z-axis,
@@ -217,6 +236,10 @@ def rotational_distance_single_axis(
 
     Returns:
         The angle between (r1 @ axis) and (r2 @ axis).
+
+    Raises:
+        ValueError: If either rotation input is not 3x3 or 4x4, if axis does not have length 3, or if axis has
+            zero magnitude.
     """
     r1 = _standardize_rotation_matrix(r1)
     r2 = _standardize_rotation_matrix(r2)

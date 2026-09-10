@@ -1,5 +1,5 @@
 [package]
-version = "1.0.1"
+version = "1.2.0"
 category = "Simulation"
 title = "Holoscan Sensor Bridge Core"
 description = "Core backend library for the Holoscan Sensor Bridge (HSB) extension, providing HSB emulator communication, image encoding, and GPU-accelerated format conversion."
@@ -10,9 +10,6 @@ preview_image = "data/preview.png"
 icon = "data/icon.png"
 writeTarget.kit = true
 writeTarget.platform = true
-
-[dependencies]
-"omni.usd.libs" = {}
 
 [[python.module]]
 name = "isaacsim.hsb.core"
@@ -38,7 +35,10 @@ timeout = 300
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*[HSB Core] Failed to connect: Failed to create socket*",
     "*Failed to initialize endpoint*",
 ]
@@ -54,7 +54,10 @@ cppTests.libraries = ["bin/${lib_prefix}isaacsim.hsb.core.tests${lib_ext}"]
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*[HSB Core] Failed to connect: Failed to create socket*",
     "*Failed to initialize endpoint*",
 ]

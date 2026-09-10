@@ -75,6 +75,9 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
 
         Initializes physics parameters, loads policy configurations, creates the stage with a Franka robot,
         sets up the RRT path planner and trajectory generator, and starts the simulation timeline.
+
+        Raises:
+            AssertionError: If the policy map file for isaacsim.robot_motion.motion_generation does not exist.
         """
         self._physics_fps = 60
         self._physics_dt = 1 / self._physics_fps  # duration of physics frame in seconds
@@ -199,11 +202,11 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
         await update_stage_async()
 
     async def reset_robot(self, robot: object) -> None:
-        """To make motion_generation outputs more deterministic, this method may be used to.
+        """Make motion_generation outputs more deterministic by resetting the robot for simulation tests.
 
-        teleport the robot to specified position targets, setting velocity to 0.
+        Teleports the robot to specified position targets and sets velocity to 0.
 
-        This prevents changes in dynamic_control from affecting motion_generation tests
+        This prevents changes in dynamic_control from affecting motion_generation tests.
 
         Args:
             robot: The robot to reset.
@@ -218,6 +221,9 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
         Validates that the RRT planner accepts all valid parameter types including seed, step size,
         max iterations, distance metric weights, task space limits, and planning parameters.
         Also verifies that invalid parameters are rejected.
+
+        Raises:
+            AssertionError: If valid RRT parameters are rejected or an invalid parameter is accepted.
         """
         self.assertTrue(self._planner.set_param("seed", 5))
         self.assertTrue(self._planner.set_param("step_size", 0.001))
@@ -257,6 +263,9 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
         Sets up obstacles in the environment, configures an end-effector target position and orientation,
         computes a collision-free path using RRT, and validates the plan by following it.
         Tests both position and orientation targeting as well as position-only targeting.
+
+        Raises:
+            AssertionError: If RRT path planning or plan execution validation fails.
         """
         target_translation = np.array([-0.4, 0.3, 0.5])
         target_orientation = np.array([0.6837119, -0.5746039, 0.14875382, -0.42454764])
@@ -356,6 +365,9 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
         Moves the robot base to a new position and orientation, sets up obstacles,
         computes paths to end-effector targets, and validates the plans.
         Tests both position and orientation targeting as well as position-only targeting.
+
+        Raises:
+            AssertionError: If RRT path planning or plan execution validation fails.
         """
         target_translation = np.array([1.4, -0.1, 0.5])
         target_orientation = np.array([0.95, 0.05, 0, 0])
@@ -437,6 +449,9 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
 
         Sets up obstacles and computes a collision-free path to a target joint configuration
         using RRT. Validates the generated plan by following it and checking path quality.
+
+        Raises:
+            AssertionError: If RRT path planning or plan execution validation fails.
         """
         cspace_target = np.array(
             [
@@ -533,6 +548,9 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
             rrt_plan: The RRT path to test trajectory generation with.
             interpolation_max_dist: Maximum distance for path interpolation.
             path_dist_thresh: Maximum allowed distance between interpolated path and generated trajectory.
+
+        Raises:
+            AssertionError: If trajectory generation fails or the generated trajectory exceeds the distance threshold.
         """
         # Pure Math RRT interpolation vs Generated Terajectory
 
@@ -558,7 +576,7 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.all(min_path_dists < path_dist_thresh))
 
     async def follow_plan(self, plan: object, interpolation_max_dist: float, path_dist_thresh: float = 0.02) -> None:
-        """Executes a planned path by generating trajectory and applying actions to the robot.
+        """Executes a planned path by generating a trajectory and applying actions to the robot.
 
         Interpolates the RRT path, generates a trajectory, and applies the resulting actions to the robot.
         Validates that the actual robot path stays within specified distance thresholds of both the

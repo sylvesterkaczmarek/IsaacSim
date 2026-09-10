@@ -1,5 +1,31 @@
 # Changelog
 
+## [3.7.0] - 2026-08-31
+### Added
+- Nested links support.
+
+## [3.6.7] - 2026-08-31
+### Fixed
+- Clearing or scaling a link's collision spheres no longer affects links whose names extend it, such as `link10` or `link1_tip` for `link1`.
+- Selecting a link no longer highlights the collision spheres of links whose names extend it as belonging to the selection.
+- Exported XRDF and robot description files no longer include spheres from a separate robot whose root path extends the exported robot's path.
+
+## [3.6.6] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [3.6.5] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [3.6.4] - 2026-06-29
+### Changed
+- Classify the editor as lifecycle-only; editor classes and helper functions remain import-compatible but are no longer published Python API.
+
+## [3.6.3] - 2026-06-12
+### Fixed
+- XRDF export now writes empty sphere groups as `{}` instead of YAML null and shows a visible warning when automatic sphere generation is blocked by instanceable meshes.
+
 ## [3.6.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

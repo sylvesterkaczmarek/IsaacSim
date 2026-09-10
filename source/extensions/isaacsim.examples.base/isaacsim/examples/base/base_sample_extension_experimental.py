@@ -15,16 +15,21 @@
 
 """Defines a base template class for creating standardized Isaac Sim example user interfaces with common world controls and extensible UI framework."""
 
+from __future__ import annotations
+
 import asyncio
 from abc import abstractmethod
+from collections.abc import Coroutine
 
+import carb
 import carb.eventdispatcher
 import omni.kit.app
 import omni.timeline
 import omni.ui as ui
 import omni.usd
 from isaacsim.examples.base.base_sample_experimental import BaseSample
-from isaacsim.gui.components.ui_utils import btn_builder, get_style, setup_ui_headers
+from isaacsim.gui.components import btn_builder, setup_ui_headers
+from isaacsim.gui.components.ui_utils import get_style
 
 
 class BaseSampleUITemplate:
@@ -55,6 +60,8 @@ class BaseSampleUITemplate:
         self._timeline = omni.timeline.get_timeline_interface()
         self._stage_event_subscription = None
         self._timeline_event_subscription = None
+        self._pending_tasks: set[asyncio.Task] = set()
+        self._is_shutdown = False
 
     @property
     def sample(self) -> BaseSample:
@@ -135,15 +142,52 @@ class BaseSampleUITemplate:
         This abstract method must be implemented by subclasses to add sample-specific UI elements.
         """
 
+    def _is_active(self) -> bool:
+        """Return whether the template still owns a sample and has not shut down."""
+        return not self._is_shutdown and self._sample is not None
+
+    def _start_task(self, coro: Coroutine[object, object, None]) -> None:
+        """Track a fire-and-forget UI task so shutdown can cancel it."""
+        if not self._is_active():
+            coro.close()
+            return
+        task = asyncio.ensure_future(coro)
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._on_task_done)
+
+    def _on_task_done(self, task: asyncio.Task) -> None:
+        """Log uncaught task exceptions instead of leaving them unretrieved."""
+        self._pending_tasks.discard(task)
+        if task.cancelled():
+            return
+        exception = task.exception()
+        if exception is not None:
+            carb.log_error(f"Sample UI task failed: {type(exception).__name__}: {exception}")
+
+    def _cancel_pending_tasks(self) -> None:
+        """Cancel in-flight load and reset tasks."""
+        for task in list(self._pending_tasks):
+            if not task.done():
+                task.cancel()
+
     def _on_load_world(self) -> None:
         """Handles the Load World button click event.
 
         Asynchronously loads the sample world, sets up event subscriptions, and updates button states.
         """
+        if not self._is_active():
+            return
 
         async def _on_load_world_async() -> None:
-            await self._sample.load_world_async()
+            sample = self._sample
+            if not self._is_active() or sample is None:
+                return
+            await sample.load_world_async()
+            if not self._is_active():
+                return
             await omni.kit.app.get_app().next_update_async()
+            if not self._is_active():
+                return
 
             # Subscribe to stage closed events using Events 2.0
             usd_context = omni.usd.get_context()
@@ -161,23 +205,33 @@ class BaseSampleUITemplate:
             )
 
             self._enable_all_buttons(True)
-            self._buttons["Load World"].enabled = False
+            if self._buttons:
+                self._buttons["Load World"].enabled = False
             self.post_load_button_event()
 
-        asyncio.ensure_future(_on_load_world_async())
+        self._start_task(_on_load_world_async())
 
     def _on_reset(self) -> None:
         """Handles the Reset button click event.
 
         Asynchronously resets the sample and triggers post-reset event handling.
         """
+        if not self._is_active():
+            return
 
         async def _on_reset_async() -> None:
-            await self._sample.reset_async()
+            sample = self._sample
+            if not self._is_active() or sample is None:
+                return
+            await sample.reset_async()
+            if not self._is_active():
+                return
             await omni.kit.app.get_app().next_update_async()
+            if not self._is_active():
+                return
             self.post_reset_button_event()
 
-        asyncio.ensure_future(_on_reset_async())
+        self._start_task(_on_reset_async())
 
     @abstractmethod
     def post_reset_button_event(self) -> None:
@@ -212,10 +266,10 @@ class BaseSampleUITemplate:
 
     def on_shutdown(self) -> None:
         """Cleans up resources and subscriptions when the widget is shut down."""
-        # Clean up subscriptions
+        self._is_shutdown = True
+        self._cancel_pending_tasks()
         self._stage_event_subscription = None
         self._timeline_event_subscription = None
-
         self._extra_stacks = None
         self._buttons = {}
         self._sample = None
@@ -228,11 +282,13 @@ class BaseSampleUITemplate:
         Args:
             event: The stage event data.
         """
-        self._sample._physics_cleanup()
-        if hasattr(self, "_buttons"):
-            if self._buttons is not None:
-                self._enable_all_buttons(False)
-                self._buttons["Load World"].enabled = True
+        sample = self._sample
+        if not self._is_active() or sample is None:
+            return
+        sample._physics_cleanup()
+        if self._buttons:
+            self._enable_all_buttons(False)
+            self._buttons["Load World"].enabled = True
 
     def _reset_on_stop_event(self, event: carb.eventdispatcher.Event) -> None:
         """Timeline stop event callback.
@@ -242,6 +298,8 @@ class BaseSampleUITemplate:
         Args:
             event: The timeline event data.
         """
+        if not self._is_active() or not self._buttons:
+            return
         self._buttons["Load World"].enabled = False
         self._buttons["Reset"].enabled = True
         self.post_clear_button_event()

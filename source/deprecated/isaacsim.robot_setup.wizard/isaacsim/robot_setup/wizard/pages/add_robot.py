@@ -90,7 +90,7 @@ class AddRobot:
         self._robot_parent_prim_path = ""
 
     def _build_frame(self) -> None:
-        """Build the frame for the add robot page."""
+        """Builds the frame for the Add Robot page."""
         with ui.ScrollingFrame():
             with ui.VStack(spacing=10):
                 with ui.CollapsableFrame("Add Robot", height=0, build_header_fn=custom_header):
@@ -187,7 +187,7 @@ class AddRobot:
             self._invalid_robot_name_label.visible = True
 
     def set_visible(self, visible: bool) -> None:
-        """When this Add Robot page is visible or hidden.
+        """Shows or hides this Add Robot page.
 
         Args:
             visible: Whether the page should be visible.
@@ -202,7 +202,7 @@ class AddRobot:
         """Creates the next step button for the robot configuration wizard.
 
         Args:
-            verify_fn: Optional verification function to call when proceeding to the next step.
+            verify_fn: Verification function to call before proceeding to the next step.
 
         Returns:
             The ButtonWithIcon widget for the next step.
@@ -222,11 +222,7 @@ class AddRobot:
         return button
 
     def _preprocess_params(self) -> None:
-        """Preprocesses parameters from the registered robot for display in the UI.
-
-        Returns:
-            None if no robot is registered.
-        """
+        """Preprocesses parameters from the registered robot for display in the UI."""
         self._robot = RobotRegistry().get()
         if not self._robot:
             return
@@ -245,10 +241,13 @@ class AddRobot:
             self._parent_xform_widget.model.set_value(self._robot_parent_prim_path)
 
     def _add_robot(self) -> bool:
-        """Before moving on, initialize (or overwrite)the robot with the given params.
+        """Initializes or overwrites the registered robot with the selected robot parameters.
 
         Returns:
             True if the robot was successfully added.
+
+        Raises:
+            ValueError: If the selected robot type is invalid.
         """
         # get parameters from UI: robot name, type, and output folder, also parent prim path
         robot_name = self._robot_name_widget.model.get_value_as_string()
@@ -309,6 +308,11 @@ class AddRobot:
         self._select_parent_xform_window.visible = True
 
     def _on_parent_xform_changed(self, model: Any) -> None:
+        """Updates the parent transform selection state and enables the next step when the path exists on the stage.
+
+        Args:
+            model: Model containing the parent transform prim path.
+        """
         # check if the parent xform is valid before enabling the next step button
         prim_path = model.get_value_as_string()
         stage = omni.usd.get_context().get_stage()
@@ -322,6 +326,7 @@ class AddRobot:
             self._robot_name_widget.model.set_value(prim_path.split("/")[-1])
 
     def _configure_robot_on_stage(self) -> None:
+        """Adds the Configure a Robot On Stage frame for selecting the robot parent transform prim."""
         # configure rest of the page
         _configure_robot_on_stage_frame = ui.CollapsableFrame(
             "Configure a Robot On Stage", build_header_fn=custom_header, visible=False
@@ -356,6 +361,13 @@ class AddRobot:
                     self._next_step_button.enabled = False
 
     def __open_sim_ready_robot(self, frame: Any, title: Any) -> None:
+        """Adds controls for selecting a URDF or MJCF robot file and opening the matching importer.
+
+        Args:
+            frame: Frame to populate with sim-ready robot import controls.
+            title: Title displayed for the import section.
+        """
+
         def _on_accept_drop(url: Any) -> None:
             if FileSorter.is_sim_ready(url):
                 return True
@@ -451,6 +463,13 @@ class AddRobot:
                 parse_robot_button.set_clicked_fn(_open_importer)
 
     def __open_robot(self, frame: Any, title: Any) -> None:
+        """Adds controls for selecting a 3D robot asset file and preparing it as the robot on stage.
+
+        Args:
+            frame: Frame to populate with robot asset selection controls.
+            title: Title displayed for the asset selection section.
+        """
+
         def _on_accept_drop(url: Any) -> None:
             if FileSorter.is_3d_model(url):
                 return True
@@ -550,6 +569,7 @@ class AddRobot:
                 )  # external drop
 
     def _inspect_isaac_sim_robot(self) -> None:
+        """Adds the Isaac Sim robot inspection frame with an asset explorer button and next step control."""
         _inspect_isaac_robot_frame = ui.CollapsableFrame(
             "Inspect an Isaac Sim Robot", build_header_fn=custom_header, visible=False
         )
@@ -582,6 +602,7 @@ class AddRobot:
                     ui.Label(msg, name="highlight_tool", height=0, word_wrap=True)
 
     def _convert_sim_ready_robot(self) -> None:
+        """Adds the Import a Sim-Ready Robot frame for converting a URDF or MJCF robot."""
         _import_sim_ready_robot_frame = ui.CollapsableFrame(
             "Import a Sim-Ready Robot", build_header_fn=custom_header, visible=False
         )
@@ -661,14 +682,11 @@ class AddRobot:
 
         Args:
             e: The drag and drop event.
-            payload: List of file paths being dropped.
-            drop_area: The UI drop area widget.
-            title: Title identifying the drop area type (e.g., "Sim-Ready", "Robot Mesh").
+            payload: File paths being dropped.
+            drop_area: The UI drop area widget whose checked state controls whether the drop is accepted.
+            title: Title identifying the drop area type, such as "Sim-Ready" or "Robot Mesh".
             path_widget: The UI string field widget to update with the file path.
             button: The UI button widget to enable when a valid file is dropped.
-
-        Returns:
-            None if the drop area is not hovered.
         """
         # if drop_area is not hovered, we dont want to do anything
         if not drop_area.checked:

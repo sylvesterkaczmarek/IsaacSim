@@ -87,3 +87,32 @@ def is_missing_xform_ops_error(exc: BaseException) -> bool:
     """
     msg = str(exc)
     return "xformOp:" in msg and "reset_xform_op_properties" in msg
+
+
+def is_singular_matrix_error(exc: BaseException) -> bool:
+    """Detect the low-level transform inversion error raised for singular xforms.
+
+    Args:
+        exc: Exception to inspect.
+
+    Returns:
+        True if the exception reports a singular matrix, otherwise False.
+    """
+    return "singular matrix" in str(exc).lower()
+
+
+def singular_matrix_pose_message(target: str) -> str:
+    """Build a clear diagnostic for replay pose writes blocked by singular transforms.
+
+    Args:
+        target: Human-readable replay target or batch scope.
+
+    Returns:
+        Diagnostic string explaining the likely transform-authoring issue.
+    """
+    return (
+        f"{target}: singular matrix while composing replay pose. "
+        "A replay target or one of its ancestors has a non-invertible transform, "
+        "usually from zero scale or malformed xform ops. Fix the stage transform "
+        "hierarchy before replaying world-space poses."
+    )

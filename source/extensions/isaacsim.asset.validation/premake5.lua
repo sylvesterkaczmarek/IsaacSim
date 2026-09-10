@@ -20,4 +20,9 @@ repo_build.prebuild_link {
     { "docs", ext.target_dir .. "/docs" },
     { "data", ext.target_dir .. "/data" },
     { "isaacsim", ext.target_dir .. "/isaacsim" },
+    -- SimReady foundation validation tiers, pre-merged into a single implicit
+    -- namespace tree by deps/pip_simready.toml (installed in one pip pass to
+    -- avoid pip's --target namespace clobber). Kit adds this to sys.path via the
+    -- `[[python.module]] path = "pip_prebundle"` entry in config/extension.toml.
+    { "$root/_build/target-deps/isaac_simready_tiers_prebundle", ext.target_dir .. "/pip_prebundle" },
 }

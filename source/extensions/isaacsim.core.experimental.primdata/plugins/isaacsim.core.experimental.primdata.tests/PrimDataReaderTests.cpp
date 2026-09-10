@@ -14,10 +14,19 @@
 // limitations under the License.
 
 #include <carb/BindingsUtils.h>
+#include <carb/PluginUtils.h>
 
 #include <doctest/doctest.h>
+#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.hpp>
+#include <omni/usd/UsdContextIncludes.h>
+//
+#include <omni/usd/UsdContext.h>
+#include <omni/usd/UsdManager.h>
+#include <pxr/base/tf/token.h>
+#include <pxr/usd/sdf/path.h>
 
-#include <BufferRegistry.h>
+#include <BufferRegistry.hpp>
+#include <string>
 
 CARB_BINDINGS("isaacsim.core.experimental.primdata.tests")
 
@@ -148,5 +157,74 @@ TEST_SUITE("isaacsim.core.experimental.primdata.tests")
         CHECK_UNARY(entry.buffer == nullptr);
         CHECK_UNARY(entry.hostStaging == nullptr);
         CHECK_UNARY(!entry.callback);
+    }
+
+    TEST_CASE("Stage closing releases reader-owned stage references for views")
+    {
+        static const std::string kContextName = "PrimDataReaderCloseCleanupTest";
+        omni::usd::UsdManager::destroyContext(kContextName);
+        omni::usd::UsdContext* usdContext = omni::usd::UsdManager::createContext(kContextName);
+        REQUIRE_UNARY(usdContext != nullptr);
+        REQUIRE_UNARY(usdContext->newStage());
+
+        long stageId = usdContext->getStageId();
+        REQUIRE_UNARY(stageId != 0);
+
+        pxr::UsdStageRefPtr stage = usdContext->getStage();
+        REQUIRE_UNARY(stage != nullptr);
+        stage->DefinePrim(pxr::SdfPath("/PrimDataReaderCloseCleanupTest"), pxr::TfToken("Xform"));
+        const size_t baselineRefCount = stage->GetCurrentCount();
+
+        auto* manager = carb::getCachedInterface<IPrimDataReaderManager>();
+        REQUIRE_UNARY(manager != nullptr);
+        REQUIRE_UNARY(manager->ensureInitialized(stageId, -1));
+
+        IPrimDataReader* reader = manager->getReader();
+        REQUIRE_UNARY(reader != nullptr);
+        CHECK_EQ(reader->getStageId(), stageId);
+
+        const char* paths[] = { "/PrimDataReaderCloseCleanupTest" };
+        IXformDataView* view = reader->createXformView("close_cleanup_view", paths, 1, "newton");
+        REQUIRE_UNARY(view != nullptr);
+        CHECK_UNARY(stage->GetCurrentCount() > baselineRefCount);
+
+        stage.Reset();
+        const uint64_t generationBeforeClose = reader->getGeneration();
+        REQUIRE_UNARY(usdContext->closeStage());
+
+        CHECK_EQ(reader->getStageId(), 0);
+        CHECK_UNARY(reader->getGeneration() > generationBeforeClose);
+        omni::usd::UsdManager::destroyContext(kContextName);
+    }
+
+    TEST_CASE("Manager reinitializes reader after invalidation")
+    {
+        static const std::string kContextName = "PrimDataReaderReinitializeTest";
+        omni::usd::UsdManager::destroyContext(kContextName);
+        omni::usd::UsdContext* usdContext = omni::usd::UsdManager::createContext(kContextName);
+        REQUIRE_UNARY(usdContext != nullptr);
+        REQUIRE_UNARY(usdContext->newStage());
+
+        long stageId = usdContext->getStageId();
+        REQUIRE_UNARY(stageId != 0);
+
+        auto* manager = carb::getCachedInterface<IPrimDataReaderManager>();
+        REQUIRE_UNARY(manager != nullptr);
+        REQUIRE_UNARY(manager->ensureInitialized(stageId, -1));
+
+        IPrimDataReader* reader = manager->getReader();
+        REQUIRE_UNARY(reader != nullptr);
+        CHECK_EQ(reader->getStageId(), stageId);
+        const uint64_t generationBeforeShutdown = reader->getGeneration();
+
+        reader->shutdown();
+        CHECK_EQ(reader->getStageId(), 0);
+
+        REQUIRE_UNARY(manager->ensureInitialized(stageId, -1));
+        CHECK_EQ(reader->getStageId(), stageId);
+        CHECK_UNARY(reader->getGeneration() > generationBeforeShutdown);
+
+        usdContext->closeStage();
+        omni::usd::UsdManager::destroyContext(kContextName);
     }
 }

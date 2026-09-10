@@ -31,6 +31,7 @@ from isaacsim.robot_motion.cumotion import (
     GraphBasedMotionPlanner,
     load_cumotion_supported_robot,
 )
+from isaacsim.robot_motion.cumotion.impl.kit_cumotion_debug_visualizer import KitCumotionDebugVisualizer
 from isaacsim.robot_motion.experimental.motion_generation import (
     ObstacleConfiguration,
     ObstacleStrategy,
@@ -91,7 +92,7 @@ class FrankaGraphPlannerExample:
         Must be called after :meth:`load_robot_config`.
         """
         assets_root = await get_assets_root_path_async()
-        path_to_robot_usd = assets_root + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+        path_to_robot_usd = assets_root + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 
         add_reference_to_stage(path_to_robot_usd, self._robot_prim_path)
         self._articulation = Articulation(self._robot_prim_path)
@@ -228,7 +229,7 @@ class FrankaGraphPlannerExample:
         obstacle_strategy.set_default_configuration(Cylinder, ObstacleConfiguration("obb", 0.01))
 
         world_binding = WorldBinding(
-            world_interface=CumotionWorldInterface(visualize_debug_prims=True),
+            world_interface=CumotionWorldInterface(debug_visualizer=KitCumotionDebugVisualizer()),
             obstacle_strategy=obstacle_strategy,
             tracked_prims=objects,
             tracked_collision_api=TrackableApi.PHYSICS_COLLISION,

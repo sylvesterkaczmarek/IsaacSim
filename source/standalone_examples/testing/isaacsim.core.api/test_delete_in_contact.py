@@ -72,7 +72,11 @@ cs = _sensor.acquire_contact_sensor_interface()
 
 
 def block_1_is_contacting_block_0() -> bool:
-    """Check whether block_1 is in contact with block_0."""
+    """Check whether ``block_1`` is in contact with ``block_0``.
+
+    Returns:
+        Whether the contact report for block 1 names block 0 as a participant.
+    """
     raw_data = cs.get_rigid_body_raw_data(block_1.prim_paths[0])
     in_contact = False
     for c in raw_data:

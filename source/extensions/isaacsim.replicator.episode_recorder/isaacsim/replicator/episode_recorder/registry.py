@@ -33,9 +33,9 @@ _REGISTRY: dict[str, type[Recordable]] = {}
 def register_recordable(cls: type[Recordable]) -> type[Recordable]:
     """Class decorator: register ``cls`` under its :attr:`Recordable.TYPE_ID`.
 
-    Idempotent re-registration with the identical class is a no-op (Kit's hot-reload
-    during tests would otherwise raise). A *different* class trying to claim an
-    already-used ``TYPE_ID`` raises :class:`RuntimeError`.
+    Re-registration with the identical class or a reloaded definition of the same
+    fully-qualified class replaces the existing entry. A *different* class trying
+    to claim an already-used ``TYPE_ID`` raises :class:`RuntimeError`.
 
     Args:
         cls: Recordable class to register.
@@ -46,7 +46,18 @@ def register_recordable(cls: type[Recordable]) -> type[Recordable]:
     if not cls.TYPE_ID:
         raise ValueError(f"{cls.__name__} must define a non-empty TYPE_ID to be registered.")
     existing = _REGISTRY.get(cls.TYPE_ID)
-    if existing is not None and existing is not cls:
+    if (
+        existing is not None
+        and existing is not cls
+        and (
+            existing.__module__,
+            existing.__qualname__,
+        )
+        != (
+            cls.__module__,
+            cls.__qualname__,
+        )
+    ):
         raise RuntimeError(
             f"Recordable TYPE_ID '{cls.TYPE_ID}' is already registered by "
             f"{existing.__module__}.{existing.__qualname__}; cannot re-register "

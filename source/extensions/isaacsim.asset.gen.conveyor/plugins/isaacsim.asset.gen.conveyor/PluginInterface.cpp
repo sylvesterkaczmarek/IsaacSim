@@ -20,7 +20,7 @@
 #include <carb/PluginUtils.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/asset/gen/conveyor/IOmniIsaacConveyor.h>
+#include <isaacsim/asset/gen/conveyor/IOmniIsaacConveyor.hpp>
 #include <omni/fabric/IToken.h>
 #include <omni/graph/core/OgnHelpers.h>
 #include <omni/graph/core/iComputeGraph.h>

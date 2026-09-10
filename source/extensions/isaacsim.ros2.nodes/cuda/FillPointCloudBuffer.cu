@@ -16,7 +16,7 @@
 #include <tuple>
 #include <vector>
 
-#include "isaacsim/core/includes/ScopedCudaDevice.h"
+#include "isaacsim/core/includes/ScopedCudaDevice.hpp"
 #include "FillPointCloudBuffer.cuh"
 
 namespace isaacsim

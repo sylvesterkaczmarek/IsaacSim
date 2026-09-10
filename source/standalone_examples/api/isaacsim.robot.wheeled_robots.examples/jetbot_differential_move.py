@@ -39,7 +39,7 @@ DEVICE = "cpu"
 assets_root_path = get_assets_root_path()
 if assets_root_path is None:
     raise RuntimeError("Could not find Isaac Sim assets folder")
-jetbot_asset_path = assets_root_path + "/Isaac/Robots/NVIDIA/Jetbot/jetbot.usd"
+jetbot_asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/NVIDIA/Jetbot/jetbot.usda"
 
 stage_utils.set_stage_up_axis("Z")
 stage_utils.set_stage_units(meters_per_unit=1.0)

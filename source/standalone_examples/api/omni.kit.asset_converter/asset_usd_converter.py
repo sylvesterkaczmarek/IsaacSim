@@ -23,7 +23,16 @@ from isaacsim import SimulationApp
 
 
 async def convert(in_file: str, out_file: str, load_materials: bool = False) -> bool:
-    """Convert an asset file to USD format asynchronously."""
+    """Convert an asset file to USD format asynchronously.
+
+    Args:
+        in_file: Source asset path or URL.
+        out_file: Destination USD path or URL.
+        load_materials: Whether to import referenced material definitions and textures.
+
+    Returns:
+        True after the converter reports a successful result.
+    """
     # This import causes conflicts when global
     import omni.kit.asset_converter
 
@@ -55,7 +64,11 @@ async def convert(in_file: str, out_file: str, load_materials: bool = False) -> 
 
 
 def asset_convert(args: argparse.Namespace) -> None:
-    """Convert all supported assets in the specified folders to USD."""
+    """Convert all supported assets in the specified folders to USD.
+
+    Args:
+        args: Parsed options containing source folders, model limit, and material-loading behavior.
+    """
     supported_file_formats = ["stl", "obj", "fbx"]
     for folder in args.folders:
         local_asset_output = folder + "_converted"

@@ -305,7 +305,7 @@ class GamepadDriver(object):
         self._event_handle = self._input.subscribe_to_gamepad_events(self._gamepad, self._event_callback)
 
     def _disconnect(self) -> None:
-        """Unsubscribes from gamepad events and cleans up the event handle."""
+        """Unsubscribe from gamepad events and clean up the event handle."""
         self._input.unsubscribe_to_gamepad_events(self._gamepad, self._event_handle)
         self._event_handle = None
 
@@ -322,7 +322,7 @@ class GamepadDriver(object):
 
     @staticmethod
     def disconnect() -> None:
-        """Disconnects the gamepad driver instance if it exists."""
+        """Disconnect the gamepad driver instance if it exists."""
         if GamepadDriver._instance is None:
             return
         GamepadDriver.instance()._disconnect()
@@ -342,7 +342,8 @@ class GamepadDriver(object):
         """Current values of all gamepad axes.
 
         Returns:
-            Array containing axis values for left stick vertical, left stick horizontal, right stick vertical, and right stick horizontal.
+            Array containing axis values for left stick vertical, left stick horizontal, right stick vertical, and right
+            stick horizontal.
         """
         return np.array([axis.value for axis in self.axes])
 
@@ -390,7 +391,7 @@ class Keyboard(Module):
         Retrieves the latest button states from the keyboard driver and stores them in the internal buffer.
 
         Returns:
-            The result of the parent class's update_state method.
+            The result of the parent class update_state method.
         """
         self.buttons.set_value(self._keyboard.get_button_values())
         return super().update_state()
@@ -430,7 +431,7 @@ class Gamepad(Module):
         """Update the gamepad state by refreshing button and axis values from the gamepad driver.
 
         Returns:
-            The result of the parent class update_state method.
+            The result of the parent class's update_state method.
         """
         self.buttons.set_value(self._gamepad.get_button_values())
         self.axes.set_value(self._gamepad.get_axis_values())

@@ -39,10 +39,16 @@ args, unknown = parser.parse_known_args()
 
 
 class HelloWorld(BaseTask):
-    """Base task that clones objects across multiple environments."""
+    """Clone a task object across a grid of simulation environments.
+
+    Args:
+        name: Task name registered with the world.
+        num_envs: Number of cloned environments to create.
+        env_spacing: Distance between neighboring environment origins in stage units.
+        offset: Task-frame offset, or ``None`` to apply no offset.
+    """
 
     def __init__(self, name: str, num_envs: int, env_spacing: float, offset: Any = None) -> None:
-        """Initialize the HelloWorld task with environment configuration."""
         BaseTask.__init__(self, name=name, offset=offset)
 
         self._num_envs = num_envs
@@ -74,7 +80,11 @@ class HelloWorld(BaseTask):
 
     @abstractmethod
     def set_object(self) -> Any:
-        """Create and return the object to clone across environments."""
+        """Create and return the object to clone across environments.
+
+        Returns:
+            Scene object to use as the source for environment clones.
+        """
         raise NotImplementedError
 
     def get_observations(self) -> dict:
@@ -99,14 +109,24 @@ class HelloWorld(BaseTask):
 
 
 class HelloWorldSphere(HelloWorld):
-    """HelloWorld task using dynamic sphere objects."""
+    """Clone dynamic spheres across a grid of simulation environments.
+
+    Args:
+        name: Task name registered with the world.
+        num_envs: Number of cloned environments to create.
+        env_spacing: Distance between neighboring environment origins in stage units.
+        offset: Task-frame offset, or ``None`` to apply no offset.
+    """
 
     def __init__(self, name: str, num_envs: int, env_spacing: float, offset: Any = None) -> None:
-        """Initialize the HelloWorldSphere task with sphere objects."""
         super().__init__(name=name, num_envs=num_envs, env_spacing=env_spacing, offset=offset)
 
     def set_object(self) -> DynamicSphere:
-        """Create and return a dynamic sphere object."""
+        """Create and return a dynamic sphere object.
+
+        Returns:
+            Dynamic sphere configured as the source object for cloning.
+        """
         radius = 0.1
         density = 1000.0
 
@@ -114,14 +134,24 @@ class HelloWorldSphere(HelloWorld):
 
 
 class HelloWorldCuboid(HelloWorld):
-    """HelloWorld task using dynamic cuboid objects."""
+    """Clone dynamic cuboids across a grid of simulation environments.
+
+    Args:
+        name: Task name registered with the world.
+        num_envs: Number of cloned environments to create.
+        env_spacing: Distance between neighboring environment origins in stage units.
+        offset: Task-frame offset, or ``None`` to apply no offset.
+    """
 
     def __init__(self, name: str, num_envs: int, env_spacing: float, offset: Any = None) -> None:
-        """Initialize the HelloWorldCuboid task with cuboid objects."""
         super().__init__(name=name, num_envs=num_envs, env_spacing=env_spacing, offset=offset)
 
     def set_object(self) -> DynamicCuboid:
-        """Create and return a dynamic cuboid object."""
+        """Create and return a dynamic cuboid object.
+
+        Returns:
+            Dynamic cuboid configured as the source object for cloning.
+        """
         size = np.array([0.2, 0.2, 0.2])
         density = 1000.0
 

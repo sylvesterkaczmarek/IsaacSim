@@ -14,19 +14,19 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "JointStateSensorImpl.h"
+#include "JointStateSensorImpl.hpp"
 
 #include <carb/events/EventsUtils.h>
 #include <carb/logging/Log.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/core/experimental/prims/IPrimDataReader.h>
-#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.h>
-#include <isaacsim/core/includes/UsdUtilities.h>
-#include <isaacsim/core/simulation_manager/ISimulationManager.h>
+#include <isaacsim/core/experimental/prims/IPrimDataReader.hpp>
+#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.hpp>
+#include <isaacsim/core/includes/UsdUtilities.hpp>
+#include <isaacsim/core/simulation_manager/ISimulationManager.hpp>
 #include <omni/physics/simulation/IPhysicsSimulation.h>
 #include <omni/physics/simulation/IPhysicsStageUpdate.h>
 #include <omni/usd/UsdContext.h>
@@ -303,10 +303,7 @@ JointStateSensorReading JointStateSensorImpl::getSensorReading(const char* artic
         return JointStateSensorReading();
     }
 
-    if (m_impl->reader && m_impl->reader->getGeneration() != m_impl->readerGeneration)
-    {
-        _recreateSensorViews();
-    }
+    _refreshReaderAndSensorViews(false);
 
     JointStateSensorData& sensor = it->second;
 
@@ -353,6 +350,30 @@ void JointStateSensorImpl::_clearSensors()
         }
     }
     m_impl->sensors.clear();
+}
+
+bool JointStateSensorImpl::_refreshReaderAndSensorViews(bool requireInitialized)
+{
+    if (m_impl->readerManager && m_impl->stageId != 0)
+    {
+        if (!m_impl->readerManager->ensureInitialized(m_impl->stageId, -1))
+        {
+            if (requireInitialized)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            m_impl->reader = m_impl->readerManager->getReader();
+        }
+    }
+
+    if (m_impl->reader && m_impl->reader->getGeneration() != m_impl->readerGeneration)
+    {
+        _recreateSensorViews();
+    }
+    return true;
 }
 
 void JointStateSensorImpl::_recreateSensorViews()
@@ -450,9 +471,9 @@ void JointStateSensorImpl::_stepSensors(const float dt)
         return;
     }
 
-    if (m_impl->reader && m_impl->reader->getGeneration() != m_impl->readerGeneration)
+    if (!_refreshReaderAndSensorViews(true))
     {
-        _recreateSensorViews();
+        return;
     }
 
     const double simTime = m_impl->simManager->getSimulationTime();

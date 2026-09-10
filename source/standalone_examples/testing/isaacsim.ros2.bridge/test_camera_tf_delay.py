@@ -73,7 +73,11 @@ img_queue = deque()
 
 
 def tf_callback(msg: Any) -> None:
-    """Handle incoming TF messages and record their timestamps."""
+    """Handle incoming TF messages and record their timestamps.
+
+    Args:
+        msg: Transform-tree message whose first transform timestamp is queued for comparison.
+    """
     global tf_msg, tf_recv_time, tf_recv_count
     tf_msg = msg
     tf_recv_time = time.perf_counter()
@@ -89,7 +93,11 @@ def tf_callback(msg: Any) -> None:
 
 
 def img_callback(msg: Any) -> None:
-    """Handle incoming image messages and record their timestamps."""
+    """Handle incoming image messages and record their timestamps.
+
+    Args:
+        msg: Camera image message whose timestamp is queued for comparison.
+    """
     global img_msg, img_recv_time, img_recv_count
     img_msg = msg
     img_recv_time = time.perf_counter()
@@ -117,7 +125,16 @@ def clear_message_state() -> None:
 def collect_latest_pair(
     max_wait_steps: int = 20,
 ) -> tuple[int, int, Any, Any, float, float, int, float, int, int] | None:
-    """Collect the latest TF and image message pair by spinning the ROS node."""
+    """Spin the ROS node until both TF and image queues contain a message.
+
+    Args:
+        max_wait_steps: Maximum number of 50-millisecond executor spins before timing out.
+
+    Returns:
+        Ten-item result ordered as ``(tf_ns, img_ns, tf_msg, img_msg, tf_recv_time, img_recv_time, wait_count,
+        spin_elapsed, dropped_tf, dropped_img)``. On timeout, the first six entries are ``None`` and both
+        discarded-message counts are zero.
+    """
     wait_count = 0
     spin_start = time.perf_counter()
 

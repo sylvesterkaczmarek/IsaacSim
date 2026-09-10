@@ -1,0 +1,17 @@
+{
+  "backend": "auto",
+  "cma_sigma": 0.3,
+  "cma_population_size": null,
+  "cma_batch_size": null,
+  "cma_seed": 0,
+  "bo_initial_samples": 5,
+  "bo_candidate_count": 64,
+  "bo_batch_size": 4,
+  "bo_seed": 0,
+  "gd_learning_rate": 0.05,
+  "gd_num_restarts": 1,
+  "gd_seed": 0,
+  "use_analytical_jacobian": false,
+  "use_analytical_presolve": false,
+  "differentiable_bridge": false
+}

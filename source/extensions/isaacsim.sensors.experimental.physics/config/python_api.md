@@ -70,6 +70,7 @@
 
 - class IMUSensor(_PhysicsSensorRuntime)
   - [property] def imu(self) -> IMU
+  - def __init__(self, path: str | IMU)
   - def get_sensor_reading(self, read_gravity: bool = True) -> object
   - def get_data(self, read_gravity: bool = True) -> dict
 

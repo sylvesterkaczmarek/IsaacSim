@@ -28,7 +28,137 @@ from isaacsim.asset.gen.omap.utils import compute_coordinates, generate_image, u
 # Import extension python module we are testing with absolute import path, as if we are external user (other extension)
 from isaacsim.core.experimental.utils.stage import open_stage_async
 from isaacsim.storage.native import get_assets_root_path_async
-from pxr import PhysxSchema, Sdf, UsdGeom, UsdPhysics
+from pxr import Gf, PhysxSchema, Sdf, UsdGeom, UsdPhysics
+
+
+class TestOccupancyMapOriginValidation(omni.kit.test.AsyncTestCase):
+    """Test occupancy map origin validation."""
+
+    async def test_direct_generator_after_stage_replacement(self) -> None:
+        """A generator bound to a replaced stage must not access its stale PhysX scene."""
+        context = omni.usd.get_context()
+        await context.new_stage_async()
+        stage = context.get_stage()
+        UsdPhysics.Scene.Define(stage, Sdf.Path("/World/physicsScene"))
+        cube = UsdGeom.Cube.Define(stage, "/World/Cube")
+        UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
+
+        timeline = omni.timeline.get_timeline_interface()
+        timeline.play()
+        try:
+            for _ in range(30):
+                await omni.kit.app.get_app().next_update_async()
+
+            generator = _omap.Generator(omni.physx.get_physx_interface(), context.get_stage_id())
+            generator.update_settings(0.5, 4, 5, 6)
+            generator.set_transform((0, 0, 0), (-1, -1, 0), (1, 1, 1))
+            generator.generate2d()
+            self.assertGreater(len(generator.get_occupied_positions()), 0)
+        finally:
+            timeline.stop()
+
+        await context.new_stage_async()
+        for _ in range(10):
+            await omni.kit.app.get_app().next_update_async()
+
+        for generate in (generator.generate2d, generator.generate3d):
+            generate()
+            self.assertEqual(generator.get_occupied_positions(), [])
+            self.assertEqual(generator.get_buffer(), [])
+
+    async def test_interface_after_closing_stage(self) -> None:
+        """The documented interface workflow must not crash once the stage is closed."""
+        context = omni.usd.get_context()
+        await context.new_stage_async()
+
+        omap = _omap.acquire_omap_interface()
+        self.addCleanup(_omap.release_omap_interface, omap)
+        omap.set_cell_size(0.05)
+
+        context.close_stage()
+        for _ in range(10):
+            await omni.kit.app.get_app().next_update_async()
+
+        # Both of these reach plugin globals that the stage detach cleared.
+        update_location(omap, (0.0, 0.0, 0.0), (-2.0, -2.0, 0.0), (2.0, 2.0, 1.0))
+        omap.generate()
+        self.assertEqual(omap.get_dimensions(), (0, 0, 0))
+        self.assertEqual(omap.get_buffer(), [])
+
+    async def test_generator_with_unknown_stage_id_raises(self) -> None:
+        """An unknown stage id must raise instead of crashing the process."""
+        context = omni.usd.get_context()
+        await context.new_stage_async()
+        stale_stage_id = context.get_stage_id()
+        await context.new_stage_async()
+        for _ in range(10):
+            await omni.kit.app.get_app().next_update_async()
+
+        with self.assertRaises(ValueError):
+            _omap.Generator(omni.physx.get_physx_interface(), stale_stage_id)
+
+    async def test_new_stage_after_releasing_interface(self) -> None:
+        """Creating a stage after releasing a used interface must not crash."""
+        context = omni.usd.get_context()
+        context.new_stage()
+        stage = context.get_stage()
+        UsdPhysics.Scene.Define(stage, Sdf.Path("/World/physicsScene"))
+        cube = UsdGeom.Cube.Define(stage, "/World/Cube")
+        UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
+        for _ in range(30):
+            await omni.kit.app.get_app().next_update_async()
+
+        omap = _omap.acquire_omap_interface()
+        second_omap = _omap.acquire_omap_interface()
+        self.addCleanup(_omap.release_omap_interface, second_omap)
+        omap.set_cell_size(0.05)
+        update_location(omap, (0.0, 0.0, 0.0), (-1.0, -1.0, 0.0), (1.0, 1.0, 1.0))
+
+        timeline = omni.timeline.get_timeline_interface()
+        timeline.play()
+        try:
+            for _ in range(30):
+                await omni.kit.app.get_app().next_update_async()
+            omap.generate()
+        finally:
+            timeline.stop()
+        # Releasing the first holder must leave the second one usable.
+        _omap.release_omap_interface(omap)
+
+        context.new_stage()
+        for _ in range(10):
+            await omni.kit.app.get_app().next_update_async()
+
+        self.assertEqual(second_omap.get_dimensions(), (0, 0, 0))
+
+    async def test_origin_outside_bounds_returns_unknown_map(self) -> None:
+        """An origin outside the map bounds must leave unoccupied cells unknown."""
+        await omni.usd.get_context().new_stage_async()
+        context = omni.usd.get_context()
+        UsdPhysics.Scene.Define(context.get_stage(), Sdf.Path("/World/physicsScene"))
+        for _ in range(30):
+            await omni.kit.app.get_app().next_update_async()
+
+        omap = _omap.acquire_omap_interface()
+        self.addCleanup(_omap.release_omap_interface, omap)
+        omap.set_cell_size(0.05)
+        update_location(omap, (0.0, 0.0, 0.0), (999.0, -1001.0, 0.0), (1001.0, -999.0, 1.0))
+
+        timeline = omni.timeline.get_timeline_interface()
+        timeline.play()
+        try:
+            for _ in range(60):
+                await omni.kit.app.get_app().next_update_async()
+            omap.generate()
+            await omni.kit.app.get_app().next_update_async()
+        finally:
+            timeline.stop()
+
+        dimensions = omap.get_dimensions()
+        buffer = np.array(omap.get_buffer(), dtype=np.float32)
+        self.assertGreater(dimensions[0] * dimensions[1], 0)
+        self.assertEqual(len(buffer), dimensions[0] * dimensions[1])
+        self.assertTrue(np.all(buffer == 0.5))
 
 
 # Having a test class dervived from omni.kit.test.AsyncTestCase declared on the root of module will make it auto-discoverable by omni.kit.test
@@ -39,6 +169,7 @@ class TestOccupancyMapGenerator(omni.kit.test.AsyncTestCase):
     async def setUp(self) -> None:
         """Set up test fixtures before each test."""
         self._om = _omap.acquire_omap_interface()
+        self.addCleanup(_omap.release_omap_interface, self._om)
         self._timeline = omni.timeline.get_timeline_interface()
 
         self._assets_root_path = await get_assets_root_path_async()
@@ -107,6 +238,50 @@ class TestOccupancyMapGenerator(omni.kit.test.AsyncTestCase):
         generator.generate2d()
         buffer = generator.get_buffer()
         self.assertEqual(len(buffer), 0)
+
+    async def test_public_interface_positive_min_z_excludes_floor_collision(self) -> None:
+        """A positive lower Z bound must exclude a floor at z=0."""
+        await omni.usd.get_context().new_stage_async()
+        context = omni.usd.get_context()
+        stage = context.get_stage()
+        UsdGeom.Xform.Define(stage, "/World")
+
+        floor = UsdGeom.Cube.Define(stage, "/World/Floor")
+        floor.GetSizeAttr().Set(1.0)
+        floor_xform = UsdGeom.Xformable(floor.GetPrim())
+        floor_xform.AddTranslateOp().Set(Gf.Vec3d(0, 0, -0.05))
+        floor_xform.AddScaleOp().Set(Gf.Vec3f(10.0, 10.0, 0.1))
+        UsdPhysics.CollisionAPI.Apply(floor.GetPrim())
+
+        for path, x in [("/World/Obstacle", 2.0), ("/World/Obstacle2", -2.0)]:
+            cube = UsdGeom.Cube.Define(stage, path)
+            cube.CreateSizeAttr(2.0)
+            cube.AddTranslateOp().Set(Gf.Vec3d(x, 0, 0.5))
+            UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
+
+        UsdPhysics.Scene.Define(stage, Sdf.Path("/World/physicsScene"))
+        for _ in range(30):
+            await omni.kit.app.get_app().next_update_async()
+
+        async def generate_occupied_count(min_z: float) -> int:
+            self._om.set_cell_size(0.05)
+            self._om.set_transform((0.0, 0.0, 0.0), (-4.0, -4.0, min_z), (4.0, 4.0, 2.0))
+
+            self._timeline.play()
+            await omni.kit.app.get_app().next_update_async()
+            self._om.generate()
+            await omni.kit.app.get_app().next_update_async()
+            self._timeline.stop()
+
+            dims = self._om.get_dimensions()
+            self.assertEqual((dims.x, dims.y), (160, 160))
+            buffer = np.array(self._om.get_buffer(), dtype=np.float32)
+            return int(np.sum(buffer == 1.0))
+
+        self.assertEqual(await generate_occupied_count(0.0), 0)
+        self.assertGreater(await generate_occupied_count(0.0001), 0)
+        self.assertGreater(await generate_occupied_count(0.01), 0)
+        self.assertGreater(await generate_occupied_count(0.05), 0)
 
     # Actual test, notice it is "async" function, so "await" can be used if needed
     async def test_simple_room(self) -> None:

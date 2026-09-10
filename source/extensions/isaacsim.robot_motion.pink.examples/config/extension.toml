@@ -1,5 +1,5 @@
 [package]
-version = "0.1.2"
+version = "0.2.0"
 category = "Simulation"
 title = "PINK Examples"
 description = "Examples for using the PINK inverse kinematics library under motion generation."
@@ -15,6 +15,7 @@ icon = "data/icon.png"
 "isaacsim.core.experimental.utils" = {}
 "isaacsim.core.rendering_manager" = {}
 "isaacsim.core.simulation_manager" = {}
+"isaacsim.examples.browser" = {}
 "isaacsim.gui.components" = {}
 "isaacsim.robot_motion.experimental.motion_generation" = {}
 "isaacsim.robot_motion.pink" = {}
@@ -99,7 +100,6 @@ args = [
 
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
-    '*SyntheticData extension needs at least a stageFrameHistoryCount*',
 ]
 
 "filter:platform"."windows-x86_64".pythonTests.exclude = [

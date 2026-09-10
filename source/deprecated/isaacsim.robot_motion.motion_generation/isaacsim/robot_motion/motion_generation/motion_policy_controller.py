@@ -28,7 +28,7 @@ from isaacsim.robot_motion.motion_generation.motion_policy_interface import Moti
 
 
 class MotionPolicyController(BaseController):
-    """A Controller that steps using an arbitrary MotionPolicy.
+    """A controller that steps using an arbitrary MotionPolicy.
 
     Args:
         name: Name of this controller.
@@ -51,8 +51,8 @@ class MotionPolicyController(BaseController):
         Args:
             target_end_effector_position: Translation vector (3x1) for robot end effector.
                 Target translation should be specified in the same units as the USD stage, relative to the stage origin.
-            target_end_effector_orientation: Quaternion of desired rotation for robot end effector relative to USD stage global frame.
-                Target orientation defaults to None, which means that the robot may reach the target with any orientation.
+            target_end_effector_orientation: Quaternion of desired rotation for robot end effector relative to USD stage
+                global frame. If None, the robot may reach the target with any orientation.
 
         Returns:
             A wrapper object containing the desired next state for the robot.
@@ -71,21 +71,15 @@ class MotionPolicyController(BaseController):
         Args:
             obstacle: Dynamic, Visual, or Fixed object from isaacsim.core.api.objects.
             static: If True, the obstacle may be assumed by the MotionPolicy to remain stationary over time.
-
-        Returns:
-            None.
         """
         self._motion_policy.add_obstacle(obstacle, static=static)
         return
 
     def remove_obstacle(self, obstacle: isaacsim.core.api.objects) -> None:
-        """Remove and added obstacle from the motion_policy.
+        """Remove an added obstacle from the motion_policy.
 
         Args:
             obstacle: Object from isaacsim.core.api.objects that has been added to the motion_policy.
-
-        Returns:
-            None.
         """
         self._motion_policy.remove_obstacle(obstacle)
         return

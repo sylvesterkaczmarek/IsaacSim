@@ -1,0 +1,44 @@
+[core]
+reloadable = false
+order = -100
+
+[package]
+version = "6.2.0"
+category = "Simulation"
+title = "Isaac Sim Common Libraries"
+description = "Shared Isaac Sim runtime services and Kit logging and profiling integration."
+keywords = ["isaac", "libraries", "logging", "profiling"]
+changelog = "docs/CHANGELOG.md"
+readme = "docs/Overview.md"
+preview_image = "data/preview.png"
+icon = "data/icon.png"
+writeTarget.kit = true
+writeTarget.platform = true
+
+[[python.module]]
+path = "pip_prebundle"
+
+[[python.module]]
+name = "isaacsim.common.tests"
+
+[[native.library]]
+path = "pip_prebundle/isaacsim/lib/${lib_prefix}isaacsim-common-logging${lib_ext}"
+"filter:platform"."windows-x86_64".path = "pip_prebundle/isaacsim/common/logging/bindings/isaacsim-common-logging${lib_ext}"
+recursive = false
+
+[[native.library]]
+path = "pip_prebundle/isaacsim/lib/${lib_prefix}isaacsim-common-profiling${lib_ext}"
+"filter:platform"."windows-x86_64".path = "pip_prebundle/isaacsim/common/profiling/bindings/isaacsim-common-profiling${lib_ext}"
+recursive = false
+
+[[native.plugin]]
+path = "bin/*.plugin"
+recursive = false
+
+[[test]]
+dependencies = [
+    "omni.kit.test",
+]
+
+[documentation]
+pages = ["docs/Overview.md", "docs/CHANGELOG.md", "docs/api.rst"]

@@ -1,0 +1,59 @@
+{
+    "ZMQPublishClock": {
+        "version": 1,
+        "icon": "icons/isaac-sim.svg",
+        "description": "Publishes simulation and system clock data via ZMQ as a Clock protobuf message",
+        "metadata": {
+            "uiName": "ZMQ Publish Clock"
+        },
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": "isaacZmq",
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "The input execution port"
+            },
+            "ip": {
+                "type": "string",
+                "description": "Remote IP address of the ZMQ server",
+                "default": "localhost"
+            },
+            "port": {
+                "type": "uint",
+                "description": "Remote port number of the ZMQ server",
+                "default": 5561
+            },
+            "topicName": {
+                "type": "string",
+                "description": "ZMQ topic published on (first multipart frame); defaults to the message type. Set a unique value (e.g. \"robot_0/clock\") to distinguish multiple data sources.",
+                "default": "clock"
+            },
+            "simulationTime": {
+                "type": "double",
+                "description": "Current simulation time in seconds",
+                "default": 0.0
+            },
+            "systemTime": {
+                "type": "double",
+                "description": "Current system time in seconds",
+                "default": 0.0
+            },
+            "deltaSimulationTime": {
+                "type": "double",
+                "description": "Simulation delta time (seconds per step)",
+                "default": 0.0
+            },
+            "deltaSystemTime": {
+                "type": "double",
+                "description": "System delta time (seconds per step)",
+                "default": 0.0
+            }
+        },
+        "outputs": {
+            "execOut": {
+                "type": "execution",
+                "description": "Fires every tick after the message is published"
+            }
+        }
+    }
+}

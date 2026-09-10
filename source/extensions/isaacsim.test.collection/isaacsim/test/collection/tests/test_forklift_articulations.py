@@ -41,7 +41,9 @@ class TestForkliftArticulations(omni.kit.test.AsyncTestCase):
             carb.log_error("Could not find Isaac Sim assets folder")
             return
 
-        self.usd_path = self._assets_root_path + "/Isaac/Robots/IsaacSim/ForkliftC/forklift_c.usd"
+        self.usd_path = (
+            self._assets_root_path + "/Isaac/Robots_Multiphysics/IsaacSim/ForkliftC/forklift_c/forklift_c.usda"
+        )
         stage_utils.add_reference_to_stage(self.usd_path, "/World/Forklift")
         self.stage = omni.usd.get_context().get_stage()
 

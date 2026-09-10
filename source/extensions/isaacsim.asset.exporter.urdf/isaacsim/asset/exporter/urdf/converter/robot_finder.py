@@ -495,6 +495,9 @@ def _collect_sites(links: list[Usd.Prim]) -> list[SiteInfo]:
 
     These are child Xforms that represent reference frames (sensor mounts,
     end-effector offsets, etc.) and map to ghost links + fixed joints in URDF.
+    Geometry-bearing candidates are skipped: some assets spuriously apply
+    ``IsaacSiteAPI`` to a link's visual/collision mesh holders, which would
+    otherwise produce duplicate links and self-referencing fixed joints.
 
     Args:
         links: Link prims to inspect.
@@ -513,5 +516,23 @@ def _collect_sites(links: list[Usd.Prim]) -> list[SiteInfo]:
                 continue
             if child.HasAPI(UsdPhysics.RigidBodyAPI):
                 continue
+            if _contains_geometry(child):
+                continue
             sites.append(SiteInfo(prim=child, parent_link_prim=link_prim))
     return sites
+
+
+def _contains_geometry(prim: Usd.Prim) -> bool:
+    """Check whether a prim or its subtree contains renderable/collision geometry.
+
+    Traverses instance proxies so that geometry pulled in through instanced
+    references (common in Isaac Sim assets) is detected.
+
+    Args:
+        prim: USD prim to inspect.
+
+    Returns:
+        True if the prim or any descendant is a UsdGeom.Gprim, else False.
+    """
+    instance_pred = Usd.TraverseInstanceProxies()
+    return any(desc.IsA(UsdGeom.Gprim) for desc in Usd.PrimRange(prim, instance_pred))

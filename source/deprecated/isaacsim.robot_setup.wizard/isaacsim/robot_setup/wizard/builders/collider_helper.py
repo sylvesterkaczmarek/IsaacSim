@@ -45,7 +45,7 @@ def apply_collider(link_name: str, approximation_type: str) -> None:
 
     Args:
         link_name: Name of the robot link to apply collision to.
-        approximation_type: Type of collision approximation to use (e.g., "triangleMesh", "convexHull").
+        approximation_type: Type of collision approximation to use, such as "triangleMesh" or "convexHull".
 
     Raises:
         ValueError: If the mesh prim does not exist at the expected path.

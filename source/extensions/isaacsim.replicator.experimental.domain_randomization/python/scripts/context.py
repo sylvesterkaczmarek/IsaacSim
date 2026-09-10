@@ -89,12 +89,25 @@ def initialize_context(num_envs: Any, action_graph_entry_node: Any) -> None:
     _context = ReplicatorIsaacContext(num_envs, action_graph_entry_node)
 
 
+def cleanup() -> None:
+    """Drop the session context bound to the current stage graph."""
+    global _context
+    _context = None
+
+
 def get_reset_inds() -> Any:
     """Get the current reset indices from the global context.
 
     Returns:
         The current reset indices used for domain randomization.
+
+    Raises:
+        RuntimeError: If no domain-randomization context is active.
     """
+    if _context is None:
+        raise RuntimeError(
+            "Domain randomization context is not initialized. Call trigger.on_rl_frame after loading a stage."
+        )
     return _context.reset_inds
 
 
@@ -120,5 +133,12 @@ def trigger_randomization(reset_inds: Any) -> None:
 
     Args:
         reset_inds: Indices of environments to reset and apply randomization to.
+
+    Raises:
+        RuntimeError: If no domain-randomization context is active.
     """
+    if _context is None:
+        raise RuntimeError(
+            "Domain randomization context is not initialized. Call trigger.on_rl_frame after loading a stage."
+        )
     _context.trigger_randomization(reset_inds)

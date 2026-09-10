@@ -1,5 +1,5 @@
 [package]
-version = "0.1.3"
+version = "0.1.7"
 category = "simulation"
 title = "pink"
 description = "Access to PINK (Python Inverse Kinematics) solvers under the isaacsim motion generation API."
@@ -29,19 +29,28 @@ name = "isaacsim.robot_motion.pink.tests"
 [[test]]
 name = "startup"
 enabled = true
+args = [
+    "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
 
 "filter:platform"."windows-x86_64".pythonTests.exclude = [
     "*",
 ]
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 enabled = true
 dependencies = ["isaacsim.test.utils"]
+args = [
+    "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
 
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
     '*SparseConversionWarning*',
-    '*SyntheticData extension needs at least a stageFrameHistoryCount*',
 ]
 
 "filter:platform"."windows-x86_64".pythonTests.exclude = [

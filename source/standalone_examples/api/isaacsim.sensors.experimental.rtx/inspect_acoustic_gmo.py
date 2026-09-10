@@ -124,7 +124,11 @@ class GmoAcousticInspectWriter(Writer):
         self._printed_details = False
 
     def write(self, data: dict[str, object]) -> None:
-        """Inspect acoustic GenericModelOutput data."""
+        """Inspect acoustic GenericModelOutput data.
+
+        Args:
+            data: Writer payload containing acoustic GenericModelOutput data grouped by render product.
+        """
         if "renderProducts" not in data:
             return
         for _rp_name, rp_data in data["renderProducts"].items():

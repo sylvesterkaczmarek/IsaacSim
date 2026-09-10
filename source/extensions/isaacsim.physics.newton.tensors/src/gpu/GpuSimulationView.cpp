@@ -13,11 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "GpuSimulationView.h"
+#include "GpuSimulationView.hpp"
 
-#include "GpuArticulationView.h"
-#include "GpuRigidBodyView.h"
-#include "GpuRigidContactView.h"
+#include "GpuArticulationView.hpp"
+#include "GpuRigidBodyView.hpp"
+#include "GpuRigidContactView.hpp"
 
 namespace isaacsim
 {

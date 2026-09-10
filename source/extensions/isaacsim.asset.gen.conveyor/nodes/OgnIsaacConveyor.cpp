@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include <OgnIsaacConveyorDatabase.h>
@@ -103,7 +103,7 @@ public:
         // scheduling = compute-on-request and the OG action graph evaluator paused once
         // the timeline stops, the requested compute may be deferred or skipped entirely.
         // Doing the restore work synchronously here mirrors `BaseResetNode`'s approach
-        // (see isaacsim/core/includes/BaseResetNode.h) and matches the pre-Kit-107.3
+        // (see isaacsim/core/includes/BaseResetNode.hpp) and matches the pre-Kit-107.3
         // contract where the same callback dispatched the work.
         state.m_eventSubscription[0] = ed->observeEvent(
             carb::RStringKey("isaacsim.asset.gen.conveyor/OgnIsaacConveyor/StopPlay"),

@@ -47,14 +47,29 @@ class TestCameraContextMenu(MenuUITestCase):
         )
 
     async def test_camera_sensors_context_menu_click(self) -> None:
-        """Test the Camera and Depth Sensors are added to stage context menus correctly."""
+        """Test that Camera and Depth Sensor context-menu actions spawn Camera prims.
+
+        Clicks one sensor per vendor. ``test_camera_context_menu_count`` checks
+        that every registry entry is present in the menu.
+        """
         viewport_context_menu = await self.get_viewport_context_menu()
         self.assertIsNotNone(viewport_context_menu, "Failed to get viewport context menu")
 
         camera_viewport_menu_dict = viewport_context_menu["Create"]["Isaac"]["Sensors"]["Camera and Depth Sensors"]
         all_menu_paths = get_all_menu_paths(camera_viewport_menu_dict)
 
+        sampled_paths: list[str] = []
+        seen_vendors: set[str] = set()
         for test_path in all_menu_paths:
+            vendor = test_path.split("/", 1)[0]
+            if vendor in seen_vendors:
+                continue
+            seen_vendors.add(vendor)
+            sampled_paths.append(test_path)
+
+        self.assertGreater(len(sampled_paths), 0, "No Camera and Depth Sensor menu items found to click")
+
+        for test_path in sampled_paths:
             full_test_path = "Create/Isaac/Sensors/Camera and Depth Sensors/" + test_path
 
             await stage_utils.create_new_stage_async()

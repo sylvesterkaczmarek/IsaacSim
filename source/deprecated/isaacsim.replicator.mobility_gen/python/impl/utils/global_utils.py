@@ -55,7 +55,10 @@ def join_sdf_paths(*subpaths: str) -> str:
             and subsequent components are treated as relative paths.
 
     Returns:
-        The joined SDF path as a string.
+        The joined SDF path.
+
+    Raises:
+        IndexError: If no path components are provided.
     """
     path = Sdf.Path(subpaths[0])
 

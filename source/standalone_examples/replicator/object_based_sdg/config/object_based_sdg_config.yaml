@@ -18,21 +18,22 @@ launch_config:
   headless: false
 env_url: ''
 working_area_size:
-- 4
-- 4
-- 3
+- 2.5
+- 2.5
+- 1.5
 rt_subframes: 4
-num_frames: 10
+num_frames: 3
 num_cameras: 2
+camera_collider_radius: 0.25
 disable_render_products_between_captures: false
 simulation_duration_between_captures: 0.0
 resolution:
 - 640
 - 480
-camera_look_at_target_offset: 0.15
+camera_look_at_target_offset: 0.1
 camera_distance_to_target_min_max:
-  - 0.25
-  - 0.75
+  - 0.35
+  - 0.9
 writer_type: BasicWriter
 writer_kwargs:
   output_dir: _out_obj_based_sdg_basic_writer
@@ -42,21 +43,21 @@ writer_kwargs:
 labeled_assets_and_properties:
 - url: /Isaac/Props/YCB/Axis_Aligned/008_pudding_box.usd
   label: pudding_box
-  count: 5
+  count: 4
   floating: true
   scale_min_max:
     - 0.85
     - 1.25
 - url: /Isaac/Props/YCB/Axis_Aligned/011_banana.usd
   label: banana
-  count: 10
+  count: 3
   floating: false
   scale_min_max:
     - 0.85
     - 1.25
 - url: /Isaac/Props/YCB/Axis_Aligned_Physics/006_mustard_bottle.usd
   label: mustard_bottle
-  count: 7
+  count: 4
   floating: true
   scale_min_max:
     - 0.85
@@ -70,7 +71,7 @@ shape_distractors_types:
 shape_distractors_scale_min_max:
   - 0.015
   - 0.15
-shape_distractors_num: 350
+shape_distractors_num: 80
 mesh_distractors_urls:
 - /Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_04_1847.usd
 - /Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxA_01_414.usd
@@ -89,5 +90,5 @@ mesh_distractors_urls:
 - /Isaac/Environments/Hospital/Props/SM_Toweldispenser_01a.usd
 mesh_distractors_scale_min_max:
   - 0.35
-  - 1.35
-mesh_distractors_num: 75
+  - 1.0
+mesh_distractors_num: 4

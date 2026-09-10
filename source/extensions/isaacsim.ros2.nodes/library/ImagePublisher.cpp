@@ -17,7 +17,7 @@
 #include <carb/logging/Log.h>
 #include <carb/profiler/Profile.h>
 
-#include <isaacsim/ros2/nodes/ImagePublisher.h>
+#include <isaacsim/ros2/nodes/ImagePublisher.hpp>
 
 #include <cstring>
 

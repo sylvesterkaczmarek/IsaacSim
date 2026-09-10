@@ -30,11 +30,14 @@ Stage management utilities handle USD file operations, prim creation and manipul
 
 ```python
 import isaacsim.core.experimental.utils.stage as stage_utils
+import omni.usd
 
 # Create and manage stages
 stage_utils.create_new_stage(template="sunlight")
 stage_utils.open_stage("/path/to/file.usd")
 stage_utils.save_stage("/path/to/output.usd")
+if stage_utils.is_stage_set() or omni.usd.get_context().get_stage() is not None:
+    stage_utils.close_stage()
 
 # Define and manipulate prims
 stage_utils.define_prim("/World/Cube", "Cube")
@@ -79,6 +82,10 @@ relative = transform_utils.compute_relative_transform(source_to_world, target_to
 
 # Compute camera look-at transform
 matrix = transform_utils.look_at_matrix(eye=[5.0, 5.0, 5.0], target=[0.0, 0.0, 0.0])
+
+# Transform points between a local frame and world space
+world_point = transform_utils.transform_local_to_world(local_point, frame_position, frame_orientation)
+local_point = transform_utils.transform_world_to_local(world_point, frame_position, frame_orientation)
 ```
 
 The {func}`look_at_matrix <isaacsim.core.experimental.utils.transform.look_at_matrix>` function computes the ``Gf.Matrix4d`` camera transform (position + orientation) that places a camera at a given eye position oriented toward a target. It accepts lists, NumPy arrays, or ``Gf.Vec3d`` and automatically selects a fallback up vector when the forward direction is collinear with the specified up axis. The batched {func}`look_at_quaternion <isaacsim.core.experimental.utils.transform.look_at_quaternion>` variant returns a Warp array quaternion and supports batched inputs for multi-camera workflows.

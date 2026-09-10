@@ -19,6 +19,8 @@ import tempfile
 from typing import Any
 
 import carb.settings
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit
 import omni.usd
 from isaacsim.test.utils.file_validation import validate_folder_contents
@@ -29,9 +31,9 @@ class TestSceneBasedSDG(omni.kit.test.AsyncTestCase):
 
     async def setUp(self) -> None:
         """Open a clean stage and preserve the DLSS setting used by the SDG capture."""
-        await omni.kit.app.get_app().next_update_async()
-        await omni.usd.get_context().new_stage_async()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
         self.original_dlss_exec_mode = carb.settings.get_settings().get("rtx/post/dlss/execMode")
 
     async def tearDown(self) -> Any:
@@ -40,11 +42,11 @@ class TestSceneBasedSDG(omni.kit.test.AsyncTestCase):
         Returns:
             None.
         """
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
         # In some cases the test will end before the asset is loaded, in this case wait for assets to load
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
         carb.settings.get_settings().set("rtx/post/dlss/execMode", self.original_dlss_exec_mode)
 
     async def test_scene_based_sdg(self) -> Any:
@@ -69,11 +71,35 @@ class TestSceneBasedSDG(omni.kit.test.AsyncTestCase):
             get_obb_corners,
         )
         from isaacsim.core.experimental.utils.semantics import add_labels, remove_all_labels
-        from isaacsim.core.experimental.utils.stage import add_reference_to_stage, define_prim
+        from isaacsim.core.experimental.utils.stage import (
+            add_reference_to_stage,
+            create_new_stage,
+            define_prim,
+            open_stage,
+        )
         from isaacsim.core.experimental.utils.transform import euler_angles_to_quaternion, quaternion_to_euler_angles
-        from isaacsim.core.simulation_manager import SimulationManager
+        from isaacsim.core.simulation_manager import PhysicsScene, SimulationManager
         from isaacsim.storage.native import get_assets_root_path_async
         from pxr import Gf, Usd, UsdGeom
+
+        def setup_environment(env_url: str | None, assets_root_path: str) -> bool:
+            """Load a USD environment, or create a minimal plane + dome light when ``env_url`` is None."""
+            if env_url:
+                env_path = env_url if env_url.startswith("omniverse://") else assets_root_path + env_url
+                print(f"[SDG] Loading Stage {env_url}")
+                stage_opened, _ = open_stage(env_path)
+                if not stage_opened:
+                    print(f"[SDG] Could not open stage {env_url}")
+                    return False
+                return True
+
+            print("[SDG] Creating empty environment (plane + dome light)")
+            create_new_stage()
+            rep.functional.create.scope(name="Environment")
+            rep.functional.create.dome_light(intensity=500, parent="/Environment", name="DomeLight")
+            ground = rep.functional.create.plane(parent="/Environment", name="GroundPlane", scale=(100, 100, 1))
+            rep.functional.physics.apply_collider(ground)
+            return True
 
         def _create_prim(
             prim_path: Any,
@@ -184,7 +210,8 @@ class TestSceneBasedSDG(omni.kit.test.AsyncTestCase):
                 usd_path=assets_root_path + config["pallet"]["url"],
                 semantic_label=config["pallet"]["class"],
             )
-            sim_pallet_geom = GeomPrim(f"{str(sim_pallet.GetPrimPath())}/.*", apply_collision_apis=True)
+            sim_pallet_geom_paths = [str(p.GetPrimPath()) for p in Usd.PrimRange(sim_pallet) if p.IsA(UsdGeom.Gprim)]
+            sim_pallet_geom = GeomPrim(sim_pallet_geom_paths, apply_collision_apis=True)
             sim_pallet_geom.set_collision_approximations("boundingCube")
 
             bbox_cache = create_bbox_cache()
@@ -202,11 +229,12 @@ class TestSceneBasedSDG(omni.kit.test.AsyncTestCase):
                 )
                 current_height += bbox_cache.ComputeLocalBound(sim_box).GetRange().GetSize()[2] * 1.1
 
-                sim_box_geom = GeomPrim(f"{str(sim_box.GetPrimPath())}/.*", apply_collision_apis=True)
+                sim_box_geom_paths = [str(p.GetPrimPath()) for p in Usd.PrimRange(sim_box) if p.IsA(UsdGeom.Gprim)]
+                sim_box_geom = GeomPrim(sim_box_geom_paths, apply_collision_apis=True)
                 sim_box_geom.set_collision_approximations("convexHull")
                 sim_box_rigid_prims.append(RigidPrim(str(sim_box.GetPrimPath())))
 
-            SimulationManager.set_physics_dt(1.0 / 90.0)
+            PhysicsScene("/PhysicsScene").set_dt(1.0 / 90.0)
             SimulationManager.initialize_physics()
 
             velocity_threshold = 0.01
@@ -383,12 +411,9 @@ class TestSceneBasedSDG(omni.kit.test.AsyncTestCase):
                 print("[SDG] Could not get nucleus server path")
                 return
 
-            # Load environment stage
-            env_url = config.get("env_url", "/Isaac/Environments/Grid/default_environment.usd")
-            env_path = env_url if env_url.startswith("omniverse://") else assets_root_path + env_url
-            print(f"[SDG] Loading Stage {env_url}")
-            omni.usd.get_context().open_stage(env_path)
-            stage = omni.usd.get_context().get_stage()
+            # Load environment stage, or create a minimal plane + dome light when env_url is None
+            if not setup_environment(config.get("env_url"), assets_root_path):
+                return
 
             await omni.kit.app.get_app().next_update_async()
 
@@ -404,11 +429,11 @@ class TestSceneBasedSDG(omni.kit.test.AsyncTestCase):
 
             # Clear previous semantic labels
             if config.get("clear_previous_semantics", True):
-                for prim in stage.Traverse():
+                for prim in omni.usd.get_context().get_stage().Traverse():
                     remove_all_labels(prim, include_descendants=True)
 
             # Create SDG scope for organizing all generated objects
-            sdg_scope = stage.DefinePrim("/SDG", "Scope")
+            define_prim("/SDG", "Scope")
 
             # Spawn forklift at random pose
             forklift_prim = _create_prim(
@@ -582,7 +607,7 @@ class TestSceneBasedSDG(omni.kit.test.AsyncTestCase):
         config = {
             "resolution": [512, 512],
             "rt_subframes": 32,
-            "num_frames": 10,
+            "num_frames": 4,
             "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
             "writer": "BasicWriter",
             "backend_type": "DiskBackend",
@@ -619,10 +644,9 @@ class TestSceneBasedSDG(omni.kit.test.AsyncTestCase):
         # asyncio.ensure_future(run_example_async(config))
 
         # Test parameters
-        num_frames = 4
-        env_url = "/Isaac/Environments/Grid/default_environment.usd"
-        config["num_frames"] = num_frames
-        config["env_url"] = env_url
+        test_num_frames = 4
+        config["num_frames"] = test_num_frames
+        config["env_url"] = None
         out_dir = tempfile.mkdtemp(prefix="test_scene_based_sdg_")
         print(f"Output directory: {out_dir}")
         config["backend_params"]["output_dir"] = out_dir
@@ -632,9 +656,9 @@ class TestSceneBasedSDG(omni.kit.test.AsyncTestCase):
         # pngs: num_frames * 3 (cameras) * ( 1 (rgb) + 1 (semantic segmentation))
         # json: num_frames * 3 (cameras) * ( 2 (bounding_box_2d_tight) + 2 (bounding_box_3d) + 1 (semantic segmentation) )
         # npy: num_frames * 3 (cameras) * ( 1 (bounding_box_2d_tight) + 1 (bounding_box_3d) +  1 (distance to image plane) + 1 (occlusion))
-        expected_pngs = num_frames * 3 * (1 + 1)
-        expected_jsons = num_frames * 3 * (2 + 2 + 1)
-        expected_npy = num_frames * 3 * (1 + 1 + 1 + 1)
+        expected_pngs = test_num_frames * 3 * (1 + 1)
+        expected_jsons = test_num_frames * 3 * (2 + 2 + 1)
+        expected_npy = test_num_frames * 3 * (1 + 1 + 1 + 1)
         all_data_written = validate_folder_contents(
             out_dir, {"png": expected_pngs, "json": expected_jsons, "npy": expected_npy}, recursive=True
         )

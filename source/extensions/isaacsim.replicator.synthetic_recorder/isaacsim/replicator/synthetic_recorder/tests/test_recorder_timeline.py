@@ -18,11 +18,11 @@
 import os
 import shutil
 
-import omni.kit.app
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
 import omni.replicator.core as rep
 import omni.timeline
-import omni.usd
 from isaacsim.replicator.synthetic_recorder.synthetic_recorder import SyntheticRecorder
 from isaacsim.test.utils.file_validation import validate_folder_contents
 
@@ -31,21 +31,21 @@ class TestRecorderData(omni.kit.test.AsyncTestCase):
     """Test that the recorder writes the correct number of frames."""
 
     async def setUp(self) -> None:
-        """Set up a new stage before each test."""
-        await omni.kit.app.get_app().next_update_async()
-        omni.usd.get_context().new_stage()
-        await omni.kit.app.get_app().next_update_async()
+        """Create a clean stage before each test."""
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
 
     async def tearDown(self) -> None:
-        """Wait for assets to finish loading after each test."""
-        await omni.kit.app.get_app().next_update_async()
-        # In some cases the test will end before the asset is loaded, in this case wait for assets to load
-        while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+        """Close the test stage and wait for assets to finish loading."""
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
+        while stage_utils.is_stage_loading():
+            await app_utils.update_app_async()
 
     async def setup_stage_with_semantics(self) -> None:
         """Create a stage with semantically labeled primitives."""
-        await omni.usd.get_context().new_stage_async()
+        await stage_utils.create_new_stage_async()
         rep.functional.create.cube(semantics=[("class", "cube")])
         rep.functional.create.sphere(position=(1, 1, 0), semantics=[("class", "sphere")])
 
@@ -104,20 +104,20 @@ class TestRecorderData(omni.kit.test.AsyncTestCase):
         # Check id the recorder should capture with the timeline running
         timeline = omni.timeline.get_timeline_interface()
         if play_timeline:
-            timeline.play()
-            await omni.kit.app.get_app().next_update_async()
-        print(f"Timeline is_playing: {timeline.is_playing()}; current_time: {timeline.get_current_time()}")
+            app_utils.play()
+            await app_utils.update_app_async()
+        print(f"Timeline is_playing: {app_utils.is_playing()}; current_time: {timeline.get_current_time()}")
 
         # Check if the timeline is in the correct state
         self.assertTrue(
-            timeline.is_playing() == play_timeline,
-            f"Timeline is not in the correct play state. Expected: {play_timeline}, Actual: {timeline.is_playing()}",
+            app_utils.is_playing() == play_timeline,
+            f"Timeline is not in the correct play state. Expected: {play_timeline}, Actual: {app_utils.is_playing()}",
         )
 
         # Start the recorder and wait for all the data to be captured
         await recorder.start_stop_async()
-        await omni.kit.app.get_app().next_update_async()
-        print(f"Timeline is_playing: {timeline.is_playing()}; current_time: {timeline.get_current_time()}")
+        await app_utils.update_app_async()
+        print(f"Timeline is_playing: {app_utils.is_playing()}; current_time: {timeline.get_current_time()}")
 
         # Check if the output directory was created
         self.assertTrue(os.path.exists(out_dir_path), f"Output directory {out_dir_path} was not created.")
@@ -125,14 +125,14 @@ class TestRecorderData(omni.kit.test.AsyncTestCase):
         # If control_timeline is True, the timeline should not be playing after recording.
         if control_timeline:
             self.assertTrue(
-                not timeline.is_playing(),
+                not app_utils.is_playing(),
                 "Timeline is still playing after recording when control_timeline is True.",
             )
 
         # If control_timeline is False and play_timeline is True, the timeline should still be playing.
         if not control_timeline and play_timeline:
             self.assertTrue(
-                timeline.is_playing(),
+                app_utils.is_playing(),
                 "Timeline is not playing after recording when control_timeline is False and play_timeline is True.",
             )
 

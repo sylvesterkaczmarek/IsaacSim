@@ -36,7 +36,12 @@ kit.update()
 
 
 def test_callback(step: float, context: Any) -> None:
-    """Print a message when the physics step callback fires."""
+    """Print a message when the physics step callback fires.
+
+    Args:
+        step: Duration of the completed physics step in seconds.
+        context: Physics callback context supplied by the subscription.
+    """
     print("callback")
 
 

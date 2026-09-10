@@ -4,7 +4,7 @@ reloadable = false
 order = -100
 
 [package]
-version = "1.1.1"
+version = "1.1.4"
 category = "Simulation"
 title = "Omni USD Mujoco Schema"
 description="Extension used to host all Mujoco USD schemas."
@@ -19,9 +19,32 @@ writeTarget.usd = true
 
 [dependencies]
 "omni.usd.libs" = { }
+"omni.usd.schema.newton" = {}
 
 [[python.module]]
 name = "usd.schema.mujoco"
+
+[[python.module]]
+name = "usd.schema.mujoco.tests"
+
+[[test]]
+name = "startup"
+dependencies = [
+    "omni.kit.test",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
+[[test]]
+dependencies = [
+    "omni.kit.test",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
 
 [documentation]
 pages = ["docs/Overview.md", "docs/CHANGELOG.md"]

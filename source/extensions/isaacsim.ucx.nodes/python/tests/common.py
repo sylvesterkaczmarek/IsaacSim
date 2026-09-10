@@ -17,6 +17,7 @@
 
 import os
 import socket
+import sys
 
 import numpy as np
 
@@ -86,7 +87,16 @@ class UCXTestCase(TimedAsyncTestCase):
         # the rendezvous recv with "cannot find remote protocol for ... rndv_recv
         # into host memory from cuda/dev[0]".
         os.environ["UCX_TLS"] = "tcp,self,cuda_copy"
-        os.environ["UCX_NET_DEVICES"] = "all"
+        # Restrict device discovery to loopback on Linux. All UCX node tests
+        # communicate over 127.0.0.1, so only the loopback device is ever used.
+        # `UCX_NET_DEVICES=all` makes UCX enumerate every host interface on first
+        # init; on machines with VPN or virtual interfaces (e.g. `cscotun0`,
+        # `docker0`) the per-interface name resolution can stall for tens of
+        # seconds each, adding ~3 minutes to the first test and tripping the
+        # extension test process timeout. The loopback device is named `lo` on
+        # Linux; Windows has no equivalent stable token, so fall back to `all`
+        # there (the slow interfaces above are Linux-specific).
+        os.environ["UCX_NET_DEVICES"] = "lo" if sys.platform.startswith("linux") else "all"
 
         self.port = find_available_port()
 

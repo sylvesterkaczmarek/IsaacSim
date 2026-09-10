@@ -237,7 +237,7 @@ def velocity_field_compute_force(
     global_velocity_scale: wp.array(dtype=wp.float32),
     # output
     per_point_force_torque_buffer: wp.array(dtype=wp.spatial_vector),
-):
+) -> None:
     """Compute the conveyor-belt friction force/torque at every active contact point.
 
     Each thread processes a contiguous batch of contact points, computing the desired

@@ -15,6 +15,6 @@
 
 """Provides user interface components for Isaac Sim Replicator behavior management and exposed variable configuration."""
 
-from .extension import *
+from .extension import Extension as Extension
 
 __all__ = []

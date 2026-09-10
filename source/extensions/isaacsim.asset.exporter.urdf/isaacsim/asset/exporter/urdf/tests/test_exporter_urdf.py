@@ -24,9 +24,16 @@ import tempfile
 import xml.etree.ElementTree as ET
 from typing import Any
 
+import carb
 import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
 from isaacsim.asset.exporter.urdf.converter import UsdToUrdfConverter
+from isaacsim.asset.exporter.urdf.converter.inertia_utils import (
+    read_inertial_from_prim,
+    read_newton_inertia,
+    reconstruct_inertia_tensor,
+)
+from isaacsim.asset.exporter.urdf.converter.joint_reader import _read_joint_velocity_limit
 from isaacsim.storage.native import get_assets_root_path
 from pxr import Usd, UsdPhysics
 
@@ -60,9 +67,17 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
 
         Returns:
             Opened USD stage.
+
+        The assets root resolves via :func:`get_assets_root_path`, which reads
+        the ``/persistent/isaac/asset_root/default`` carb setting. To target a
+        different server (e.g. a dev Nucleus), override that setting at launch
+        with ``--/persistent/isaac/asset_root/default=<url>`` rather than
+        hard-coding any server URL here.
         """
-        assets_root = get_assets_root_path() + "/"
-        full_path = os.path.join(assets_root, robot_path)
+        assets_root = get_assets_root_path().rstrip("/")
+        full_path = f"{assets_root}/{robot_path.lstrip('/')}"
+        carb.log_warn(f"[test_exporter_urdf] Loading robot asset from: {full_path}")
+        print(f"[test_exporter_urdf] Loading robot asset from: {full_path}")
         await stage_utils.open_stage_async(full_path)
         return stage_utils.get_current_stage()
 
@@ -154,6 +169,156 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
         return output_path, root
 
     @staticmethod
+    def _create_continuous_joint_stage() -> tuple[Usd.Stage, UsdPhysics.RevoluteJoint]:
+        """Create a minimal stage containing a continuous revolute joint.
+
+        Returns:
+            Generated stage and continuous joint.
+        """
+        from pxr import Sdf, UsdGeom
+
+        stage = Usd.Stage.CreateInMemory()
+        robot = UsdGeom.Xform.Define(stage, "/robot")
+        stage.SetDefaultPrim(robot.GetPrim())
+        UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+
+        for path in ("/robot/base", "/robot/continuous_child"):
+            link = UsdGeom.Xform.Define(stage, path)
+            UsdPhysics.RigidBodyAPI.Apply(link.GetPrim())
+            UsdPhysics.MassAPI.Apply(link.GetPrim()).CreateMassAttr().Set(1.0)
+
+        world_joint = UsdPhysics.FixedJoint.Define(stage, "/robot/world_joint")
+        world_joint.GetBody1Rel().SetTargets([Sdf.Path("/robot/base")])
+
+        unbounded = UsdPhysics.RevoluteJoint.Define(stage, "/robot/continuous_joint")
+        unbounded.GetBody0Rel().SetTargets([Sdf.Path("/robot/base")])
+        unbounded.GetBody1Rel().SetTargets([Sdf.Path("/robot/continuous_child")])
+        unbounded.GetPrim().CreateAttribute("urdf:limit:effort", Sdf.ValueTypeNames.Float).Set(42.0)
+
+        return stage, unbounded
+
+    async def test_unbounded_revolute_joint_exports_as_continuous(self) -> None:
+        """Export a continuous joint with its finite Newton velocity limit."""
+        from pxr import Sdf
+
+        stage, unbounded = self._create_continuous_joint_stage()
+        unbounded.GetPrim().ApplyAPI("NewtonJointAPI")
+        newton_velocity_attr = unbounded.GetPrim().CreateAttribute("newton:velocityLimit", Sdf.ValueTypeNames.Float)
+        newton_velocity_attr.Set(math.degrees(3.5))
+
+        self.assertEqual(float(unbounded.GetLowerLimitAttr().Get()), -math.inf)
+        self.assertEqual(float(unbounded.GetUpperLimitAttr().Get()), math.inf)
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+        joints = {joint.get("name"): joint for joint in root.findall("joint")}
+        continuous_joint = joints["continuous_joint"]
+        self.assertEqual(continuous_joint.get("type"), "continuous")
+
+        limit = continuous_joint.find("limit")
+        self.assertIsNotNone(limit)
+        self.assertIsNone(limit.get("lower"))
+        self.assertIsNone(limit.get("upper"))
+        self.assertAlmostEqual(float(limit.get("effort")), 42.0)
+        self.assertAlmostEqual(float(limit.get("velocity")), 3.5, places=6)
+
+    async def test_missing_joint_velocity_is_omitted(self) -> None:
+        """Omit the URDF velocity when no supported source is authored."""
+        stage, _ = self._create_continuous_joint_stage()
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+        continuous_joint = root.find("joint[@name='continuous_joint']")
+        self.assertIsNotNone(continuous_joint)
+        limit = continuous_joint.find("limit")
+        self.assertIsNotNone(limit)
+        self.assertIsNone(limit.get("velocity"))
+
+    async def test_joint_velocity_falls_back_to_legacy_urdf(self) -> None:
+        """Use the legacy URDF velocity when Newton has no authored value."""
+        from pxr import Sdf
+
+        stage, unbounded = self._create_continuous_joint_stage()
+        unbounded.GetPrim().CreateAttribute("urdf:limit:velocity", Sdf.ValueTypeNames.Float).Set(2.5)
+
+        with self.assertLogs("isaacsim.asset.exporter.urdf.converter.joint_reader", level="WARNING") as logs:
+            with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+                _, root = await self._export_to_urdf(stage, temp_dir)
+
+        self.assertTrue(any("uses legacy attribute urdf:limit:velocity" in message for message in logs.output))
+
+        continuous_joint = root.find("joint[@name='continuous_joint']")
+        self.assertIsNotNone(continuous_joint)
+        limit = continuous_joint.find("limit")
+        self.assertIsNotNone(limit)
+        self.assertAlmostEqual(float(limit.get("velocity")), 2.5, places=6)
+
+    async def test_infinite_newton_velocity_blocks_other_sources(self) -> None:
+        """Treat an authored infinite Newton limit as authoritative and unbounded."""
+        from pxr import PhysxSchema, Sdf
+
+        stage, unbounded = self._create_continuous_joint_stage()
+        unbounded.GetPrim().CreateAttribute("urdf:limit:velocity", Sdf.ValueTypeNames.Float).Set(2.5)
+        unbounded.GetPrim().ApplyAPI("NewtonJointAPI")
+        newton_velocity_attr = unbounded.GetPrim().CreateAttribute("newton:velocityLimit", Sdf.ValueTypeNames.Float)
+        newton_velocity_attr.Set(math.inf)
+        physx_joint = PhysxSchema.PhysxJointAPI.Apply(unbounded.GetPrim())
+        physx_joint.CreateMaxJointVelocityAttr().Set(math.degrees(1.0))
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+        continuous_joint = root.find("joint[@name='continuous_joint']")
+        self.assertIsNotNone(continuous_joint)
+        limit = continuous_joint.find("limit")
+        self.assertIsNotNone(limit)
+        self.assertIsNone(limit.get("velocity"))
+
+    async def test_prismatic_velocity_uses_linear_units(self) -> None:
+        """Read a Newton prismatic velocity without angular conversion."""
+        from pxr import Sdf
+
+        stage = Usd.Stage.CreateInMemory()
+        slider = UsdPhysics.PrismaticJoint.Define(stage, "/slider_joint").GetPrim()
+        slider.CreateAttribute("newton:velocityLimit", Sdf.ValueTypeNames.Float).Set(0.25)
+
+        self.assertAlmostEqual(_read_joint_velocity_limit(slider), 0.25)
+
+    async def test_inverted_revolute_limits_export_as_fixed(self) -> None:
+        """Export a USD revolute joint with inverted limits as a URDF fixed joint."""
+        from pxr import Sdf, UsdGeom
+
+        stage = Usd.Stage.CreateInMemory()
+        robot = UsdGeom.Xform.Define(stage, "/robot")
+        stage.SetDefaultPrim(robot.GetPrim())
+        UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+
+        for path in ("/robot/base", "/robot/locked_child"):
+            link = UsdGeom.Xform.Define(stage, path)
+            UsdPhysics.RigidBodyAPI.Apply(link.GetPrim())
+            UsdPhysics.MassAPI.Apply(link.GetPrim()).CreateMassAttr().Set(1.0)
+
+        world_joint = UsdPhysics.FixedJoint.Define(stage, "/robot/world_joint")
+        world_joint.GetBody1Rel().SetTargets([Sdf.Path("/robot/base")])
+
+        locked = UsdPhysics.RevoluteJoint.Define(stage, "/robot/locked_joint")
+        locked.GetBody0Rel().SetTargets([Sdf.Path("/robot/base")])
+        locked.GetBody1Rel().SetTargets([Sdf.Path("/robot/locked_child")])
+        locked.GetLowerLimitAttr().Set(90.0)
+        locked.GetUpperLimitAttr().Set(-90.0)
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+        joints = {joint.get("name"): joint for joint in root.findall("joint")}
+        locked_joint = joints["locked_joint"]
+        self.assertEqual(locked_joint.get("type"), "fixed")
+        self.assertIsNone(locked_joint.find("axis"))
+        self.assertIsNone(locked_joint.find("limit"))
+
+    @staticmethod
     def _parse_xyz(text: str) -> list[float]:
         """Parse a space-separated xyz or rpy string into a list of floats.
 
@@ -171,7 +336,7 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
 
     async def test_exporter_ur10e_comprehensive(self) -> None:
         """Load UR10e once, export once, validate structure + correctness + meshes."""
-        stage = await self._open_robot("Isaac/Robots/UniversalRobots/ur10e/ur10e.usd")
+        stage = await self._open_robot("Isaac/Robots_Multiphysics/UniversalRobots/ur10e/ur10e.usda")
         if stage is None:
             self.skipTest("Could not open ur10e asset")
             return
@@ -400,6 +565,68 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
         await stage_utils.create_new_stage_async()
         await omni.kit.app.get_app().next_update_async()
 
+    @staticmethod
+    def _build_duplicate_site_name_stage() -> Usd.Stage:
+        """Build a fixed-base robot whose base link carries a same-named site.
+
+        Multiphysics USDA assets can tag ``/robot/base_link/base_link`` with
+        ``IsaacSiteAPI``. That frame is redundant with the link itself and must
+        not be exported as a second URDF link.
+
+        Returns:
+            Generated in-memory USD stage.
+        """
+        from pxr import Sdf, UsdGeom
+        from usd.schema.isaac.robot_schema import ApplySiteAPI
+
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+
+        robot = UsdGeom.Xform.Define(stage, "/robot")
+        stage.SetDefaultPrim(robot.GetPrim())
+        UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+
+        base = UsdGeom.Xform.Define(stage, "/robot/base_link")
+        UsdPhysics.RigidBodyAPI.Apply(base.GetPrim())
+        UsdPhysics.MassAPI.Apply(base.GetPrim()).CreateMassAttr().Set(1.0)
+
+        world_joint = UsdPhysics.FixedJoint.Define(stage, "/robot/world_joint")
+        world_joint.GetBody1Rel().SetTargets([Sdf.Path("/robot/base_link")])
+
+        duplicate_site = UsdGeom.Xform.Define(stage, "/robot/base_link/base_link")
+        ApplySiteAPI(duplicate_site.GetPrim())
+
+        flange = UsdGeom.Xform.Define(stage, "/robot/base_link/flange")
+        ApplySiteAPI(flange.GetPrim())
+
+        return stage
+
+    async def test_site_skipped_when_name_collides_with_link(self) -> None:
+        """Sites whose resolved name matches an existing link are not exported."""
+        stage = self._build_duplicate_site_name_stage()
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+            link_names = [link.get("name") for link in root.findall("link")]
+            self.assertEqual(link_names.count("base_link"), 1)
+            self.assertIn("flange", link_names)
+
+    async def test_site_renamed_when_duplicate_ghost_links_enabled(self) -> None:
+        """Sites whose names collide with links receive a numeric suffix when enabled."""
+        stage = self._build_duplicate_site_name_stage()
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir, export_duplicate_ghost_links=True)
+            link_names = [link.get("name") for link in root.findall("link")]
+            self.assertEqual(link_names.count("base_link"), 1)
+            self.assertIn("base_link_1", link_names)
+
+            joint = root.find("joint[@name='base_link_1_fixed_joint']")
+            self.assertIsNotNone(joint)
+            self.assertEqual(joint.find("parent").get("link"), "base_link")
+            self.assertEqual(joint.find("child").get("link"), "base_link_1")
+
     async def test_exporter_round_trip(self) -> None:
         """Test round-trip: import URDF -> USD -> export URDF, validate consistency."""
         try:
@@ -434,6 +661,9 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
             if stage is None:
                 self.skipTest("Could not open imported USD stage")
                 return
+
+            stage.GetPrimAtPath("/test_basic").GetVariantSet("Physics").SetVariantSelection("physics")
+            await omni.kit.app.get_app().next_update_async()
 
             output_urdf = os.path.join(temp_dir, "exported.urdf")
             converter = UsdToUrdfConverter(
@@ -538,6 +768,37 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
         converter.convert(output_path)
         self.assertTrue(os.path.exists(output_path))
         return ET.parse(output_path).getroot()
+
+    async def test_postprocess_modifies_robot_element(self) -> None:
+        """Apply a postprocessor before writing the URDF."""
+        stage = self._build_mjc_stage()
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            output_path = os.path.join(temp_dir, "robot.urdf")
+            converter = UsdToUrdfConverter(stage=stage)
+
+            def postprocess(root: ET.Element) -> None:
+                ET.SubElement(root, "custom", name="test")
+
+            converter.convert(output_path, postprocess=postprocess)
+            root = ET.parse(output_path).getroot()
+
+        self.assertIsNotNone(root.find("custom[@name='test']"))
+
+    async def test_postprocess_failure_prevents_urdf_write(self) -> None:
+        """Propagate postprocessor failures without writing a URDF file."""
+        stage = self._build_mjc_stage()
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            output_path = os.path.join(temp_dir, "robot.urdf")
+            converter = UsdToUrdfConverter(stage=stage)
+
+            def postprocess(_root: ET.Element) -> None:
+                raise RuntimeError("postprocess failed")
+
+            with self.assertRaisesRegex(RuntimeError, "postprocess failed"):
+                converter.convert(output_path, postprocess=postprocess)
+            self.assertFalse(os.path.exists(output_path))
 
     async def test_mjc_joint_dynamics_export(self) -> None:
         """Verify that mjc:damping and mjc:frictionloss are exported as URDF <dynamics>."""
@@ -754,8 +1015,11 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_drive_stage() -> Usd.Stage:
+    def _build_drive_stage(max_force: float | None = 50.0) -> Usd.Stage:
         """Create a stage with a RevoluteJoint that has DriveAPI and armature.
+
+        Args:
+            max_force: Drive maximum force to author, or None to leave it unauthored.
 
         Returns:
             Generated in-memory USD stage.
@@ -792,7 +1056,8 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
         drv = UsdPhysics.DriveAPI.Apply(jp, "angular")
         drv.CreateStiffnessAttr().Set(1000.0)
         drv.CreateDampingAttr().Set(100.0)
-        drv.CreateMaxForceAttr().Set(50.0)
+        if max_force is not None:
+            drv.CreateMaxForceAttr().Set(max_force)
         drv.CreateTargetPositionAttr().Set(0.0)
 
         physx_api = PhysxSchema.PhysxJointAPI.Apply(jp)
@@ -848,8 +1113,8 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
                     "DriveAPI.damping should NOT appear in <dynamics damping>",
                 )
 
-    async def test_drive_does_not_leak_into_effort(self) -> None:
-        """DriveAPI.maxForce must NOT appear in <limit effort>."""
+    async def test_drive_effort_limit_fallback(self) -> None:
+        """Use native PhysX DriveAPI maxForce as the URDF effort limit."""
         stage = self._build_drive_stage()
 
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
@@ -857,8 +1122,64 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
 
             joints = [j for j in root.findall("joint") if j.get("type") == "revolute"]
             limit = joints[0].find("limit")
-            if limit is not None:
-                self.assertIsNone(limit.get("effort"), "DriveAPI maxForce should NOT produce effort attr")
+            self.assertIsNotNone(limit)
+            self.assertAlmostEqual(float(limit.get("effort")), 50.0, places=4)
+
+    async def test_drive_effort_limit_takes_priority_over_urdf_attr(self) -> None:
+        """Prefer DriveAPI maxForce when a legacy URDF effort attribute is also authored."""
+        from pxr import Sdf
+
+        stage = self._build_drive_stage()
+        joint_prim = stage.GetPrimAtPath("/robot/joint1")
+        joint_prim.CreateAttribute("urdf:limit:effort", Sdf.ValueTypeNames.Float).Set(75.0)
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+            joints = [j for j in root.findall("joint") if j.get("type") == "revolute"]
+            limit = joints[0].find("limit")
+            self.assertIsNotNone(limit)
+            self.assertAlmostEqual(float(limit.get("effort")), 50.0, places=4)
+
+    async def test_drive_effort_limit_ignores_unauthored_fallback(self) -> None:
+        """Do not export the infinite DriveAPI schema fallback as a URDF effort limit."""
+        stage = self._build_drive_stage(max_force=None)
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+            joints = [j for j in root.findall("joint") if j.get("type") == "revolute"]
+            limit = joints[0].find("limit")
+            self.assertIsNotNone(limit)
+            self.assertIsNone(limit.get("effort"))
+
+    async def test_drive_effort_limit_ignores_authored_infinity(self) -> None:
+        """Do not export an infinite DriveAPI maxForce as a URDF effort limit."""
+        stage = self._build_drive_stage(max_force=math.inf)
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+            joints = [j for j in root.findall("joint") if j.get("type") == "revolute"]
+            limit = joints[0].find("limit")
+            self.assertIsNotNone(limit)
+            self.assertIsNone(limit.get("effort"))
+
+    async def test_drive_effort_limit_falls_back_to_legacy_urdf_attr(self) -> None:
+        """Use a finite legacy URDF effort limit when DriveAPI maxForce is not authored."""
+        from pxr import Sdf
+
+        stage = self._build_drive_stage(max_force=None)
+        joint_prim = stage.GetPrimAtPath("/robot/joint1")
+        joint_prim.CreateAttribute("urdf:limit:effort", Sdf.ValueTypeNames.Float).Set(75.0)
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+            joints = [j for j in root.findall("joint") if j.get("type") == "revolute"]
+            limit = joints[0].find("limit")
+            self.assertIsNotNone(limit)
+            self.assertAlmostEqual(float(limit.get("effort")), 75.0, places=4)
 
     async def test_drive_does_not_leak_into_calibration(self) -> None:
         """DriveAPI.targetPosition must NOT appear in <calibration>."""
@@ -1115,6 +1436,134 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
             self.assertIn("suction_cup", link_names)
             self.assertNotIn("gripper_link", link_names)
 
+    @staticmethod
+    def _build_scaled_primitive_stage() -> Usd.Stage:
+        """Create primitives with scale authored on the robot, parent, and primitive.
+
+        Returns:
+            Generated stage containing scaled primitives.
+        """
+        from pxr import Gf, Sdf, UsdGeom
+
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+
+        robot = UsdGeom.Xform.Define(stage, "/robot")
+        stage.SetDefaultPrim(robot.GetPrim())
+        UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+        robot.AddScaleOp().Set(Gf.Vec3f(2.0, 2.0, 2.0))
+
+        base = UsdGeom.Xform.Define(stage, "/robot/base")
+        UsdPhysics.RigidBodyAPI.Apply(base.GetPrim())
+        UsdPhysics.MassAPI.Apply(base.GetPrim()).CreateMassAttr().Set(1.0)
+
+        world_joint = UsdPhysics.FixedJoint.Define(stage, "/robot/world_joint")
+        world_joint.GetBody1Rel().SetTargets([Sdf.Path("/robot/base")])
+
+        geometry = UsdGeom.Xform.Define(stage, "/robot/base/geometry")
+        geometry.AddScaleOp().Set(Gf.Vec3f(3.0, 4.0, 5.0))
+
+        cube = UsdGeom.Cube.Define(stage, "/robot/base/geometry/cube")
+        cube.CreateSizeAttr().Set(1.0)
+        cube.AddScaleOp().Set(Gf.Vec3f(0.5, 0.25, 0.1))
+
+        sphere = UsdGeom.Sphere.Define(stage, "/robot/base/geometry/sphere")
+        sphere.CreateRadiusAttr().Set(0.5)
+
+        cylinder_x = UsdGeom.Cylinder.Define(stage, "/robot/base/geometry/cylinder_x")
+        cylinder_x.CreateRadiusAttr().Set(0.5)
+        cylinder_x.CreateHeightAttr().Set(2.0)
+        cylinder_x.CreateAxisAttr().Set(UsdGeom.Tokens.x)
+
+        cylinder_y = UsdGeom.Cylinder.Define(stage, "/robot/base/geometry/cylinder_y")
+        cylinder_y.CreateRadiusAttr().Set(0.25)
+        cylinder_y.CreateHeightAttr().Set(1.0)
+        cylinder_y.CreateAxisAttr().Set(UsdGeom.Tokens.y)
+
+        capsule_x = UsdGeom.Capsule.Define(stage, "/robot/base/geometry/capsule_x")
+        capsule_x.CreateRadiusAttr().Set(0.2)
+        capsule_x.CreateHeightAttr().Set(1.0)
+        capsule_x.CreateAxisAttr().Set(UsdGeom.Tokens.x)
+
+        cone_y = UsdGeom.Cone.Define(stage, "/robot/base/geometry/cone_y")
+        cone_y.CreateRadiusAttr().Set(0.1)
+        cone_y.CreateHeightAttr().Set(0.5)
+        cone_y.CreateAxisAttr().Set(UsdGeom.Tokens.y)
+
+        UsdGeom.Scope.Define(stage, "/robot/Physics")
+        return stage
+
+    async def test_parent_and_primitive_scale_applied_to_primitive_dimensions(self) -> None:
+        """Composed parent and local scale must reach exported primitive dimensions."""
+        stage = self._build_scaled_primitive_stage()
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            output_path, root = await self._export_to_urdf(stage, temp_dir)
+
+            cube = root.find("./link/visual[@name='cube']/geometry/box")
+            self.assertIsNotNone(cube)
+            for actual, expected in zip(self._parse_xyz(cube.get("size", "")), (3.0, 2.0, 1.0)):
+                self.assertAlmostEqual(actual, expected, places=6)
+
+            sphere = root.find("./link/visual[@name='sphere']/geometry/sphere")
+            self.assertIsNotNone(sphere)
+            self.assertAlmostEqual(float(sphere.get("radius")), 5.0)
+
+            cylinder_x = root.find("./link/visual[@name='cylinder_x']/geometry/cylinder")
+            self.assertIsNotNone(cylinder_x)
+            self.assertAlmostEqual(float(cylinder_x.get("radius")), 5.0)
+            self.assertAlmostEqual(float(cylinder_x.get("length")), 12.0)
+
+            capsule_body = root.find("./link/visual[@name='capsule_x_body']/geometry/cylinder")
+            self.assertIsNotNone(capsule_body)
+            self.assertAlmostEqual(float(capsule_body.get("radius")), 2.0)
+            self.assertAlmostEqual(float(capsule_body.get("length")), 6.0)
+
+            capsule_top = root.find("./link/visual[@name='capsule_x_top_cap']")
+            capsule_bottom = root.find("./link/visual[@name='capsule_x_bottom_cap']")
+            self.assertIsNotNone(capsule_top)
+            self.assertIsNotNone(capsule_bottom)
+            self.assertAlmostEqual(self._parse_xyz(capsule_top.find("origin").get("xyz"))[0], 3.0)
+            self.assertAlmostEqual(self._parse_xyz(capsule_bottom.find("origin").get("xyz"))[0], -3.0)
+
+            cone = root.find("./link/visual[@name='cone_y']/geometry/mesh")
+            self.assertIsNotNone(cone)
+            cone_path = os.path.join(os.path.dirname(output_path), cone.get("filename", "").lstrip("./"))
+            vertices = []
+            with open(cone_path) as cone_file:
+                for line in cone_file:
+                    if line.startswith("v "):
+                        vertices.append(tuple(float(value) for value in line.split()[1:4]))
+            self.assertTrue(vertices)
+            self.assertAlmostEqual(max(abs(vertex[1]) for vertex in vertices), 2.0, places=6)
+            self.assertAlmostEqual(
+                max(max(abs(vertex[0]), abs(vertex[2])) for vertex in vertices),
+                1.0,
+                places=6,
+            )
+
+    async def test_cylinder_and_capsule_axis_rotations_exported(self) -> None:
+        """USD X/Y primitive axes must be composed into URDF geometry origins."""
+        stage = self._build_scaled_primitive_stage()
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+            cylinder_x = root.find("./link/visual[@name='cylinder_x']/origin")
+            cylinder_y = root.find("./link/visual[@name='cylinder_y']/origin")
+            capsule_body = root.find("./link/visual[@name='capsule_x_body']/origin")
+            self.assertIsNotNone(cylinder_x)
+            self.assertIsNotNone(cylinder_y)
+            self.assertIsNotNone(capsule_body)
+
+            cylinder_x_rpy = self._parse_xyz(cylinder_x.get("rpy", ""))
+            cylinder_y_rpy = self._parse_xyz(cylinder_y.get("rpy", ""))
+            capsule_body_rpy = self._parse_xyz(capsule_body.get("rpy", ""))
+            self.assertAlmostEqual(cylinder_x_rpy[1], math.pi / 2.0, places=6)
+            self.assertAlmostEqual(cylinder_y_rpy[0], -math.pi / 2.0, places=6)
+            self.assertAlmostEqual(capsule_body_rpy[1], math.pi / 2.0, places=6)
+
     # ------------------------------------------------------------------
     # Mesh scale on instanceable geometry (regression)
     # ------------------------------------------------------------------
@@ -1326,3 +1775,450 @@ class TestUrdfExporter(omni.kit.test.AsyncTestCase):
                 1e-5,
                 f"OBJ max |vertex| = {max_abs}, expected ~{expected} (vertices not baked with scale)",
             )
+
+    async def test_root_scale_propagates_to_joint_origins_and_meshes(self) -> None:
+        """A scale on the robot root prim must reach joint origins and mesh scales.
+
+        The exporter expresses links and geometry in robot-local coordinates by
+        multiplying by ``robot_world.GetInverse()``, which cancels translation,
+        rotation *and* scale. Removing the root's placement is intended; removing
+        its scale is not, so a robot scaled in the viewport used to export at its
+        authored (unscaled) size. Both links are checked because the dropped
+        scale did not affect every link equally.
+        """
+        from pxr import Gf, Sdf, UsdGeom
+
+        root_scale = 2.0
+        geometry_scale = 0.01
+        child_offset = (0.4, 0.0, 0.0)
+
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+
+        # Hidden prototype holding the mesh data, shared by both links.
+        stage.CreateClassPrim("/_Proto")
+        proto_geom = UsdGeom.Xform.Define(stage, "/_Proto/geom")
+        proto_mesh = UsdGeom.Mesh.Define(stage, "/_Proto/geom/mesh")
+        proto_mesh.CreatePointsAttr().Set(
+            [
+                Gf.Vec3f(-0.5, -0.5, -0.5),
+                Gf.Vec3f(0.5, -0.5, -0.5),
+                Gf.Vec3f(0.5, 0.5, -0.5),
+                Gf.Vec3f(-0.5, 0.5, -0.5),
+                Gf.Vec3f(-0.5, -0.5, 0.5),
+                Gf.Vec3f(0.5, -0.5, 0.5),
+                Gf.Vec3f(0.5, 0.5, 0.5),
+                Gf.Vec3f(-0.5, 0.5, 0.5),
+            ]
+        )
+        proto_mesh.CreateFaceVertexCountsAttr().Set([4, 4, 4, 4, 4, 4])
+        proto_mesh.CreateFaceVertexIndicesAttr().Set(
+            [0, 3, 2, 1, 4, 5, 6, 7, 0, 1, 5, 4, 2, 3, 7, 6, 1, 2, 6, 5, 0, 4, 7, 3]
+        )
+
+        # The scale under test lives on the robot root prim itself.
+        robot = UsdGeom.Xform.Define(stage, "/robot")
+        stage.SetDefaultPrim(robot.GetPrim())
+        UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+        robot.AddScaleOp().Set(Gf.Vec3f(root_scale, root_scale, root_scale))
+
+        for link_name, offset in (("base", (0.0, 0.0, 0.0)), ("child", child_offset)):
+            link = UsdGeom.Xform.Define(stage, f"/robot/{link_name}")
+            if any(offset):
+                link.AddTranslateOp().Set(Gf.Vec3f(*offset))
+            UsdPhysics.RigidBodyAPI.Apply(link.GetPrim())
+            UsdPhysics.MassAPI.Apply(link.GetPrim()).CreateMassAttr().Set(1.0)
+
+            geom_xf = UsdGeom.Xform.Define(stage, f"/robot/{link_name}/geometry")
+            geom_xf.GetPrim().GetReferences().AddInternalReference(proto_geom.GetPath())
+            geom_xf.AddScaleOp().Set(Gf.Vec3f(geometry_scale, geometry_scale, geometry_scale))
+            geom_xf.GetPrim().SetInstanceable(True)
+
+        world_joint = UsdPhysics.FixedJoint.Define(stage, "/robot/world_joint")
+        world_joint.GetBody1Rel().SetTargets([Sdf.Path("/robot/base")])
+
+        base_to_child = UsdPhysics.FixedJoint.Define(stage, "/robot/base_to_child")
+        base_to_child.CreateBody0Rel().SetTargets([Sdf.Path("/robot/base")])
+        base_to_child.CreateBody1Rel().SetTargets([Sdf.Path("/robot/child")])
+        base_to_child.CreateLocalPos0Attr().Set(Gf.Vec3f(*child_offset))
+
+        UsdGeom.Scope.Define(stage, "/robot/Physics")
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+            # Joint offsets must be scaled by the root scale.
+            joint = root.find("./joint[@name='base_to_child']")
+            self.assertIsNotNone(joint, "Expected the base->child joint in the exported URDF")
+            origin = joint.find("./origin")
+            self.assertIsNotNone(origin)
+            joint_xyz = self._parse_xyz(origin.get("xyz", ""))
+            for axis_idx, axis_name in enumerate("xyz"):
+                self.assertAlmostEqual(
+                    joint_xyz[axis_idx],
+                    child_offset[axis_idx] * root_scale,
+                    places=5,
+                    msg=(
+                        f"Joint origin {axis_name} expected "
+                        f"{child_offset[axis_idx] * root_scale}, got {joint_xyz[axis_idx]}; "
+                        "the root scale was dropped from the joint offset"
+                    ),
+                )
+
+            # Every link's mesh must carry geometry scale * root scale.
+            mesh_elems = list(root.iter("mesh"))
+            self.assertEqual(len(mesh_elems), 2, "Expected one <mesh> per link")
+            expected_mesh_scale = geometry_scale * root_scale
+            for mesh_elem in mesh_elems:
+                scale_attr = mesh_elem.get("scale")
+                self.assertIsNotNone(
+                    scale_attr,
+                    "Mesh scale attribute is missing; the root scale was dropped for this link",
+                )
+                mesh_scale_vals = self._parse_xyz(scale_attr)
+                for axis_idx, axis_name in enumerate("xyz"):
+                    self.assertAlmostEqual(
+                        mesh_scale_vals[axis_idx],
+                        expected_mesh_scale,
+                        places=5,
+                        msg=f"Mesh scale {axis_name} expected {expected_mesh_scale}",
+                    )
+
+    # ------------------------------------------------------------------
+    # NewtonMassAPI newton:inertia tests
+    # ------------------------------------------------------------------
+
+    # Real inspire_hand base-link tensor, ordered [Ixx, Iyy, Izz, Ixy, Ixz, Iyz].
+    _NEWTON_INERTIA = [
+        0.00032283748353732,  # Ixx
+        0.000208330666586235,  # Iyy
+        0.000184844103234342,  # Izz
+        0.00000136447935341448,  # Ixy
+        -0.00000195391053679767,  # Ixz
+        0.00000117907186759775,  # Iyz
+    ]
+
+    @staticmethod
+    def _author_mass_prim(
+        newton_inertia: list[float] | None = None,
+        diagonal: tuple[float, float, float] | None = None,
+        principal_axes: tuple[float, float, float, float] | None = None,
+        mass: float = 0.5,
+        com: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    ) -> tuple[Usd.Stage, Usd.Prim]:
+        """Create an in-memory prim with MassAPI and optional inertia attrs.
+
+        Args:
+            newton_inertia: Value for the NewtonMassAPI ``newton:inertia`` array.
+            diagonal: ``physics:diagonalInertia`` value.
+            principal_axes: ``physics:principalAxes`` quaternion (w, x, y, z).
+            mass: ``physics:mass`` value.
+            com: ``physics:centerOfMass`` value.
+
+        Returns:
+            (stage, prim). The stage is returned so it stays alive.
+        """
+        from pxr import Gf, Sdf, UsdGeom
+
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+
+        prim = UsdGeom.Xform.Define(stage, "/body").GetPrim()
+        UsdPhysics.RigidBodyAPI.Apply(prim)
+        mass_api = UsdPhysics.MassAPI.Apply(prim)
+        mass_api.CreateMassAttr().Set(mass)
+        mass_api.CreateCenterOfMassAttr().Set(Gf.Vec3f(*com))
+        if diagonal is not None:
+            mass_api.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(*diagonal))
+        if principal_axes is not None:
+            mass_api.CreatePrincipalAxesAttr().Set(Gf.Quatf(*principal_axes))
+        if newton_inertia is not None:
+            prim.CreateAttribute("newton:inertia", Sdf.ValueTypeNames.DoubleArray).Set(newton_inertia)
+        return stage, prim
+
+    async def test_newton_inertia_reader_ordering(self) -> None:
+        """read_newton_inertia returns the 6 elements as [Ixx, Iyy, Izz, Ixy, Ixz, Iyz]."""
+        vals = self._NEWTON_INERTIA
+        _stage, prim = self._author_mass_prim(newton_inertia=vals)
+
+        result = read_newton_inertia(prim)
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result), 6)
+        for got, exp in zip(result, vals):
+            self.assertAlmostEqual(got, exp, places=15)
+
+        # Malformed (wrong length) -> None
+        _stage2, bad = self._author_mass_prim(newton_inertia=[1.0, 2.0, 3.0])
+        self.assertIsNone(read_newton_inertia(bad))
+
+        # Absent attribute -> None
+        _stage3, none_prim = self._author_mass_prim(diagonal=(0.1, 0.2, 0.3))
+        self.assertIsNone(read_newton_inertia(none_prim))
+
+    async def test_inertia_prefers_newton_over_principal_axes(self) -> None:
+        """newton:inertia overrides diagonalInertia + principalAxes when both are authored."""
+        newton = self._NEWTON_INERTIA
+        _stage, prim = self._author_mass_prim(
+            newton_inertia=newton,
+            diagonal=(1.0, 2.0, 3.0),  # deliberately different from newton values
+            principal_axes=(1.0, 0.0, 0.0, 0.0),  # identity
+        )
+
+        data = read_inertial_from_prim(prim)
+        self.assertIsNotNone(data)
+        self.assertAlmostEqual(data.ixx, newton[0], places=12)
+        self.assertAlmostEqual(data.iyy, newton[1], places=12)
+        self.assertAlmostEqual(data.izz, newton[2], places=12)
+        self.assertAlmostEqual(data.ixy, newton[3], places=12)
+        self.assertAlmostEqual(data.ixz, newton[4], places=12)
+        self.assertAlmostEqual(data.iyz, newton[5], places=12)
+
+        # Prove the diagonalInertia reconstruction path was NOT used.
+        self.assertNotAlmostEqual(data.ixx, 1.0, places=6)
+
+    async def test_inertia_fallback_to_principal_axes(self) -> None:
+        """Without newton:inertia, the tensor is reconstructed from diagonal + principal axes."""
+        _stage, prim = self._author_mass_prim(
+            diagonal=(0.1, 0.2, 0.3),
+            principal_axes=(1.0, 0.0, 0.0, 0.0),  # identity -> tensor is diagonal
+        )
+
+        data = read_inertial_from_prim(prim)
+        self.assertIsNotNone(data)
+        self.assertAlmostEqual(data.ixx, 0.1, places=6)
+        self.assertAlmostEqual(data.iyy, 0.2, places=6)
+        self.assertAlmostEqual(data.izz, 0.3, places=6)
+        self.assertAlmostEqual(data.ixy, 0.0, places=6)
+        self.assertAlmostEqual(data.ixz, 0.0, places=6)
+        self.assertAlmostEqual(data.iyz, 0.0, places=6)
+
+    async def test_inertia_reconstruction_uses_gf_row_vector_convention(self) -> None:
+        """A rotated principal frame must produce body-frame products of inertia with the correct signs."""
+        from pxr import Gf
+
+        angle = math.pi / 4.0
+        principal_axes = Gf.Quatf(math.cos(angle / 2.0), Gf.Vec3f(0.0, 0.0, math.sin(angle / 2.0)))
+        inertia = reconstruct_inertia_tensor(principal_axes, Gf.Vec3f(1.0, 2.0, 3.0))
+
+        expected = (1.5, -0.5, 0.0, 1.5, 0.0, 3.0)
+        for actual, expected_value in zip(inertia, expected):
+            self.assertAlmostEqual(actual, expected_value, places=6)
+
+    async def test_inertia_ignores_empty_newton_array(self) -> None:
+        """An empty (default) newton:inertia array is ignored and falls back to reconstruction."""
+        _stage, prim = self._author_mass_prim(
+            newton_inertia=[],
+            diagonal=(0.1, 0.2, 0.3),
+            principal_axes=(1.0, 0.0, 0.0, 0.0),
+        )
+
+        self.assertIsNone(read_newton_inertia(prim))
+        data = read_inertial_from_prim(prim)
+        self.assertIsNotNone(data)
+        self.assertAlmostEqual(data.ixx, 0.1, places=6)
+        self.assertAlmostEqual(data.iyy, 0.2, places=6)
+        self.assertAlmostEqual(data.izz, 0.3, places=6)
+
+    @staticmethod
+    def _build_newton_inertia_stage(newton_inertia: list[float]) -> Usd.Stage:
+        """Build a 2-link articulation with newton:inertia authored on the base link.
+
+        The base link also carries a deliberately different diagonalInertia so
+        that a passing export proves newton:inertia took precedence.
+
+        Args:
+            newton_inertia: The ``newton:inertia`` array authored on ``base``.
+
+        Returns:
+            Generated in-memory USD stage.
+        """
+        from pxr import Gf, Sdf, UsdGeom
+
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+
+        robot = UsdGeom.Xform.Define(stage, "/robot")
+        stage.SetDefaultPrim(robot.GetPrim())
+        UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+
+        base = UsdGeom.Xform.Define(stage, "/robot/base")
+        UsdPhysics.RigidBodyAPI.Apply(base.GetPrim())
+        base_mass = UsdPhysics.MassAPI.Apply(base.GetPrim())
+        base_mass.CreateMassAttr().Set(1.0)
+        base_mass.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(0.001, 0.001, 0.001))
+        base_mass.CreatePrincipalAxesAttr().Set(Gf.Quatf(1, 0, 0, 0))
+        base.GetPrim().CreateAttribute("newton:inertia", Sdf.ValueTypeNames.DoubleArray).Set(newton_inertia)
+
+        child = UsdGeom.Xform.Define(stage, "/robot/child")
+        UsdPhysics.RigidBodyAPI.Apply(child.GetPrim())
+        UsdPhysics.MassAPI.Apply(child.GetPrim()).CreateMassAttr().Set(0.5)
+
+        world_joint = UsdPhysics.FixedJoint.Define(stage, "/robot/world_joint")
+        world_joint.GetBody1Rel().SetTargets([Sdf.Path("/robot/base")])
+
+        joint = UsdPhysics.RevoluteJoint.Define(stage, "/robot/base/joint")
+        joint.CreateBody0Rel().SetTargets([Sdf.Path("/robot/base")])
+        joint.CreateBody1Rel().SetTargets([Sdf.Path("/robot/child")])
+        joint.GetAxisAttr().Set("Z")
+        joint.GetLowerLimitAttr().Set(-90.0)
+        joint.GetUpperLimitAttr().Set(90.0)
+
+        UsdGeom.Scope.Define(stage, "/robot/Physics")
+        return stage
+
+    async def test_export_uses_newton_inertia(self) -> None:
+        """End-to-end: exported <inertia> comes from newton:inertia, not the diagonal fallback."""
+        newton = self._NEWTON_INERTIA
+        stage = self._build_newton_inertia_stage(newton)
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+            base_link = next((l for l in root.findall("link") if l.get("name") == "base"), None)
+            self.assertIsNotNone(base_link, "Expected a 'base' link in exported URDF")
+            inertial = base_link.find("inertial")
+            self.assertIsNotNone(inertial, "base link missing <inertial>")
+            inertia = inertial.find("inertia")
+            self.assertIsNotNone(inertia, "base link missing <inertia>")
+
+            # Diagonal (~1e-4) survives %.8f formatting; must match newton:inertia,
+            # not the 0.001 diagonalInertia that the reconstruction path would use.
+            self.assertAlmostEqual(float(inertia.get("ixx")), newton[0], delta=1e-7)
+            self.assertAlmostEqual(float(inertia.get("iyy")), newton[1], delta=1e-7)
+            self.assertAlmostEqual(float(inertia.get("izz")), newton[2], delta=1e-7)
+
+            # Off-diagonals from newton are non-zero; the identity-axes reconstruction
+            # would have produced exactly "0".
+            self.assertNotEqual(inertia.get("ixy"), "0", "Expected non-zero Ixy from newton:inertia")
+
+            await stage_utils.create_new_stage_async()
+            await omni.kit.app.get_app().next_update_async()
+
+    async def test_root_link_ancestor_chain_is_rebased_from_joint_origin(self) -> None:
+        """Verify that ancestor transforms do not leak into a joint origin."""
+        from pxr import Gf, Sdf, UsdGeom
+
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+
+        robot = UsdGeom.Xform.Define(stage, "/robot")
+        stage.SetDefaultPrim(robot.GetPrim())
+        UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+
+        ancestor_transform = Gf.Matrix4d(1.0)
+        ancestor_transform.SetRotateOnly(Gf.Rotation(Gf.Vec3d(2.0, 1.0, 3.0), 23.0))
+        ancestor_transform.SetTranslateOnly(Gf.Vec3d(-0.18, 0.27, 0.12))
+        import_frame = UsdGeom.Xform.Define(stage, "/robot/import_frame")
+        import_frame.AddTransformOp().Set(ancestor_transform)
+
+        root_transform = Gf.Matrix4d(1.0)
+        root_transform.SetRotateOnly(Gf.Rotation(Gf.Vec3d(1.0, 2.0, 3.0), 37.0))
+        root_transform.SetTranslateOnly(Gf.Vec3d(0.31, -0.22, 0.47))
+        root_frame = UsdGeom.Xform.Define(stage, "/robot/import_frame/root_frame")
+        root_frame.AddTransformOp().Set(root_transform)
+        base = UsdGeom.Xform.Define(stage, "/robot/import_frame/root_frame/base")
+        UsdPhysics.RigidBodyAPI.Apply(base.GetPrim())
+        UsdPhysics.MassAPI.Apply(base.GetPrim()).CreateMassAttr().Set(1.0)
+
+        world_joint = UsdPhysics.FixedJoint.Define(stage, "/robot/world_joint")
+        world_joint.GetBody1Rel().SetTargets([Sdf.Path("/robot/import_frame/root_frame/base")])
+
+        child_offset = (0.41, -0.13, 0.29)
+        child_to_root = Gf.Matrix4d(1.0)
+        child_to_root.SetTranslateOnly(Gf.Vec3d(*child_offset))
+        child = UsdGeom.Xform.Define(stage, "/robot/import_frame/root_frame/child")
+        child.AddTransformOp().Set(child_to_root)
+        UsdPhysics.RigidBodyAPI.Apply(child.GetPrim())
+        UsdPhysics.MassAPI.Apply(child.GetPrim()).CreateMassAttr().Set(0.5)
+
+        joint = UsdPhysics.FixedJoint.Define(stage, "/robot/child_joint")
+        joint.CreateBody0Rel().SetTargets([Sdf.Path("/robot/import_frame/root_frame/base")])
+        joint.CreateBody1Rel().SetTargets([Sdf.Path("/robot/import_frame/root_frame/child")])
+        joint.CreateLocalPos0Attr().Set(Gf.Vec3f(*child_offset))
+
+        UsdGeom.Scope.Define(stage, "/robot/Physics")
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+            base_link = root.find("./link[@name='base']")
+            self.assertIsNotNone(base_link)
+
+            child_joint = root.find("./joint[@name='child_joint']")
+            self.assertIsNotNone(child_joint)
+            joint_origin = child_joint.find("./origin")
+            self.assertIsNotNone(joint_origin)
+            joint_xyz = self._parse_xyz(joint_origin.get("xyz", ""))
+            joint_rpy = self._parse_xyz(joint_origin.get("rpy", ""))
+            for actual, expected in zip(joint_xyz, child_offset):
+                self.assertAlmostEqual(actual, expected, places=6)
+            for actual in joint_rpy:
+                self.assertAlmostEqual(actual, 0.0, places=6)
+
+    async def test_non_rigid_ancestor_frames_are_rebased_into_rigid_root(self) -> None:
+        """Verify that non-rigid ancestor frames do not leak into child joints."""
+        from pxr import Gf, Sdf, UsdGeom
+
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+
+        robot = UsdGeom.Xform.Define(stage, "/robot")
+        stage.SetDefaultPrim(robot.GetPrim())
+        UsdPhysics.ArticulationRootAPI.Apply(robot.GetPrim())
+
+        base_link_transform = Gf.Matrix4d(1.0)
+        base_link_transform.SetTranslateOnly(Gf.Vec3d(0.0, 0.0, 0.0762))
+        base_link = UsdGeom.Xform.Define(stage, "/robot/base_link")
+        base_link.AddTransformOp().Set(base_link_transform)
+
+        mount_transform = Gf.Matrix4d(1.0)
+        mount_transform.SetRotateOnly(Gf.Rotation(Gf.Vec3d(1.0, 1.0, 0.0), 29.0))
+        mount_transform.SetTranslateOnly(Gf.Vec3d(0.11, -0.07, 0.04))
+        chassis_mount = UsdGeom.Xform.Define(stage, "/robot/base_link/chassis_mount")
+        chassis_mount.AddTransformOp().Set(mount_transform)
+
+        # base_link and chassis_mount deliberately have no RigidBodyAPI.
+        base_chassis = UsdGeom.Xform.Define(stage, "/robot/base_link/chassis_mount/base_chassis_link")
+        UsdPhysics.RigidBodyAPI.Apply(base_chassis.GetPrim())
+        UsdPhysics.MassAPI.Apply(base_chassis.GetPrim()).CreateMassAttr().Set(1.0)
+
+        world_joint = UsdPhysics.FixedJoint.Define(stage, "/robot/world_joint")
+        world_joint.GetBody1Rel().SetTargets([Sdf.Path("/robot/base_link/chassis_mount/base_chassis_link")])
+
+        sensor_offset = (0.3375, 0.0, 0.1439106)
+        sensor_to_chassis = Gf.Matrix4d(1.0)
+        sensor_to_chassis.SetTranslateOnly(Gf.Vec3d(*sensor_offset))
+        sensor = UsdGeom.Xform.Define(stage, "/robot/base_link/chassis_mount/front_sensor_link")
+        sensor.AddTransformOp().Set(sensor_to_chassis)
+        UsdPhysics.RigidBodyAPI.Apply(sensor.GetPrim())
+        UsdPhysics.MassAPI.Apply(sensor.GetPrim()).CreateMassAttr().Set(0.5)
+
+        sensor_joint = UsdPhysics.FixedJoint.Define(stage, "/robot/chassis_to_sensor")
+        sensor_joint.CreateBody0Rel().SetTargets([Sdf.Path("/robot/base_link/chassis_mount/base_chassis_link")])
+        sensor_joint.CreateBody1Rel().SetTargets([Sdf.Path("/robot/base_link/chassis_mount/front_sensor_link")])
+        sensor_joint.CreateLocalPos0Attr().Set(Gf.Vec3f(*sensor_offset))
+
+        UsdGeom.Scope.Define(stage, "/robot/Physics")
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            _, root = await self._export_to_urdf(stage, temp_dir)
+
+            self.assertIsNone(root.find("./link[@name='base_link']"))
+            chassis_link = root.find("./link[@name='base_chassis_link']")
+            self.assertIsNotNone(chassis_link)
+
+            exported_joint = root.find("./joint[@name='chassis_to_sensor']")
+            self.assertIsNotNone(exported_joint)
+            joint_origin = exported_joint.find("./origin")
+            self.assertIsNotNone(joint_origin)
+            joint_xyz = self._parse_xyz(joint_origin.get("xyz", ""))
+            joint_rpy = self._parse_xyz(joint_origin.get("rpy", ""))
+            for actual, expected in zip(joint_xyz, sensor_offset):
+                self.assertAlmostEqual(actual, expected, places=6)
+            for actual in joint_rpy:
+                self.assertAlmostEqual(actual, 0.0, places=6)

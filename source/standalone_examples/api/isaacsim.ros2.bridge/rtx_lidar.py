@@ -57,6 +57,15 @@ def _read_laser_scan_metadata(prim: object) -> dict[str, float | list[float]]:
     Mirrors the metadata extraction performed by ``OgnROS2RtxLidarHelper`` so the
     LaserScan writer can be initialized directly from the prim authored by
     ``Lidar.create()``.
+
+    Args:
+        prim: Rotary OmniLidar prim containing the scan configuration attributes.
+
+    Returns:
+        Horizontal field of view, angular resolution, depth range, rotation rate, and azimuth range for the writer.
+
+    Raises:
+        RuntimeError: If the prim has no positive scan or firing rate.
     """
     rotation_rate = float(prim.GetAttribute("omni:sensor:Core:scanRateBaseHz").Get() or 0)
     near_range = float(prim.GetAttribute("omni:sensor:Core:nearRangeM").Get() or 0)

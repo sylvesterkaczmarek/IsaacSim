@@ -80,6 +80,25 @@ def apply_randomization_operation_full_tensor(
     return initial_values
 
 
+def should_skip_tendon_attribute(view_name: Any, attribute_name: Any) -> bool:
+    """Return whether tendon randomization should be skipped for the view.
+
+    Args:
+        view_name: Name of the registered articulation view.
+        attribute_name: Name of the randomized attribute.
+
+    Returns:
+        True when ``attribute_name`` is a tendon attribute and the view has no
+        fixed tendons, False otherwise.
+    """
+    if attribute_name not in TENDON_ATTRIBUTES:
+        return False
+    if not physics._current_tendon_properties:
+        return True
+    reset_values = physics._articulation_views_reset_values.get(view_name, {})
+    return attribute_name not in reset_values
+
+
 def modify_initial_values(view_name: Any, operation: Any, attribute_name: Any, samples: Any, indices: Any) -> Any:
     """Modify initial values based on operation type.
 
@@ -93,16 +112,19 @@ def modify_initial_values(view_name: Any, operation: Any, attribute_name: Any, s
     Returns:
         None.
     """
+    reset_values = physics._articulation_views_reset_values[view_name]
+    if attribute_name not in reset_values:
+        return
     if operation == "additive":
-        physics._articulation_views_reset_values[view_name][attribute_name][indices] = (
+        reset_values[attribute_name][indices] = (
             physics._articulation_views_initial_values[view_name][attribute_name][indices] + samples
         )
     elif operation == "scaling":
-        physics._articulation_views_reset_values[view_name][attribute_name][indices] = (
+        reset_values[attribute_name][indices] = (
             physics._articulation_views_initial_values[view_name][attribute_name][indices] * samples
         )
     else:
-        physics._articulation_views_reset_values[view_name][attribute_name][indices] = samples
+        reset_values[attribute_name][indices] = samples
 
 
 def get_bucketed_values(
@@ -162,8 +184,10 @@ class OgnWritePhysicsArticulationView:
         ``scaling`` operations, sampled values, and selected environment
         indices. Empty indices keep ``execOut`` enabled but perform no write.
         On reset, the stored reset baseline is updated before values are
-        restored or applied. Tendon attributes are staged together and written
-        as fixed tendon properties when the articulation has fixed tendons.
+        restored or applied. Tendon attributes on articulations without fixed
+        tendons are skipped with an error log and leave the view unchanged.
+        Tendon attributes are otherwise staged together and written as fixed
+        tendon properties.
         Invalid views, attributes, or operations log an error, disable
         ``execOut``, and return ``False``.
 
@@ -171,7 +195,8 @@ class OgnWritePhysicsArticulationView:
             db: Database object containing node inputs and outputs.
 
         Returns:
-            True when values are written, False when inputs are empty or invalid.
+            True when values are written or tendon randomization is skipped, False
+            when inputs are empty or invalid.
         """
         view_name = db.inputs.prims
         attribute_name = db.inputs.attribute
@@ -206,6 +231,14 @@ class OgnWritePhysicsArticulationView:
             db.log_error(f"WritePhysics Error: {error}")
             db.outputs.execOut = og.ExecutionAttributeState.DISABLED
             return False
+
+        if should_skip_tendon_attribute(view_name, attribute_name):
+            carb.log_error(
+                f"Cannot randomize tendon attribute '{attribute_name}' for view '{view_name}': "
+                "articulation has no fixed tendons."
+            )
+            db.outputs.execOut = og.ExecutionAttributeState.ENABLED
+            return True
 
         if on_reset:
             modify_initial_values(view_name, operation, attribute_name, samples, indices)
@@ -326,13 +359,6 @@ class OgnWritePhysicsArticulationView:
             )
             physics_view.set_rest_offsets(place(rest_offsets, dtype=wp.float32, device="cpu"), wp_indices)
         elif attribute_name in TENDON_ATTRIBUTES:
-            if not physics._current_tendon_properties:
-                carb.log_error(
-                    f"Cannot randomize tendon attribute '{attribute_name}' for view '{view_name}': "
-                    "articulation has no fixed tendons."
-                )
-                db.outputs.execOut = og.ExecutionAttributeState.ENABLED
-                return True
             tendon_values = apply_randomization_operation(
                 view_name, operation, attribute_name, samples, indices, on_reset
             )

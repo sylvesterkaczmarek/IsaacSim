@@ -1,11 +1,41 @@
 ---
 name: profile-isaac-sim
-description: Profile and optimize Isaac Sim performance using benchmark scripts and Tracy profiling. Use when the user asks to profile, benchmark, measure performance, compare frame times, or optimize Isaac Sim workloads.
+description: "Profile Isaac Sim with benchmark scripts and Tracy captures. Use when measuring or optimizing frame times."
+license: Apache-2.0
+metadata:
+  author: Chris Dodd
 ---
 
 # Profile Isaac Sim Performance
 
+## Purpose
+
+Measure Isaac Sim performance with in-repo benchmarks, Tracy profiling, CSV export, and run-to-run frame-time comparison.
+
+## Limitations
+
+- Targets Isaac Sim 6 / Kit 110 unless a section states otherwise.
+- Does not replace official NVIDIA documentation for unsupported edge cases.
+
+## Troubleshooting
+
+| Error / symptom | Cause | Solution |
+|---|---|---|
+| Nucleus auth prompt | `OMNI_USER` / `OMNI_PASS` unset | Set creds or pass S3 asset-root fallback flag |
+| No Tracy CSV | Capture wrapper flags omitted | Use `tracy_capture.py --csv` per skill steps |
+| Noisy frame times | Too few `--num-frames` | Use >= 100 frames for stable GPU measurements |
+
 Iterative profiling workflow: run a benchmark with GPU frame-time recording, capture a Tracy profile, export to CSV, compare against a reference, make changes, and repeat.
+
+## Running scripts
+
+From agent runtimes that expose skill execution helpers, invoke helpers with `run_script()`:
+
+```python
+run_script("scripts/compare_tracy_csvs.py", args=["--help"])
+```
+
+From a built Isaac Sim tree, run the same file with `./python.sh` (Linux) or `python.bat` (Windows) from `_build/*/release`, or execute shell helpers directly when they do not require the simulator.
 
 ## Prerequisites
 

@@ -16,8 +16,9 @@
 """Example base behavior that inherits from BaseBehavior."""
 
 import carb
+import isaacsim.core.experimental.utils.prim as prim_utils
 from isaacsim.replicator.behavior.base_behavior import BaseBehavior
-from pxr import Sdf, Usd
+from pxr import Sdf
 
 
 class ExampleBaseBehavior(BaseBehavior):
@@ -70,12 +71,16 @@ class ExampleBaseBehavior(BaseBehavior):
         include_children = self._get_exposed_variable("includeChildren")
 
         # Get the valid prims to randomize
-        if include_children:
-            self._valid_prims = [prim for prim in Usd.PrimRange(self.prim) if prim.IsValid()]
-        elif self.prim.IsValid():
-            self._valid_prims = [self.prim]
+        if self.prim and self.prim.IsValid():
+            if include_children:
+                self._valid_prims = prim_utils.get_all_matching_child_prims(
+                    self.prim, predicate=lambda prim, _: prim.IsValid(), include_self=True
+                )
+            else:
+                self._valid_prims = [self.prim]
         else:
             self._valid_prims = []
+        if not self._valid_prims:
             carb.log_warn(f"[{self.prim_path}] No valid prims found to randomize.")
             return
 

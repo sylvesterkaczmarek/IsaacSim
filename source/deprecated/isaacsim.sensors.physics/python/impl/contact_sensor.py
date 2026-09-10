@@ -149,7 +149,7 @@ class ContactSensor(BaseSensor):
         """Get the current sensor frame data including contact information.
 
         Returns:
-            Dictionary containing contact data with keys for time, physics step, contact status, force, and number of contacts.
+            Contact frame data with time, physics step, contact status, force, number of contacts, and optional contacts.
         """
         cs_sensor_reading = self._contact_sensor_interface.get_sensor_reading(self.prim_path)
         cs_raw_data = self._contact_sensor_interface.get_contact_sensor_raw_data(self.prim_path)
@@ -202,7 +202,11 @@ class ContactSensor(BaseSensor):
         return
 
     def remove_raw_contact_data_from_frame(self) -> None:
-        """Remove raw contact data from the current frame."""
+        """Remove raw contact data from the current frame.
+
+        Raises:
+            KeyError: If the current frame does not contain raw contact data.
+        """
         del self._current_frame["contacts"]
         return
 
@@ -230,7 +234,10 @@ class ContactSensor(BaseSensor):
         """Set the sensor sampling frequency.
 
         Args:
-            value: The frequency in Hz to set for the sensor.
+            value: Frequency in Hz to set for the sensor.
+
+        Raises:
+            ZeroDivisionError: If value is zero.
         """
         self._isaac_sensor_prim.GetSensorPeriodAttr().Set(1.0 / value)
         return
@@ -239,7 +246,10 @@ class ContactSensor(BaseSensor):
         """Get the current sensor sampling frequency.
 
         Returns:
-            The sensor frequency in Hz.
+            The sensor sampling frequency in Hz.
+
+        Raises:
+            ZeroDivisionError: If the sensor period is zero.
         """
         return int(1.0 / self._isaac_sensor_prim.GetSensorPeriodAttr().Get())
 
@@ -252,7 +262,7 @@ class ContactSensor(BaseSensor):
         return self._isaac_sensor_prim.GetSensorPeriodAttr().Get()
 
     def set_dt(self, value: float) -> None:
-        """Set the sensor period (time step) for the contact sensor.
+        """Set the sensor period for the contact sensor.
 
         Args:
             value: The sensor period in seconds.
@@ -284,7 +294,7 @@ class ContactSensor(BaseSensor):
         """Minimum force threshold for contact detection.
 
         Returns:
-            The minimum force threshold value.
+            The minimum force threshold value, or None if the threshold attribute is not set.
         """
         threshold = self.prim.GetAttribute("threshold").Get()
         if threshold is not None:
@@ -308,7 +318,7 @@ class ContactSensor(BaseSensor):
         """Maximum force threshold for contact detection.
 
         Returns:
-            The maximum force threshold value.
+            The maximum force threshold value, or None if the threshold attribute is not set.
         """
         threshold = self.prim.GetAttribute("threshold").Get()
         if threshold is not None:

@@ -1,5 +1,37 @@
 # Changelog
 
+## [5.10.13] - 2026-08-28
+### Fixed
+- `IsaacArticulationController`: `jointIndices=[0]` no longer broadcasts the command to all DOFs instead of selecting DOF 0.
+
+## [5.10.12] - 2026-08-11
+### Fixed
+- `IsaacGetViewportRenderProduct`: no longer raises `AttributeError` when the named viewport is missing; it now logs the viewport name and reports failure.
+
+## [5.10.11] - 2026-07-22
+### Added
+- `IsaacAttachHydraTexture` can optionally define requested RenderVars as direct children of the attached RenderProduct instead of under `/Render/Vars`.
+
+## [5.10.10] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [5.10.9] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [5.10.8] - 2026-07-09
+### Changed
+- `IsaacMapScalarsToColors`: apply log-scaling to unnormalized inputs, clamping non-positive scalars at bottom of range
+
+## [5.10.7] - 2026-06-16
+### Added
+- `IsaacReadCameraInfo`: added a `cameraIntrinsics` output (3x3 intrinsics matrix) computed from the camera's focal length, apertures, and resolution.
+
+## [5.10.6] - 2026-06-14
+### Added
+- `IsaacMapScalarsToColors` node to map a per-point scalar buffer to per-point colors.
+
 ## [5.10.5] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.
@@ -221,7 +253,7 @@
 
 ## [3.2.7] - 2025-06-18
 ### Changed
-- Track change from isaacsim.core.include Pose.h
+- Track change from isaacsim.core.include Pose.hpp
 
 ## [3.2.6] - 2025-06-13
 ### Changed
@@ -229,7 +261,7 @@
 
 ## [3.2.5] - 2025-06-04
 ### Changed
-- Changed CUDA_CHECK in ScopedCudaDevice.h to indicate file and line for more verbose error logging
+- Changed CUDA_CHECK in ScopedCudaDevice.hpp to indicate file and line for more verbose error logging
 
 ## [3.2.4] - 2025-05-31
 ### Changed
@@ -253,7 +285,7 @@
 
 ## [3.1.1] - 2025-05-15
 ### Changed
-- UsdUtilities.h was updated
+- UsdUtilities.hpp was updated
 
 ## [3.1.0] - 2025-05-13
 ### Changed

@@ -4,75 +4,141 @@
 This extension is deprecated in favor of `isaacsim.robot_motion.experimental.motion_generation` and `isaacsim.robot_motion.cumotion`.
 ```
 
-The isaacsim.robot_motion.lula_test_widget extension provides a testing interface for robot motion planning using Lula kinematics solvers and RmpFlow motion generation algorithms. This extension creates a dockable UI window that enables users to select articulated robots from the scene, load robot configuration files, and test various motion planning scenarios including inverse kinematics, trajectory generation, and RmpFlow-based motion control.
+`**isaacsim.robot_motion.lula_test_widget**` provides a Lula-focused test widget for robot motion planning experiments. It helps users select robot articulations, load robot description and URDF files, and run simple motion tests using Lula inverse kinematics, trajectory generation, and RmpFlow motion policies.
 
-```{image} ../../../../source/deprecated/isaacsim.robot_motion.lula_test_widget/data/preview.png
----
-align: center
----
-```
+The main workflow is scenario based. Users choose a robot and configuration files, then run tests such as target following, obstacle avoidance, custom waypoint trajectories, or sinusoidal target tracking.
 
+## Concepts
+
+### Scenario-based testing
+
+The central concept is a motion test scenario managed by {class}`LulaTestScenarios <isaacsim.robot_motion.lula_test_widget.LulaTestScenarios>`. A scenario defines the active motion behavior, the visual objects used by that behavior, and the controller that produces the next robot action.
+
+Supported scenario types include:
+
+- Inverse kinematics target following
+- RmpFlow target following with obstacle avoidance
+- RmpFlow sinusoidal target tracking
+- Custom trajectory execution through editable waypoints
+
+### Robot configuration files
+
+The widget works with two robot configuration inputs:
+
+- A YAML robot description file
+- A URDF robot file
+
+The helper functions {func}`is_yaml_file <isaacsim.robot_motion.lula_test_widget.is_yaml_file>`, {func}`is_urdf_file <isaacsim.robot_motion.lula_test_widget.is_urdf_file>`, {func}`on_filter_yaml_item <isaacsim.robot_motion.lula_test_widget.on_filter_yaml_item>`, and {func}`on_filter_urdf_item <isaacsim.robot_motion.lula_test_widget.on_filter_urdf_item>` are used to identify and filter compatible files in file selection UI.
+
+### Visual debugging
+
+{class}`LulaTestScenarios <isaacsim.robot_motion.lula_test_widget.LulaTestScenarios>` can create visual aids for understanding motion behavior. These include end-effector frame visualization, target objects, obstacle objects, trajectory waypoints, and RmpFlow collision sphere visualization when debug mode is enabled.
+
+## Functionality
+
+### Inverse kinematics testing
+
+`LulaTestScenarios.initialize_ik_solver()` initializes the Lula inverse kinematics solver from a robot description file and URDF file. After initialization, `get_ik_frames()` returns the available frame names that can be used as end-effector targets.
+
+The `on_ik_follow_target()` scenario creates a target-following test for a selected articulation and end-effector frame. The scenario can optionally use orientation constraints through `set_use_orientation()`.
+
+### RmpFlow testing
+
+The widget supports RmpFlow scenarios for motion policy testing.
+
+`on_rmpflow_follow_target_obstacles()` creates a target-following scenario with obstacle avoidance. The scenario includes a target cube and wall obstacles, allowing the robot motion policy to be tested against simple obstacles.
+
+`on_rmpflow_follow_sinusoidal_target()` creates a scenario where the target moves along a sinusoidal path. The target motion is updated through scenario parameters such as vertical frequency, horizontal frequency, radius, and height.
+
+`toggle_rmpflow_debug_mode()` switches RmpFlow debug visualization on or off. When enabled, collision sphere visualization is activated and state updates are ignored.
+
+### Custom trajectory testing
+
+`on_custom_trajectory()` sets up a waypoint-based trajectory scenario. The initial trajectory forms a rectangular path, and users can adjust the waypoint list with:
+
+- `add_waypoint()`
+- `delete_waypoint()`
+
+`create_trajectory_controller()` creates the controller that follows the trajectory for a selected articulation and end-effector frame.
+
+### Scenario updates and actions
+
+`update_scenario()` advances scenario-specific behavior, such as moving the sinusoidal target. `get_next_action()` computes the next `ArticulationAction` for the active scenario.
+
+If no controller is active, `get_next_action()` returns an empty action.
 
 ## Key Components
 
 ### {class}`LulaTestScenarios <isaacsim.robot_motion.lula_test_widget.LulaTestScenarios>`
 
-**{class}`LulaTestScenarios <isaacsim.robot_motion.lula_test_widget.LulaTestScenarios>` is the core testing framework that manages all motion planning scenarios.** This class provides comprehensive testing capabilities for robotic motion planning scenarios, including inverse kinematics target following, obstacle avoidance with RmpFlow, custom trajectory execution, and sinusoidal target tracking.
+{class}`LulaTestScenarios <isaacsim.robot_motion.lula_test_widget.LulaTestScenarios>` manages the active test scenario and the Lula-related objects used by that scenario. It owns the active IK solver, RmpFlow instance, trajectory generator, controller state, visual targets, obstacles, and waypoint data.
 
-The class manages visual elements like targets, obstacles, coordinate frames, and trajectory waypoints, providing both interactive control and automated scenario execution with real-time visualization of end-effector frames and collision spheres for debugging.
+Important responsibilities include:
 
-#### Test Scenarios
+- Initializing Lula IK from YAML and URDF files
+- Creating target-following and trajectory scenarios
+- Updating visual debug elements
+- Returning the next `ArticulationAction`
+- Resetting scenario-specific data with `scenario_reset()`
+- Resetting all Lula scenario state with `full_reset()`
 
-The framework supports several distinct testing scenarios:
+### File filter helpers
 
-- **Inverse Kinematics Target Following**: Sets up scenarios where robots follow targets using the `on_ik_follow_target()` method with configurable end-effector frames
-- **Custom Trajectory Execution**: Creates trajectory scenarios with waypoints forming rectangular paths via `on_custom_trajectory()`, with dynamic waypoint management through `add_waypoint()` and `delete_waypoint()`
-- **RmpFlow Target Following with Obstacles**: Implements obstacle avoidance scenarios using `on_rmpflow_follow_target_obstacles()` with wall obstacles and target cubes
-- **Sinusoidal Target Tracking**: Provides sinusoidal motion patterns through `on_rmpflow_follow_sinusoidal_target()` with configurable frequency and radius parameters
+The module exposes small helper functions for filtering robot configuration files:
 
-#### Visualization and Debugging
+- `is_yaml_file(path)` returns `True` for `.yaml` or `.YAML` paths.
+- `is_urdf_file(path)` returns `True` for `.urdf` or `.URDF` paths.
+- `on_filter_yaml_item(item)` filters file browser items for YAML selection.
+- `on_filter_urdf_item(item)` filters file browser items for URDF selection.
 
-The framework includes comprehensive visualization tools:
+These helpers are useful when building UI controls that should only show valid robot description or URDF files.
+
+## Usage Examples
+
+### Initialize IK and list available frames
 
 ```python
-# Visualize end-effector frames
-scenarios.visualize_ee_frame(articulation, ee_frame)
+from isaacsim.robot_motion.lula_test_widget import LulaTestScenarios
 
-# Toggle RmpFlow debug mode for collision sphere visualization
-scenarios.toggle_rmpflow_debug_mode()
+scenarios = LulaTestScenarios()
+
+robot_description_path = "/path/to/robot_description.yaml"
+urdf_path = "/path/to/robot.urdf"
+
+scenarios.initialize_ik_solver(robot_description_path, urdf_path)
+
+frames = scenarios.get_ik_frames()
+print(frames)
 ```
 
-#### Scenario Management
+### Start an IK target-following scenario
 
-{class}`LulaTestScenarios <isaacsim.robot_motion.lula_test_widget.LulaTestScenarios>` provides methods for managing scenario lifecycle:
+```python
+from isaacsim.robot_motion.lula_test_widget import LulaTestScenarios
 
-- `full_reset()`: Performs complete reset of all scenario data and Lula components
-- `scenario_reset()`: Resets current scenario by clearing targets, obstacles, and trajectories
-- `update_scenario()`: Updates scenarios based on type and parameters, particularly for sinusoidal patterns
-- `get_next_action()`: Computes articulation actions for the current scenario with end-effector visualization updates
+scenarios = LulaTestScenarios()
 
-### File Filtering Utilities
+scenarios.initialize_ik_solver(robot_description_path, urdf_path)
+scenarios.set_use_orientation(True)
 
-The extension provides specialized file filtering functions for robot configuration:
+# articulation is the selected robot articulation object.
+# ee_frame_name is one of the frame names returned by get_ik_frames().
+scenarios.on_ik_follow_target(articulation, ee_frame_name)
 
-- {func}`is_yaml_file <isaacsim.robot_motion.lula_test_widget.is_yaml_file>` and {func}`is_urdf_file <isaacsim.robot_motion.lula_test_widget.is_urdf_file>`: Check file extensions for YAML and URDF formats
-- {func}`on_filter_yaml_item <isaacsim.robot_motion.lula_test_widget.on_filter_yaml_item>` and {func}`on_filter_urdf_item <isaacsim.robot_motion.lula_test_widget.on_filter_urdf_item>`: Filter functions for file browser items to display only relevant robot configuration files
+action = scenarios.get_next_action()
+```
 
-### Extension Interface
+### Use file filter helpers
 
-The Extension class manages the UI window and robot selection interface, providing:
+```python
+from isaacsim.robot_motion.lula_test_widget import is_yaml_file, is_urdf_file
 
-- Interactive robot articulation selection from the current stage via `get_all_articulations()`
-- Robot configuration loading with support for YAML robot descriptions and URDF files
-- Real-time articulation property updates through `get_articulation_values()`
-- Comprehensive UI panels for kinematics testing, trajectory generation, and RmpFlow configuration
+print(is_yaml_file("/robots/franka.yaml"))  # True
+print(is_urdf_file("/robots/franka.urdf"))  # True
+```
 
-## Functionality
+## Relationships
 
-The extension integrates multiple motion planning approaches within a unified testing interface. Users can select articulated robots from the scene, load robot configuration files, and execute various motion planning algorithms with real-time visualization and debugging capabilities.
+{class}`LulaTestScenarios <isaacsim.robot_motion.lula_test_widget.LulaTestScenarios>` uses Lula motion-generation concepts directly. The public API exposes `get_rmpflow()`, which returns the active `RmpFlow` instance when an RmpFlow scenario has been initialized.
 
-Key functionality includes inverse kinematics solving with target following, RmpFlow-based motion planning with obstacle avoidance, custom trajectory generation and execution, and sinusoidal target tracking scenarios. The extension supports both interactive control and automated scenario execution with comprehensive visual debugging tools.
-
-## Integration
-
-The extension integrates with the Isaac Sim robotics ecosystem through dependencies on isaacsim.robot_motion.lula for kinematics solving and isaacsim.robot_motion.motion_generation for RmpFlow motion policies. It utilizes isaacsim.gui.components for UI elements and connects with the physics simulation through **omni.physics** for robot articulation control.
+The scenario controller output is an `ArticulationAction`, which is the action object returned by `get_next_action()` for applying the computed robot command.

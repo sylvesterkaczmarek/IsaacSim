@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<!-- Template: @ROS_DISTRO@ is substituted at build time by premake5.lua postbuildcommands. -->
+<library path="isaacsim.ros2.control.@ROS_DISTRO@">
+  <class name="isaacsim_ros2_control/IsaacSimSystem"
+         type="isaacsim::ros2::control::backend::IsaacSimSystem"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>Isaac Sim hardware interface for ros2_control</description>
+  </class>
+</library>

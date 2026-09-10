@@ -42,7 +42,7 @@ class DataFrame(object):
         """Convert the DataFrame to a dictionary representation.
 
         Returns:
-            Dictionary with time step, time, and data fields.
+            Dictionary with current_time_step, current_time, and data fields.
         """
         return {"current_time": self.current_time, "current_time_step": self.current_time_step, "data": self.data}
 
@@ -59,7 +59,7 @@ class DataFrame(object):
         """Create a DataFrame instance from a dictionary.
 
         Args:
-            dict_representation: Dictionary containing time_step, time, and data.
+            dict_representation: Dictionary containing current_time_step, current_time, and data.
 
         Returns:
             A new DataFrame instance initialized from the dictionary.
@@ -93,8 +93,8 @@ class XFormPrimState(object):
     """State of an XFormPrim containing position and orientation.
 
     Args:
-        position: The position as a numpy array of shape (3,).
-        orientation: The orientation quaternion (w, x, y, z) as a numpy array of shape (4,).
+        position: The position as a NumPy array of shape (3,).
+        orientation: The orientation quaternion (w, x, y, z) as a NumPy array of shape (4,).
     """
 
     def __init__(self, position: np.ndarray, orientation: np.ndarray) -> None:
@@ -119,10 +119,10 @@ class DynamicState(object):
     """State of a dynamic rigid body including pose and velocities.
 
     Args:
-        position: The position as a numpy array of shape (3,).
-        orientation: The orientation quaternion (w, x, y, z) as a numpy array of shape (4,).
-        linear_velocity: The linear velocity as a numpy array of shape (3,).
-        angular_velocity: The angular velocity as a numpy array of shape (3,).
+        position: The position as a NumPy array of shape (3,).
+        orientation: The orientation quaternion (w, x, y, z) as a NumPy array of shape (4,).
+        linear_velocity: The linear velocity as a NumPy array of shape (3,).
+        angular_velocity: The angular velocity as a NumPy array of shape (3,).
     """
 
     def __init__(
@@ -195,10 +195,10 @@ class ArticulationAction(object):
         self.joint_indices = joint_indices
 
     def get_dof_action(self, index: int) -> dict:
-        """Get the action for a specific DOF as a dictionary.
+        """Get the action for a specific degree of freedom (DOF) as a dictionary.
 
         Args:
-            index: The index of the DOF to get the action for.
+            index: Index of the DOF to get the action for.
 
         Returns:
             Dictionary containing the position, velocity, or effort for this DOF.
@@ -290,10 +290,13 @@ class ArticulationActions(object):
         joint_velocities: Target joint velocities.
         joint_efforts: Target joint efforts (torques/forces).
         joint_indices: Joint indices to specify which joints to manipulate. Shape (K,).
-            Where K <= num of dofs.
-        joint_names: Joint names to specify which joints to manipulate
-            (cannot be specified together with joint_indices). Shape (K,).
-            Where K <= num of dofs.
+            Where K <= number of DOFs.
+        joint_names: Joint names to specify which joints to manipulate.
+            Cannot be specified together with joint_indices. Shape (K,).
+            Where K <= number of DOFs.
+
+    Raises:
+        Exception: If both joint_names and joint_indices are specified.
     """
 
     def __init__(

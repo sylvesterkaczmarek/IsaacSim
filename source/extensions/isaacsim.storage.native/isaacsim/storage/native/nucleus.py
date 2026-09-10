@@ -35,6 +35,7 @@ DEFAULT_ASSET_ROOT_PATH_SETTING = "/persistent/isaac/asset_root/default"
 DEFAULT_ASSET_ROOT_TIMEOUT_SETTING = "/persistent/isaac/asset_root/timeout"
 DEFAULT_ASSET_ROOT_RETRY_ATTEMPTS_SETTING = "/persistent/isaac/asset_root/retry_attempts"
 DEFAULT_ASSET_ROOT_RETRY_BASE_DELAY_SETTING = "/persistent/isaac/asset_root/retry_base_delay"
+_ASSET_ROOT_SUBPATHS = ("/Isaac", "/NVIDIA")
 
 
 class Version(namedtuple("Version", "major minor patch")):
@@ -232,13 +233,14 @@ async def download_assets_async(
     return result
 
 
-def check_server(server: str, path: str, timeout: float = 10.0) -> bool:
+def check_server(server: str, path: str, timeout: float = 10.0, *, accept_unsupported: bool = False) -> bool:
     """Check a specific server for a path.
 
     Args:
         server: Name of Nucleus server.
         path: Path to search.
         timeout: Timeout in seconds.
+        accept_unsupported: Treat an unsupported metadata operation as success.
 
     Returns:
         True if folder is found.
@@ -250,12 +252,17 @@ def check_server(server: str, path: str, timeout: float = 10.0) -> bool:
     if result == Result.OK:
         carb.log_info(f"Success: {server}{path}")
         return True
+    elif accept_unsupported and result == Result.ERROR_NOT_SUPPORTED:
+        carb.log_info(f"Path metadata is unsupported for {server}{path}; trusting the configured server")
+        return True
     else:
         carb.log_info(f"Failure: {server}{path} not accessible")
         return False
 
 
-async def check_server_async(server: str, path: str, timeout: float = 10.0) -> bool:
+async def check_server_async(
+    server: str, path: str, timeout: float = 10.0, *, accept_unsupported: bool = False
+) -> bool:
     """Check a specific server for a path.
 
     This function retries transient failures using exponential backoff.
@@ -268,6 +275,7 @@ async def check_server_async(server: str, path: str, timeout: float = 10.0) -> b
         server: Name of Nucleus server.
         path: Path to search.
         timeout: Per-attempt timeout in seconds.
+        accept_unsupported: Treat an unsupported metadata operation as success.
 
     Returns:
         True if folder is found, False otherwise.
@@ -289,6 +297,9 @@ async def check_server_async(server: str, path: str, timeout: float = 10.0) -> b
             result, _ = await asyncio.wait_for(omni.client.stat_async(server_path), timeout)
             if result == Result.OK:
                 carb.log_info(f"Success: {server_path}")
+                return True
+            if accept_unsupported and result == Result.ERROR_NOT_SUPPORTED:
+                carb.log_info(f"Path metadata is unsupported for {server_path}; trusting the configured server")
                 return True
             if result == Result.ERROR_CONNECTION and attempt < retry_attempts:
                 carb.log_warn(
@@ -313,6 +324,39 @@ async def check_server_async(server: str, path: str, timeout: float = 10.0) -> b
             carb.log_warn(f"Exception: {type(ex).__name__}")
             return False
 
+    return False
+
+
+def _contains_asset_tree(server: str, timeout: float = 10.0, *, accept_unsupported: bool = False) -> bool:
+    """Check whether a root exposes at least one recognized asset tree.
+
+    Args:
+        server: Asset root URL or path.
+        timeout: Timeout in seconds for each path check.
+        accept_unsupported: Treat unsupported metadata operations as success.
+
+    Returns:
+        True if either recognized asset tree is accessible.
+    """
+    return any(
+        check_server(server, path, timeout, accept_unsupported=accept_unsupported) for path in _ASSET_ROOT_SUBPATHS
+    )
+
+
+async def _contains_asset_tree_async(server: str, timeout: float = 10.0, *, accept_unsupported: bool = False) -> bool:
+    """Check asynchronously whether a root exposes at least one recognized asset tree.
+
+    Args:
+        server: Asset root URL or path.
+        timeout: Timeout in seconds for each path check.
+        accept_unsupported: Treat unsupported metadata operations as success.
+
+    Returns:
+        True if either recognized asset tree is accessible.
+    """
+    for path in _ASSET_ROOT_SUBPATHS:
+        if await check_server_async(server, path, timeout, accept_unsupported=accept_unsupported):
+            return True
     return False
 
 
@@ -401,7 +445,9 @@ def verify_asset_root_path(path: str) -> tuple[omni.client.Result, str]:
     """Attempts to determine Isaac assets version and check if there are updates.
 
     Reads the version.txt file from the asset root path and compares it against
-    the current Isaac Sim application version to verify compatibility.
+    the current Isaac Sim application version to verify compatibility. For HTTP
+    asset roots without a version file, the version is read from the final path
+    component after validating that the root contains an Isaac or NVIDIA asset tree.
 
     Args:
         path: URL or path of asset root to verify.
@@ -426,8 +472,23 @@ def verify_asset_root_path(path: str) -> tuple[omni.client.Result, str]:
         file_path = omni.client.combine_with_base_url("version.txt")
         # carb.log_warn(f"Looking for version file at: {file_path}")
         result, _, file_content = omni.client.read_file(file_path)
-        if result != omni.client.Result.OK:
+        if result == omni.client.Result.ERROR_NOT_FOUND:
             carb.log_info(f"Unable to find version file: {file_path}.")
+            parsed_path = urlparse(path)
+            version_string = parsed_path.path.rstrip("/").rsplit("/", 1)[-1]
+            version_components = version_string.split(".")
+            if (
+                parsed_path.scheme in ("http", "https")
+                and len(version_components) in (2, 3)
+                and all(component.isdigit() for component in version_components)
+            ):
+                if len(version_components) == 2:
+                    version_components.append("0")
+                fallback_version = Version(".".join(version_components))
+                if _contains_asset_tree(path):
+                    ver_asset = fallback_version
+        elif result != omni.client.Result.OK:
+            carb.log_info(f"Unable to read version file: {file_path} ({result}).")
         else:
             ver_asset = Version(memoryview(file_content).tobytes().decode())
 
@@ -553,11 +614,12 @@ def get_isaac_asset_root_path() -> str | None:
     return None
 
 
-def get_assets_root_path(*, skip_check: bool = False) -> str:
+def get_assets_root_path(*, skip_check: bool = False, accept_unsupported: bool = True) -> str:
     """Tries to find the root path to the Isaac Sim assets on a Nucleus server.
 
     Args:
         skip_check: If True, skip the checking step to verify that the resolved path exists.
+        accept_unsupported: Trust the configured root when its provider does not support path metadata.
 
     Raises:
         RuntimeError: If the root path setting is not set.
@@ -580,21 +642,19 @@ def get_assets_root_path(*, skip_check: bool = False) -> str:
         return default_asset_root
 
     # check path
-    result = check_server(default_asset_root, "/Isaac", timeout)
-    if result:
-        result = check_server(default_asset_root, "/NVIDIA", timeout)
-        if result:
-            carb.log_info(f"Assets root found at {default_asset_root}")
-            return default_asset_root
+    if _contains_asset_tree(default_asset_root, timeout, accept_unsupported=accept_unsupported):
+        carb.log_info(f"Assets root found at {default_asset_root}")
+        return default_asset_root
 
     raise RuntimeError(f"Could not find assets root folder: {default_asset_root}")
 
 
-async def get_assets_root_path_async(*, skip_check: bool = False) -> str:
+async def get_assets_root_path_async(*, skip_check: bool = False, accept_unsupported: bool = True) -> str:
     """Tries to find the root path to the Isaac Sim assets on a Nucleus server.
 
     Args:
         skip_check: If True, skip the checking step to verify that the resolved path exists.
+        accept_unsupported: Trust the configured root when its provider does not support path metadata.
 
     Raises:
         RuntimeError: If the root path setting is not set.
@@ -617,12 +677,9 @@ async def get_assets_root_path_async(*, skip_check: bool = False) -> str:
         return default_asset_root
 
     # check path
-    result = await check_server_async(default_asset_root, "/Isaac", timeout)
-    if result:
-        result = await check_server_async(default_asset_root, "/NVIDIA", timeout)
-        if result:
-            carb.log_info(f"Assets root found at {default_asset_root}")
-            return default_asset_root
+    if await _contains_asset_tree_async(default_asset_root, timeout, accept_unsupported=accept_unsupported):
+        carb.log_info(f"Assets root found at {default_asset_root}")
+        return default_asset_root
     raise RuntimeError(f"Could not find assets root folder: {default_asset_root}")
 
 

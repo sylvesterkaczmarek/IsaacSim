@@ -18,15 +18,15 @@
 #    pragma warning(disable : 4996)
 #endif
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include <isaacsim/core/includes/Pose.h>
-#include <isaacsim/sensors/physics/ContactManager.h>
-#include <isaacsim/sensors/physics/ContactSensor.h>
-#include <isaacsim/sensors/physics/IPhysicsSensor.h>
-#include <isaacsim/sensors/physics/IsaacSensorComponent.h>
-#include <isaacsim/sensors/physics/IsaacSensorManager.h>
+#include <isaacsim/core/includes/Pose.hpp>
+#include <isaacsim/sensors/physics/ContactManager.hpp>
+#include <isaacsim/sensors/physics/ContactSensor.hpp>
+#include <isaacsim/sensors/physics/IPhysicsSensor.hpp>
+#include <isaacsim/sensors/physics/IsaacSensorComponent.hpp>
+#include <isaacsim/sensors/physics/IsaacSensorManager.hpp>
 
 namespace isaacsim
 {

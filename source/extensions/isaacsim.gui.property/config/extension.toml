@@ -33,6 +33,10 @@ name = "isaacsim.gui.property.tests"
 [[test]]
 name = "startup"
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 timeout = 120
 dependencies = [

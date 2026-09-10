@@ -641,6 +641,13 @@ def _read_material_data(material: UsdShade.Material) -> _MtlData:
             if shader and _read_shader_color(shader, data):
                 return data
 
+    # Strategy 3: parse the .mdl source asset for parameters not authored as
+    # USD shader inputs (otherwise the MTL would default to flat gray).
+    for child in mat_prim.GetChildren():
+        shader = UsdShade.Shader(child)
+        if shader and _read_mdl_shader(shader, data):
+            return data
+
     return data
 
 
@@ -758,6 +765,238 @@ def _read_shader_color(shader: UsdShade.Shader, data: _MtlData) -> bool:
     return found_color
 
 
+_MDL_PARAM_CACHE: dict[str, dict] = {}
+
+
+def _resolve_mdl_asset_path(shader: UsdShade.Shader) -> str | None:
+    """Resolve the absolute path of a shader's ``.mdl`` source asset.
+
+    A relative asset path (e.g. ``@../Materials/Foo.mdl@``) must be anchored to
+    the layer that authored it, not the stage root layer. The asset is commonly
+    authored in a payload/reference sublayer (``payloads/materials.usda``), so
+    anchoring to the root layer resolves to the wrong directory. The resolver's
+    ``resolvedPath`` is preferred when populated, but it can be empty for
+    instance-proxy/prototype shaders, so fall back to anchoring against the
+    authoring layer.
+
+    Args:
+        shader: USD shader to read.
+
+    Returns:
+        Absolute ``.mdl`` path, or None if it cannot be resolved.
+    """
+    asset = shader.GetSourceAsset("mdl")
+    if asset is not None and asset.resolvedPath:
+        return asset.resolvedPath
+
+    attr = shader.GetPrim().GetAttribute("info:mdl:sourceAsset")
+    if not attr:
+        return None
+    value = attr.Get()
+    raw = getattr(value, "path", None) if value is not None else None
+    if not raw:
+        return None
+    if os.path.isabs(raw):
+        return raw
+
+    for spec in attr.GetPropertyStack(Usd.TimeCode.Default()):
+        anchored = spec.layer.ComputeAbsolutePath(raw)
+        if anchored and os.path.exists(anchored):
+            return anchored
+    return None
+
+
+def _read_mdl_shader(shader: UsdShade.Shader, data: _MtlData) -> bool:
+    """Recover OmniPBR-style parameters from a shader's ``.mdl`` source asset.
+
+    USD-authored shader inputs take precedence over the values baked into the
+    ``.mdl`` (an authored ``inputs:diffuse_tint`` overrides the MDL default).
+    The effective diffuse color is ``diffuse_color_constant * diffuse_tint``.
+
+    Args:
+        shader: USD shader to read.
+        data: Material data to populate.
+
+    Returns:
+        True if any usable parameter was recovered, False otherwise.
+    """
+    mdl_path = _resolve_mdl_asset_path(shader)
+    if not mdl_path:
+        return False
+    params = _parse_mdl_params(mdl_path)
+    if not params:
+        return False
+
+    found = False
+
+    # USD-authored inputs override MDL defaults; effective diffuse =
+    # diffuse_texture (averaged) * diffuse_color_constant * diffuse_tint.
+    diffuse = _shader_input_color(shader, "diffuse_color_constant")
+    if diffuse is None:
+        diffuse = params.get("diffuse_color_constant")
+    tint = _shader_input_color(shader, "diffuse_tint")
+    if tint is None:
+        tint = params.get("diffuse_tint")
+
+    # Exported OBJs carry no UVs, so a diffuse texture cannot be mapped; bake its
+    # average color into Kd instead so textured materials are not flat gray.
+    tex_rel = params.get("diffuse_texture__tex")
+    base = None
+    if tex_rel:
+        tex_path = os.path.normpath(os.path.join(os.path.dirname(mdl_path), tex_rel))
+        base = _average_texture_color_linear(tex_path)
+    if base is not None and diffuse is not None:
+        base = (base[0] * diffuse[0], base[1] * diffuse[1], base[2] * diffuse[2])
+    elif base is None:
+        base = diffuse
+
+    if base is not None:
+        if tint is not None:
+            base = (base[0] * tint[0], base[1] * tint[1], base[2] * tint[2])
+        data.kd = _linear_color_to_srgb(base)
+        found = True
+    elif tint is not None:
+        data.kd = _linear_color_to_srgb(tint)
+        found = True
+
+    roughness = params.get("reflection_roughness_constant")
+    if isinstance(roughness, (int, float)):
+        data.roughness = float(roughness)
+        data.ns = (1.0 - data.roughness) * 1000.0
+        found = True
+
+    metallic = params.get("metallic_constant")
+    if isinstance(metallic, (int, float)):
+        data.metallic = float(metallic)
+        m = data.metallic
+        data.ks = (m, m, m)
+        found = True
+
+    if params.get("enable_emission") is True:
+        emissive = params.get("emissive_color")
+        intensity = params.get("emissive_intensity")
+        if emissive is not None and isinstance(intensity, (int, float)) and intensity > 0:
+            data.ke = _linear_color_to_srgb((emissive[0] * intensity, emissive[1] * intensity, emissive[2] * intensity))
+            found = True
+
+    opacity = params.get("opacity_constant")
+    if isinstance(opacity, (int, float)):
+        data.opacity = float(opacity)
+        found = True
+
+    return found
+
+
+def _shader_input_color(shader: UsdShade.Shader, name: str) -> tuple[float, float, float] | None:
+    """Read an authored color3f shader input, returning None if absent.
+
+    Args:
+        shader: USD shader to read.
+        name: Input name.
+
+    Returns:
+        (r, g, b) tuple, or None if the input is not authored.
+    """
+    inp = shader.GetInput(name)
+    if not inp:
+        return None
+    val = inp.Get()
+    if val is None or not hasattr(val, "__len__") or len(val) < 3:
+        return None
+    return (float(val[0]), float(val[1]), float(val[2]))
+
+
+def _parse_mdl_params(mdl_path: str) -> dict:
+    """Parse OmniPBR constructor parameters from an ``.mdl`` source file.
+
+    Extracts ``name: color(r, g, b)``, ``name: <scalar>`` and ``name: true|false``
+    assignments from the material constructor. Results are cached per path.
+
+    Args:
+        mdl_path: Filesystem path to the ``.mdl`` file.
+
+    Returns:
+        Mapping of parameter name to value (tuple, float, or bool).
+    """
+    import re
+
+    if mdl_path in _MDL_PARAM_CACHE:
+        return _MDL_PARAM_CACHE[mdl_path]
+
+    params: dict = {}
+    try:
+        with open(mdl_path, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        _MDL_PARAM_CACHE[mdl_path] = params
+        return params
+
+    # Drop // line comments so commented-out texture/value hints are ignored.
+    text = re.sub(r"//[^\n]*", "", text)
+
+    num = r"[-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?f?"
+    color_re = re.compile(rf"(\w+)\s*:\s*color\s*\(\s*({num})\s*,\s*({num})\s*,\s*({num})\s*\)")
+    for m in color_re.finditer(text):
+        params[m.group(1)] = (
+            float(m.group(2).rstrip("f")),
+            float(m.group(3).rstrip("f")),
+            float(m.group(4).rstrip("f")),
+        )
+
+    tex_re = re.compile(r'(\w+)\s*:\s*texture_2d\s*\(\s*"([^"]+)"')
+    for m in tex_re.finditer(text):
+        params.setdefault(m.group(1) + "__tex", m.group(2))
+
+    bool_re = re.compile(r"(\w+)\s*:\s*(true|false)\b")
+    for m in bool_re.finditer(text):
+        if m.group(1) not in params:
+            params[m.group(1)] = m.group(2) == "true"
+
+    scalar_re = re.compile(rf"(\w+)\s*:\s*({num})\s*[,)]")
+    for m in scalar_re.finditer(text):
+        name = m.group(1)
+        if name not in params:
+            params[name] = float(m.group(2).rstrip("f"))
+
+    _MDL_PARAM_CACHE[mdl_path] = params
+    return params
+
+
+def _srgb_to_linear(c: float) -> float:
+    """Convert a single sRGB color component to linear space.
+
+    Args:
+        c: sRGB color value in [0, 1].
+
+    Returns:
+        Linear color value in [0, 1].
+    """
+    if c <= 0.04045:
+        return c / 12.92
+    return ((c + 0.055) / 1.055) ** 2.4
+
+
+def _average_texture_color_linear(path: str) -> tuple[float, float, float] | None:
+    """Compute the average color of an image texture in linear space.
+
+    Args:
+        path: Filesystem path to the image.
+
+    Returns:
+        Average (r, g, b) in linear space, or None if the image cannot be read.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        with Image.open(path) as im:
+            r, g, b = im.convert("RGB").resize((1, 1)).getpixel((0, 0))
+    except (OSError, ValueError):
+        return None
+    return (_srgb_to_linear(r / 255.0), _srgb_to_linear(g / 255.0), _srgb_to_linear(b / 255.0))
+
+
 def _linear_color_to_srgb(val: tuple[float, ...] | list[float]) -> tuple[float, float, float]:
     """Convert a linear RGB color to sRGB for MTL output.
 
@@ -867,7 +1106,9 @@ def _write_mtl(mtl_path: str, materials: dict[str, _MtlData]) -> None:
     - Kd: diffuse color (sRGB)
     - Ks: specular color (from metallic)
     - Ke: emissive color (sRGB)
-    - Ns: specular exponent (from 1-roughness)
+    - Ns: specular exponent (from 1-roughness), for legacy Phong consumers
+    - Pr: PBR roughness extension (what tinyobjloader/the URDF importer reads)
+    - Pm: PBR metallic extension
     - d: opacity
     - map_Kd: diffuse texture
 
@@ -883,6 +1124,8 @@ def _write_mtl(mtl_path: str, materials: dict[str, _MtlData]) -> None:
             f.write("Ka 0.000000 0.000000 0.000000\n")
             f.write(f"Ks {data.ks[0]:.6f} {data.ks[1]:.6f} {data.ks[2]:.6f}\n")
             f.write(f"Ns {data.ns:.6f}\n")
+            f.write(f"Pr {data.roughness:.6f}\n")
+            f.write(f"Pm {data.metallic:.6f}\n")
             f.write(f"d {data.opacity:.6f}\n")
             if data.ke != (0.0, 0.0, 0.0):
                 f.write(f"Ke {data.ke[0]:.6f} {data.ke[1]:.6f} {data.ke[2]:.6f}\n")

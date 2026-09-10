@@ -7,7 +7,7 @@
 [[dependency]]
 python = "../_build/target-deps/python"
 packages = [
-    "h5py~=3.16.0", # SWIPAT filed under: https://nvbugs/6101430 # Used by: isaacsim.replicator.episode_recorder
+    "h5py==3.16.0", # SWIPAT filed under: https://nvbugs/6101430 # Used by: isaacsim.replicator.episode_recorder
 ]
 target = "../_build/target-deps/pip_episode_recorder_prebundle"
 platforms = ["*-x86_64", "linux-aarch64"]

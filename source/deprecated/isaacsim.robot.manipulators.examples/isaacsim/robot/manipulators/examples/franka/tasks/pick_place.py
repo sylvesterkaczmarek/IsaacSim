@@ -25,7 +25,7 @@ from isaacsim.robot.manipulators.examples.franka import Franka
 
 
 class PickPlace(tasks.PickPlace):
-    """Franka robot pick and place task.
+    """Franka robot pick-and-place task.
 
     Args:
         name: Task name.

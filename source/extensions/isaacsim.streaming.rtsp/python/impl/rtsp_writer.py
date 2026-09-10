@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Literal, Optional
+from typing import Literal
 
 import carb
 import numpy as np
@@ -80,7 +80,7 @@ class RTSPStreamWriter(Writer):
         width: int = 1920,
         height: int = 1080,
         *,
-        sensorSetName: Optional[str] = None,
+        sensorSetName: str | None = None,
     ) -> None:
         # node_type_id, _kwargs, and _annotators are required by
         # WriterRequest.__repr__ in BaseWriterNode, which logs writer

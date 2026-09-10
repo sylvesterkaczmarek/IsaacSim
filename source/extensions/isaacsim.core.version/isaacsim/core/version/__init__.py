@@ -15,6 +15,8 @@
 
 """Version parsing and management utilities for Isaac Sim."""
 
-from .extension import *
+from .extension import Version as Version
+from .extension import get_version as get_version
+from .extension import parse_version as parse_version
 
 __all__ = ["Version", "parse_version", "get_version"]

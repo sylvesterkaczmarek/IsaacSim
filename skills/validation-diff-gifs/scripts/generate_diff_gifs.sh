@@ -3,16 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# generate_diff_gifs.sh — nested Robots/ benchmark layout. Full Apache-2.0 grant text:
+# skills/validation-diff-gifs/scripts/diff_gif_common.inc
 
 # Generate per-camera difference GIFs between captured and golden images.
 # Usage: ./generate_diff_gifs.sh <captured_dir> <golden_dir> [amplify] [fps]
@@ -32,16 +24,17 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=diff_gif_common.inc
+source "${SCRIPT_DIR}/diff_gif_common.inc"
+
 CAPTURED_DIR="${1:?Usage: $0 <captured_dir> <golden_dir> [amplify] [fps]}"
 GOLDEN_DIR="${2:?Usage: $0 <captured_dir> <golden_dir> [amplify] [fps]}"
 AMPLIFY="${3:-10}"
 FPS="${4:-5}"
 DELAY=$((100 / FPS))
 
-if ! command -v composite &>/dev/null || ! command -v convert &>/dev/null; then
-    echo "ERROR: ImageMagick (composite, convert) is required but not found." >&2
-    exit 1
-fi
+diff_gif_require_imagemagick
 
 found=0
 for rgb_dir in $(find "$CAPTURED_DIR" -type d -name rgb | sort); do
@@ -56,7 +49,7 @@ for rgb_dir in $(find "$CAPTURED_DIR" -type d -name rgb | sort); do
     camera_name=$(echo "$rel_path" | sed 's|/rgb$||')
     echo "Processing: $camera_name"
 
-    diff_frames=""
+    diff_frames=()
     matched=0
     skipped=0
     for cap_png in $(ls "$rgb_dir"/rgb_*.png 2>/dev/null | sort -t_ -k2 -g); do
@@ -67,15 +60,13 @@ for rgb_dir in $(find "$CAPTURED_DIR" -type d -name rgb | sort); do
             continue
         fi
         diff_tmp="$rgb_dir/.diff_tmp_${basename}"
-        composite "$cap_png" "$golden_png" -compose difference "$diff_tmp"
-        convert "$diff_tmp" -evaluate multiply "$AMPLIFY" -clamp "$diff_tmp"
-        diff_frames="$diff_frames $diff_tmp"
+        diff_gif_make_frame "$cap_png" "$golden_png" "$diff_tmp" "$AMPLIFY"
+        diff_frames+=("$diff_tmp")
         matched=$((matched + 1))
     done
 
-    if [ -n "$diff_frames" ]; then
-        convert -delay "$DELAY" -loop 0 $diff_frames "$rgb_dir/diff_animation.gif"
-        rm -f $diff_frames
+    if [ "${#diff_frames[@]}" -gt 0 ]; then
+        diff_gif_write_animation "$DELAY" "$rgb_dir/diff_animation.gif" "${diff_frames[@]}"
         echo "  Created: $rgb_dir/diff_animation.gif ($matched frames, ${AMPLIFY}x amplified, ${FPS}fps)"
         found=$((found + 1))
     else

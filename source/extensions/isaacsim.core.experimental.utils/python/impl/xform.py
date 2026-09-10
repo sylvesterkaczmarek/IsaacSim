@@ -20,7 +20,7 @@ from __future__ import annotations
 import numpy as np
 import usdrt
 import warp as wp
-from pxr import Usd, UsdGeom
+from pxr import Gf, Usd, UsdGeom
 
 from . import ops as ops_utils
 from . import prim as prim_utils
@@ -92,18 +92,10 @@ def set_local_pose(
 
     Backends: :guilabel:`usd`, :guilabel:`usdrt`, :guilabel:`fabric`.
 
-    .. warning::
-
-        This function is not implemented for the :guilabel:`usd` backend.
-        Use :py:meth:`~isaacsim.core.experimental.prims.XformPrim.set_local_poses` instead of what is being implemented.
-
     Args:
         prim: Prim path or prim instance.
         translation: Translation in the local frame (shape ``(3,)``).
         orientation: Orientation in the local frame (shape ``(4,)``, quaternion ``wxyz``).
-
-    Raises:
-        NotImplementedError: If the backend is USD.
 
     Example:
 
@@ -120,8 +112,15 @@ def set_local_pose(
     prim = prim_utils.get_prim_at_path(prim)
     backend = "usd" if isinstance(prim, Usd.Prim) else "usdrt"
     if backend == "usd":
-        # TODO: Implement for USD
-        raise NotImplementedError("This function is not implemented for USD. Use `XformPrim.set_local_poses` instead.")
+        xformable = UsdGeom.Xformable(prim)
+        transform = Gf.Transform(xformable.GetLocalTransformation())
+        if translation is not None:
+            translation = ops_utils.place(translation, device="cpu").numpy().flatten()
+            transform.SetTranslation(Gf.Vec3d(*translation))
+        if orientation is not None:
+            orientation = ops_utils.place(orientation, device="cpu").numpy().flatten()
+            transform.SetRotation(Gf.Rotation(Gf.Quatd(*orientation)))
+        xformable.MakeMatrixXform().Set(transform.GetMatrix())
     elif backend == "usdrt":
         path = usdrt.Sdf.Path(prim_utils.get_prim_path(prim))
         fabric_stage = stage_utils.get_current_stage(backend="fabric")

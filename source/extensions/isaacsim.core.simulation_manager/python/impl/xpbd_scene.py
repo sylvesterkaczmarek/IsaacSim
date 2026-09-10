@@ -230,3 +230,6 @@ class NewtonXpbdScene(PhysicsScene):
         attr = self._prim.GetAttribute("newton:xpbd:restitutionEnabled")
         if attr:
             attr.Set(bool(enabled))
+
+    def get_newton_solver_type(self) -> str:
+        return "xpbd"

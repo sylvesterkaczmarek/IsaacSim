@@ -26,7 +26,7 @@ from isaacsim.robot.manipulators.examples.universal_robots import UR10
 
 
 class PickPlace(tasks.PickPlace):
-    """UR10 robot pick and place task.
+    """UR10 robot pick-and-place task.
 
     Args:
         name: Task name.

@@ -30,7 +30,7 @@ class SingleXFormPrim(_SinglePrimWrapper):
     """Provides high level functions to deal with an Xform prim (only one Xform prim) and its attributes/properties.
 
     If there is an Xform prim present at the path, it will use it. Otherwise, a new XForm prim at
-    the specified prim path will be created
+    the specified prim path will be created.
 
     .. note::
 
@@ -38,24 +38,24 @@ class SingleXFormPrim(_SinglePrimWrapper):
         unless it is a non-root articulation link.
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create.
-        name: shortname to be used as a key by Scene class.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. shape is (3, ).
-        translation: translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
+        position: Position in the world frame of the prim. Shape is (3, ).
+        translation: Translation in the local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world/local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        reset_xform_properties: True if the prims don't have the right set of xform properties
-            (i.e: translate, orient and scale) ONLY and in that order.
-            Set this parameter to False if the object were cloned using using
-            the cloner api in isaacsim.core.cloner.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to false for an invisible prim in the stage while rendering.
+        reset_xform_properties: True if the prim does not have the right set of xform properties
+            (i.e. translate, orient, and scale) ONLY and in that order.
+            Set this parameter to False if the object was cloned using
+            the cloner API in isaacsim.core.cloner.
 
     Raises:
-        Exception: if translation and position defined at the same time
+        Exception: If translation and position are defined at the same time.
 
     Example:
 
@@ -63,12 +63,12 @@ class SingleXFormPrim(_SinglePrimWrapper):
 
         >>> from isaacsim.core.prims import SingleXFormPrim
         >>>
-        >>> # given the stage: /World. Get the Xform prim at /World
+        >>> # Given the stage: /World. Get the Xform prim at /World
         >>> prim = SingleXFormPrim("/World")
         >>> prim
         <isaacsim.core.prims.single_xform_prim.SingleXFormPrim object at 0x7f52381547c0>
         >>>
-        >>> # create a new Xform prim at path: /World/Objects
+        >>> # Create a new Xform prim at path: /World/Objects
         >>> prim = SingleXFormPrim("/World/Objects", name="objects")
         >>> prim
         <isaacsim.core.prims.single_xform_prim.SingleXFormPrim object at 0x7f525c11d420>

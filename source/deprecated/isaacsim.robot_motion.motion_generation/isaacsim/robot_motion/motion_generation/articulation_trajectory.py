@@ -27,7 +27,7 @@ from .trajectory import Trajectory
 
 
 class ArticulationTrajectory:
-    """Wrapper class which takes in a Trajectory object and converts the output to discrete ArticulationActions that may be sent to the provided robot Articulation.
+    """Wrapper class that takes in a Trajectory object and converts the output to discrete ArticulationActions that may be sent to the provided robot Articulation.
 
     Args:
         robot_articulation: Initialized robot Articulation object representing the simulated USD robot.
@@ -43,13 +43,18 @@ class ArticulationTrajectory:
         self._active_joints_view = ArticulationSubset(robot_articulation, trajectory.get_active_joints())
 
     def get_action_at_time(self, time: float) -> ArticulationAction:
-        """Get an ArticulationAction that will send the robot to the desired position/velocity at a given time in the provided Trajectory.
+        """Get an ArticulationAction that sends the robot to the desired position/velocity at a given time in the provided Trajectory.
 
         Args:
-            time: Time between the start and end times in the provided Trajectory. If the time is out of bounds, an error will be thrown.
+            time: Time between the start and end times in the provided Trajectory. Raises an error if the time is out of
+                bounds.
 
         Returns:
-            ArticulationAction that may be passed directly to the robot Articulation to send it to the desired position/velocity at the given time.
+            ArticulationAction that may be passed directly to the robot Articulation to send it to the desired
+            position/velocity at the given time.
+
+        Raises:
+            ValueError: If time is before the start time or after the end time of the Trajectory.
         """
         if time < self._trajectory.start_time:
             message = f"Provided time {time} is before the start time {self._trajectory.start_time} of the Trajectory"
@@ -70,9 +75,9 @@ class ArticulationTrajectory:
 
         Args:
             timestep: Timestep used for sampling the provided Trajectory.
-                A vlue of 1/60, for example, returns ArticulationActions that represent the desired position/velocity of
-                the robot at 1/60 second intervals. I.e. a one second trajectory with timestep=1/60 would result in 60 ArticulationActions.
-                When not provided, the framerate of Isaac Sim is used.
+                A value of 1/60, for example, returns ArticulationActions that represent the desired position/velocity of
+                the robot at 1/60 second intervals. I.e. a one second trajectory with timestep=1/60 would result in 60
+                ArticulationActions. When timestep is None, the framerate of Isaac Sim is used.
 
         Returns:
             Sequence of ArticulationActions that may be passed to the robot Articulation to produce the desired trajectory.
@@ -88,7 +93,7 @@ class ArticulationTrajectory:
         """Returns the duration of the provided Trajectory.
 
         Returns:
-            Duration of the provided trajectory.
+            Duration of the provided Trajectory.
         """
         return self._trajectory.end_time - self._trajectory.start_time
 

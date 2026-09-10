@@ -14,22 +14,22 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "RaycastSensorImpl.h"
+#include "RaycastSensorImpl.hpp"
 
-#include "SensorImplUtils.h"
+#include "SensorImplUtils.hpp"
 
 #include <carb/events/EventsUtils.h>
 #include <carb/logging/Log.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/core/experimental/prims/IPrimDataReader.h>
-#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.h>
-#include <isaacsim/core/includes/UsdUtilities.h>
-#include <isaacsim/core/simulation_manager/ISimulationManager.h>
-#include <isaacsim/robot/schema/sensor_tokens.h>
+#include <isaacsim/core/experimental/prims/IPrimDataReader.hpp>
+#include <isaacsim/core/experimental/prims/IPrimDataReaderManager.hpp>
+#include <isaacsim/core/includes/UsdUtilities.hpp>
+#include <isaacsim/core/simulation_manager/ISimulationManager.hpp>
+#include <isaacsim/robot/schema/sensor_tokens.hpp>
 #include <omni/fabric/FabricUSD.h>
 #include <omni/physics/simulation/IPhysicsSceneQuery.h>
 #include <omni/physics/simulation/IPhysicsSimulation.h>
@@ -589,6 +589,29 @@ void RaycastSensorImpl::_clearSensors()
     m_impl->sensors.clear();
 }
 
+void RaycastSensorImpl::_recreateSensorViews()
+{
+    if (!m_impl->reader)
+    {
+        return;
+    }
+
+    for (auto& [id, sensor] : m_impl->sensors)
+    {
+        (void)id;
+        sensor.rigidBodyView = nullptr;
+        if (sensor.viewId.empty() || sensor.parentRigidBodyPath.empty())
+        {
+            continue;
+        }
+
+        const char* pathStr = sensor.parentRigidBodyPath.c_str();
+        sensor.rigidBodyView =
+            m_impl->reader->createRigidBodyView(sensor.viewId.c_str(), &pathStr, 1, m_impl->engineType.c_str());
+    }
+    m_impl->readerGeneration = m_impl->reader->getGeneration();
+}
+
 void RaycastSensorImpl::_subscribeToPhysicsEvents()
 {
     if (m_impl->physicsEventSub)
@@ -664,6 +687,20 @@ void RaycastSensorImpl::_stepSensors(float dt)
     if (!m_impl->sceneQuery)
     {
         m_impl->sceneQuery = carb::getCachedInterface<omni::physics::IPhysicsSceneQuery>();
+    }
+
+    if (m_impl->readerManager && m_impl->stageId != 0)
+    {
+        if (!m_impl->readerManager->ensureInitialized(m_impl->stageId, -1))
+        {
+            return;
+        }
+        m_impl->reader = m_impl->readerManager->getReader();
+    }
+
+    if (m_impl->reader && m_impl->reader->getGeneration() != m_impl->readerGeneration)
+    {
+        _recreateSensorViews();
     }
 
     const double simTime = m_impl->simManager->getSimulationTime();

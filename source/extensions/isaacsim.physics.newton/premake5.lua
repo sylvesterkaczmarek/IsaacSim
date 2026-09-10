@@ -23,7 +23,6 @@ repo_build.prebuild_link {
     { "data", ext.target_dir.."/data" },
     { "docs", ext.target_dir.."/docs" },
     { "python/impl", ext.target_dir.."/isaacsim/physics/newton/impl" },
-    { "python/impl/tensors", ext.target_dir.."/isaacsim/physics/newton/tensors" },  -- Link tensors directly to maintain module structure
     { "python/tests", ext.target_dir.."/isaacsim/physics/newton/tests" },
 }
 

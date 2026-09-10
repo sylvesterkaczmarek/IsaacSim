@@ -463,7 +463,6 @@ class TestRos2CameraInfo(ROS2TestCase):
 
         """
         import rclpy
-        from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
         from sensor_msgs.msg import CameraInfo, Image
 
         if not rclpy.ok():
@@ -472,11 +471,8 @@ class TestRos2CameraInfo(ROS2TestCase):
         # Create ROS nodes to receive camera data
         node_left = self.create_node("camera_left_node")
         node_right = self.create_node("camera_right_node")
-
-        # Set up QoS profile matching the publisher
-        cam_info_qos = QoSProfile(
-            reliability=QoSReliabilityPolicy.RELIABLE, history=QoSHistoryPolicy.KEEP_LAST, depth=10
-        )
+        self.start_async_spinning(node_left)
+        self.start_async_spinning(node_right)
 
         # Subscribe to camera topics
         def camera_info_left_callback(msg: Any) -> None:
@@ -491,42 +487,42 @@ class TestRos2CameraInfo(ROS2TestCase):
         def image_right_callback(msg: Any) -> None:
             self._image_right = msg
 
+        message_qos = get_qos_profile(depth=100)
+
         # Create subscriptions
         camera_info_left_sub = self.create_subscription(
-            node_left, CameraInfo, "camera_info_left", camera_info_left_callback, cam_info_qos
+            node_left, CameraInfo, "camera_info_left", camera_info_left_callback, message_qos
         )
         camera_info_right_sub = self.create_subscription(
-            node_right, CameraInfo, "camera_info_right", camera_info_right_callback, cam_info_qos
+            node_right, CameraInfo, "camera_info_right", camera_info_right_callback, message_qos
         )
-        image_left_sub = self.create_subscription(node_left, Image, "rgb_left", image_left_callback, cam_info_qos)
-        image_right_sub = self.create_subscription(node_right, Image, "rgb_right", image_right_callback, cam_info_qos)
+        image_left_sub = self.create_subscription(node_left, Image, "rgb_left", image_left_callback, message_qos)
+        image_right_sub = self.create_subscription(node_right, Image, "rgb_right", image_right_callback, message_qos)
 
         self._camera_info_left = None
         self._camera_info_right = None
         self._image_left = None
         self._image_right = None
 
-        # Start spinning the nodes
-        def spin_left() -> None:
-            rclpy.spin_once(node_left, timeout_sec=0.01)
-
-        def spin_right() -> None:
-            rclpy.spin_once(node_right, timeout_sec=0.01)
-
-        # Wait for camera info and images to be received — run a fixed 30 frames
-        # for each camera (matching the original simulate_async(0.5) call at 60 fps)
-        # so the scene is fully settled before we use the captured images.
+        # Wait for the exact ROS 2 messages this test validates instead of sleeping a fixed frame count.
         self._timeline.play()
         await omni.kit.app.get_app().next_update_async()
-        await self.simulate_until_condition(
-            lambda: False,
-            max_frames=30,
-            per_frame_callback=spin_right,
+        condition_met = await self.simulate_until_condition(
+            lambda: (
+                self._camera_info_left is not None
+                and self._camera_info_right is not None
+                and self._image_left is not None
+                and self._image_right is not None
+            ),
+            max_frames=300,
         )
-        await self.simulate_until_condition(
-            lambda: False,
-            max_frames=30,
-            per_frame_callback=spin_left,
+        self.assertTrue(
+            condition_met,
+            f"Timed out waiting for stereo camera messages for {opencv_distortion_model}: "
+            f"left_info={self._camera_info_left is not None}, "
+            f"right_info={self._camera_info_right is not None}, "
+            f"left_image={self._image_left is not None}, "
+            f"right_image={self._image_right is not None}",
         )
 
         self.assertIsNotNone(self._camera_info_left, f"Did not receive left camera_info for {opencv_distortion_model}")
@@ -937,7 +933,13 @@ class TestRos2CameraInfo(ROS2TestCase):
         await omni.kit.app.get_app().next_update_async()
 
         # Wait for ROS2 messages to be received
-        await self._wait_for_ros2_messages(node, depth_image_msg, pointcloud_msg, camera_info_msg)
+        await self._wait_for_ros2_messages(
+            node,
+            depth_image_msg,
+            pointcloud_msg,
+            camera_info_msg,
+            topic_names=("depth_image", "depth_pointcloud", "camera_info"),
+        )
 
         # Convert depth image message to numpy array using existing method
         original_depth_image = self.imgmsg_to_cv2(depth_image_msg[0])
@@ -1105,7 +1107,13 @@ class TestRos2CameraInfo(ROS2TestCase):
         return node, depth_image_msg, pointcloud_msg, camera_info_msg
 
     async def _wait_for_ros2_messages(
-        self, node: Any, depth_image_msg: Any, pointcloud_msg: Any, camera_info_msg: Any, timeout_iterations: int = 50
+        self,
+        node: Any,
+        depth_image_msg: Any,
+        pointcloud_msg: Any,
+        camera_info_msg: Any,
+        timeout_iterations: int = 180,
+        topic_names: tuple[str, str, str] | None = None,
     ) -> None:
         """Wait for ROS2 messages to be received.
 
@@ -1134,6 +1142,15 @@ class TestRos2CameraInfo(ROS2TestCase):
         # Spin ROS2 node to receive messages
         def spin_and_check() -> None:
             rclpy.spin_once(node, timeout_sec=0.01)
+
+        if topic_names is not None:
+            for topic_name in topic_names:
+                await self.wait_for_publishers_on_topic(
+                    node,
+                    topic_name,
+                    timeout_sec=10.0,
+                    per_frame_callback=spin_and_check,
+                )
 
         condition_met = await self.simulate_until_condition(
             lambda: all([depth_image_msg[0], pointcloud_msg[0], camera_info_msg[0]]),
@@ -1356,7 +1373,13 @@ class TestRos2CameraInfo(ROS2TestCase):
         await omni.kit.app.get_app().next_update_async()
 
         # Wait for ROS2 messages to be received
-        await self._wait_for_ros2_messages(node, depth_image_msg, pointcloud_msg, camera_info_msg)
+        await self._wait_for_ros2_messages(
+            node,
+            depth_image_msg,
+            pointcloud_msg,
+            camera_info_msg,
+            topic_names=("depth_image_low_level", "depth_pointcloud_low_level", "camera_info_low_level"),
+        )
 
         # Convert depth image message to numpy array using existing method
         original_depth_image = self.imgmsg_to_cv2(depth_image_msg[0])

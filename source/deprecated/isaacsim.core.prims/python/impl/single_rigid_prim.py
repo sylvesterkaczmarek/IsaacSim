@@ -27,7 +27,7 @@ from .single_prim_wrapper import _SinglePrimWrapper
 
 
 class SingleRigidPrim(_SinglePrimWrapper):
-    """High level wrapper to deal with a rigid body prim (only one rigid body prim) and its attributes/properties.
+    """High-level wrapper to deal with a rigid body prim (only one rigid body prim) and its attributes/properties.
 
     .. warning::
 
@@ -36,28 +36,28 @@ class SingleRigidPrim(_SinglePrimWrapper):
 
     .. note::
 
-        If the prim does not already have the Rigid Body API applied to it before init, it will apply it.
+        If the prim does not already have the Rigid Body API applied to it before initialization, it will apply it.
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create.
-        name: shortname to be used as a key by Scene class.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. shape is (3, ).
-        translation: translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
-            (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        reset_xform_properties: True if the prims don't have the right set of xform properties
+        position: Position in the world frame of the prim. Shape is (3, ).
+        translation: Translation in the local frame of the prim
+            with respect to its parent prim. Shape is (3, ).
+        orientation: Quaternion orientation in the world or local frame of the prim
+            depending on whether translation or position is specified.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to False for an invisible prim in the stage while rendering.
+        reset_xform_properties: True if the prim does not have the right set of xform properties
             (i.e: translate, orient and scale) ONLY and in that order.
-            Set this parameter to False if the object were cloned using using
-            the cloner api in isaacsim.core.cloner.
-        mass: mass in kg.
-        density: density.
-        linear_velocity: linear velocity in the world frame.
-        angular_velocity: angular velocity in the world frame.
+            Set this parameter to False if the object was cloned using
+            the cloner API in isaacsim.core.cloner.
+        mass: Mass in kg.
+        density: Density.
+        linear_velocity: Linear velocity in the world frame.
+        angular_velocity: Angular velocity in the world frame.
 
     Example:
 
@@ -136,14 +136,14 @@ class SingleRigidPrim(_SinglePrimWrapper):
         return
 
     def set_linear_velocity(self, velocity: np.ndarray) -> None:
-        """Set the linear velocity of the rigid body in stage.
+        """Set the linear velocity of the rigid body in the stage.
 
         .. warning::
 
-            This method will immediately set the rigid prim state
+            This method will immediately set the rigid prim state.
 
         Args:
-            velocity: linear velocity to set the rigid prim to. Shape (3,).
+            velocity: Linear velocity to set the rigid prim to. Shape (3,).
         """
         velocity = self._backend_utils.expand_dims(velocity, 0)
         self._rigid_prim_view.set_linear_velocities(velocities=velocity)
@@ -153,7 +153,7 @@ class SingleRigidPrim(_SinglePrimWrapper):
         """Get the linear velocity of the rigid body.
 
         Returns:
-            current linear velocity of the the rigid prim. Shape (3,).
+            Current linear velocity of the rigid prim. Shape (3,).
 
         Example:
 
@@ -166,14 +166,14 @@ class SingleRigidPrim(_SinglePrimWrapper):
         return velocities[0]
 
     def set_angular_velocity(self, velocity: np.ndarray) -> None:
-        """Set the angular velocity of the rigid body in stage.
+        """Set the angular velocity of the rigid body in the stage.
 
         .. warning::
 
-            This method will immediately set the rigid body state
+            This method will immediately set the rigid body state.
 
         Args:
-            velocity: angular velocity to set the rigid prim to. Shape (3,).
+            velocity: Angular velocity to set the rigid prim to. Shape (3,).
         """
         velocity = self._backend_utils.expand_dims(velocity, 0)
         self._rigid_prim_view.set_angular_velocities(velocities=velocity)
@@ -183,7 +183,7 @@ class SingleRigidPrim(_SinglePrimWrapper):
         """Get the angular velocity of the rigid body.
 
         Returns:
-            current angular velocity of the the rigid prim. Shape (3,).
+            Current angular velocity of the rigid prim. Shape (3,).
         """
         velocities = self._rigid_prim_view.get_angular_velocities()
         return velocities[0]
@@ -192,8 +192,8 @@ class SingleRigidPrim(_SinglePrimWrapper):
         """Set the center of mass pose of the rigid body.
 
         Args:
-            position: center of mass position. Shape (3,).
-            orientation: center of mass orientation. Shape (4,).
+            position: Center of mass position. Shape (3,).
+            orientation: Center of mass orientation. Shape (4,).
         """
         position = self._backend_utils.expand_dims(position, 0)
         orientation = self._backend_utils.expand_dims(orientation, 0)
@@ -204,7 +204,8 @@ class SingleRigidPrim(_SinglePrimWrapper):
         """Get the center of mass pose of the rigid body.
 
         Returns:
-            A tuple of (position, orientation) where position is the center of mass position and orientation is the center of mass orientation.
+            A tuple of (position, orientation) where position is the center of mass position and orientation is the
+            center of mass orientation.
         """
         positions, orientations = self._rigid_prim_view.get_coms()
         return positions[0], orientations[0]
@@ -213,7 +214,7 @@ class SingleRigidPrim(_SinglePrimWrapper):
         """Set the mass of the rigid body.
 
         Args:
-            mass: mass of the rigid body in kg.
+            mass: Mass of the rigid body in kg.
 
         Example:
 
@@ -229,7 +230,7 @@ class SingleRigidPrim(_SinglePrimWrapper):
         """Get the mass of the rigid body.
 
         Returns:
-            mass of the rigid body in kg.
+            Mass of the rigid body in kg.
 
         Example:
 
@@ -245,7 +246,7 @@ class SingleRigidPrim(_SinglePrimWrapper):
         """Set the density of the rigid body.
 
         Args:
-            density: density of the rigid body.
+            density: Density of the rigid body.
 
         Example:
 
@@ -261,7 +262,7 @@ class SingleRigidPrim(_SinglePrimWrapper):
         """Get the density of the rigid body.
 
         Returns:
-            density of the rigid body.
+            Density of the rigid body.
 
         Example:
 
@@ -275,12 +276,11 @@ class SingleRigidPrim(_SinglePrimWrapper):
     def set_sleep_threshold(self, threshold: float) -> None:
         """Set the threshold for the rigid body to enter a sleep state.
 
-        Search for *Rigid Body Dynamics* > *Sleeping* in |physx_docs| for more details
+        Search for *Rigid Body Dynamics* > *Sleeping* in |physx_docs| for more details.
 
         Args:
             threshold: Mass-normalized kinetic energy threshold below which
-                an actor may go to sleep. Range: [0, inf)
-                Defaults: 0.00005 * tolerancesSpeed* tolerancesSpeed
+                an actor may go to sleep. Range: [0, inf).
                 Units: distance^2 / second^2.
 
         Example:
@@ -296,13 +296,11 @@ class SingleRigidPrim(_SinglePrimWrapper):
     def get_sleep_threshold(self) -> float:
         """Get the threshold for the rigid body to enter a sleep state.
 
-        Search for *Rigid Body Dynamics* > *Sleeping* in |physx_docs| for more details
+        Search for *Rigid Body Dynamics* > *Sleeping* in |physx_docs| for more details.
 
         Returns:
-            Mass-normalized kinetic energy threshold below which
-            an actor may go to sleep. Range: [0, inf)
-            Defaults: 0.00005 * tolerancesSpeed* tolerancesSpeed
-            Units: distance^2 / second^2.
+            Mass-normalized kinetic energy threshold below which an actor may go to sleep.
+            Range is [0, inf). Units are distance^2 / second^2.
 
         Example:
 
@@ -316,7 +314,7 @@ class SingleRigidPrim(_SinglePrimWrapper):
     def enable_rigid_body_physics(self) -> None:
         """Enable the rigid body physics.
 
-        When enabled, the object will be moved by external forces such as gravity and collisions
+        When enabled, the object will be moved by external forces such as gravity and collisions.
 
         Example:
 
@@ -330,7 +328,7 @@ class SingleRigidPrim(_SinglePrimWrapper):
     def disable_rigid_body_physics(self) -> None:
         """Disable the rigid body physics.
 
-        When disabled, the object will not be moved by external forces such as gravity and collisions
+        When disabled, the object will not be moved by external forces such as gravity and collisions.
 
         Example:
 
@@ -348,22 +346,22 @@ class SingleRigidPrim(_SinglePrimWrapper):
         linear_velocity: np.ndarray | None = None,
         angular_velocity: np.ndarray | None = None,
     ) -> None:
-        """Set the default state of the prim (position, orientation and linear and angular velocities),.
+        """Set the default state of the prim (position, orientation, linear velocity, and angular velocity).
 
-        that will be used after each reset.
+        The default state is used after each reset.
 
         .. note::
 
             The default states will be set during post-reset (e.g., calling ``.post_reset()`` or ``world.reset()`` methods)
 
         Args:
-            position: position in the world frame of the prim. shape is (3, ).
-                Defaults to None, which means left unchanged.
-            orientation: quaternion orientation in the world frame of the prim.
-                quaternion is scalar-first (w, x, y, z). shape is (4, ).
-                Defaults to None, which means left unchanged.
-            linear_velocity: linear velocity to set the rigid prim to. Shape (3,).
-            angular_velocity: angular velocity to set the rigid prim to. Shape (3,).
+            position: Position in the world frame of the prim. Shape is (3, ).
+                If not specified, the position is left unchanged.
+            orientation: Quaternion orientation in the world frame of the prim.
+                Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+                If not specified, the orientation is left unchanged.
+            linear_velocity: Linear velocity to set the rigid prim to. Shape (3,).
+            angular_velocity: Angular velocity to set the rigid prim to. Shape (3,).
 
         Example:
 
@@ -399,10 +397,10 @@ class SingleRigidPrim(_SinglePrimWrapper):
         return
 
     def get_default_state(self) -> DynamicState:
-        """Get the default rigid body state (position, orientation and linear and angular velocities).
+        """Get the default rigid body state (position, orientation, linear velocity, and angular velocity).
 
         Returns:
-            returns the default state of the prim that is used after each reset
+            The default state of the prim that is used after each reset.
 
         Example:
 
@@ -425,10 +423,10 @@ class SingleRigidPrim(_SinglePrimWrapper):
         return default_state
 
     def get_current_dynamic_state(self) -> DynamicState:
-        """Get the current rigid body state (position, orientation and linear and angular velocities).
+        """Get the current rigid body state (position, orientation, linear velocity, and angular velocity).
 
         Returns:
-            the dynamic state of the rigid body prim
+            The dynamic state of the rigid body prim.
 
         Example:
 
@@ -451,10 +449,10 @@ class SingleRigidPrim(_SinglePrimWrapper):
         return self._dynamics_view_state_conversion(view_default_state)
 
     def _dynamics_view_state_conversion(self, view_state: object) -> object:
-        """Convert view state from the rigid prim view to a DynamicState object.
+        """Convert a rigid prim view state into a DynamicState object.
 
         Args:
-            view_state: The view state object from the rigid prim view.
+            view_state: View state object from the rigid prim view.
 
         Returns:
             A DynamicState object containing position, orientation, linear velocity, and angular velocity.

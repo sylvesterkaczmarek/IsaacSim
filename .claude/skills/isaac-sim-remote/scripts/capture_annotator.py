@@ -20,18 +20,28 @@ Injected globals (via isaacsim_send.py --arg):
         Options: rgb, distance_to_camera, distance_to_image_plane, normals,
                  semantic_segmentation, instance_id_segmentation, etc.
     output_path: str — File path for output. .npy for raw array, .png for image
-        (default: /tmp/annotator_data.npy).
+        (default: under tempfile.gettempdir()).
 """
+
+import tempfile
+from pathlib import Path
 
 # Defaults
 if "annotator" not in dir():
     annotator = "distance_to_camera"  # noqa: F841
 if "output_path" not in dir():
-    output_path = "/tmp/annotator_data.npy"  # noqa: F841
+    output_path = str(Path(tempfile.gettempdir()) / "annotator_data.npy")  # noqa: F841
 
 
 async def _capture():
+    import isaacsim.core.experimental.utils.app as app_utils
     import omni.kit.viewport.utility as viewport_utils
+
+    if not app_utils.is_extension_enabled("isaacsim.test.utils"):
+        if not app_utils.enable_extension("isaacsim.test.utils"):
+            raise RuntimeError("Failed to enable extension isaacsim.test.utils")
+        await app_utils.update_app_async(steps=5)
+
     from isaacsim.test.utils.image_capture import capture_viewport_annotator_data_async
     from isaacsim.test.utils.image_io import save_annotator_data
 

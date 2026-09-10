@@ -31,6 +31,12 @@ from isaacsim.cortex.framework.cortex_rigid_prim import CortexRigidPrim
 from isaacsim.cortex.framework.cortex_utils import get_assets_root_path
 from isaacsim.cortex.framework.robot import CortexUr10
 
+# Pin this deprecated example to the Isaac Sim 6.0 asset retained for compatibility.
+LEGACY_UR10_TABLE_USD = (
+    "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/"
+    "Isaac/Samples/Leonardo/Stage/ur10_bin_stacking_short_suction.usd"
+)
+
 
 class Ur10Assets:
     """Container for asset file paths used in the UR10 bin stacking demonstration.
@@ -49,9 +55,7 @@ class Ur10Assets:
     def __init__(self) -> None:
         self.assets_root_path = get_assets_root_path()
 
-        self.ur10_table_usd = (
-            self.assets_root_path + "/Isaac/Samples/Leonardo/Stage/ur10_bin_stacking_short_suction.usd"
-        )
+        self.ur10_table_usd = LEGACY_UR10_TABLE_USD
         self.small_klt_usd = self.assets_root_path + "/Isaac/Props/KLT_Bin/small_KLT.usd"
         self.background_usd = self.assets_root_path + "/Isaac/Environments/Simple_Warehouse/warehouse.usd"
         self.rubiks_cube_usd = self.assets_root_path + "/Isaac/Props/Rubiks_Cube/rubiks_cube.usd"
@@ -60,7 +64,7 @@ class Ur10Assets:
 def random_bin_spawn_transform() -> tuple[np.ndarray, np.ndarray]:
     """Generate a random spawn transform for a bin on the conveyor.
 
-    Creates a randomized position and orientation for spawning bins. The position has random x-coordinate
+    Creates a randomized position and orientation for spawning bins. The position has a random x-coordinate
     within the conveyor width, with a 50% chance of flipping the bin upside down for varied orientations.
 
     Returns:
@@ -92,7 +96,7 @@ class BinStackingTask(BaseTask):
     This task manages the dynamic spawning and manipulation of bins on a conveyor system. It continuously
     spawns bins with random orientations and positions, monitors their movement through the conveyor system,
     and coordinates with the robot's behavior system for stacking operations. The task handles bin lifecycle
-    management including creation, tracking, and cleanup of bin objects in the simulation environment.
+    management, including creation, tracking, and cleanup of bin objects in the simulation environment.
 
     The task integrates with Isaac Sim's Cortex framework to provide autonomous bin handling capabilities.
     Bins are spawned with random orientations (including potential upside-down configurations) and initial
@@ -140,7 +144,7 @@ class BinStackingTask(BaseTask):
         self.on_conveyor = None
 
     def pre_step(self, time_step_index: int, simulation_time: float) -> None:
-        """Spawn a new randomly oriented bin if the previous bin has been placed.
+        """Spawns a new randomly oriented bin if the previous bin has been placed.
 
         Args:
             time_step_index: The current simulation time step index.
@@ -330,7 +334,7 @@ class BinStacking(CortexBase):
         for the bin stacking scenario.
 
         Args:
-            step_size: The time step size for the physics simulation.
+            step_size: Time step size for the physics simulation.
         """
         world = self.get_world()
         world.step(False, False)

@@ -82,6 +82,8 @@ files_strip_exclude = [
     ["*libscipy_openblas*.so"],
     ["*extscache/omni.kit.livestream.*/**"],
     ["*exts/isaacsim.pip.newton/pip_prebundle/**"],
+    ["*exts/isaacsim.pip.nv/pip_prebundle/**"],
+    ["*exts/isaacsim.pip.onnx/pip_prebundle/**"],
     ["*kit/exts/omni.kit.pip_archive/pip_prebundle/**"],
 ]
 

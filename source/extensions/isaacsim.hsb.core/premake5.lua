@@ -48,11 +48,12 @@ if os.target() == "linux" then
     }
 
     links {
-        "emulation",
         "emulationcoe",
         "emulationroce",
         "emulation_sensors",
         "emulator_utils",
+        "emulation_common",
+        "emulation_host",
     }
 
     filter { "system:linux" }
@@ -127,11 +128,12 @@ if os.target() == "linux" then
 
     links {
         "isaacsim.hsb.core",
-        "emulation",
         "emulationcoe",
         "emulationroce",
         "emulation_sensors",
         "emulator_utils",
+        "emulation_common",
+        "emulation_host",
     }
 
     filter { "configurations:debug" }

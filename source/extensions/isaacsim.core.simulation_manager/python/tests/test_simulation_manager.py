@@ -16,7 +16,9 @@
 """Verifies SimulationManager backend selection, physics scene settings, callbacks, lifecycle state, engine switching, Fabric handlers, stage transitions, and multi-tick rendering behavior. The tests ensure stale scene references are invalidated and simulation state remains consistent across stage changes."""
 
 from typing import Any
+from unittest import mock
 
+import carb
 import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.app
 import omni.kit.test
@@ -79,6 +81,8 @@ class TestSimulationManagerBackend(omni.kit.test.AsyncTestCase):
 class TestSimulationManagerDefaultCallbacks(omni.kit.test.AsyncTestCase):
     """Tests for SimulationManager default callback enable/disable functionality."""
 
+    _ENABLE_DEFAULT_CALLBACKS_SETTING = "/exts/isaacsim.core.simulation_manager/enable_default_callbacks"
+
     async def setUp(self) -> None:
         """Method called to prepare the test fixture."""
         super().setUp()
@@ -86,8 +90,23 @@ class TestSimulationManagerDefaultCallbacks(omni.kit.test.AsyncTestCase):
 
     async def tearDown(self) -> None:
         """Method called immediately after the test method has been called."""
-        SimulationManager.enable_all_default_callbacks(True)
+        enabled = carb.settings.get_settings().get_as_bool(self._ENABLE_DEFAULT_CALLBACKS_SETTING)
+        SimulationManager.enable_all_default_callbacks(enabled)
         super().tearDown()
+
+    async def test_default_callback_startup_state_matches_setting(self) -> None:
+        """Test the callback state produced by extension startup configuration."""
+        enabled = carb.settings.get_settings().get_as_bool(self._ENABLE_DEFAULT_CALLBACKS_SETTING)
+        status = SimulationManager.get_default_callback_status()
+
+        self.assertEqual(all(status.values()), enabled)
+        for callback in (
+            SimulationManager._default_callback_warm_start,
+            SimulationManager._default_callback_on_stop,
+            SimulationManager._default_callback_stage_open,
+            SimulationManager._default_callback_stage_close,
+        ):
+            self.assertEqual(callback is not None, enabled)
 
     async def test_default_callbacks(self) -> None:
         """Test all default callback enable/disable functionality."""
@@ -116,6 +135,10 @@ class TestSimulationManagerDefaultCallbacks(omni.kit.test.AsyncTestCase):
         SimulationManager.enable_all_default_callbacks(False)
         status = SimulationManager.get_default_callback_status()
         self.assertFalse(all(status.values()))
+        self.assertIsNone(SimulationManager._default_callback_warm_start)
+        self.assertIsNone(SimulationManager._default_callback_on_stop)
+        self.assertIsNone(SimulationManager._default_callback_stage_open)
+        self.assertIsNone(SimulationManager._default_callback_stage_close)
 
         SimulationManager.enable_all_default_callbacks(True)
         status = SimulationManager.get_default_callback_status()
@@ -127,6 +150,33 @@ class TestSimulationManagerDefaultCallbacks(omni.kit.test.AsyncTestCase):
 
         # Test invalid callback name returns False
         self.assertFalse(SimulationManager.is_default_callback_enabled("nonexistent_callback"))
+
+    async def test_startup_honors_enable_default_callbacks_setting(self) -> None:
+        """Test configuring default callback registration during startup."""
+        setting_path = self._ENABLE_DEFAULT_CALLBACKS_SETTING
+        settings = carb.settings.get_settings()
+        original_setting = settings.get(setting_path)
+        original_subscription = SimulationManager._simulation_registry_sub
+
+        try:
+            for enabled in (False, True):
+                with self.subTest(enabled=enabled):
+                    settings.set(setting_path, enabled)
+                    with (
+                        mock.patch.object(SimulationManager, "enable_all_default_callbacks") as enable_callbacks,
+                        mock.patch.object(SimulationManager, "_reset"),
+                        mock.patch.object(SimulationManager, "_sync_engine_state"),
+                        mock.patch.object(SimulationManager, "_physics_interface") as physics_interface,
+                    ):
+                        SimulationManager._startup()
+
+                    enable_callbacks.assert_called_once_with(enabled)
+                    physics_interface.subscribe_simulation_registry_events.assert_called_once_with(
+                        SimulationManager._on_simulation_registry_event
+                    )
+        finally:
+            settings.set(setting_path, original_setting)
+            SimulationManager._simulation_registry_sub = original_subscription
 
 
 class TestSimulationManagerPhysicsDevice(omni.kit.test.AsyncTestCase):
@@ -177,6 +227,28 @@ class TestSimulationManagerPhysicsDevice(omni.kit.test.AsyncTestCase):
         # Test invalid device raises exception
         with self.assertRaises(Exception):
             SimulationManager.set_physics_sim_device("invalid_device")
+
+    async def test_get_device_uses_cuda_zero_for_negative_cuda_setting_without_scenes(self) -> None:
+        """Test a negative CUDA setting falls back to CUDA device zero before device parsing."""
+        if SimulationManager.get_active_physics_engine() != "physx":
+            return
+
+        cuda_device_setting = "/physics/cudaDevice"
+        suppress_readback_setting = "/physics/suppressReadback"
+        settings = carb.settings.get_settings()
+        original_cuda_device = settings.get(cuda_device_setting)
+        original_suppress_readback = settings.get(suppress_readback_setting)
+
+        try:
+            settings.set_int(cuda_device_setting, -1)
+            settings.set_bool(suppress_readback_setting, True)
+            with mock.patch.object(SimulationManager, "_physics_scenes", {}):
+                self.assertEqual(str(SimulationManager.get_device()), "cuda:0")
+
+            self.assertEqual(settings.get_as_int(cuda_device_setting), 0)
+        finally:
+            settings.set(cuda_device_setting, original_cuda_device)
+            settings.set(suppress_readback_setting, original_suppress_readback)
 
 
 class TestSimulationManagerPhysicsSceneSettings(omni.kit.test.AsyncTestCase):

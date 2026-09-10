@@ -48,7 +48,7 @@ def prepare_buffers(
     total_contact_count: wp.array(dtype=wp.uint32),
     total_elapsed_time: wp.array(dtype=wp.float32),
     global_conveyor_belt_speed_scale: wp.array(dtype=wp.float32),
-):
+) -> None:
     """Fill buffers for subsequent conveyor belt force computation stages.
 
     For each body, computes the center-of-mass-to-world transform by composing the body
@@ -184,8 +184,12 @@ def prepare_buffers(
 def clear_buffers(
     # output
     total_contact_count: wp.array(dtype=wp.uint32),
-):
-    """Warp kernel: reset the total contact count to zero at the start of each step."""
+) -> None:
+    """Reset the accumulated contact count at the start of a simulation step.
+
+    Args:
+        total_contact_count: Single-element output buffer whose contact count is reset.
+    """
     total_contact_count[0] = wp.uint32(0)
 
     # note: it is not necessary to zero the per-body force buffers or per-contact force buffers since
@@ -246,7 +250,7 @@ def correlate_and_filter_contact_points(
     contact_patch_buffer: wp.array(dtype=Patch),
     body_to_patch_buffer: wp.array(dtype=wp.uint32),
     mass_splitting_scale_buffer: wp.array(dtype=wp.float32),
-):
+) -> None:
     """Group contact points into patches by similar normals and filter out invalid contacts.
 
     Iterates over every contact point for each body and conveyor belt pair. Contact points
@@ -425,7 +429,7 @@ def redistribute_contact_force(
     # output
     adjusted_contact_normal_force_buffer: wp.array2d(dtype=wp.float32),
     mass_splitting_scale_buffer: wp.array(dtype=wp.float32),
-):
+) -> None:
     """Redistribute contact normal forces within each patch using a point-density heuristic.
 
     For each patch that spans more than one conveyor belt and contains more than one contact
@@ -698,7 +702,7 @@ def sum_up_force(
     # output
     body_force_buffer: wp.array2d(dtype=wp.float32),
     body_torque_buffer: wp.array2d(dtype=wp.float32),
-):
+) -> None:
     """Accumulate per-contact-point force/torque spatial vectors into per-body totals.
 
     For each body, sums the spatial force/torque contributions from all of its contact points

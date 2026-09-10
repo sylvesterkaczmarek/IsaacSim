@@ -2,7 +2,7 @@
 order = -100
 
 [package]
-version = "0.3.2"
+version = "0.3.6"
 category = "Simulation"
 title = "Isaac Sim Core Experimental Prim Data"
 description = "Provider extension for IPrimDataReader and IPrimDataReaderManager implementations."
@@ -87,6 +87,9 @@ cppTests.libraries = [
 pythonTests.include = []
 pythonTests.exclude = ["*"]
 
+stdoutFailPatterns.include = [
+    '*Unexpected reference count*UsdStage*while being closed in UsdContext*',
+]
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

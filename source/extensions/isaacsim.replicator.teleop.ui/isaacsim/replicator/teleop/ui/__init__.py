@@ -13,6 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .teleop_ui_extension import *
+from .teleop_ui_extension import TeleopUIExtension as TeleopUIExtension
 
 __all__ = []

@@ -124,7 +124,7 @@ class Extension(omni.ext.IExt):
                         attr.Set(new_value)
                         deprecation_changes.append((entry["deprecated"], entry["new"], value, new_value))
                         # find USD references
-                        while (prim := prim.GetParent()).IsValid():
+                        while prim.IsValid() and (prim := prim.GetParent()).IsValid():
                             references = omni.usd.get_composed_references_from_prim(prim, False)
                             payloads = omni.usd.get_composed_payloads_from_prim(prim, False)
                             if references or payloads:

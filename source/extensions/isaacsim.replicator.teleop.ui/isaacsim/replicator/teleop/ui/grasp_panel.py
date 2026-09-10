@@ -17,23 +17,24 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+import carb.eventdispatcher
 import carb.settings
 import omni.timeline
 import omni.ui as ui
 from isaacsim.gui.components.ui_utils import get_style
 from isaacsim.replicator.teleop import (
+    GraspConfig,
+    GraspController,
     GraspControllerProfile,
     GraspSideProfile,
     TeleopManager,
-)
-from isaacsim.replicator.teleop.controllers import (
-    GraspConfig,
-    GraspController,
     get_builtin_grasp_configs,
     load_grasp_config,
     normalize_grasp_config_path,
+    parse_grasp_drive_mode,
+    parse_grasp_retargeter_kind,
 )
 
 from .ui_helpers import (
@@ -88,6 +89,9 @@ class _SideState:
     enable_btn: ui.Button | None = None
     clear_btn: ui.Button | None = None
     loaded_config: GraspConfig | None = None
+    drive_mode: str = "trigger"
+    retargeter_kind: str = ""
+    joint_aliases: dict[str, str] = field(default_factory=dict)
     is_configured: bool = False
     desired_enabled: bool = False
 
@@ -115,10 +119,16 @@ class GraspPanel:
         self._sides: dict[str, _SideState] = {"left": _SideState(), "right": _SideState()}
         self._builtin_configs: list[tuple[str, str]] = []
         self._is_playing: bool = False
-        self._timeline_sub = (
-            omni.timeline.get_timeline_interface()
-            .get_timeline_event_stream()
-            .create_subscription_to_pop(self._on_timeline_event, name="GraspPanel_timeline")
+        event_dispatcher = carb.eventdispatcher.get_eventdispatcher()
+        self._timeline_play_sub = event_dispatcher.observe_event(
+            event_name=omni.timeline.GLOBAL_EVENT_PLAY,
+            on_event=self._on_timeline_play,
+            observer_name="GraspPanel._on_timeline_play",
+        )
+        self._timeline_stop_sub = event_dispatcher.observe_event(
+            event_name=omni.timeline.GLOBAL_EVENT_STOP,
+            on_event=self._on_timeline_stop,
+            observer_name="GraspPanel._on_timeline_stop",
         )
 
         for side in ("left", "right"):
@@ -302,17 +312,17 @@ class GraspPanel:
             side=side,
         )
 
-    def _on_timeline_event(self, event: object) -> None:
-        if event.type == int(omni.timeline.TimelineEventType.PLAY):
-            self._is_playing = True
-            for side in ("left", "right"):
-                self._sync_side_controls(side)
-            self._refresh_side_statuses()
-        elif event.type == int(omni.timeline.TimelineEventType.STOP):
-            self._is_playing = False
-            for side in ("left", "right"):
-                self._sync_side_controls(side)
-            self._refresh_side_statuses()
+    def _on_timeline_play(self, _event: object) -> None:
+        self._is_playing = True
+        for side in ("left", "right"):
+            self._sync_side_controls(side)
+        self._refresh_side_statuses()
+
+    def _on_timeline_stop(self, _event: object) -> None:
+        self._is_playing = False
+        for side in ("left", "right"):
+            self._sync_side_controls(side)
+        self._refresh_side_statuses()
 
     def _on_configure(self, side: str) -> None:
         if self._is_playing:
@@ -355,7 +365,50 @@ class GraspPanel:
             self._sync_side_controls(side)
             return
 
-        ok = self._gc.configure(path, side, ss.loaded_config)
+        drive_mode = (ss.drive_mode or "trigger").strip().lower()
+        retargeter_kind = (ss.retargeter_kind or "").strip().lower() or None
+        try:
+            parse_grasp_drive_mode(drive_mode)
+            parsed_retargeter = parse_grasp_retargeter_kind(retargeter_kind)
+        except ValueError as exc:
+            ss.is_configured = False
+            set_status(ss.status_label, str(exc), CLR_RED, emit_terminal=True, side=side)
+            self._sync_side_controls(side)
+            return
+        if drive_mode == "retargeted":
+            if parsed_retargeter is None:
+                ss.is_configured = False
+                set_status(
+                    ss.status_label,
+                    "retargeted drive_mode requires retargeter_kind in the teleop profile",
+                    CLR_RED,
+                    emit_terminal=True,
+                    side=side,
+                )
+                self._sync_side_controls(side)
+                return
+            if not ss.joint_aliases:
+                ss.is_configured = False
+                set_status(
+                    ss.status_label,
+                    "retargeted drive_mode requires joint_aliases in the teleop profile",
+                    CLR_RED,
+                    emit_terminal=True,
+                    side=side,
+                )
+                self._sync_side_controls(side)
+                return
+        else:
+            retargeter_kind = None
+
+        ok = self._gc.configure(
+            path,
+            side,
+            ss.loaded_config,
+            drive_mode=drive_mode,
+            retargeter_kind=retargeter_kind,
+            joint_aliases=ss.joint_aliases or None,
+        )
         if ok:
             ss.is_configured = True
             self._gc.set_side_tracking_enabled(side, False)
@@ -399,6 +452,9 @@ class GraspPanel:
         ss.is_configured = False
         ss.loaded_config = None
         ss.desired_enabled = False
+        ss.drive_mode = "trigger"
+        ss.retargeter_kind = ""
+        ss.joint_aliases = {}
         self._sync_manager_tracking()
         self._sync_side_controls(side)
         set_status(ss.status_label, "Cleared", CLR_DIM, emit_terminal=True, side=side)
@@ -422,6 +478,9 @@ class GraspPanel:
                 enabled=ss.desired_enabled,
                 prim_path=prim_path,
                 config_path=config_path,
+                drive_mode=ss.drive_mode,
+                retargeter_kind=ss.retargeter_kind if ss.drive_mode == "retargeted" else "",
+                joint_aliases=dict(ss.joint_aliases),
             )
 
         return GraspControllerProfile(
@@ -442,6 +501,9 @@ class GraspPanel:
             self._gc.remove(side)
             ss.is_configured = False
             ss.loaded_config = None
+            ss.joint_aliases = dict(side_profile.joint_aliases or {})
+            ss.drive_mode = (side_profile.drive_mode or "trigger").strip().lower()
+            ss.retargeter_kind = (side_profile.retargeter_kind or "").strip().lower()
             desired_enabled = bool(side_profile.enabled)
             ss.desired_enabled = False
             config_path = normalize_grasp_config_path(side_profile.config_path)
@@ -462,7 +524,10 @@ class GraspPanel:
                 set_status(status, "; ".join(errors), CLR_RED)
             elif config is not None:
                 ss.loaded_config = config
-                set_status(status, f'Loaded "{config.name or side}" grasp profile', CLR_YELLOW)
+                drive_hint = ss.drive_mode
+                if ss.drive_mode == "retargeted" and ss.retargeter_kind:
+                    drive_hint = f"{ss.drive_mode}/{ss.retargeter_kind}"
+                set_status(status, f'Loaded "{config.name or side}" grasp ({drive_hint})', CLR_YELLOW)
             else:
                 set_status(status, "", CLR_DIM)
 
@@ -481,7 +546,6 @@ class GraspPanel:
 
     def _sync_side_controls(self, side: str) -> None:
         ss = self._ss(side)
-        running = self._gc.is_side_tracking_enabled(side)
         path_editable = (not self._is_playing) and (not ss.is_configured)
         for widget in (ss.prim_field, ss.plus_btn, ss.del_btn, ss.prim_apply_btn):
             if widget:
@@ -514,6 +578,9 @@ class GraspPanel:
             ss.is_configured = False
             ss.loaded_config = None
             ss.desired_enabled = False
+            ss.drive_mode = "trigger"
+            ss.retargeter_kind = ""
+            ss.joint_aliases = {}
             self._gc.set_side_tracking_enabled(side, False)
             self._sync_side_controls(side)
             if ss.status_label:
@@ -538,5 +605,6 @@ class GraspPanel:
                     set_status(ss.status_label, "", CLR_DIM)
 
     def destroy(self) -> None:
-        """Release the timeline subscription."""
-        self._timeline_sub = None
+        """Release the timeline subscriptions."""
+        self._timeline_play_sub = None
+        self._timeline_stop_sub = None

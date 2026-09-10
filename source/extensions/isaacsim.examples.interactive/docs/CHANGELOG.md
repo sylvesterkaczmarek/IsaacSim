@@ -1,5 +1,37 @@
 # Changelog
 
+## [4.16.8] - 2026-08-10
+### Fixed
+- Surface Gripper: raise GPU broadphase `foundLostAggregatePairsCapacity` to avoid dropped contact events.
+- Surface Gripper: release stage reference on reload to prevent resident-stage warnings.
+- Surface Gripper: remove spurious `custom` qualifier from `physics:filteredPairs` on `Gripper_Cones`.
+
+## [4.16.7] - 2026-08-06
+### Fixed
+- Improve RoboParty spawn layout so Kaya does not drive into the UR10 workspace, and tighten Franka/UR10 cube and place poses.
+- Reset pick/place task state when starting the RoboParty so stacking recovers after Reset.
+
+## [4.16.6] - 2026-07-30
+### Changed
+- Use core articulations and robot-motion controllers in RoboParty.
+- Use `isaacsim.robot_motion.examples` for shared manipulation examples.
+
+## [4.16.5] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+## [4.16.4] - 2026-07-09
+### Changed
+- Update the overview to match the examples currently provided by the extension.
+
+## [4.16.3] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [4.16.2] - 2026-06-29
+### Changed
+- Stop publishing Kit lifecycle classes from interactive example modules.
+
 ## [4.16.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

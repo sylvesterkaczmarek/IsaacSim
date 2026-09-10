@@ -46,15 +46,15 @@ class Extension(omni.ext.IExt):
 
     The extension automatically subscribes to physics steps during timeline playback and provides callbacks
     for stage and timeline events. It uses a UIBuilder component to handle the actual UI construction and
-    user interactions, following a separation of concerns pattern where this class manages the extension
-    lifecycle and the UIBuilder handles the specific tutorial content.
+    user interactions, following a separation of concerns pattern where this class manages extension-level UI
+    and event integration and the UIBuilder handles the specific tutorial content.
 
     The extension window is dockable and appears in the left bottom area by default, providing an integrated
     experience within the Isaac Sim interface.
     """
 
     def on_startup(self, ext_id: str) -> None:
-        """Initialize extension and UI elements.
+        """Initializes extension and UI elements.
 
         Args:
             ext_id: The extension identifier.
@@ -91,7 +91,7 @@ class Extension(omni.ext.IExt):
         self._timeline = omni.timeline.get_timeline_interface()
 
     def on_shutdown(self) -> None:
-        """Clean up extension resources and UI elements."""
+        """Cleans up extension resources and UI elements."""
         self._models = {}
         remove_menu_items(self._menu_items, MENU_PARENT_NAME)
 
@@ -104,7 +104,7 @@ class Extension(omni.ext.IExt):
         gc.collect()
 
     def _on_window(self, visible: bool) -> None:
-        """Handle window visibility changes and manage event subscriptions.
+        """Handles window visibility changes and manages event subscriptions.
 
         Args:
             visible: Whether the window is visible.
@@ -143,7 +143,7 @@ class Extension(omni.ext.IExt):
             self.ui_builder.cleanup()
 
     def _build_ui(self) -> None:
-        """Build the extension UI and dock the window."""
+        """Builds the extension UI and docks the window."""
         with self._window.frame:
             with ui.VStack(spacing=5, height=0):
                 self._build_extension_ui()
@@ -168,12 +168,12 @@ class Extension(omni.ext.IExt):
     #################################################################
 
     def _menu_callback(self) -> None:
-        """Toggle window visibility and notify the UI builder."""
+        """Toggles window visibility and notifies the UIBuilder."""
         self._window.visible = not self._window.visible
         self.ui_builder.on_menu_callback()
 
     def _on_timeline_play(self, event: object) -> None:
-        """Timeline play event callback.
+        """Handles timeline play events and subscribes to physics step events.
 
         Args:
             event: The timeline play event.
@@ -184,7 +184,7 @@ class Extension(omni.ext.IExt):
             )
 
     def _on_timeline_stop(self, event: object) -> None:
-        """Timeline stop event callback.
+        """Handles timeline stop events and notifies the UIBuilder.
 
         Args:
             event: The timeline stop event.
@@ -193,7 +193,7 @@ class Extension(omni.ext.IExt):
         self.ui_builder.on_timeline_event(event)
 
     def _on_physics_step(self, step: float, context: object) -> None:
-        """Handle physics step events and forward to the UI builder.
+        """Handles physics step events and forwards them to the UIBuilder.
 
         Args:
             step: The physics step information.
@@ -202,7 +202,7 @@ class Extension(omni.ext.IExt):
         self.ui_builder.on_physics_step(step)
 
     def _on_stage_opened(self, event: object) -> None:
-        """Stage opened event callback.
+        """Handles stage opened events and resets the UIBuilder.
 
         Args:
             event: The stage opened event.
@@ -212,7 +212,7 @@ class Extension(omni.ext.IExt):
         self.ui_builder.on_stage_event(event)
 
     def _on_stage_closed(self, event: object) -> None:
-        """Stage closed event callback.
+        """Handles stage closed events and cleans up the UIBuilder.
 
         Args:
             event: The stage closed event.
@@ -221,9 +221,10 @@ class Extension(omni.ext.IExt):
         self.ui_builder.cleanup()
 
     def _build_extension_ui(self) -> None:
-        """Builds the extension UI by calling the user-defined UI builder.
+        """Builds the extension UI by calling the user-defined UIBuilder implementation.
 
-        This method serves as a bridge between the extension's UI framework and the user's custom UI implementation in the UIBuilder class.
+        This method serves as a bridge between the extension UI and the user's custom UI implementation in the
+        UIBuilder class.
         """
         # Call user function for building UI
         self.ui_builder.build_ui()

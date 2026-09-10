@@ -1,8 +1,8 @@
 [package]
-version = "0.8.1"
+version = "1.0.6"
 category = "Simulation"
 title = "Isaac Sim Newton Physics"
-description = "Extension for simulating physics with Newton and connecting with Fabric. Includes tensor interface (isaacsim.physics.newton.tensors) for NumPy/PyTorch/Warp frontends."
+description = "Extension for simulating physics with Newton and connecting with Fabric. Use isaacsim.physics.newton.tensors for the tensor interface."
 keywords = ["isaac", "newton", "physics", "tensors"]
 changelog = "docs/CHANGELOG.md"
 readme = "docs/Overview.md"
@@ -28,17 +28,24 @@ name = "isaacsim.physics.newton.tests"
 exts."isaacsim.physics.newton".capture_graph_physics_step = true
 # Automatically switch to the Newton physics engine when the extension starts.
 exts."isaacsim.physics.newton".auto_switch_on_startup = true
+# Load material textures into Newton.
+exts."isaacsim.physics.newton".load_textures = false
 
 # Main python module this extension provides
 [[test]]
 name = "startup"
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 timeout = 3600
-enabled = false
+enabled = true
 dependencies = [
     "isaacsim.asset.importer.mjcf",
     "isaacsim.asset.importer.urdf",
+    "isaacsim.core.experimental.objects",
     "isaacsim.physics.newton.tensors",
     "isaacsim.test.utils" # Used to suppress NumPy coverage errors
 ]
@@ -94,6 +101,13 @@ args = [
     "--/rtx/reservedDescriptors=900000",
     ### Extension specific args
     "--/exts/isaacsim.core.simulation_manager/default_engine=newton",
+]
+pythonTests.include = [
+    "isaacsim.physics.newton.tests.test_deprecated_tensors*",
+    "isaacsim.physics.newton.tests.test_hydroelastic*",
+    "isaacsim.physics.newton.tests.test_newton_stage*",
+    "isaacsim.physics.newton.tests.test_property_query*",
+    "isaacsim.physics.newton.tests.test_warning_logging*",
 ]
 
 [documentation]

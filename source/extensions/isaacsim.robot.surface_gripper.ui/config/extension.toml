@@ -21,6 +21,7 @@ name = "isaacsim.robot.surface_gripper.ui"
 
 [[test]]
 name = "startup"
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

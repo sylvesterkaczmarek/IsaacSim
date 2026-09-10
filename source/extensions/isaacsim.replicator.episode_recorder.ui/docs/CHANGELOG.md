@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.5] - 2026-08-23
+### Changed
+- Subscribe to stage closing through Events 2.0 instead of the deprecated stage event stream.
+
+## [0.1.4] - 2026-06-29
+### Changed
+- Stop publishing the Kit lifecycle class while retaining the panel and window APIs.
+
 ## [0.1.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

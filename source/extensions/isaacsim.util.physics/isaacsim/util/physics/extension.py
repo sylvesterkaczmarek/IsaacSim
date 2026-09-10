@@ -19,22 +19,16 @@ import asyncio
 import gc
 import weakref
 
+import isaacsim.core.experimental.utils.physics as physics_utils
 import omni.ext
 import omni.kit.commands
 import omni.kit.utils
 import omni.ui as ui
 import omni.usd
+from isaacsim.gui.components import btn_builder, cb_builder, dropdown_builder, multi_btn_builder, progress_bar_builder
 from isaacsim.gui.components.element_wrappers import ScrollingWindow
 from isaacsim.gui.components.menu import make_menu_item_description
-from isaacsim.gui.components.ui_utils import (
-    btn_builder,
-    cb_builder,
-    dropdown_builder,
-    multi_btn_builder,
-    progress_bar_builder,
-)
 from omni.kit.menu.utils import MenuItemDescription, add_menu_items, remove_menu_items
-from omni.physx.scripts import utils
 from pxr import Usd, UsdGeom, UsdPhysics
 
 EXTENSION_NAME = "Physics API Editor"
@@ -225,7 +219,7 @@ class Extension(omni.ext.IExt):
                                 prim_range_iter.PruneChildren()
                                 continue
                     # Ignore rigid bodies and its children
-                    if ignore_rigid and utils.hasSchema(prim, "PhysicsRigidBodyAPI"):
+                    if ignore_rigid and prim.HasAPI(UsdPhysics.RigidBodyAPI):
                         prim_range_iter.PruneChildren()
                         continue
                     if self.prim_is_valid(
@@ -276,8 +270,8 @@ class Extension(omni.ext.IExt):
         """Apply collision API to a single prim.
 
         For instanceable prims, applies CollisionAPI and MeshCollisionAPI directly.
-        For other prims, uses the physx utility to set the collider with the specified
-        approximation shape.
+        For other prims, uses the core experimental physics utils to set the collider with the
+        specified approximation shape.
 
         Args:
             prim: The USD prim to apply collision to.
@@ -289,7 +283,7 @@ class Extension(omni.ext.IExt):
             UsdPhysics.CollisionAPI.Apply(prim)
             UsdPhysics.MeshCollisionAPI.Apply(prim)
         else:
-            utils.setCollider(prim, approximationShape)
+            physics_utils.apply_collision(prim, approximation=approximationShape)
 
     def unapply_collision_on_prim(self, prim: Usd.Prim) -> None:
         """Remove collision API from a single prim.
@@ -297,7 +291,7 @@ class Extension(omni.ext.IExt):
         Args:
             prim: The USD prim to remove collision from.
         """
-        utils.removeCollider(prim)
+        physics_utils.remove_collision(prim)
 
     def remove_physics_apis_on_prim(self, prim: Usd.Prim) -> None:
         """Remove all physics-related APIs from a single prim.

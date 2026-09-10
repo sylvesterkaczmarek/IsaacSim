@@ -16,11 +16,6 @@
   - class def destroy_viewport_windows(cls) -> list[str]
   - class def set_camera_view(cls, camera: str | Usd.Prim | UsdGeom.Camera)
 
-- class ROS2CoreExtension(omni.ext.IExt)
-  - def on_startup(self, ext_id: str)
-  - def on_shutdown(self)
-  - def check_status(self, distro: str) -> bool
-
 ## Functions
 
 - def read_camera_info(render_product_path: str) -> tuple
@@ -30,11 +25,3 @@
 - def print_environment_setup_instructions(extension_path: str, ros_distro: str)
 - def restore_ros2_python_paths()
 - def setup_ros2_environment(extension_path: str, ros_distro: str)
-
-## Variables
-
-- OPENCV_PINHOLE_ATTRIBUTE_MAP: List
-- OPENCV_FISHEYE_ATTRIBUTE_MAP: List
-- SUPPORTED_ROS_DISTROS: Dict
-- BRIDGE_NAME: str
-- BRIDGE_PREFIX: str

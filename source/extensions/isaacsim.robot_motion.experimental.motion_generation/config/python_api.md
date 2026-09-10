@@ -6,7 +6,7 @@
   - def forward(self, estimated_state: RobotState, setpoint_state: Optional[RobotState], t: float, **kwargs: object) -> Optional[RobotState]
   - def reset(self, estimated_state: RobotState, setpoint_state: Optional[RobotState], t: float, **kwargs: object) -> bool
 
-- class ControllerContainer(BaseController)
+- class SelectableController(BaseController)
   - def __init__(self, controller_options: dict[Enum, BaseController], initial_controller_selection: Enum)
   - def reset(self, estimated_state: RobotState, setpoint_state: Optional[RobotState], t: float, **kwargs: object) -> bool
   - def forward(self, estimated_state: RobotState, setpoint_state: Optional[RobotState], t: float, **kwargs: object) -> Optional[RobotState]
@@ -14,12 +14,12 @@
   - def get_active_controller_enum(self) -> Enum
   - def get_controller(self, controller_selection: Enum) -> BaseController
 
-- class ParallelController(BaseController)
+- class CombinedController(BaseController)
   - def __init__(self, controllers: list[BaseController])
   - def reset(self, estimated_state: RobotState, setpoint_state: Optional[RobotState], t: float, **kwargs: object) -> bool
   - def forward(self, estimated_state: RobotState, setpoint_state: Optional[RobotState], t: float, **kwargs: object) -> Optional[RobotState]
 
-- class SequentialController(BaseController)
+- class ChainedController(BaseController)
   - def __init__(self, controllers: list[BaseController])
   - def reset(self, estimated_state: RobotState, setpoint_state: Optional[RobotState], t: float, **kwargs: object) -> bool
   - def forward(self, estimated_state: RobotState, setpoint_state: Optional[RobotState], t: float, **kwargs: object) -> Optional[RobotState]
@@ -130,9 +130,7 @@
 - class WorldBinding(Generic[TWorldInterface])
   - def __init__(self, world_interface: TWorldInterface, obstacle_strategy: ObstacleStrategy, tracked_prims: list[str], tracked_collision_api: TrackableApi)
   - def initialize(self)
-  - def synchronize(self)
   - def synchronize_transforms(self)
-  - def synchronize_properties(self)
   - def get_world_interface(self) -> WorldInterface
 
 - class WorldInterface

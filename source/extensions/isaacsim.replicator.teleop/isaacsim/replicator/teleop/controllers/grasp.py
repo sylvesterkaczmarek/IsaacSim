@@ -31,8 +31,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.prim as prim_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
-import omni.kit.app
 import omni.usd
 from isaacsim.core.experimental.prims import Articulation
 from pxr import PhysxSchema, Sdf, Usd, UsdPhysics
@@ -53,11 +55,22 @@ class JointMapping:
         input_range: Sub-range of [0,1] trigger input that activates this joint.
             Joints with higher start values begin moving later in the squeeze.
         target_range: Joint position [open, closed] mapped from input_range.
+            Revolute-joint values are angles in degrees. Prismatic-joint values
+            are distances in stage linear units.
+        drive_stiffness: Optional USD drive stiffness override. Leave unset to
+            preserve the value authored in the gripper asset.
+        drive_damping: Optional USD drive damping override. Leave unset to
+            preserve the value authored in the gripper asset.
+        drive_max_force: Optional USD drive maximum-force override. Leave unset
+            to preserve the value authored in the gripper asset.
     """
 
     name: str
     input_range: tuple[float, float] = (0.0, 1.0)
     target_range: tuple[float, float] = (0.0, 1.0)
+    drive_stiffness: float | None = None
+    drive_damping: float | None = None
+    drive_max_force: float | None = None
 
     def compute_target(self, input_value: float) -> float:
         """Compute drive target for a given trigger input value.
@@ -70,7 +83,8 @@ class JointMapping:
             input_value: Value for input value.
 
         Returns:
-            The requested value.
+            Configured joint target. Revolute-joint values are in degrees;
+            prismatic-joint values are in stage linear units.
         """
         input_value = max(0.0, min(1.0, input_value))
         lo, hi = self.input_range
@@ -123,6 +137,10 @@ class _GraspState:
     # joint USD path -> (mapping, cached DriveAPI) -- USD fallback path
     active_joints: dict[str, tuple[JointMapping, UsdPhysics.DriveAPI]] = field(default_factory=dict)
     input_value: float = 0.0
+    drive_mode: str = "trigger"
+    retargeter_kind: str | None = None
+    joint_aliases: dict[str, str] = field(default_factory=dict)
+    retargeted_targets: dict[str, float] = field(default_factory=dict)
     # Articulation-backed path (used when gripper is part of a larger articulation)
     articulation: Articulation | None = None
     # joint USD path -> (mapping, DOF index in articulation)
@@ -134,8 +152,7 @@ class _GraspState:
 
 def _get_builtin_grasp_configs_dir() -> Path | None:
     try:
-        ext_manager = omni.kit.app.get_app().get_extension_manager()
-        ext_path = ext_manager.get_extension_path_by_module("isaacsim.replicator.teleop")
+        ext_path = app_utils.get_extension_path("isaacsim.replicator.teleop")
         if not ext_path:
             return None
         configs_dir = Path(ext_path) / "data" / "grasp_configs"
@@ -229,7 +246,7 @@ def load_grasp_config(path: str) -> tuple[GraspConfig | None, list[str]]:
     Returns:
         The requested value.
     """
-    import yaml  # noqa: delayed import - only needed when user loads a config
+    import yaml
 
     errors: list[str] = []
     normalized_path = normalize_grasp_config_path(path)
@@ -277,11 +294,32 @@ def load_grasp_config(path: str) -> tuple[GraspConfig | None, list[str]]:
         if not (isinstance(tr, (list, tuple)) and len(tr) == 2):
             errors.append(f"Joint '{name}': target_range must be [start, end]")
             continue
+        drive = jd.get("drive", {})
+        if not isinstance(drive, dict):
+            errors.append(f"Joint '{name}': drive must be a mapping")
+            continue
+        drive_values: dict[str, float | None] = {}
+        invalid_drive = False
+        for key in ("stiffness", "damping", "max_force"):
+            value = drive.get(key)
+            if value is None:
+                drive_values[key] = None
+                continue
+            try:
+                drive_values[key] = float(value)
+            except (TypeError, ValueError):
+                errors.append(f"Joint '{name}': drive.{key} must be a number")
+                invalid_drive = True
+        if invalid_drive:
+            continue
         config.joints.append(
             JointMapping(
                 name=name,
                 input_range=(float(ir[0]), float(ir[1])),
                 target_range=(float(tr[0]), float(tr[1])),
+                drive_stiffness=drive_values["stiffness"],
+                drive_damping=drive_values["damping"],
+                drive_max_force=drive_values["max_force"],
             )
         )
 
@@ -350,10 +388,10 @@ class GraspController:
         """
         result = GraspValidationResult()
 
-        stage = omni.usd.get_context().get_stage()
-        if not stage:
+        if not stage_utils.is_stage_set() and omni.usd.get_context().get_stage() is None:
             result.errors.append("Stage not available")
             return result
+        stage = stage_utils.get_current_stage()
 
         if not prim_path or not Sdf.Path.IsValidPathString(prim_path):
             result.errors.append(f"Invalid path: '{prim_path}'")
@@ -364,12 +402,15 @@ class GraspController:
             result.errors.append(f"Prim not found: '{prim_path}'")
             return result
 
+        # Traverse instance proxies so joints inside instanced gripper hierarchies are included.
         for p in Usd.PrimRange(prim, Usd.TraverseInstanceProxies(Usd.PrimAllPrimsPredicate)):
             if p.IsA(UsdPhysics.Joint):
                 result.total_joints += 1
                 path = str(p.GetPath())
-                is_mimic = p.HasAPI(PhysxSchema.PhysxMimicJointAPI)
-                has_drive = p.HasAPI(UsdPhysics.DriveAPI, "angular") or p.HasAPI(UsdPhysics.DriveAPI, "linear")
+                is_mimic = prim_utils.has_api(p, PhysxSchema.PhysxMimicJointAPI)
+                has_drive = prim_utils.has_api(p, UsdPhysics.DriveAPI, instance_name="angular") or prim_utils.has_api(
+                    p, UsdPhysics.DriveAPI, instance_name="linear"
+                )
                 if is_mimic:
                     result.mimic_joints += 1
                 if has_drive:
@@ -390,7 +431,16 @@ class GraspController:
 
     # ── Configure ─────────────────────────────────────────────────────
 
-    def configure(self, prim_path: str, side: str, config: GraspConfig) -> bool:
+    def configure(
+        self,
+        prim_path: str,
+        side: str,
+        config: GraspConfig,
+        *,
+        drive_mode: str = "trigger",
+        retargeter_kind: str | None = None,
+        joint_aliases: dict[str, str] | None = None,
+    ) -> bool:
         """Configure grasp control for a side.
 
         Matches YAML joint names in the config to USD drive joints under
@@ -400,12 +450,23 @@ class GraspController:
             prim_path: USD path to the gripper/hand root prim.
             side: "left" or "right".
             config: Grasp configuration (loaded from YAML).
+            drive_mode: ``trigger`` or ``retargeted``.
+            retargeter_kind: Isaac Teleop retargeter id when ``drive_mode`` is ``retargeted``.
+            joint_aliases: Optional TriHand semantic to USD joint mapping.
 
         Returns:
-            The requested value.
+            True when at least one joint was matched and configured.
         """
         if not prim_path:
             print(f"[Teleop][Grasp] Cannot configure {side}: empty path")
+            return False
+        drive_mode = drive_mode.strip().lower()
+        retargeter_kind = retargeter_kind.strip().lower() if retargeter_kind else None
+        if drive_mode not in {"trigger", "retargeted"}:
+            print(f"[Teleop][Grasp] Unsupported drive mode: {drive_mode!r}")
+            return False
+        if drive_mode == "retargeted" and (retargeter_kind != "trihand" or not joint_aliases):
+            print("[Teleop][Grasp] Retargeted drive requires retargeter_kind='trihand' and joint aliases")
             return False
 
         result = self.validate_prim(prim_path)
@@ -413,11 +474,28 @@ class GraspController:
             print(f"[Teleop][Grasp] Validation failed for '{prim_path}': {result.errors}")
             return False
 
+        if drive_mode == "retargeted":
+            from ..retargeting_grasp import validate_trihand_joint_aliases
+
+            controllable_joint_names = {Sdf.Path(path).name for path in result.drive_joint_paths}
+            alias_errors = validate_trihand_joint_aliases(
+                config,
+                joint_aliases,
+                available_joint_names=controllable_joint_names,
+            )
+            if alias_errors:
+                print(f"[Teleop][Grasp] Retargeting validation failed for '{prim_path}': {alias_errors}")
+                return False
+
         state = self._side(side)
         state.prim_path = prim_path
         state.config = config
         state.articulation = None
         state.art_joint_map = {}
+        state.drive_mode = drive_mode
+        state.retargeter_kind = retargeter_kind
+        state.joint_aliases = dict(joint_aliases or {})
+        state.retargeted_targets = {}
 
         state.active_joints = self._match_config_joints(config, result.drive_joint_paths)
 
@@ -426,7 +504,7 @@ class GraspController:
         # managing the same articulation). Any failure here is only reported
         # below if the DriveAPI fallback is also unusable.
         art_bind_error: str | None = None
-        art_root = find_owning_articulation_root(prim_path)
+        art_root = self._find_runtime_articulation_root(prim_path)
         if art_root:
             art_bind_error = self._bind_articulation(state, art_root)
 
@@ -440,8 +518,39 @@ class GraspController:
         self._enabled = True
         matched = len(state.art_joint_map or state.active_joints)
         mode = "articulation" if state.articulation else "DriveAPI"
-        print(f"[Teleop][Grasp] Configured {side}: '{prim_path}' ({matched} joint(s), {mode})")
+        drive_label = state.drive_mode
+        if state.drive_mode == "retargeted" and state.retargeter_kind:
+            drive_label = f"{state.drive_mode}/{state.retargeter_kind}"
+        print(f"[Teleop][Grasp] Configured {side}: '{prim_path}' ({matched} joint(s), {mode}, {drive_label})")
         return True
+
+    @staticmethod
+    def _find_runtime_articulation_root(prim_path: str) -> str | None:
+        """Resolve the PhysX articulation root for standalone or assembled grippers.
+
+        A gripper can retain ArticulationRootAPI on its own root after a fixed
+        joint attaches it to an external floating or robot articulation. PhysX
+        then exposes only the external root through the tensor backend. Prefer
+        that connected root and use the gripper's own root only when standalone.
+        """
+        if stage_utils.is_stage_set() or omni.usd.get_context().get_stage() is not None:
+            stage = stage_utils.get_current_stage()
+            gripper_root = Sdf.Path(prim_path)
+            joints = prim_utils.get_all_matching_child_prims(
+                stage.GetPrimAtPath(gripper_root),
+                predicate=lambda prim, _: prim.IsA(UsdPhysics.Joint),
+                include_self=True,
+            )
+            for joint_prim in joints:
+                joint = UsdPhysics.Joint(joint_prim)
+                body_paths = list(joint.GetBody0Rel().GetTargets()) + list(joint.GetBody1Rel().GetTargets())
+                for body_path in body_paths:
+                    if body_path.HasPrefix(gripper_root):
+                        continue
+                    connected_root = find_owning_articulation_root(str(body_path))
+                    if connected_root:
+                        return connected_root
+        return find_owning_articulation_root(prim_path)
 
     def _bind_articulation(self, state: _GraspState, art_root_path: str) -> str | None:
         """Bind matched joints to an Articulation's DOF indices.
@@ -503,9 +612,9 @@ class GraspController:
         Returns:
             The requested value.
         """
-        stage = omni.usd.get_context().get_stage()
-        if not stage:
+        if not stage_utils.is_stage_set() and omni.usd.get_context().get_stage() is None:
             return {}
+        stage = stage_utils.get_current_stage()
 
         name_to_path: dict[str, str] = {}
         for jp in drive_joint_paths:
@@ -513,12 +622,12 @@ class GraspController:
 
         active: dict[str, tuple[JointMapping, UsdPhysics.DriveAPI]] = {}
         for mapping in config.joints:
-            jp = name_to_path.get(mapping.name)
-            if jp is None:
+            joint_path = name_to_path.get(mapping.name)
+            if joint_path is None:
                 print(f"[Teleop][Grasp] Warning: config joint '{mapping.name}' not found in prim hierarchy")
                 continue
 
-            prim = stage.GetPrimAtPath(jp)
+            prim = stage.GetPrimAtPath(joint_path)
             if not prim or not prim.IsValid():
                 continue
 
@@ -531,9 +640,22 @@ class GraspController:
 
             drive_api = UsdPhysics.DriveAPI.Get(prim, drive_type)
             if drive_api:
-                active[jp] = (mapping, drive_api)
+                self._apply_drive_overrides(mapping, drive_api)
+                active[joint_path] = (mapping, drive_api)
 
         return active
+
+    @staticmethod
+    def _apply_drive_overrides(mapping: JointMapping, drive_api: UsdPhysics.DriveAPI) -> None:
+        """Apply optional grasp-config drive properties to the matched USD drive."""
+        overrides = (
+            (mapping.drive_stiffness, drive_api.GetStiffnessAttr()),
+            (mapping.drive_damping, drive_api.GetDampingAttr()),
+            (mapping.drive_max_force, drive_api.GetMaxForceAttr()),
+        )
+        for value, attribute in overrides:
+            if value is not None and attribute:
+                attribute.Set(value)
 
     # ── Runtime ──────────────────────────────────────────────────────
 
@@ -547,8 +669,25 @@ class GraspController:
         if not self.is_side_tracking_enabled(side):
             return
         state = self._side(side)
+        if state.drive_mode != "trigger":
+            return
         state.input_value = max(0.0, min(1.0, input_value))
         self._apply_input(state)
+
+    def set_joint_targets(self, side: str, joint_targets: dict[str, float]) -> None:
+        """Set explicit per-joint drive targets for retargeted grasping.
+
+        Args:
+            side: ``left`` or ``right``.
+            joint_targets: USD joint name to target angle in degrees.
+        """
+        if not self.is_side_tracking_enabled(side):
+            return
+        state = self._side(side)
+        if state.drive_mode != "retargeted":
+            return
+        state.retargeted_targets = dict(joint_targets)
+        self._apply_retargeted(state)
 
     def _apply_input(self, state: _GraspState) -> None:
         """Apply current input to all matched joints.
@@ -560,10 +699,62 @@ class GraspController:
         Args:
             state: Value for state.
         """
+        if state.drive_mode == "retargeted":
+            self._apply_retargeted(state)
+            return
         if state.articulation and state.art_joint_map:
             self._apply_via_articulation(state)
         else:
             self._apply_via_drive_api(state)
+
+    def _apply_retargeted(self, state: _GraspState) -> None:
+        """Apply explicit per-joint targets produced by a grasp retargeter."""
+        if state.articulation and state.art_joint_map:
+            robot = state.articulation
+            try:
+                indices: list[int] = []
+                articulation_targets: list[float] = []
+                for jp, (mapping, dof_idx) in state.art_joint_map.items():
+                    configured_target = state.retargeted_targets.get(mapping.name)
+                    if configured_target is None:
+                        continue
+                    indices.append(dof_idx)
+                    articulation_targets.append(
+                        self._to_articulation_position(joint_path=jp, configured_target=float(configured_target))
+                    )
+                if indices:
+                    robot.set_dof_position_targets(
+                        np.array([articulation_targets], dtype=np.float32),
+                        dof_indices=indices,
+                    )
+            except (AssertionError, RuntimeError):
+                self._apply_retargeted_via_drive_api(state)
+            return
+        self._apply_retargeted_via_drive_api(state)
+
+    @staticmethod
+    def _to_articulation_position(*, joint_path: str, configured_target: float) -> float:
+        """Convert a USD drive target to tensor articulation units.
+
+        USD angular DriveAPI positions are authored in degrees, while the
+        articulation tensor backend consumes radians. Prismatic targets use
+        the same linear units in both backends.
+        """
+        if stage_utils.is_stage_set() or omni.usd.get_context().get_stage() is not None:
+            prim = stage_utils.get_current_stage().GetPrimAtPath(joint_path)
+            if prim and prim.IsValid() and prim.IsA(UsdPhysics.RevoluteJoint):
+                return float(np.deg2rad(configured_target))
+        return float(configured_target)
+
+    def _apply_retargeted_via_drive_api(self, state: _GraspState) -> None:
+        """Write retargeted joint targets through cached DriveAPI attributes."""
+        for _jp, (mapping, drive_api) in state.active_joints.items():
+            target = state.retargeted_targets.get(mapping.name)
+            if target is None:
+                continue
+            target_attr = drive_api.GetTargetPositionAttr()
+            if target_attr:
+                target_attr.Set(float(target))
 
     def _apply_via_articulation(self, state: _GraspState) -> None:
         """Set drive targets through the Articulation tensor API.
@@ -576,12 +767,15 @@ class GraspController:
             return
         try:
             indices: list[int] = []
-            targets: list[float] = []
-            for _jp, (mapping, dof_idx) in state.art_joint_map.items():
+            articulation_targets: list[float] = []
+            for jp, (mapping, dof_idx) in state.art_joint_map.items():
                 indices.append(dof_idx)
-                targets.append(mapping.compute_target(state.input_value))
+                configured_target = mapping.compute_target(state.input_value)
+                articulation_targets.append(
+                    self._to_articulation_position(joint_path=jp, configured_target=configured_target)
+                )
             robot.set_dof_position_targets(
-                np.array([targets], dtype=np.float32),
+                np.array([articulation_targets], dtype=np.float32),
                 dof_indices=indices,
             )
         except (AssertionError, RuntimeError):
@@ -616,8 +810,12 @@ class GraspController:
         state.art_joint_map.clear()
         state.articulation = None
         state.input_value = 0.0
+        state.drive_mode = "trigger"
+        state.retargeter_kind = None
+        state.joint_aliases = {}
+        state.retargeted_targets = {}
         self._tracking_enabled[side] = False
-        if not any(s.active_joints for s in self._sides.values()):
+        if not any(s.active_joints or s.art_joint_map for s in self._sides.values()):
             self._enabled = False
 
     def remove_all(self) -> None:
@@ -651,7 +849,8 @@ class GraspController:
         state = self._sides.get(side)
         if state is None:
             return False
-        return bool(self._tracking_enabled.get(side, False) and state.active_joints)
+        has_joints = bool(state.active_joints or state.art_joint_map)
+        return bool(self._tracking_enabled.get(side, False) and has_joints and state.config is not None)
 
     @property
     def has_any_side_tracking_enabled(self) -> bool:
@@ -671,7 +870,16 @@ class GraspController:
         Returns:
             The requested value.
         """
-        return self._enabled and any(s.active_joints for s in self._sides.values())
+        return self._enabled and any(s.active_joints or s.art_joint_map for s in self._sides.values())
+
+    def get_side_config(self, side: str) -> GraspConfig | None:
+        """Return the loaded grasp config for one side."""
+        return self._side(side).config
+
+    def get_side_drive_settings(self, side: str) -> tuple[str, str | None, dict[str, str]]:
+        """Return drive mode, retargeter kind, and joint aliases for one side."""
+        state = self._side(side)
+        return state.drive_mode, state.retargeter_kind, dict(state.joint_aliases)
 
     @property
     def left_prim_path(self) -> str | None:

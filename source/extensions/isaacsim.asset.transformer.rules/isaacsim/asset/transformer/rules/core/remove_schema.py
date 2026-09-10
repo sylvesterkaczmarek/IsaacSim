@@ -124,9 +124,10 @@ class RemoveSchemaRule(RuleInterface):
 
         source_stage = self.source_stage
         if input_stage_path:
-            source_stage = self.args.get("input_stage") or Usd.Stage.Open(input_stage_path)
+            resolved_input_stage_path = utils.join_asset_path(self.package_root, input_stage_path)
+            source_stage = self.args.get("input_stage") or Usd.Stage.Open(resolved_input_stage_path)
             if not source_stage:
-                self.log_operation(f"Failed to open input stage: {input_stage_path}")
+                self.log_operation(f"Failed to open input stage: {resolved_input_stage_path}")
                 return None
 
         self.log_operation(
@@ -151,11 +152,20 @@ class RemoveSchemaRule(RuleInterface):
         removed_property_count = 0
 
         for prim_path in matching_prim_paths:
-            prim_spec = utils.ensure_prim_spec_in_layer(output_layer, Sdf.Path(prim_path))
-            if not prim_spec:
-                continue
             source_prim = source_stage.GetPrimAtPath(prim_path)
             if not source_prim or not source_prim.IsValid():
+                continue
+
+            if schema_patterns:
+                applied_schemas = [str(token) for token in source_prim.GetAppliedSchemas()]
+                has_matching_schema = any(
+                    utils.matches_any_pattern(schema, schema_patterns) for schema in applied_schemas
+                )
+                if not has_matching_schema and not (clear_properties and property_patterns):
+                    continue
+
+            prim_spec = utils.ensure_prim_spec_in_layer(output_layer, Sdf.Path(prim_path))
+            if not prim_spec:
                 continue
 
             if schema_patterns:

@@ -13,4 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Re-exports the RTX sensor checker API from isaacsim.sensors.experimental.rtx.sensor_checker."""
+
 from isaacsim.sensors.experimental.rtx.sensor_checker import *
+
+__all__ = []

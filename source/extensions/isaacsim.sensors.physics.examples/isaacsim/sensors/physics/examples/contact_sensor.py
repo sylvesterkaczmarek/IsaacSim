@@ -27,12 +27,51 @@ import omni.physics.core
 import omni.ui as ui
 import omni.usd
 from isaacsim.examples.browser import get_instance as get_browser_instance
-from isaacsim.gui.components.ui_utils import LABEL_WIDTH, get_style, setup_ui_headers
+from isaacsim.gui.components import setup_ui_headers
+from isaacsim.gui.components.ui_utils import LABEL_WIDTH, get_style
 from isaacsim.sensors.experimental.physics import Contact, ContactSensor
 from isaacsim.storage.native import get_assets_root_path
-from pxr import UsdGeom
+from pxr import PhysxSchema, Usd, UsdGeom, UsdPhysics
 
 EXTENSION_NAME = "Contact Sensor Example"
+
+
+def disable_articulation_sleep(robot_path: str = "/Ant") -> None:
+    """Disable PhysX sleep/stabilization under the robot so resting contacts keep reporting.
+
+    Applies ``PhysxArticulationAPI`` and sets sleep and stabilization thresholds to 0.
+    Also zeros ``PhysxRigidBodyAPI`` sleep thresholds on rigid bodies in the tree.
+
+    Args:
+        robot_path: USD path to the ant robot root prim.
+    """
+    stage = omni.usd.get_context().get_stage()
+    if stage is None:
+        return
+    robot_prim = stage.GetPrimAtPath(robot_path)
+    if not robot_prim.IsValid():
+        carb.log_warn(f"disable_articulation_sleep: robot root not found at '{robot_path}'")
+        return
+
+    roots = 0
+    bodies = 0
+    for prim in Usd.PrimRange(robot_prim):
+        if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+            artic_api = PhysxSchema.PhysxArticulationAPI.Apply(prim)
+            artic_api.CreateSleepThresholdAttr().Set(0.0)
+            artic_api.CreateStabilizationThresholdAttr().Set(0.0)
+            roots += 1
+        if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            rb_api = PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
+            rb_api.CreateSleepThresholdAttr().Set(0.0)
+            bodies += 1
+    if roots == 0:
+        carb.log_warn(f"disable_articulation_sleep: no ArticulationRootAPI under '{robot_path}'")
+    else:
+        carb.log_info(
+            f"disable_articulation_sleep: zeroed sleep/stabilization on {roots} articulation root(s), "
+            f"{bodies} rigid body sleep threshold(s) under '{robot_path}'"
+        )
 
 
 class Extension(omni.ext.IExt):
@@ -211,11 +250,12 @@ class Extension(omni.ext.IExt):
             carb.log_error("Could not find Isaac Sim assets folder")
             return
 
-        # Add Contact Sensor
         await omni.usd.get_context().open_stage_async(
             self._assets_root_path + "/Isaac/Robots/IsaacSim/Ant/ant_colored.usd"
         )
         await omni.kit.app.get_app().next_update_async()
+
+        disable_articulation_sleep("/Ant")
 
         self.meters_per_unit = UsdGeom.GetStageMetersPerUnit(omni.usd.get_context().get_stage())
 

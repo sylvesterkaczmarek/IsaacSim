@@ -1,7 +1,7 @@
 [package]
 description = "App for checking system requirements and compatibility"
 title = "Isaac Sim Compatibility Checker App"
-version = "6.0.1"
+version = "6.1.0"
 
 # That makes it browsable in UI with "experience" filter
 keywords = ["app", "isaac-sim", "compatibility"]
@@ -13,39 +13,42 @@ keywords = ["app", "isaac-sim", "compatibility"]
 "omni.ui" = {}
 
 [settings]
-app.name = "Isaac-Sim_Compatibility_Checker"
-app.version = "6.0.1"
-app.window.title = "Isaac Sim Compatibility Checker App"
+rtx.spg.enabled = true # Enable RTX Sensor Processing Graphs feature
 
-app.extensions.enabledCore = []
-app.settings.persistent = true
-app.settings.standalone_mode = true
+[settings.app]
+name = "Isaac-Sim_Compatibility_Checker"
+version = "6.1.0"
+window.title = "Isaac Sim Compatibility Checker App"
+
+extensions.enabledCore = []
+settings.persistent = true
+settings.standalone_mode = true
 
 # controled update rate
-app.runLoops.main.rateLimitEnabled = true
-app.runLoops.main.rateLimitFrequency = 60
-app.runLoops.main.rateLimitUseBusyLoop = false
+runLoops.main.rateLimitEnabled = true
+runLoops.main.rateLimitFrequency = 60
+runLoops.main.rateLimitUseBusyLoop = false
 
 # window size
-app.window.width = 500
-app.window.height = 545
-app.window.noResize = true
+window.width = 500
+window.height = 545
+window.noResize = true
 
 # window center position
-app.window.x = -1
-app.window.y = -1
+window.x = -1
+window.y = -1
 
 # icon
-app.window._iconSize = 256
-app.window.iconPath = "${isaacsim.app.compatibility_check}/data/app/isaacsim.png"
+window._iconSize = 256
+window.iconPath = "${isaacsim.app.compatibility_check}/data/app/isaacsim.png"
 
 # window properties
-app.window.alwaysOnTop = false
-app.window.fullscreen = false
-app.window.noDecorations = false
-app.window.scaleToMonitor = true
+window.alwaysOnTop = false
+window.fullscreen = false
+window.noDecorations = false
+window.scaleToMonitor = true
 
-app.fastShutdown = true
+fastShutdown = true
 
 [settings.app.exts]
 folders = [
@@ -53,9 +56,4 @@ folders = [
     "${app}/../extscache",
     "${app}/../extsUser",
     "${app}/../extsDeprecated",
-]
-
-[settings.exts."omni.kit.registry.nucleus".registries]
-++ = [
-    { name = "isaacsim/prod/6.0", url = "https://ovextensionsprod.blob.core.windows.net/exts/isaacsim/prod/6.0/shared" },
 ]

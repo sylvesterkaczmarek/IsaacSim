@@ -35,12 +35,25 @@ except ImportError:
 
 
 def _package(name: str) -> types.ModuleType:
+    """Create a stub package module for import patching.
+
+    Args:
+        name: Module name to assign to the stub package.
+
+    Returns:
+        The stub package module with an empty package path.
+    """
     package = types.ModuleType(name)
     package.__path__ = []
     return package
 
 
 def _load_articulation_trajectory_module() -> types.ModuleType:
+    """Load articulation_trajectory with mocked Isaac runtime dependencies.
+
+    Returns:
+        The loaded articulation_trajectory module for tests.
+    """
     package_name = "_articulation_trajectory_test_package"
     module_name = f"{package_name}.articulation_trajectory"
 
@@ -87,6 +100,7 @@ class TestArticulationTrajectory(_TEST_CASE_BASE):
     """Test articulation trajectory behavior without requiring Isaac runtime modules."""
 
     async def _setup_case(self) -> None:
+        """Creates a mocked ArticulationTrajectory test case with trajectory bounds and active joints view."""
         self.module = _load_articulation_trajectory_module()
         self.articulation_trajectory = object.__new__(self.module.ArticulationTrajectory)
 

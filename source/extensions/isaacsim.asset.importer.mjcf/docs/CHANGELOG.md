@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.12.1] - 2026-08-20
+### Changed
+- Pin `usd-exchange` to version 2.3.0 for reproducible standalone installs.
+
+## [3.12.0] - 2026-08-05
+### Changed
+- Updated mujoco to 3.11.0 and newton-usd-schemas to 0.4.1
+- Updated mujoco-usd-converter to 0.5.0
+
+## [3.11.2] - 2026-07-29
+### Removed
+- Remove duplicated UI font and icon assets from the core importer package.
+
+## [3.11.1] - 2026-07-13
+### Fixed
+- Explicitly set physics variant in unit test
+
+## [3.11.0] - 2026-07-10
+### Changed
+- Updated mujoco to 3.10.0, newton-usd-schemas to 0.4.0, and mujoco-usd-converter to 0.4.0rc1
+
+## [3.10.2] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [3.10.1] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

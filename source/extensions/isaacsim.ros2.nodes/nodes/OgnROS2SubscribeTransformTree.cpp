@@ -14,12 +14,12 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 
-#include <isaacsim/ros2/core/Ros2Node.h>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
 #include <omni/fabric/FabricUSD.h>
 #include <physxSchema/physxArticulationAPI.h>
 #include <pxr/usd/usdPhysics/articulationRootAPI.h>

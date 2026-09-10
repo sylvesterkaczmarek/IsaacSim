@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="test_roundtrip_drive">
+  <link name="base"/>
+  <link name="tip"/>
+  <joint name="drive_joint" type="revolute">
+    <parent link="base"/>
+    <child link="tip"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1" upper="1" velocity="2"/>
+    <dynamics damping="0" friction="0"/>
+    <!-- isaac:source_drive {"armature": 0.25,
+         "drive": {"damping": 6.75, "max_force": 89.0,
+                   "stiffness": 1234.5, "target_position": 0.125},
+         "instance": "angular", "source": "physx"} -->
+  </joint>
+</robot>

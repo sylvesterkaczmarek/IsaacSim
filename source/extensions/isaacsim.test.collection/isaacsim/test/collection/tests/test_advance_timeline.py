@@ -23,6 +23,7 @@ import omni.replicator.core as rep
 import omni.syntheticdata._syntheticdata as sd
 import omni.timeline
 from isaacsim.core.experimental.utils.prim import get_prim_at_path
+from isaacsim.core.rendering_manager import RenderingManager
 from pxr import PhysxSchema, UsdPhysics
 
 
@@ -76,9 +77,11 @@ class TestAdvanceTimelineAndPhysics(omni.kit.test.AsyncTestCase):
 
     async def tearDown(self) -> None:
         """Clean up test environment and restore original FPS."""
-        omni.timeline.get_timeline_interface().set_time_codes_per_second(self._initial_stage_fps)
+        timeline = omni.timeline.get_timeline_interface()
+        timeline.set_time_codes_per_second(self._initial_stage_fps)
+        timeline.commit()
         await omni.kit.app.get_app().next_update_async()
-        print(f"[tearDown] Restored stage FPS: {omni.timeline.get_timeline_interface().get_time_codes_per_second()}")
+        print(f"[tearDown] Restored stage FPS: {timeline.get_time_codes_per_second()}")
         omni.usd.get_context().close_stage()
         await omni.kit.app.get_app().next_update_async()
         # In some cases the test will end before the asset is loaded, in this case wait for assets to load
@@ -115,14 +118,18 @@ class TestAdvanceTimelineAndPhysics(omni.kit.test.AsyncTestCase):
                 physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
                 physx_scene = PhysxSchema.PhysxSceneAPI.Apply(physics_scene.GetPrim())
             physx_scene.GetTimeStepsPerSecondAttr().Set(physx_fps)
+            self.assertEqual(physx_scene.GetTimeStepsPerSecondAttr().Get(), physx_fps)
             print(
                 f"  Physics FPS: physx_scene.GetTimeStepsPerSecondAttr(): {physx_scene.GetTimeStepsPerSecondAttr().Get()}"
             )
 
         # Set a custom stage FPS if provided
         timeline = omni.timeline.get_timeline_interface()
-        if stage_fps:
+        if stage_fps is not None:
             timeline.set_time_codes_per_second(stage_fps)
+            timeline.commit()
+            self.assertEqual(timeline.get_time_codes_per_second(), stage_fps)
+            self.assertEqual(omni.usd.get_context().get_stage().GetTimeCodesPerSecond(), stage_fps)
             print(f"  Stage FPS: timeline.get_time_codes_per_second(): {timeline.get_time_codes_per_second()}")
 
         # Play the timeline
@@ -142,21 +149,39 @@ class TestAdvanceTimelineAndPhysics(omni.kit.test.AsyncTestCase):
             prev_time = timeline.get_current_time()
         return delta_times
 
+    def assert_timeline_delta_times_match_app_dt(
+        self,
+        delta_times: list[float],
+        *,
+        expected_app_dt: float,
+        stage_fps: float | None,
+        physx_fps: float | None,
+    ) -> None:
+        """Check that stable timeline deltas match the configured application timestep."""
+        delta_times_without_first = np.array(delta_times[1:])
+        print_unique_values_and_counts(delta_times_without_first)
+        print(f"  Expected application dt: {expected_app_dt:.6f}")
+        self.assertGreater(expected_app_dt, 0.0, "The configured application dt must be positive")
+        all_match_app_dt = np.all(np.abs(delta_times_without_first - expected_app_dt) < 1e-6)
+        self.assertTrue(
+            all_match_app_dt,
+            f"All timeline delta times should equal the configured application dt ({expected_app_dt}), "
+            f"stage_fps={stage_fps}, physx_fps={physx_fps}",
+        )
+
     async def test_timeline_delta_times_with_default_fps(self) -> None:
         """Test that delta times are consistent with default FPS settings."""
         num_frames = 11
         stage_fps = None
         physx_fps = None
         print(f"*** Running tests with:\n  num_frames={num_frames}\n  stage_fps={stage_fps}\n  physx_fps={physx_fps}")
+        expected_app_dt = RenderingManager.get_dt()
         delta_times = await self.run_timeline_and_get_delta_times(
             num_frames, stage_fps=stage_fps, physx_fps=physx_fps, verbose=True
         )
-
-        # Check if all delta times are equal, skipping the first value as it is always different from the others
-        delta_times_without_first = np.array(delta_times[1:])
-        print_unique_values_and_counts(delta_times_without_first)
-        all_equal = np.all(np.abs(delta_times_without_first - delta_times_without_first[0]) < 1e-6)
-        self.assertTrue(all_equal, f"All delta times should be equal, stage_fps={stage_fps}, physx_fps={physx_fps}")
+        self.assert_timeline_delta_times_match_app_dt(
+            delta_times, expected_app_dt=expected_app_dt, stage_fps=stage_fps, physx_fps=physx_fps
+        )
 
     async def test_timeline_delta_times_with_matching_fps(self) -> None:
         """Test that delta times are consistent when stage and physics FPS match."""
@@ -164,15 +189,13 @@ class TestAdvanceTimelineAndPhysics(omni.kit.test.AsyncTestCase):
         stage_fps = 100
         physx_fps = 100
         print(f"*** Running tests with:\n  num_frames={num_frames}\n  stage_fps={stage_fps}\n  physx_fps={physx_fps}")
+        expected_app_dt = RenderingManager.get_dt()
         delta_times = await self.run_timeline_and_get_delta_times(
             num_frames, stage_fps=stage_fps, physx_fps=physx_fps, verbose=True
         )
-
-        # Check if all delta times are equal, skipping the first value as it is always different from the others
-        delta_times_without_first = np.array(delta_times[1:])
-        print_unique_values_and_counts(delta_times_without_first)
-        all_equal = np.all(np.abs(delta_times_without_first - delta_times_without_first[0]) < 1e-6)
-        self.assertTrue(all_equal, f"All delta times should be equal, stage_fps={stage_fps}, physx_fps={physx_fps}")
+        self.assert_timeline_delta_times_match_app_dt(
+            delta_times, expected_app_dt=expected_app_dt, stage_fps=stage_fps, physx_fps=physx_fps
+        )
 
     async def test_timeline_delta_times_with_stage_fps_higher_than_physics(self) -> None:
         """Test delta times when stage FPS exceeds physics FPS."""
@@ -180,15 +203,13 @@ class TestAdvanceTimelineAndPhysics(omni.kit.test.AsyncTestCase):
         stage_fps = 100
         physx_fps = 75
         print(f"*** Running tests with:\n  num_frames={num_frames}\n  stage_fps={stage_fps}\n  physx_fps={physx_fps}")
+        expected_app_dt = RenderingManager.get_dt()
         delta_times = await self.run_timeline_and_get_delta_times(
             num_frames, stage_fps=stage_fps, physx_fps=physx_fps, verbose=True
         )
-
-        # Check if all delta times are equal, skipping the first value as it is always different from the others
-        delta_times_without_first = np.array(delta_times[1:])
-        print_unique_values_and_counts(delta_times_without_first)
-        all_equal = np.all(np.abs(delta_times_without_first - delta_times_without_first[0]) < 1e-6)
-        self.assertTrue(all_equal, f"All delta times should be equal, stage_fps={stage_fps}, physx_fps={physx_fps}")
+        self.assert_timeline_delta_times_match_app_dt(
+            delta_times, expected_app_dt=expected_app_dt, stage_fps=stage_fps, physx_fps=physx_fps
+        )
 
     async def test_timeline_delta_times_with_stage_fps_lower_than_physics(self) -> None:
         """Test delta times when physics FPS exceeds stage FPS."""
@@ -196,15 +217,13 @@ class TestAdvanceTimelineAndPhysics(omni.kit.test.AsyncTestCase):
         stage_fps = 75
         physx_fps = 100
         print(f"*** Running tests with:\n  num_frames={num_frames}\n  stage_fps={stage_fps}\n  physx_fps={physx_fps}")
+        expected_app_dt = RenderingManager.get_dt()
         delta_times = await self.run_timeline_and_get_delta_times(
             num_frames, stage_fps=stage_fps, physx_fps=physx_fps, verbose=True
         )
-
-        # Check if all delta times are equal, skipping the first value as it is always different from the others
-        delta_times_without_first = np.array(delta_times[1:])
-        print_unique_values_and_counts(delta_times_without_first)
-        all_equal = np.all(np.abs(delta_times_without_first - delta_times_without_first[0]) < 1e-6)
-        self.assertTrue(all_equal, f"All delta times should be equal, stage_fps={stage_fps}, physx_fps={physx_fps}")
+        self.assert_timeline_delta_times_match_app_dt(
+            delta_times, expected_app_dt=expected_app_dt, stage_fps=stage_fps, physx_fps=physx_fps
+        )
 
     async def step_simulation(self, step_method: str = "timeline_forward") -> None:
         """Step the simulation using the specified method.

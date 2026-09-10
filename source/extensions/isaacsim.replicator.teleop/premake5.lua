@@ -13,16 +13,19 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-if platform_target == "linux-x86_64" then
-    local ext = get_current_extension_info()
-    project_ext(ext)
+local ext = get_current_extension_info()
+project_ext(ext)
 
+repo_build.prebuild_link {
+    { "data", ext.target_dir .. "/data" },
+    { "docs", ext.target_dir .. "/docs" },
+    { "isaacsim", ext.target_dir .. "/isaacsim" },
+}
+
+-- Isaac Teleop only publishes Linux wheels. Other platforms still support the
+-- extension's debug input mode without the optional pip prebundle.
+if platform_target == "linux-x86_64" then
     repo_build.prebuild_link {
-        { "data", ext.target_dir .. "/data" },
-        { "docs", ext.target_dir .. "/docs" },
-        { "isaacsim", ext.target_dir .. "/isaacsim" },
         { "$root/_build/target-deps/pip_teleop_prebundle", ext.target_dir .. "/pip_prebundle" },
     }
-else
-    print("SKIPPING isaacsim.replicator.teleop - only supported on linux-x86_64")
 end

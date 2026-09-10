@@ -1,0 +1,113 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 26,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../../_cmake_build/isaacsim-libraries-${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "standard",
+      "inherits": "base",
+      "displayName": "C and C++ libraries, Python modules and bindings, and tests",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "ISAACSIM_ENABLE_PYTHON": "ON",
+        "ISAACSIM_ENABLE_PYTHON_BINDINGS": "ON"
+      }
+    },
+    {
+      "name": "cpp-tests",
+      "inherits": "base",
+      "displayName": "C and C++ libraries and native tests",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "ISAACSIM_ENABLE_PYTHON": "OFF",
+        "ISAACSIM_ENABLE_PYTHON_BINDINGS": "OFF"
+      }
+    },
+    {
+      "name": "python-modules",
+      "inherits": "base",
+      "displayName": "C and C++ libraries, pure Python modules, and tests",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "ISAACSIM_ENABLE_PYTHON": "ON",
+        "ISAACSIM_ENABLE_PYTHON_BINDINGS": "OFF"
+      }
+    },
+    {
+      "name": "cpp-library",
+      "inherits": "base",
+      "displayName": "C and C++ libraries without tests",
+      "cacheVariables": {
+        "BUILD_TESTING": "OFF",
+        "ISAACSIM_ENABLE_PYTHON": "OFF",
+        "ISAACSIM_ENABLE_PYTHON_BINDINGS": "OFF"
+      }
+    },
+    {
+      "name": "werror",
+      "inherits": "standard",
+      "displayName": "Strict compiler warnings",
+      "cacheVariables": {
+        "ISAACSIM_WARNINGS_AS_ERRORS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "standard", "configurePreset": "standard" },
+    { "name": "cpp-tests", "configurePreset": "cpp-tests" },
+    { "name": "python-modules", "configurePreset": "python-modules" },
+    { "name": "cpp-library", "configurePreset": "cpp-library" },
+    { "name": "werror", "configurePreset": "werror" }
+  ],
+  "testPresets": [
+    { "name": "standard", "configurePreset": "standard", "output": { "outputOnFailure": true } },
+    { "name": "cpp-tests", "configurePreset": "cpp-tests", "output": { "outputOnFailure": true } },
+    { "name": "python-modules", "configurePreset": "python-modules", "output": { "outputOnFailure": true } },
+    { "name": "werror", "configurePreset": "werror", "output": { "outputOnFailure": true } }
+  ],
+  "workflowPresets": [
+    {
+      "name": "standard",
+      "steps": [
+        { "type": "configure", "name": "standard" },
+        { "type": "build", "name": "standard" },
+        { "type": "test", "name": "standard" }
+      ]
+    },
+    {
+      "name": "cpp-tests",
+      "steps": [
+        { "type": "configure", "name": "cpp-tests" },
+        { "type": "build", "name": "cpp-tests" },
+        { "type": "test", "name": "cpp-tests" }
+      ]
+    },
+    {
+      "name": "python-modules",
+      "steps": [
+        { "type": "configure", "name": "python-modules" },
+        { "type": "build", "name": "python-modules" },
+        { "type": "test", "name": "python-modules" }
+      ]
+    },
+    {
+      "name": "cpp-library",
+      "steps": [
+        { "type": "configure", "name": "cpp-library" },
+        { "type": "build", "name": "cpp-library" }
+      ]
+    }
+  ]
+}

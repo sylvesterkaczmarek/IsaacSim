@@ -157,7 +157,12 @@ from isaacsim.benchmark.services.metrics import measurements
 
 
 class FPSWriter(Writer):
-    """Lightweight writer that tracks replicator step speed (FPS)."""
+    """Lightweight writer that tracks replicator step speed (FPS).
+
+    Args:
+        annotators: Replicator annotator names to request for each frame. When ``None`` or empty, request only
+            RGB data.
+    """
 
     def __init__(self, annotators: list[str] | None = None) -> None:
         self._last_frame_time = None
@@ -165,7 +170,11 @@ class FPSWriter(Writer):
         self.annotators = annotators if annotators else ["rgb"]
 
     def write(self, data: dict[str, Any]) -> None:
-        """Record the time between consecutive replicator steps."""
+        """Record the time between consecutive replicator steps.
+
+        Args:
+            data: Annotator outputs for the current frame. The contents are ignored.
+        """
         if self._last_frame_time is None:
             self._last_frame_time = time.time()
             return
@@ -184,6 +193,9 @@ class ReplicatorFPSRecorder(MeasurementDataRecorder):
 
     This recorder acts as a bridge between the Replicator FPSWriter and
     the benchmark metrics system.
+
+    Args:
+        context: Benchmark context to associate with the recorder, if available.
     """
 
     def __init__(self, context: Any = None) -> None:
@@ -191,7 +203,11 @@ class ReplicatorFPSRecorder(MeasurementDataRecorder):
         self._fps_writer = None
 
     def set_fps_writer(self, fps_writer: FPSWriter) -> None:
-        """Attach an FPSWriter instance to read data from."""
+        """Attach an FPSWriter instance to read data from.
+
+        Args:
+            fps_writer: Writer containing the frame-duration samples to summarize.
+        """
         self._fps_writer = fps_writer
 
     def start_collecting(self) -> None:
@@ -201,7 +217,12 @@ class ReplicatorFPSRecorder(MeasurementDataRecorder):
         """Stop collecting FPS measurements."""
 
     def get_data(self) -> MeasurementData:
-        """Get Replicator FPS measurements from the attached FPSWriter."""
+        """Get Replicator FPS measurements from the attached FPSWriter.
+
+        Returns:
+            Mean FPS, aggregate image rate, mean/minimum/maximum frame times, and total frame count, or an empty
+            collection when no samples exist.
+        """
         if not self._fps_writer or not self._fps_writer._times_per_frame:
             return MeasurementData()
 

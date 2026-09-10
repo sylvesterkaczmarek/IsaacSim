@@ -74,7 +74,9 @@ class TestExtensionDocstrings(isaacsim.test.docstring.AsyncDocTestCase):
             stage_utils.define_prim(f"/World/prim_{i}", "Xform")
             stage_utils.define_prim(f"/World/prim_{i}/Cube", "Cube")
         # test case
-        await self.assertDocTests(RigidPrim)
+        # Removing the rigid-body APIs invalidates the tensor view used by the
+        # remaining examples, so keep that destructive example last.
+        await self.assertDocTests(RigidPrim, order=[(RigidPrim.remove_physics_apis, -1)])
 
     @common.requires_engines(supported_engines=["physx"])
     async def test_articulation_docstrings(self) -> None:
@@ -84,9 +86,9 @@ class TestExtensionDocstrings(isaacsim.test.docstring.AsyncDocTestCase):
         # define prims
         for i in range(3):
             stage_utils.add_reference_to_stage(
-                f"{assets_root_path}/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+                f"{assets_root_path}/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
                 path=f"/World/prim_{i}",
-                variants=[("Gripper", "AlternateFinger"), ("Mesh", "Performance")],
+                variants=[("Gripper", "alternatefinger"), ("Mesh", "performance")],
             )
         # test case
         await self.assertDocTests(Articulation, stop_on_failure=False)

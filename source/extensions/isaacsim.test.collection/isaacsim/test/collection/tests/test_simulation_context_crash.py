@@ -52,7 +52,7 @@ class TestSimulationContextCrash(omni.kit.test.AsyncTestCase):
     async def test_simulation_context_crash(self) -> None:
         """Test that stopping timeline after articulation creation does not crash."""
         usd_path = await get_assets_root_path_async()
-        usd_path += "/Isaac/Robots/Denso/CobottaPro900/cobotta_pro_900.usd"
+        usd_path += "/Isaac/Robots_Multiphysics/Denso/CobottaPro900/cobotta_pro_900/cobotta_pro_900.usda"
         robot_prim_path = "/cobotta_pro_900"
 
         stage_utils.add_reference_to_stage(usd_path, robot_prim_path)

@@ -15,6 +15,7 @@
 
 """Tests for the exposed variables property widget UI."""
 
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.app
 import omni.kit.commands
 import omni.kit.test
@@ -23,8 +24,8 @@ import omni.usd
 from isaacsim.replicator.behavior.global_variables import EXPOSED_ATTR_NS
 from isaacsim.replicator.behavior.ui.exposed_variables_widget import ExposedVariablesPropertyWidget
 from isaacsim.replicator.behavior.ui.global_variables import WIDGET_NAME
+from isaacsim.replicator.behavior.utils.behavior_utils import add_behavior_script
 from omni.kit.window.property.property_widget import PropertyWidget
-from pxr import Sdf
 
 BEHAVIOR_SCRIPTS_EXTENSION_NAME = "isaacsim.replicator.behavior"
 BEHAVIOR_SCRIPT_PATH = "/isaacsim/replicator/behavior/behaviors/example_behavior.py"
@@ -65,16 +66,10 @@ class TestExposedVariablesWidgetUI(omni.kit.test.AsyncTestCase):
     async def test_widget_built(self) -> None:
         """Verify the widget is built for prims with behavior scripts and not for those without."""
         await omni.usd.get_context().new_stage_async()
-        stage = omni.usd.get_context().get_stage()
         prim_path = "/World/MyPrim"
-        prim = stage.DefinePrim(prim_path, "Xform")
+        prim = stage_utils.define_prim(prim_path, "Xform")
         prim_path_no_behaviors = "/World/MyPrimNoBehaviors"
-        prim_no_behaviors = stage.DefinePrim(prim_path_no_behaviors, "Xform")
-
-        # Add scripting API to the prim
-        omni.kit.commands.execute("ApplyScriptingAPICommand", paths=[prim_path])
-        scripts_attr = prim.GetAttribute("omni:scripting:scripts")
-        self.assertTrue(scripts_attr, f"No 'omni:scripting:scripts' attribute found on prim: {prim_path}")
+        stage_utils.define_prim(prim_path_no_behaviors, "Xform")
 
         # Add example behavior script to the prim
         extension_manager = omni.kit.app.get_app().get_extension_manager()
@@ -82,12 +77,7 @@ class TestExposedVariablesWidgetUI(omni.kit.test.AsyncTestCase):
         extension_path = extension_manager.get_extension_path(extension_id)
         script_path = f"{extension_path}{BEHAVIOR_SCRIPT_PATH}"
 
-        # Add the behavior script to the prim
-        current_scripts = scripts_attr.Get()
-        if current_scripts is None:
-            current_scripts = []
-        current_scripts.append(Sdf.AssetPath(script_path))
-        scripts_attr.Set(current_scripts)
+        add_behavior_script(prim, script_path)
 
         # NOTE, at least 3 updates are needed to ensure the script is loaded and the exposed vars are set
         for _ in range(3):

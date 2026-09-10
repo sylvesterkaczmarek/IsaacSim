@@ -102,6 +102,7 @@ class RobotDefinitionReader:
         self.node_name = None
         self.node = None
         self.future = None
+        self._request_generation = 0
         self.description_received_fn: typing.Callable[[str, bool], None] | None = None
         self.status_fn: typing.Callable[[str, int], None] | None = None
         self.urdf_doc = ""
@@ -124,59 +125,78 @@ class RobotDefinitionReader:
         if self.description_received_fn:
             self.description_received_fn(self.urdf_abs, self.package_found)
 
-    def service_call(self, node: typing.Any) -> None:
+    def service_call(self, node: typing.Any, node_name: str, request_generation: int) -> None:
         """Query the robot description parameter from a node.
 
         Args:
             node: ROS 2 node to query.
+            node_name: ROS 2 node name to query.
+            request_generation: Request generation this worker belongs to.
 
         Example:
 
         .. code-block:: python
 
             >>> reader = RobotDefinitionReader()  # doctest: +SKIP
-            >>> reader.service_call(None)  # doctest: +SKIP
+            >>> reader.service_call(None, "robot_state_publisher", 1)  # doctest: +SKIP
         """
         import rclpy
         from rcl_interfaces.srv import GetParameters
 
         try:
-            client = node.create_client(GetParameters, f"/{self.node_name}/get_parameters")
-            if client.wait_for_service(timeout_sec=1.0):
-                request = GetParameters.Request()
-                request.names = ["robot_description"]
-                self.future = client.call_async(request)
-
-                while rclpy.ok():
-                    if self.future.cancelled():
-                        break
-                    rclpy.spin_once(node)
-                    if self.future.done():
-                        break
-
-                if self.future.done():
-                    try:
-                        response = self.future.result()
-                        if response.values:
-                            for param in response.values:
-                                self.urdf_doc = param.string_value
-                                self.urdf_abs, self.package_found = replace_package_urls_with_paths(self.urdf_doc)
-                                self.on_description_received(self.urdf_abs)
-                    except Exception as e:
-                        carb.log_error(f"Service call failed {e!r}")
-                        if self.status_fn:
-                            self.status_fn("ROS node error", 0xFF0000FF)
+            client = node.create_client(GetParameters, f"/{node_name}/get_parameters")
+            while rclpy.ok() and request_generation == self._request_generation:
+                if client.wait_for_service(timeout_sec=0.1):
+                    break
             else:
-                carb.log_error(f"node '{self.node_name}' not found. is the spelling correct?")
-                if self.status_fn:
-                    self.status_fn(f"ROS node '{self.node_name}' not found", 0xFF0000FF)
+                return
+
+            request = GetParameters.Request()
+            request.names = ["robot_description"]
+            future = client.call_async(request)
+            self.future = future
+
+            while rclpy.ok() and request_generation == self._request_generation:
+                if future.cancelled():
+                    break
+                rclpy.spin_once(node, timeout_sec=0.1)
+                if future.done():
+                    break
+
+            if future.done() and request_generation == self._request_generation:
+                try:
+                    response = future.result()
+                    if response.values:
+                        for param in response.values:
+                            self.urdf_doc = param.string_value
+                            self.urdf_abs, self.package_found = replace_package_urls_with_paths(self.urdf_doc)
+                            self.on_description_received(self.urdf_abs)
+                except Exception as e:
+                    carb.log_error(f"Service call failed {e!r}")
+                    if self.status_fn:
+                        self.status_fn("ROS node error", 0xFF0000FF)
         except rclpy._rclpy_pybind11.RCLError:
-            carb.log_warn(f"ROS 2 context shut down while querying node '{self.node_name}'")
+            carb.log_warn(f"ROS 2 context shut down while querying node '{node_name}'")
 
         try:
             node.destroy_node()
         except rclpy._rclpy_pybind11.RCLError:
             pass
+        if request_generation == self._request_generation:
+            rclpy.try_shutdown()
+
+    def _cancel_request(self) -> None:
+        self._request_generation += 1
+        if self.future:
+            self.future.cancel()
+            self.future = None
+
+    def cancel(self) -> None:
+        """Cancel any active robot description request."""
+        import rclpy
+
+        self._cancel_request()
+        self.node_name = None
         rclpy.try_shutdown()
 
     def start_get_robot_description(self, node_name: str) -> None:
@@ -187,16 +207,18 @@ class RobotDefinitionReader:
         """
         import rclpy
 
-        if self.future:
-            self.future.cancel()
+        self._cancel_request()
+        if not node_name:
+            self.node_name = None
+            return
 
-        if node_name:
-            self.node_name = node_name
-            try:
-                rclpy.init()
-            except RuntimeError:
-                pass
-            node = rclpy.create_node("service_client")
+        request_generation = self._request_generation
+        self.node_name = node_name
+        try:
+            rclpy.init()
+        except RuntimeError:
+            pass
+        node = rclpy.create_node("service_client")
 
-            thread = threading.Thread(target=self.service_call, args=(node,))
-            thread.start()
+        thread = threading.Thread(target=self.service_call, args=(node, node_name, request_generation), daemon=True)
+        thread.start()

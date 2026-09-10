@@ -16,8 +16,8 @@
 #include <carb/Types.h>
 
 #include <flatbuffers/flatbuffers.h>
-#include <isaacsim/core/includes/Math.h>
-#include <isaacsim/ucx/nodes/UcxPublishOdometryNodeBase.h>
+#include <isaacsim/core/includes/Math.hpp>
+#include <isaacsim/ucx/nodes/UcxPublishOdometryNodeBase.hpp>
 
 #include <OgnUCXPublishOdometryDatabase.h>
 #include <odometry_generated.h>

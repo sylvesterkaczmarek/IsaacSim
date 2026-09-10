@@ -70,7 +70,9 @@ class UR10TrajectoryGeneratorExample:
         stage_utils.set_stage_units(meters_per_unit=1.0)
 
         assets_root = await get_assets_root_path_async()
-        add_reference_to_stage(assets_root + "/Isaac/Robots/UniversalRobots/ur10/ur10.usd", _ROBOT_PRIM_PATH)
+        add_reference_to_stage(
+            assets_root + "/Isaac/Robots_Multiphysics/UniversalRobots/ur10/ur10.usda", _ROBOT_PRIM_PATH
+        )
         self._articulation = Articulation(_ROBOT_PRIM_PATH)
 
         ViewportManager.set_camera_view(camera="/OmniverseKit_Persp", eye=[2, 1.5, 2], target=[0, 0, 0])

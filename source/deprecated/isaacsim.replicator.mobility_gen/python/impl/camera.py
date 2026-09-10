@@ -25,21 +25,21 @@ from .utils.prim_utils import prim_get_world_transform
 class MobilityGenCamera(Module):
     """A camera interface for the mobility generation system that provides various rendering outputs.
 
-    This class wraps a USD camera prim to enable different types of rendering including RGB images, semantic
+    This class wraps a USD camera prim to enable different types of rendering, including RGB images, semantic
     segmentation, instance segmentation, depth maps, and surface normals. It manages render products and annotators
     through omni.replicator.core to capture data from the camera's perspective.
 
     The camera provides access to rendered data through buffer objects that can be accessed after calling
     ``update_state()``. Each rendering type can be enabled independently using the corresponding enable methods.
 
-    Buffers available after enabling respective rendering modes:
+    Buffers available after enabling the respective rendering modes:
 
     - ``rgb_image``: RGB color data when RGB rendering is enabled
     - ``segmentation_image``: Semantic segmentation mask when segmentation rendering is enabled
     - ``segmentation_info``: Metadata for semantic segmentation labels
     - ``instance_id_segmentation_image``: Instance segmentation mask when instance ID rendering is enabled
     - ``instance_id_segmentation_info``: Metadata for instance segmentation labels
-    - ``depth_image``: Depth values from camera when depth rendering is enabled
+    - ``depth_image``: Depth values from the camera when depth rendering is enabled
     - ``normals_image``: Surface normals when normals rendering is enabled
     - ``position``: World position of the camera
     - ``orientation``: World orientation quaternion of the camera

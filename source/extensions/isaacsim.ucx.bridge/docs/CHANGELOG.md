@@ -1,4 +1,8 @@
 # Changelog
+## [1.2.3] - 2026-06-26
+### Changed
+- Replace package-root star imports with explicit lifecycle imports.
+
 ## [1.2.2] - 2026-05-14
 ### Changed
 - Add return type annotations to extension lifecycle methods and update docstring style to satisfy ruff lint rules.

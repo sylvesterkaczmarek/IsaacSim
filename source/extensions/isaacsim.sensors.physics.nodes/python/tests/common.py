@@ -15,6 +15,8 @@
 
 """Provides shared fixtures, tolerances, and scene helpers for physics sensor OmniGraph node tests. Covers timeline reset helpers, gravity constants, and reusable ant and cube scene configuration."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -23,8 +25,10 @@ import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
 import omni.kit.app
 import omni.timeline
+import omni.usd
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.storage.native import get_assets_root_path_async
+from pxr import PhysxSchema, Usd, UsdPhysics
 
 EARTH_GRAVITY = 9.81
 MOON_GRAVITY = 1.62
@@ -89,7 +93,63 @@ class AntConfig:
     def __post_init__(self) -> None:
         """Derive lower-arm joint paths from the configured Ant lower-arm link paths."""
         if not self.lower_joints:
-            self.lower_joints = [f"{path}/lower_arm_joint" for path in self.leg_paths]
+            self.lower_joints = [f"{path}/elbow_joint" for path in self.leg_paths]
+
+
+def author_ant_standing_drives(config: AntConfig, stage: Usd.Stage) -> None:
+    """Author drives that bend the Ant legs into their standing pose.
+
+    The legacy Ant is centimeter-scaled, so retain its stiffness of 100 while
+    using the 10:1 stiffness-to-damping ratio from the experimental sensor
+    tests. Its authored damping of 100 prevents it from reaching the standing
+    targets before falling.
+
+    Args:
+        config: Ant prim paths used by the test scene.
+        stage: Stage containing the Ant articulation.
+    """
+    for shoulder_path in config.shoulder_joints:
+        shoulder = stage.GetPrimAtPath(shoulder_path)
+        rot_x_drive = UsdPhysics.DriveAPI.Apply(shoulder, "rotX")
+        rot_x_drive.CreateTargetPositionAttr().Set(30.0)
+        rot_x_drive.CreateStiffnessAttr().Set(100.0)
+        rot_x_drive.CreateDampingAttr().Set(10.0)
+
+        rot_z_drive = UsdPhysics.DriveAPI.Apply(shoulder, "rotZ")
+        rot_z_drive.CreateTargetPositionAttr().Set(0.0)
+        rot_z_drive.CreateStiffnessAttr().Set(100.0)
+        rot_z_drive.CreateDampingAttr().Set(10.0)
+
+    for elbow_path in config.lower_joints:
+        elbow = stage.GetPrimAtPath(elbow_path)
+        drive = UsdPhysics.DriveAPI.Apply(elbow, "angular")
+        drive.CreateTargetPositionAttr().Set(90.0)
+        drive.CreateStiffnessAttr().Set(100.0)
+        drive.CreateDampingAttr().Set(10.0)
+
+
+def disable_articulation_sleep(robot_path: str = "/Ant", stage: Usd.Stage | None = None) -> None:
+    """Disable PhysX sleep/stabilization under the robot so resting contacts keep reporting.
+
+    Args:
+        robot_path: USD path to the ant robot root prim.
+        stage: Stage to modify. Uses the USD context stage when ``None``.
+    """
+    if stage is None:
+        stage = omni.usd.get_context().get_stage()
+    if stage is None:
+        return
+    robot_prim = stage.GetPrimAtPath(robot_path)
+    if not robot_prim.IsValid():
+        return
+    for prim in Usd.PrimRange(robot_prim):
+        if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+            artic_api = PhysxSchema.PhysxArticulationAPI.Apply(prim)
+            artic_api.CreateSleepThresholdAttr().Set(0.0)
+            artic_api.CreateStabilizationThresholdAttr().Set(0.0)
+        if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            rb_api = PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
+            rb_api.CreateSleepThresholdAttr().Set(0.0)
 
 
 async def setup_ant_scene(physics_rate: float = 60.0) -> AntConfig:
@@ -106,10 +166,16 @@ async def setup_ant_scene(physics_rate: float = 60.0) -> AntConfig:
         carb.log_error("Could not find Isaac Sim assets folder")
         raise RuntimeError("Could not find Isaac Sim assets folder")
 
-    await stage_utils.open_stage_async(assets_root_path + "/Isaac/Robots/IsaacSim/Ant/ant_colored.usd")
+    ant_usd = assets_root_path + "/Isaac/Robots/IsaacSim/Ant/ant_colored.usd"
+    result, stage = await stage_utils.open_stage_async(ant_usd)
+    if not result or stage is None:
+        raise RuntimeError(f"Failed to open ant stage: {ant_usd}")
     await omni.kit.app.get_app().next_update_async()
 
-    stage_utils.set_stage_units(meters_per_unit=1.0)
+    # Keep asset metersPerUnit; ant_colored is authored for that scale.
+    config = AntConfig()
+    author_ant_standing_drives(config, stage)
+    disable_articulation_sleep("/Ant", stage=stage)
     SimulationManager.setup_simulation(dt=1.0 / physics_rate)
 
-    return AntConfig()
+    return config

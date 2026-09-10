@@ -75,6 +75,20 @@ _MDL_TEXTURE_PATH_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# UDIM tile token as it appears in authored asset paths, matching both the
+# canonical USD form (``<UDIM>``) and the URL-encoded form (``%3CUDIM%3E``)
+# commonly found in Nucleus asset paths. A UDIM template never resolves to a
+# single file: it stands in for a family of concrete tiles (``.1001.``,
+# ``.1002.``, ...), each of which must be transferred individually.
+_UDIM_TOKEN_PATTERN = re.compile(r"%3CUDIM%3E|<UDIM>", re.IGNORECASE)
+
+# UDIM tile indices are always four digits (1001 and up).
+_UDIM_TILE_REGEX: str = r"\d{4}"
+
+# Canonical UDIM token written into transferred (local) asset paths so the USD
+# resolver expands the family against the downloaded tiles.
+_UDIM_CANONICAL_TOKEN: str = "<UDIM>"
+
 
 @dataclass
 class MaterialSource:
@@ -672,6 +686,20 @@ class MaterialsRoutingRule(RuleInterface):
                     if not is_transferable_asset(raw_path) and not is_transferable_asset(resolved_path):
                         continue
 
+                    # UDIM families never resolve to a single file. Collect the
+                    # template path itself; concrete tiles are enumerated and
+                    # transferred later by ``_transfer_udim_family``.
+                    if self._is_udim_path(raw_path) or self._is_udim_path(resolved_path):
+                        udim_template = self._collectable_udim_template(
+                            raw_path,
+                            resolved_path,
+                            get_attr_resolution_dirs(attr, stage_layer),
+                            include_remote,
+                        )
+                        if udim_template:
+                            add_asset(udim_template)
+                        continue
+
                     # Remote assets
                     if include_remote:
                         if resolved_path and utils.is_remote_path(resolved_path):
@@ -905,60 +933,347 @@ class MaterialsRoutingRule(RuleInterface):
             if not src_path:
                 continue
 
-            is_remote = utils.is_remote_path(src_path)
-
-            # Skip remote paths if download is disabled
-            if is_remote and not download_remote:
+            # UDIM templates do not name a single file -- expand them into their
+            # concrete tiles, transfer each, and map the template to a local
+            # ``<UDIM>`` template so the resolver finds the downloaded tiles.
+            if self._is_udim_path(src_path):
+                template_rel = self._transfer_udim_family(
+                    src_path,
+                    assets_output_path,
+                    materials_layer_dir,
+                    used_filenames,
+                    download_remote,
+                )
+                if template_rel:
+                    path_mapping[src_path] = template_rel
                 continue
 
-            # Skip local paths that don't exist
-            if not is_remote and not os.path.exists(src_path):
-                continue
-
-            filename = os.path.basename(src_path)
-            dst_path = os.path.join(assets_output_path, filename)
-
-            # Handle filename collisions
-            if filename in used_filenames:
-                existing_src = used_filenames[filename]
-                if existing_src == src_path:
-                    path_mapping[src_path] = self._make_relative_asset_path(dst_path, materials_layer_dir)
-                    continue
-                elif not is_remote and os.path.exists(dst_path) and utils.files_are_identical(src_path, dst_path):
-                    path_mapping[src_path] = self._make_relative_asset_path(dst_path, materials_layer_dir)
-                    continue
-                else:
-                    base, ext = os.path.splitext(filename)
-                    counter = 1
-                    while filename in used_filenames or os.path.exists(dst_path):
-                        if (
-                            filename not in used_filenames
-                            and not is_remote
-                            and os.path.exists(dst_path)
-                            and utils.files_are_identical(src_path, dst_path)
-                        ):
-                            break
-                        filename = f"{base}_{counter}{ext}"
-                        dst_path = os.path.join(assets_output_path, filename)
-                        counter += 1
-
-            # Transfer the file if not already there
-            if not os.path.exists(dst_path):
-                if is_remote:
-                    if not self._download_remote_asset(src_path, dst_path):
-                        continue
-                else:
-                    try:
-                        shutil.copy2(src_path, dst_path)
-                        self.log_operation(f"Copied asset: {src_path} -> {dst_path}")
-                    except Exception as e:
-                        self.log_operation(f"Failed to copy asset {src_path}: {e}")
-                        continue
-
-            used_filenames[filename] = src_path
-            path_mapping[src_path] = self._make_relative_asset_path(dst_path, materials_layer_dir)
+            relative_path = self._transfer_single_asset(
+                src_path,
+                assets_output_path,
+                materials_layer_dir,
+                used_filenames,
+                download_remote,
+            )
+            if relative_path:
+                path_mapping[src_path] = relative_path
 
         return path_mapping
+
+    def _transfer_single_asset(
+        self,
+        src_path: str,
+        assets_output_path: str,
+        materials_layer_dir: str,
+        used_filenames: dict[str, str],
+        download_remote: bool,
+    ) -> str | None:
+        """Transfer one concrete asset file to the assets folder.
+
+        Handles filename-collision renaming and content-identity short-circuits.
+        ``used_filenames`` maps a destination filename to the source path that
+        claimed it and is updated in place.
+
+        Args:
+            src_path: Absolute/resolved local path or remote URL of a single file.
+            assets_output_path: Absolute path to the assets output folder.
+            materials_layer_dir: Directory of the materials layer (for relative path computation).
+            used_filenames: Filename -> source-path map used for collision tracking.
+            download_remote: If True, download remote assets using omni.client.
+
+        Returns:
+            Explicit relative path (from the materials layer) to the transferred
+            file, or None when the asset was skipped.
+
+        """
+        is_remote = utils.is_remote_path(src_path)
+
+        # Skip remote paths if download is disabled
+        if is_remote and not download_remote:
+            return None
+
+        # Skip local paths that don't exist
+        if not is_remote and not os.path.exists(src_path):
+            return None
+
+        filename = os.path.basename(src_path)
+        dst_path = os.path.join(assets_output_path, filename)
+
+        # Handle filename collisions
+        if filename in used_filenames:
+            existing_src = used_filenames[filename]
+            if existing_src == src_path:
+                return self._make_relative_asset_path(dst_path, materials_layer_dir)
+            elif not is_remote and os.path.exists(dst_path) and utils.files_are_identical(src_path, dst_path):
+                return self._make_relative_asset_path(dst_path, materials_layer_dir)
+            else:
+                base, ext = os.path.splitext(filename)
+                counter = 1
+                while filename in used_filenames or os.path.exists(dst_path):
+                    if (
+                        filename not in used_filenames
+                        and not is_remote
+                        and os.path.exists(dst_path)
+                        and utils.files_are_identical(src_path, dst_path)
+                    ):
+                        break
+                    filename = f"{base}_{counter}{ext}"
+                    dst_path = os.path.join(assets_output_path, filename)
+                    counter += 1
+
+        # Transfer the file if not already there
+        if not os.path.exists(dst_path):
+            if is_remote:
+                if not self._download_remote_asset(src_path, dst_path):
+                    return None
+            else:
+                try:
+                    shutil.copy2(src_path, dst_path)
+                    self.log_operation(f"Copied asset: {src_path} -> {dst_path}")
+                except Exception as e:
+                    self.log_operation(f"Failed to copy asset {src_path}: {e}")
+                    return None
+
+        used_filenames[filename] = src_path
+        return self._make_relative_asset_path(dst_path, materials_layer_dir)
+
+    def _transfer_udim_family(
+        self,
+        template_path: str,
+        assets_output_path: str,
+        materials_layer_dir: str,
+        used_filenames: dict[str, str],
+        download_remote: bool,
+    ) -> str | None:
+        """Expand a UDIM template, transfer every concrete tile, and map the family.
+
+        Each tile is transferred via :meth:`_transfer_single_asset`, so tiles
+        share the same collision handling as ordinary assets. The returned
+        relative path keeps the canonical ``<UDIM>`` token so the USD resolver
+        expands it against the transferred tiles.
+
+        Args:
+            template_path: UDIM template path (remote URL or local absolute path).
+            assets_output_path: Absolute path to the assets output folder.
+            materials_layer_dir: Directory of the materials layer (for relative path computation).
+            used_filenames: Filename -> source-path map used for collision tracking.
+            download_remote: If True, download remote tiles using omni.client.
+
+        Returns:
+            Explicit relative ``<UDIM>`` template path (from the materials layer)
+            when at least one tile was transferred, otherwise None.
+
+        """
+        is_remote = utils.is_remote_path(template_path)
+        if is_remote and not download_remote:
+            return None
+
+        tiles = self._expand_udim_tiles(template_path, is_remote)
+        if not tiles:
+            self.log_operation(f"No UDIM tiles found for {template_path}")
+            return None
+
+        transferred = 0
+        for tile_path in sorted(set(tiles)):
+            if self._transfer_single_asset(
+                tile_path,
+                assets_output_path,
+                materials_layer_dir,
+                used_filenames,
+                download_remote,
+            ):
+                transferred += 1
+
+        if transferred == 0:
+            return None
+
+        template_name = self._canonical_udim_name(os.path.basename(template_path))
+        template_dst = os.path.join(assets_output_path, template_name)
+        self.log_operation(f"Transferred {transferred} UDIM tile(s) for {template_name}")
+        return self._make_relative_asset_path(template_dst, materials_layer_dir)
+
+    @staticmethod
+    def _is_udim_path(path: str) -> bool:
+        """Return True if ``path`` contains a UDIM tile token (``<UDIM>``).
+
+        Args:
+            path: Asset path to inspect.
+
+        Returns:
+            True if the path contains a UDIM tile token.
+
+        """
+        return bool(path) and _UDIM_TOKEN_PATTERN.search(path) is not None
+
+    @staticmethod
+    def _canonical_udim_name(name: str) -> str:
+        """Rewrite any UDIM token form in ``name`` to the canonical ``<UDIM>``.
+
+        Args:
+            name: Filename that may contain a UDIM token in any form.
+
+        Returns:
+            The name with any UDIM token normalized to ``<UDIM>``.
+
+        """
+        return _UDIM_TOKEN_PATTERN.sub(_UDIM_CANONICAL_TOKEN, name)
+
+    @staticmethod
+    def _udim_filename_matcher(template_name: str) -> re.Pattern | None:
+        """Build a regex matching concrete tile filenames for a UDIM template.
+
+        The token is replaced by a four-digit group and every literal segment is
+        escaped, so ``foo.<UDIM>.png`` matches ``foo.1001.png`` but not
+        ``foo_extra.1001.png``.
+
+        Args:
+            template_name: UDIM template filename (any token form).
+
+        Returns:
+            Compiled, anchored, case-insensitive pattern, or None when
+            ``template_name`` carries no UDIM token.
+
+        """
+        segments = _UDIM_TOKEN_PATTERN.split(template_name)
+        if len(segments) < 2:
+            return None
+        pattern = _UDIM_TILE_REGEX.join(re.escape(segment) for segment in segments)
+        return re.compile(rf"^{pattern}$", re.IGNORECASE)
+
+    def _expand_udim_tiles(self, template_path: str, is_remote: bool) -> list[str]:
+        """Enumerate concrete tile paths for a UDIM template.
+
+        Args:
+            template_path: UDIM template path (remote URL or local absolute path).
+            is_remote: True when ``template_path`` is a remote URL.
+
+        Returns:
+            List of concrete tile paths (remote URLs or local paths).
+
+        """
+        if is_remote:
+            return self._expand_remote_udim_tiles(template_path)
+        return self._expand_local_udim_tiles(template_path)
+
+    def _expand_local_udim_tiles(self, template_path: str) -> list[str]:
+        """Enumerate concrete tiles for a local UDIM template by scanning its folder.
+
+        Args:
+            template_path: Local UDIM template path.
+
+        Returns:
+            Sorted list of absolute tile paths present on disk.
+
+        """
+        directory = os.path.dirname(template_path)
+        matcher = self._udim_filename_matcher(os.path.basename(template_path))
+        if matcher is None or not os.path.isdir(directory):
+            return []
+        return sorted(os.path.join(directory, name) for name in os.listdir(directory) if matcher.match(name))
+
+    def _expand_remote_udim_tiles(self, template_url: str) -> list[str]:
+        """Enumerate concrete tiles for a remote UDIM template via ``omni.client.list``.
+
+        Args:
+            template_url: Remote UDIM template URL.
+
+        Returns:
+            Sorted list of concrete tile URLs found on the server.
+
+        """
+        try:
+            import omni.client
+        except ImportError:
+            self.log_operation("omni.client not available, cannot expand remote UDIM tiles")
+            return []
+
+        directory = self._remote_dir(template_url)
+        matcher = self._udim_filename_matcher(template_url[len(directory) :].lstrip("/"))
+        if matcher is None:
+            return []
+
+        try:
+            result, entries = omni.client.list(directory)
+        except Exception as e:
+            self.log_operation(f"Failed to list remote UDIM folder {directory}: {e}")
+            return []
+        if result != omni.client.Result.OK:
+            self.log_operation(f"Failed to list remote UDIM folder {directory}: {result}")
+            return []
+
+        tiles: list[str] = []
+        for entry in entries:
+            name = getattr(entry, "relative_path", "") or ""
+            if name and matcher.match(name):
+                tiles.append(self._join_remote_path(directory, name))
+        return sorted(tiles)
+
+    def _collectable_udim_template(
+        self,
+        raw_path: str,
+        resolved_path: str,
+        candidate_dirs: list[str],
+        include_remote: bool,
+    ) -> str:
+        """Return the UDIM template path to transfer for a UDIM asset reference.
+
+        The USD resolver may leave a UDIM reference unresolved, keep the
+        template, or expand it to a single concrete tile. This normalizes any of
+        those outcomes to a template path whose folder can be enumerated at
+        transfer time:
+
+        * a template that is already remote/absolute is returned directly;
+        * a resolved concrete tile is turned back into a template in the tile's
+          folder so the whole family is discovered;
+        * a relative template is resolved against the attribute's layer stack,
+          keeping only a folder that actually contains matching tiles.
+
+        Args:
+            raw_path: Authored asset path (``value.path``).
+            resolved_path: Resolver output (``value.resolvedPath``); may be empty,
+                a template, or a single expanded tile.
+            candidate_dirs: Directories to resolve a relative template against.
+            include_remote: If True, remote templates are eligible for download.
+
+        Returns:
+            A template path (remote URL or local absolute path), or "" when none
+            could be determined.
+
+        """
+        candidate = ""
+
+        if resolved_path and self._is_udim_path(resolved_path):
+            # Resolver preserved the template.
+            if utils.is_remote_path(resolved_path):
+                return resolved_path if include_remote else ""
+            if os.path.isabs(resolved_path):
+                return resolved_path
+            candidate = resolved_path
+        elif resolved_path and self._is_udim_path(raw_path):
+            # Resolver expanded the template to a single concrete tile; rebuild
+            # the template in the tile's folder so the whole family is found.
+            template_name = self._canonical_udim_name(os.path.basename(raw_path))
+            if utils.is_remote_path(resolved_path):
+                template = self._join_remote_path(self._remote_dir(resolved_path), template_name)
+                return template if include_remote else ""
+            return os.path.join(os.path.dirname(resolved_path), template_name)
+        elif self._is_udim_path(raw_path):
+            if utils.is_remote_path(raw_path):
+                return raw_path if include_remote else ""
+            if os.path.isabs(raw_path):
+                return raw_path
+            candidate = raw_path
+
+        if not candidate:
+            return ""
+
+        # Relative template: resolve against the layer stack, keeping the first
+        # folder that actually contains matching tiles.
+        for base_dir in candidate_dirs:
+            abs_template = os.path.normpath(os.path.join(base_dir, candidate))
+            if self._expand_local_udim_tiles(abs_template):
+                return abs_template
+        return ""
 
     @staticmethod
     def _make_relative_asset_path(dst_path: str, materials_layer_dir: str) -> str:

@@ -103,7 +103,7 @@ class TestOgnWritePhysicsRigidPrimView(omni.kit.test.AsyncTestCase):
         omni.usd.get_context().close_stage()
 
     async def _setup_random_attribute(self, attribute_name: Any, value: Any) -> None:
-        """Set up a random attribute for the rigid prim view node with specified value.
+        """Set up a random attribute for the rigid prim view node with the specified value.
 
         Args:
             attribute_name: Name of the physics attribute to randomize.
@@ -193,6 +193,9 @@ class TestOgnWritePhysicsRigidPrimView(omni.kit.test.AsyncTestCase):
 
         Sets up a uniform distribution to randomize material properties (static friction, dynamic friction,
         and restitution) across all shapes in the rigid prim view and verifies the values are applied correctly.
+
+        Raises:
+            AssertionError: If the applied material property values do not match the expected randomized values.
         """
         value = [0.5] * self._rb_view.count * 3 * self._rb_view.num_shapes
         await self._setup_random_attribute(attribute_name="material_properties", value=value)
@@ -205,6 +208,9 @@ class TestOgnWritePhysicsRigidPrimView(omni.kit.test.AsyncTestCase):
 
         Sets up a uniform distribution to randomize contact offsets across all shapes in the rigid prim view
         and verifies the values are applied correctly.
+
+        Raises:
+            AssertionError: If the applied contact offset values do not match the expected randomized values.
         """
         value = [0.05] * self._rb_view.count * self._rb_view.num_shapes
         await self._setup_random_attribute(attribute_name="contact_offset", value=value)
@@ -217,6 +223,9 @@ class TestOgnWritePhysicsRigidPrimView(omni.kit.test.AsyncTestCase):
 
         Sets up a uniform distribution to randomize rest offsets (set to half the contact offset values)
         across all shapes in the rigid prim view and verifies the values are applied correctly.
+
+        Raises:
+            AssertionError: If the applied rest offset values do not match the expected randomized values.
         """
         # rest offset should be less than current contact offset
         value = self._rb_view._physics_view.get_contact_offsets().clone().cpu().numpy() / 2

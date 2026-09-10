@@ -53,16 +53,14 @@ class LowPassFilterController(mg.BaseController):
 
     This controller applies a low-pass filter to the entire underlying data array
     of the input RobotState, filtering all joint outputs simultaneously.
+
+    Args:
+        robot_joint_space: Ordered joint names represented by the controller states.
+        alpha: Low-pass filter coefficient between zero and one; smaller values produce more filtering.
     """
 
     # <start-low-pass-filter-init-snippet>
     def __init__(self, robot_joint_space: list[str], alpha: float = 0.1) -> None:
-        """Initialize the low-pass filter controller.
-
-        Args:
-            robot_joint_space: The full joint space of the robot
-            alpha: Low-pass filter coefficient (0 < alpha <= 1). Smaller values = more filtering.
-        """
         self.robot_joint_space = robot_joint_space
         self.alpha = alpha
 
@@ -104,6 +102,16 @@ class LowPassFilterController(mg.BaseController):
         Resets the initial filter state to be exactly the underlying joint-data array from the estimated state.
         This prevents jerky motions - if the filter is initialized to match the exact state of the robot,
         then the robot will smoothly transition into following the filter as soon as it starts running.
+
+        Args:
+            estimated_state: Current robot state used to initialize the filter output.
+            setpoint_state: Desired state whose joint space is validated when present.
+            t: Current controller time, accepted for the controller interface.
+            **kwargs: Additional controller inputs accepted for interface compatibility.
+
+        Returns:
+            True when the estimated joint space matches and the setpoint is absent, has no joint state, or has a
+            matching joint space; otherwise False.
         """
         # Validate joint spaces match
         if not self._validate_joint_spaces(estimated_state, setpoint_state):
@@ -128,6 +136,15 @@ class LowPassFilterController(mg.BaseController):
 
         Applies low-pass filter to the entire data array of the setpoint state.
         Filters all joint outputs (position, velocity, effort) simultaneously.
+
+        Args:
+            estimated_state: Current robot state used to validate the joint space.
+            setpoint_state: Desired joint state to filter.
+            t: Current controller time, accepted for the controller interface.
+            **kwargs: Additional controller inputs accepted for interface compatibility.
+
+        Returns:
+            Filtered joint setpoint, or None if the state is missing, incompatible, or not initialized.
         """
         # Validate joint spaces match
         if not self._validate_joint_spaces(estimated_state, setpoint_state):
@@ -179,6 +196,11 @@ class DifferentialDriveController(mg.BaseController):
 
     where ω is the desired angular velocity (yaw rate), V is the desired linear velocity,
     r is the radius of the wheels, and b is the distance between them.
+
+    Args:
+        robot_joint_space: Ordered joint names represented by the controller states.
+        wheel_radius: Radius of left and right wheels in meters.
+        wheel_base: Distance between left and right wheels in meters.
     """
 
     # <start-differential-drive-init-snippet>
@@ -188,13 +210,6 @@ class DifferentialDriveController(mg.BaseController):
         wheel_radius: float,
         wheel_base: float,
     ) -> None:
-        """Initialize the differential drive controller.
-
-        Args:
-            robot_joint_space: The full joint space of the robot
-            wheel_radius: Radius of left and right wheels in meters
-            wheel_base: Distance between left and right wheels in meters
-        """
         self.robot_joint_space = robot_joint_space
         self.wheel_radius = wheel_radius
         self.wheel_base = wheel_base
@@ -228,6 +243,15 @@ class DifferentialDriveController(mg.BaseController):
         """Initialize the controller.
 
         The DifferentialDriveController is stateless, so we don't need to do anything here.
+
+        Args:
+            estimated_state: Current robot state accepted for the controller interface.
+            setpoint_state: Desired robot state accepted for the controller interface.
+            t: Current controller time, accepted for the controller interface.
+            **kwargs: Additional controller inputs accepted for interface compatibility.
+
+        Returns:
+            Always True because the controller has no state to reset.
         """
         return True
 
@@ -246,6 +270,15 @@ class DifferentialDriveController(mg.BaseController):
 
         where ω is angular velocity (yaw rate), V is linear velocity, r is wheel radius,
         and b is wheel base.
+
+        Args:
+            estimated_state: Current state whose joint space identifies the commanded robot.
+            setpoint_state: Desired root state containing forward and yaw velocities.
+            t: Current controller time, accepted for the controller interface.
+            **kwargs: Additional controller inputs accepted for interface compatibility.
+
+        Returns:
+            Joint state commanding left and right wheel velocities, or None when required state is unavailable.
         """
         # First, verify that the correct inputs are there
         # We need a setpoint root state. If there is no root state, we return None.
@@ -462,14 +495,14 @@ def differential_drive_control(
         wheel_base=0.1125,  # 11.25 cm wheel base
     )
 
-    # Optionally wrap with low-pass filter using SequentialController
+    # Optionally wrap with low-pass filter using ChainedController
     if use_filter:
         filter_controller = LowPassFilterController(
             robot_joint_space=robot_joint_space,
             alpha=0.01,  # Low-pass filter coefficient
         )
-        # SequentialController: differential controller output becomes filter input
-        controller = mg.SequentialController([differential_controller, filter_controller])
+        # ChainedController: differential controller output becomes filter input
+        controller = mg.ChainedController([differential_controller, filter_controller])
     else:
         controller = differential_controller
 
@@ -496,7 +529,7 @@ async def setup_scene() -> tuple[Articulation, list[str]]:
     assets_root_path = await get_assets_root_path_async()
 
     # Add Jetbot robot
-    jetbot_path = assets_root_path + "/Isaac/Robots/NVIDIA/Jetbot/jetbot.usd"
+    jetbot_path = assets_root_path + "/Isaac/Robots_Multiphysics/NVIDIA/Jetbot/jetbot.usda"
     stage_utils.add_reference_to_stage(usd_path=jetbot_path, path="/World/Jetbot")
     await omni.kit.app.get_app().next_update_async()
 
@@ -542,7 +575,7 @@ def main() -> None:
     parser.add_argument(
         "--filter",
         action="store_true",
-        help="Apply low-pass filter to the differential controller output using SequentialController",
+        help="Apply low-pass filter to the differential controller output using ChainedController",
     )
     parser.add_argument(
         "--test",

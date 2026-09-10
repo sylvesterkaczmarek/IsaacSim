@@ -30,11 +30,11 @@ import omni.replicator.core as rep
 import warp as wp
 from isaacsim.storage.native import get_assets_root_path
 
-from ._sensor_base import _resolve_config_path, _SensorAuthoring
+from ._sensor_base import SensorAuthoring, _resolve_config_path
 from .rtx_lidar_configs import SUPPORTED_LIDAR_CONFIGS
 
 
-class Lidar(_SensorAuthoring):
+class Lidar(SensorAuthoring):
     """High level class for creating/wrapping USD OmniLidar prims.
 
     This class uses ``omni.replicator.core.functional.create.omni_lidar`` to create new lidar prims,
@@ -44,7 +44,8 @@ class Lidar(_SensorAuthoring):
 
         This class creates or wraps (one of both) USD OmniLidar prims according to the following rules:
 
-        * If the prim path exists, a wrapper is placed over the USD OmniLidar prim.
+        * If the prim path exists, a wrapper is placed over the USD OmniLidar prim. The
+          ``OmniSensorGenericLidarCoreAPI`` schema is applied to it when not already present.
         * If the prim path does not exist, a USD OmniLidar prim is created at the path and a wrapper is placed over it.
 
     Args:
@@ -207,6 +208,10 @@ class Lidar(_SensorAuthoring):
     ) -> Lidar:
         """Create a Lidar instance from a config name or USD file path.
 
+        When the loaded asset nests the OmniLidar prim under the reference root, the transform
+        arguments are authored on the reference root instead of the sensor prim, so the sensor
+        stays attached to the housing geometry and keeps the vendor's mounting offset.
+
         Args:
             path: Single path to existing or non-existing (one of both) USD OmniLidar prim.
             accumulate_outputs: Set the ``omni:sensor:Core:accumulateOutputs`` attribute on the OmniLidar prim.
@@ -253,10 +258,10 @@ class Lidar(_SensorAuthoring):
             usd_path = get_assets_root_path() + _resolve_config_path(
                 config, SUPPORTED_LIDAR_CONFIGS, sensor_type="Lidar"
             )
-        if usd_path is not None:
-            path = Lidar._create_from_usd(path=path, usd_path=usd_path, variant=variant)
-        return Lidar(
+        return Lidar._create_from_usd(
             path=path,
+            usd_path=usd_path,
+            variant=variant,
             accumulate_outputs=accumulate_outputs,
             aux_output_level=aux_output_level,
             tick_rate=tick_rate,

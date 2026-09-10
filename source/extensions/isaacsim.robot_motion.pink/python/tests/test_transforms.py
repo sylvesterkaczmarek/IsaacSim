@@ -22,6 +22,7 @@ import warp as wp
 from isaacsim.robot_motion.pink.impl.utils import (
     isaac_sim_position_quaternion_to_se3,
     map_joint_positions_to_pinocchio,
+    map_pinocchio_velocity_to_joint_state,
     se3_to_isaac_sim_position_quaternion,
 )
 
@@ -198,6 +199,14 @@ class TestJointMapping(omni.kit.test.AsyncTestCase):
             )
         )
 
+        # Build a mixed model with one Pinocchio unbounded revolute joint.
+        self.continuous_model = pin.Model()
+        parent_id = self.continuous_model.addJoint(0, pin.JointModelRZ(), pin.SE3.Identity(), "joint1")
+        parent_id = self.continuous_model.addJoint(
+            parent_id, pin.JointModelRUBZ(), pin.SE3.Identity(), "continuous_joint"
+        )
+        self.continuous_model.addJoint(parent_id, pin.JointModelRZ(), pin.SE3.Identity(), "joint3")
+
     async def tearDown(self) -> None:
         """Clean up the Joint Mapping test fixture."""
 
@@ -240,3 +249,67 @@ class TestJointMapping(omni.kit.test.AsyncTestCase):
         positions = wp.array([0.1, 0.2, 0.3], dtype=wp.float32)
         q = map_joint_positions_to_pinocchio(joint_names, positions, self.model)
         self.assertTrue(np.allclose(q, [0.1, 0.2, 0.3], atol=1e-5))
+
+    async def test_map_continuous_joint_to_unit_circle(self) -> None:
+        """Map a continuous joint angle to a unit-norm cosine and sine pair."""
+        joint_names = ["joint1", "continuous_joint", "joint3"]
+        positions = np.array([0.11, 0.22, 0.33])
+
+        q = map_joint_positions_to_pinocchio(joint_names, positions, self.continuous_model)
+
+        expected = np.array([0.11, np.cos(0.22), np.sin(0.22), 0.33])
+        self.assertTrue(np.allclose(q, expected))
+        self.assertAlmostEqual(np.dot(q[1:3], q[1:3]), 1.0)
+
+    async def test_map_joint_positions_requires_one_position_per_name(self) -> None:
+        """Reject position arrays whose length differs from the joint-name list."""
+        with self.assertRaisesRegex(ValueError, "Expected one position"):
+            map_joint_positions_to_pinocchio(["joint1", "joint2"], np.array([0.1]), self.model)
+
+    async def test_map_joint_positions_rejects_multi_dof_joint(self) -> None:
+        """Reject a spherical joint that cannot be represented by one scalar position."""
+        model = pin.Model()
+        model.addJoint(0, pin.JointModelSpherical(), pin.SE3.Identity(), "spherical_joint")
+
+        with self.assertRaisesRegex(ValueError, "nq=4, nv=3"):
+            map_joint_positions_to_pinocchio(["spherical_joint"], np.array([0.1]), model)
+
+    async def test_map_continuous_velocity_to_unwrapped_position(self) -> None:
+        """Preserve an unwrapped continuous angle when integration crosses pi."""
+        joint_names = ["joint1", "continuous_joint", "joint3"]
+        current_positions = np.array([0.11, 3.0, 0.33])
+        velocity = np.array([0.0, 0.4, 0.0])
+        dt = 0.5
+        q_current = map_joint_positions_to_pinocchio(joint_names, current_positions, self.continuous_model)
+
+        joint_state = map_pinocchio_velocity_to_joint_state(
+            velocity=velocity,
+            model=self.continuous_model,
+            controlled_joint_names=joint_names,
+            robot_joint_space=joint_names,
+            dt=dt,
+            q_current=q_current,
+            current_joint_positions=current_positions,
+        )
+
+        self.assertTrue(np.allclose(joint_state.positions.numpy(), [0.11, 3.2, 0.33], atol=1e-6))
+        self.assertTrue(np.allclose(joint_state.velocities.numpy(), velocity, atol=1e-6))
+
+    async def test_map_continuous_velocity_preserves_multiple_revolutions(self) -> None:
+        """Preserve the revolution count of a continuous Isaac Sim joint position."""
+        joint_names = ["joint1", "continuous_joint", "joint3"]
+        current_positions = np.array([0.0, 4.0 * np.pi + 0.51, 0.0])
+        velocity = np.zeros(self.continuous_model.nv)
+        q_current = map_joint_positions_to_pinocchio(joint_names, current_positions, self.continuous_model)
+
+        joint_state = map_pinocchio_velocity_to_joint_state(
+            velocity=velocity,
+            model=self.continuous_model,
+            controlled_joint_names=joint_names,
+            robot_joint_space=joint_names,
+            dt=0.1,
+            q_current=q_current,
+            current_joint_positions=current_positions,
+        )
+
+        self.assertTrue(np.allclose(joint_state.positions.numpy(), current_positions, atol=1e-6))

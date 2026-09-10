@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.1] - 2026-08-26
+### Fixed
+- Show configured folders with the same final name in the Isaac Sim collection.
+
+## [0.5.0] - 2026-08-24
+### Added
+- Add the Isaac Sim asset collection to File > Open dialogs.
+
+### Changed
+- Use the current File Picker collection API without the deprecated protocol argument.
+
 ## [0.4.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

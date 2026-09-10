@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["scikit-build-core>=1.0.3"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "isaacsim-foundation"
+dynamic = ["version", "dependencies"]
+description = "USD Foundation for Isaac Sim"
+requires-python = "==3.12.*"
+license = "Apache-2.0"
+authors = [{ name = "NVIDIA Corporation" }]
+dependencies = [
+    "usd-exchange==2.3.0",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+
+[[tool.dynamic-metadata]]
+provider = "scikit_build_core.metadata.regex"
+field = "version"
+input = "../../VERSION"
+regex = '''^(?P<value>[^\r\n]+)$'''
+
+[[tool.dynamic-metadata]]
+provider = { path = "../../packaging", module = "isaacsim_libraries_metadata" }
+field = "dependencies"
+names = ["isaacsim-common"]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = ">=3.26"
+wheel.cmake = false
+wheel.packages = []
+wheel.platlib = true
+wheel.py-api = "cp312"
+wheel.reproducible = true

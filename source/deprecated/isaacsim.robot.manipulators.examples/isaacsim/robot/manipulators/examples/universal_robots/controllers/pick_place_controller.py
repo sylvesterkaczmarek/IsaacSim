@@ -27,13 +27,13 @@ from isaacsim.robot.manipulators.grippers.surface_gripper import SurfaceGripper
 
 
 class PickPlaceController(manipulators_controllers.PickPlaceController):
-    """Pick and place controller for the UR10 robot.
+    """Pick-and-place controller for the UR10 robot.
 
     Args:
         name: Name identifier for the controller.
         gripper: The surface gripper to use.
         robot_articulation: The robot articulation to control.
-        events_dt: Timesteps for pick/place events.
+        events_dt: Timesteps for pick-and-place events.
     """
 
     def __init__(
@@ -70,8 +70,8 @@ class PickPlaceController(manipulators_controllers.PickPlaceController):
             picking_position: Position to pick from.
             placing_position: Position to place at.
             current_joint_positions: Current robot joint positions.
-            end_effector_offset: Offset for end effector.
-            end_effector_orientation: Orientation for end effector.
+            end_effector_offset: Offset for the end effector.
+            end_effector_orientation: Orientation for the end effector.
 
         Returns:
             The articulation action to execute.

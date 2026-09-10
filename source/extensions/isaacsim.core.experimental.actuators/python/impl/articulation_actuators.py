@@ -69,13 +69,13 @@ class _SimStateAdapter:
 class _SimControlAdapter:
     """Control targets + scatter-add effort buffer in the layout Newton actuators expect."""
 
-    joint_target_pos: wp.array[float]
-    joint_target_vel: wp.array[float]
+    joint_target_q: wp.array[float]
+    joint_target_qd: wp.array[float]
     joint_control_feedforward: wp.array[float]
     joint_f: wp.array[float]
 
 
-def _row_major_indices(n_rows: int, stride: int, column: int, device: str | None) -> wp.array:
+def _row_major_indices(n_rows: int, stride: int, column: int, device: wp.DeviceLike) -> wp.array:
     """Build strided indices into a row-major ``(n_rows, stride)`` flat buffer.
 
     The ``i``-th element of the returned array is ``i * stride + column`` — i.e.
@@ -193,7 +193,7 @@ class ArticulationActuators:
         auto_step_pre_physics: When true, register the pre-physics callback immediately so
             actuators are stepped automatically on every physics tick.
         device: Warp device on which to allocate per-actuator scratch buffers. When ``None``,
-            use the articulation's device.
+            use Warp's default device.
         _skip_discovery: Internal flag used by `from_actuators` to bypass USD discovery so
             actuators can be supplied directly from Python.
 
@@ -217,6 +217,7 @@ class ArticulationActuators:
         paths: str | list[str],
         actuators: list[tuple[ActuatorConfig, str]],
         *,
+        device: wp.DeviceLike = None,
         auto_step_pre_physics: bool = True,
     ) -> ArticulationActuators:
         """Construct an `ArticulationActuators` entirely from Python-built `ActuatorConfig` objects.
@@ -236,6 +237,8 @@ class ArticulationActuators:
             paths: Single path or list of paths to articulation root prims.
             actuators: List of ``(config, dof_name)`` pairs.  ``dof_name`` is the
                 last path segment of the target joint (e.g. ``"RevoluteJoint"``).
+            device: Warp device on which to allocate per-actuator scratch buffers. When ``None``,
+                use Warp's default device.
             auto_step_pre_physics: Forwarded to the underlying ``__init__``.
 
         Returns:
@@ -267,7 +270,7 @@ class ArticulationActuators:
             ...     [(cfg, "RevoluteJoint")],
             ... )
         """
-        instance = cls(paths, auto_step_pre_physics=auto_step_pre_physics, _skip_discovery=True)
+        instance = cls(paths, auto_step_pre_physics=auto_step_pre_physics, device=device, _skip_discovery=True)
 
         if not actuators:
             return instance
@@ -296,8 +299,8 @@ class ArticulationActuators:
         dof_index_to_actuated = {dof_idx: pos for pos, dof_idx in enumerate(new_dof_indices)}
 
         instance._actuated_dof_indices = new_dof_indices
-        instance._effort_buffer = wp.zeros(n_robots * n_actuated_dofs, dtype=wp.float32, device=instance._device)
-        instance._actuated_dof_indices_wp = wp.array(new_dof_indices, dtype=wp.int32, device=instance._device)
+        instance._effort_buffer = wp.zeros(n_robots * n_actuated_dofs, dtype=wp.float32, device=device)
+        instance._actuated_dof_indices_wp = wp.array(new_dof_indices, dtype=wp.int32, device=device)
 
         # Build each Actuator wrapper from the config's components with correct index arrays.
         # controller.finalize(device, n_robots) is called inside Actuator.__init__, which is
@@ -305,8 +308,8 @@ class ArticulationActuators:
         # stateful ones (e.g. PID integral).
         for dof_index, cfg in sorted_pairs:
             actuated_dof_index = dof_index_to_actuated[dof_index]
-            sim_state_indices = _row_major_indices(n_robots, n_all_dofs, dof_index, instance._device)
-            effort_indices = _row_major_indices(n_robots, n_actuated_dofs, actuated_dof_index, instance._device)
+            sim_state_indices = _row_major_indices(n_robots, n_all_dofs, dof_index, device)
+            effort_indices = _row_major_indices(n_robots, n_actuated_dofs, actuated_dof_index, device)
             actuator = Actuator(
                 indices=sim_state_indices,
                 controller=cfg.controller,
@@ -332,7 +335,7 @@ class ArticulationActuators:
         paths: str | list[str],
         *,
         auto_step_pre_physics: bool = True,
-        device: str | None = None,
+        device: wp.DeviceLike = None,
         _skip_discovery: bool = False,
     ) -> None:
         _ensure_runtime()
@@ -359,8 +362,8 @@ class ArticulationActuators:
         # the buffer below instead of falling back to `warp.clone`.
         self._joint_q_buffer = wp.empty(flat_dof_size, dtype=wp.float32, device=self._device)
         self._joint_qd_buffer = wp.empty(flat_dof_size, dtype=wp.float32, device=self._device)
-        self._joint_target_pos_buffer = wp.empty(flat_dof_size, dtype=wp.float32, device=self._device)
-        self._joint_target_vel_buffer = wp.empty(flat_dof_size, dtype=wp.float32, device=self._device)
+        self._joint_target_q_buffer = wp.empty(flat_dof_size, dtype=wp.float32, device=self._device)
+        self._joint_target_qd_buffer = wp.empty(flat_dof_size, dtype=wp.float32, device=self._device)
         self._joint_control_feedforward_buffer = wp.empty(flat_dof_size, dtype=wp.float32, device=self._device)
 
         #: Newton `Actuator` objects owned by this wrapper, one per discovered prim.
@@ -628,12 +631,12 @@ class ArticulationActuators:
             ),
         )
         sim_control = _SimControlAdapter(
-            joint_target_pos=_gather_into(
-                self._joint_target_pos_buffer,
+            joint_target_q=_gather_into(
+                self._joint_target_q_buffer,
                 self._articulation.get_dof_position_targets().reshape(n_robots * n_all_dofs),
             ),
-            joint_target_vel=_gather_into(
-                self._joint_target_vel_buffer,
+            joint_target_qd=_gather_into(
+                self._joint_target_qd_buffer,
                 self._articulation.get_dof_velocity_targets().reshape(n_robots * n_all_dofs),
             ),
             joint_control_feedforward=self._joint_control_feedforward_buffer,

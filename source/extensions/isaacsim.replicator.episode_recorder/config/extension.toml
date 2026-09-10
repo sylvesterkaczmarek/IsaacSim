@@ -1,5 +1,5 @@
 [package]
-version = "0.1.4"
+version = "0.1.6"
 category = "Simulation"
 title = "Isaac Sim Episode Recorder"
 description = "Manifest-first HDF5 recorder / replayer for capturing simulation state (articulations, rigid bodies, xforms, cameras, USD attributes, sim time) per-episode and replaying it back onto a live stage. Plugin-based via the Recordable protocol."
@@ -35,12 +35,17 @@ args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 timeout = 900
 dependencies = [
     "isaacsim.core.experimental.objects",
     "isaacsim.test.utils",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]

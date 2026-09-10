@@ -29,7 +29,7 @@ from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.storage.native import get_assets_root_path
 
 assets_root_path = get_assets_root_path()
-asset_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 
 simulation_context = SimulationContext(physics_dt=1.0 / 60.0, rendering_dt=1.0 / 60.0, stage_units_in_meters=1.0)
 if not math.isclose(simulation_context.get_physics_dt(), 1.0 / 60.0):
@@ -61,26 +61,44 @@ class TimeStepTester(unittest.TestCase):
         self.render_dt = 1.0 / 60.0
 
     def step_callback(self, step_size: float) -> None:
-        """Record a physics step with the given step size."""
+        """Record a physics step with the given step size.
+
+        Args:
+            step_size: Duration of the completed physics step in seconds.
+        """
         print("simulate with step: ", step_size)
         self.physics_steps = self.physics_steps + 1
         self.physics_dt = step_size
 
     def render_callback(self, event: Any) -> None:
-        """Record a render step with the dt from the event payload."""
+        """Record a render step with the dt from the event payload.
+
+        Args:
+            event: Application update event whose payload contains the render interval in seconds.
+        """
         print("update app with step: ", event.payload["dt"])
         self.render_steps = self.render_steps + 1
         self.render_dt = event.payload["dt"]
 
     def check_steps(self, physics_steps: int, render_steps: int) -> None:
-        """Assert that recorded step counts match expected values."""
+        """Assert that recorded step counts match expected values.
+
+        Args:
+            physics_steps: Expected number of physics callbacks.
+            render_steps: Expected number of render callbacks.
+        """
         if physics_steps != self.physics_steps:
             self.assertAlmostEqual(physics_steps, self.physics_steps)
         if render_steps != self.render_steps:
             self.assertAlmostEqual(render_steps, self.render_steps)
 
     def check_dt(self, physics_dt: float, render_dt: float) -> None:
-        """Assert that recorded dt values match expected values."""
+        """Assert that recorded dt values match expected values.
+
+        Args:
+            physics_dt: Expected duration of the latest physics step in seconds.
+            render_dt: Expected duration of the latest render step in seconds.
+        """
         if physics_dt != self.physics_dt:
             self.assertAlmostEqual(physics_dt, self.physics_dt)
         if render_dt != self.render_dt:

@@ -13,9 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "CpuArticulationView.h"
+#include "CpuArticulationView.hpp"
 
-#include "CpuGatherHelper.h"
+#include "CpuGatherHelper.hpp"
+#include "utils/WrenchOps.hpp"
 
 #include <carb/logging/Log.h>
 
@@ -649,56 +650,42 @@ bool CpuArticulationView::applyForcesAndTorquesAtPosition(const TensorDesc* srcF
     if (hasTorque &&
         !validateFloat32Tensor(srcTorqueTensor, -1, size_t(m_count) * m_maxLinks * 3u, "torque", __FUNCTION__))
         return false;
+    if (srcPositionTensor && srcPositionTensor->data &&
+        !validateFloat32Tensor(srcPositionTensor, -1, size_t(m_count) * m_maxLinks * 3u, "position", __FUNCTION__))
+        return false;
     if (!validateOptionalIndexTensor(indexTensor, -1, __FUNCTION__))
         return false;
 
-    if (hasForce)
-    {
-        const auto& artiIndices = _resolveIndices(indexTensor);
-        m_scratchSourceOffset.clear();
-        m_scratchDestinationIndex.clear();
-        for (uint32_t idx : artiIndices)
-        {
-            if (idx >= m_count)
-                continue;
-            const auto& links = m_linkIndicesPerArticulation[idx];
-            for (uint32_t j = 0; j < m_maxLinks && j < links.size(); ++j)
-            {
-                for (int e = 0; e < 3; ++e)
-                {
-                    m_scratchSourceOffset.push_back(static_cast<int>((idx * m_maxLinks + j) * 3 + e));
-                    m_scratchDestinationIndex.push_back(links[j] * 6 + e);
-                }
-            }
-        }
-        if (!m_scratchSourceOffset.empty())
-            indirectAddFloat(static_cast<const float*>(srcForceTensor->data), m_cachedBodyF, m_scratchSourceOffset.data(),
-                             m_scratchDestinationIndex.data(), m_scratchSourceOffset.size());
-    }
+    const bool hasPosition = srcPositionTensor && srcPositionTensor->data;
+    const float* forceData = hasForce ? static_cast<const float*>(srcForceTensor->data) : nullptr;
+    const float* torqueData = hasTorque ? static_cast<const float*>(srcTorqueTensor->data) : nullptr;
+    const float* positionData = hasPosition ? static_cast<const float*>(srcPositionTensor->data) : nullptr;
+    const auto* bodyTransforms = reinterpret_cast<const wp::transform*>(m_cachedBodyQ);
+    const auto* bodyCentersOfMass = reinterpret_cast<const wp::vec3*>(m_cachedBodyCenterOfMass);
 
-    if (hasTorque)
+    const auto& articulationIndices = _resolveIndices(indexTensor);
+    for (uint32_t idx : articulationIndices)
     {
-        const auto& artiIndices = _resolveIndices(indexTensor);
-        m_scratchSourceOffset.clear();
-        m_scratchDestinationIndex.clear();
-        for (uint32_t idx : artiIndices)
+        if (idx >= m_count)
+            continue;
+
+        const auto& links = m_linkIndicesPerArticulation[idx];
+        for (uint32_t linkSlot = 0; linkSlot < m_maxLinks && linkSlot < links.size(); ++linkSlot)
         {
-            if (idx >= m_count)
-                continue;
-            const auto& links = m_linkIndicesPerArticulation[idx];
-            for (uint32_t j = 0; j < m_maxLinks && j < links.size(); ++j)
+            const int bodyIdx = links[linkSlot];
+            const size_t sourceOffset = (size_t(idx) * m_maxLinks + linkSlot) * 3;
+            wp::vec3 forceWorld;
+            wp::vec3 torqueWorld;
+            details::computeWorldWrench(
+                hasForce ? forceData + sourceOffset : nullptr, hasTorque ? torqueData + sourceOffset : nullptr,
+                hasPosition ? positionData + sourceOffset : nullptr, bodyTransforms[bodyIdx],
+                bodyCentersOfMass[bodyIdx], isGlobal, hasForce, hasTorque, hasPosition, forceWorld, torqueWorld);
+            for (int component = 0; component < 3; ++component)
             {
-                for (int e = 0; e < 3; ++e)
-                {
-                    m_scratchSourceOffset.push_back(static_cast<int>((idx * m_maxLinks + j) * 3 + e));
-                    m_scratchDestinationIndex.push_back(links[j] * 6 + 3 + e);
-                }
+                m_cachedBodyF[bodyIdx * 6 + component] += forceWorld[component];
+                m_cachedBodyF[bodyIdx * 6 + 3 + component] += torqueWorld[component];
             }
         }
-        if (!m_scratchSourceOffset.empty())
-            indirectAddFloat(static_cast<const float*>(srcTorqueTensor->data), m_cachedBodyF,
-                             m_scratchSourceOffset.data(), m_scratchDestinationIndex.data(),
-                             m_scratchSourceOffset.size());
     }
 
     return true;

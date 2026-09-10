@@ -17,6 +17,7 @@
 
 import asyncio
 import dataclasses
+import unittest
 
 import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
@@ -90,6 +91,20 @@ class TestPhysicsScene(omni.kit.test.AsyncTestCase):
         for enabled in [False, True]:
             physics_scene.set_enabled_gravity(enabled)
             self.assertEqual(physics_scene.get_enabled_gravity(), enabled)
+
+    async def test_get_gravity_returns_effective_default_for_unauthored_schema_defaults(self) -> None:
+        """Test gravity reads map the USD schema's unauthored sentinel to the physics default."""
+        physics_scene = PhysicsScene("/World/physicsScene")
+
+        self.assertEqual(physics_scene.get_gravity(), Gf.Vec3f(0.0, 0.0, -9.81))
+
+    async def test_get_gravity_normalizes_authored_direction(self) -> None:
+        """Test gravity reads normalize manually authored non-unit directions."""
+        physics_scene = PhysicsScene("/World/physicsScene")
+        physics_scene.physics_scene.GetGravityMagnitudeAttr().Set(9.81)
+        physics_scene.physics_scene.GetGravityDirectionAttr().Set(Gf.Vec3f(0.0, 0.0, -2.0))
+
+        self.assertEqual(physics_scene.get_gravity(), Gf.Vec3f(0.0, 0.0, -9.81))
 
     async def test_max_solver_iterations(self) -> None:
         """Test max solver iterations."""

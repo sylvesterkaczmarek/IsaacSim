@@ -34,6 +34,12 @@ def compute_basis_vectors(dir: wp.vec3) -> Vec3Pair:
     """Compute two unit vectors orthogonal to ``dir`` and to each other, returning them as a Vec3Pair.
 
     ``dir`` must be a normalized vector.
+
+    Args:
+        dir: Normalized direction for which to construct the perpendicular basis.
+
+    Returns:
+        Pair of mutually orthogonal unit vectors perpendicular to ``dir``.
     """
     basis_vectors = Vec3Pair()
 

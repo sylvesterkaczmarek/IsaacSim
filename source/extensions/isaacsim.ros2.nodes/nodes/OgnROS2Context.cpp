@@ -14,9 +14,9 @@
 // limitations under the License.
 
 
-#include <isaacsim/core/includes/BaseResetNode.h>
-#include <isaacsim/ros2/core/IRos2Core.h>
-#include <isaacsim/ros2/core/Ros2Factory.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
+#include <isaacsim/ros2/core/IRos2Core.hpp>
+#include <isaacsim/ros2/core/Ros2Factory.hpp>
 
 #include <OgnROS2ContextDatabase.h>
 

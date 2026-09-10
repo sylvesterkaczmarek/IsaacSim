@@ -44,7 +44,17 @@ def run_example(
     gripper_path: str | None = None,
     object_prim_path: str | None = None,
 ) -> None:
-    """Run grasp pose generation and physics-based evaluation workflow."""
+    """Run grasp pose generation and physics-based evaluation workflow.
+
+    Args:
+        stage_path: Isaac asset path of the stage containing the gripper and object.
+        config_path: Grasping configuration file, or None to configure the manager from arguments.
+        sampler_config: Grasp-pose sampler settings used when the configuration contains none.
+        physics_scene_path: Stage path of the physics scene used for evaluation, or None to create one as needed.
+        output_dir: Directory for evaluated grasp results, or None to run without saving them.
+        gripper_path: Gripper prim path used when the configuration contains none.
+        object_prim_path: Grasped-object prim path used when the configuration contains none.
+    """
     assets_root_path = get_assets_root_path()
     print(f"Assets root path: {assets_root_path}")
     stage_url = assets_root_path + stage_path
@@ -147,12 +157,6 @@ run_example(stage_path=stage_path, config_path=config_path, output_dir=output_di
 
 # <start-grasping-workflow-sdg-test>
 import argparse
-import sys
-
-from isaacsim.core.utils.extensions import enable_extension
-
-enable_extension("isaacsim.test.utils")
-from isaacsim.test.utils.file_validation import validate_folder_contents
 
 test_parser = argparse.ArgumentParser()
 test_parser.add_argument(
@@ -163,6 +167,13 @@ test_parser.add_argument(
 test_args, _ = test_parser.parse_known_args()
 
 if test_args.test:
+    import sys
+
+    from isaacsim.core.utils.extensions import enable_extension
+
+    enable_extension("isaacsim.test.utils")
+    from isaacsim.test.utils.file_validation import validate_folder_contents
+
     # Pose generation requires the optional rtree dependency; skip validation if it is missing
     # to match the behavior of the in-extension test (test_grasping_workflow.py).
     try:

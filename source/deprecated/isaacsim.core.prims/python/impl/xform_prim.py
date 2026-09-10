@@ -47,41 +47,41 @@ class XFormPrim(Prim):
 
     Handle attributes and properties of single or multiple Xform prims.
 
-    Wrap all matching Xforms found at the regex provided at the ``prim_paths_expr`` argument
+    Wrap all matching Xforms found at the regex provided at the ``prim_paths_expr`` argument.
 
     .. note::
 
-        Each prim will have ``xformOp:orient``, ``xformOp:translate`` and ``xformOp:scale`` only post-init,
+        Each prim will have ``xformOp:orient``, ``xformOp:translate`` and ``xformOp:scale`` only after initialization,
         unless it is a non-root articulation link.
 
     Args:
-        prim_paths_expr: prim paths regex to encapsulate all prims that match it.
-            example: "/World/Env[1-5]/Franka" will match /World/Env1/Franka,
-            /World/Env2/Franka..etc.
-            (a non regex prim path can also be used to encapsulate one Xform). Additionally a
-            list of regex can be provided. example ["/World/Env[1-5]/Franka", "/World/Env[10-19]/Franka"].
-        name: shortname to be used as a key by Scene class.
+        prim_paths_expr: Prim path regex to encapsulate all prims that match it.
+            For example, "/World/Env[1-5]/Franka" will match /World/Env1/Franka,
+            /World/Env2/Franka, etc.
+            A non-regex prim path can also be used to encapsulate one Xform. Additionally, a
+            list of regex can be provided. For example, ["/World/Env[1-5]/Franka", "/World/Env[10-19]/Franka"].
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        positions: default positions in the world frame of the prim.
-            shape is (N, 3).
-        translations: default translations in the local frame of the prims
-            (with respect to its parent prims). shape is (N, 3).
-        orientations: default quaternion orientations in the world/ local frame of the prim
-            (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (N, 4).
-        scales: local scales to be applied to
-            the prim's dimensions. shape is (N, 3).
-        visibilities: set to false for an invisible prim in
-            the stage while rendering. shape is (N,).
-        reset_xform_properties: True if the prims don't have the right set of xform properties
+        positions: Default positions in the world frame of the prim.
+            Shape is (N, 3).
+        translations: Default translations in the local frame of the prims
+            with respect to their parent prims. Shape is (N, 3).
+        orientations: Default quaternion orientations in the world/local frame of the prim
+            depending on whether translation or position is specified.
+            Quaternion is scalar-first (w, x, y, z). Shape is (N, 4).
+        scales: Local scales to be applied to
+            the prim's dimensions. Shape is (N, 3).
+        visibilities: Set to False for an invisible prim in
+            the stage while rendering. Shape is (N,).
+        reset_xform_properties: True if the prims do not have the right set of xform properties
             (i.e: translate, orient and scale) ONLY and in that order.
-            Set this parameter to False if the object were cloned using using
-            the cloner api in isaacsim.core.cloner.
-        usd: True to strictly read/ write from usd. Otherwise False to allow read/ write from Fabric during
+            Set this parameter to False if the object was cloned using
+            the cloner API in isaacsim.core.cloner.
+        usd: True to strictly read/write from USD. Otherwise False to allow read/write from Fabric during
             initialization.
 
     Raises:
-        Exception: if translations and positions defined at the same time.
+        Exception: if translations and positions are defined at the same time.
         Exception: No prim was matched using the prim_paths_expr provided.
 
     Example:
@@ -188,10 +188,13 @@ class XFormPrim(Prim):
         """Set the visibilities of the prims in stage.
 
         Args:
-            visibilities: flag to set the visibilities of the usd prims in stage.
+            visibilities: Flag to set the visibilities of the USD prims in stage.
                 Shape (M,). Where M <= size of the encapsulated prims in the view.
-            indices: indices to specify which prims
+            indices: Indices to specify which prims
                 to manipulate. Shape (M,).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -222,13 +225,16 @@ class XFormPrim(Prim):
         """Return the current visibilities of the prims in stage.
 
         Args:
-            indices: indices to specify which prims
+            indices: Indices to specify which prims
                 to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
             Shape (M,) with type bool, where each item holds True
             if the prim is visible in stage. False otherwise.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -262,7 +268,10 @@ class XFormPrim(Prim):
         """Get the default states (positions and orientations) defined with the ``set_default_state`` method.
 
         Returns:
-            returns the default state of the prims that is used after each reset.
+            The default state of the prims that is used after each reset.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -304,12 +313,15 @@ class XFormPrim(Prim):
             The default states will be set during post-reset (e.g., calling ``.post_reset()`` or ``world.reset()`` methods)
 
         Args:
-            positions: positions in the world frame of the prim. shape is (M, 3).
-            orientations: quaternion orientations in the world frame of the prim.
+            positions: Positions in the world frame of the prim. shape is (M, 3).
+            orientations: Quaternion orientations in the world frame of the prim.
                 quaternion is scalar-first (w, x, y, z). shape is (M, 4).
-            indices: indices to specify which prims
+            indices: Indices to specify which prims
                 to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -367,7 +379,7 @@ class XFormPrim(Prim):
         """Apply visual material to the prims and optionally their prim descendants.
 
         Args:
-            visual_materials: visual materials to be applied to the prims. Currently supports
+            visual_materials: Visual materials to be applied to the prims. Currently supports
                 PreviewSurface, OmniPBR and OmniGlass. If a list is provided then
                 its size has to be equal the view's size or indices size.
                 If one material is provided it will be applied to all prims in the view.
@@ -375,13 +387,14 @@ class XFormPrim(Prim):
                 materials, otherwise False.
                 If a list of visual materials is provided then a list
                 has to be provided with the same size for this arg as well.
-            indices: indices to specify which prims
+            indices: Indices to specify which prims
                 to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
         Raises:
             Exception: length of visual materials != length of prims indexed
             Exception: length of visual materials != length of weaker descendants bools arg
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -458,12 +471,15 @@ class XFormPrim(Prim):
         """Get the current applied visual materials.
 
         Args:
-            indices: indices to specify which prims
+            indices: Indices to specify which prims
                 to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            a list of the current applied visual materials to the prims if its type is currently supported.
+            A list of the current applied visual materials to the prims if its type is currently supported.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -558,12 +574,15 @@ class XFormPrim(Prim):
         """Check if there is a visual material applied.
 
         Args:
-            indices: indices to specify which prims
+            indices: Indices to specify which prims
                 to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
         Returns:
-            True if there is a visual material applied is applied to the corresponding prim in the view. False otherwise.
+            True if there is a visual material applied to the corresponding prim in the view. False otherwise.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -606,15 +625,18 @@ class XFormPrim(Prim):
         """Get the poses of the prims in the view with respect to the world's frame.
 
         Args:
-            indices: indices to specify which prims
+            indices: Indices to specify which prims
                 to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-            usd: True to query from usd. Otherwise False to query from Fabric data.
+            usd: True to query from USD. Otherwise False to query from Fabric data.
 
         Returns:
-            first index is positions in the world frame of the prims. shape is (M, 3).
-            second index is quaternion orientations in the world frame of the prims.
+            First index is positions in the world frame of the prims. shape is (M, 3).
+            Second index is quaternion orientations in the world frame of the prims.
             quaternion is scalar-first (w, x, y, z). shape is (M, 4).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -711,13 +733,16 @@ class XFormPrim(Prim):
             This method will change (teleport) the prim poses immediately to the indicated value
 
         Args:
-            positions: positions in the world frame of the prims. shape is (M, 3).
-            orientations: quaternion orientations in the world frame of the prims.
+            positions: Positions in the world frame of the prims. shape is (M, 3).
+            orientations: Quaternion orientations in the world frame of the prims.
                 quaternion is scalar-first (w, x, y, z). shape is (M, 4).
-            indices: indices to specify which prims
+            indices: Indices to specify which prims
                 to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-            usd: True to query from usd. Otherwise False to query from Fabric data.
+            usd: True to query from USD. Otherwise False to query from Fabric data.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         .. hint::
 
@@ -808,6 +833,9 @@ class XFormPrim(Prim):
             second index is quaternion orientations in the local frame of the prims.
             quaternion is scalar-first (w, x, y, z). shape is (M, 4).
 
+        Raises:
+            Exception: If the prim view is not valid.
+
         Example:
 
         .. code-block:: python
@@ -874,6 +902,9 @@ class XFormPrim(Prim):
                 quaternion is scalar-first (w, x, y, z). shape is (M, 4).
             indices: indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         .. hint::
 
@@ -948,6 +979,9 @@ class XFormPrim(Prim):
         Returns:
             scales applied to the prim's dimensions in the world frame. shape is (M, 3).
 
+        Raises:
+            Exception: If the prim view is not valid.
+
         Example:
 
         .. code-block:: python
@@ -997,6 +1031,9 @@ class XFormPrim(Prim):
             indices: indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
+        Raises:
+            Exception: If the prim view is not valid.
+
         Example:
 
         .. code-block:: python
@@ -1038,6 +1075,9 @@ class XFormPrim(Prim):
 
         Returns:
             scales applied to the prim's dimensions in the local frame. shape is (M, 3).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1123,6 +1163,10 @@ class XFormPrim(Prim):
 
         Returns:
             Data converted to the current backend format (Warp, PyTorch, or NumPy).
+
+        Raises:
+            Exception: If utilities to convert Warp arrays to the specified backend do not exist or the data is not using the
+                specified backend.
         """
         if self._backend == "warp":
             return data
@@ -1140,10 +1184,13 @@ class XFormPrim(Prim):
 
         Args:
             data: Data from the current backend to convert to Warp format.
-            dtype: Optional Warp data type to cast the result to.
+            dtype: Warp data type to cast the result to.
 
         Returns:
             Data converted to Warp array format.
+
+        Raises:
+            Exception: If utilities to convert the specified backend arrays to Warp do not exist.
         """
         if isinstance(data, list):
             result = wp.array(data, dtype=wp.uint32, device=self._device).to(self._device)
@@ -1202,11 +1249,11 @@ class XFormPrim(Prim):
 
         When the backend changes between __init__ and physics start (e.g. the automatic
         numpy-to-torch switch for GPU pipelines), the cached _default_state tensors become
-        stale.  Re-converting here keeps them consistent with _backend_utils so that
+        stale. Re-converting here keeps them consistent with _backend_utils so that
         _on_post_reset can pass them to set_world_poses without a type mismatch.
 
         Subclasses like Articulation reset _default_state to None/None in their __init__
-        and populate it later in their own _on_physics_ready, so we skip None values.
+        and populate it later in their own _on_physics_ready, so None values are skipped.
 
         Args:
             event: The physics ready event.
@@ -1229,6 +1276,9 @@ class XFormPrim(Prim):
 
         Args:
             event: The post-reset event that triggered this callback.
+
+        Raises:
+            Exception: If the prim view is not a valid view.
         """
         if not self._non_root_link:
             self.set_world_poses(self._default_state.positions, self._default_state.orientations)
@@ -1238,6 +1288,9 @@ class XFormPrim(Prim):
 
         Ensures each prim has the correct set of xform properties (translate, orient, and scale) in the proper order.
         Removes any existing non-standard transformation operations and preserves current world poses.
+
+        Raises:
+            Exception: If the prim view is not a valid view.
         """
         current_positions, current_orientations = self.get_world_poses()
         properties_to_remove = [

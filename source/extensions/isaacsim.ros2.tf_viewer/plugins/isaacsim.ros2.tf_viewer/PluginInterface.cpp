@@ -17,10 +17,10 @@
 
 #include <carb/PluginUtils.h>
 
-#include <isaacsim/ros2/core/Ros2Distro.h>
-#include <isaacsim/ros2/core/Ros2Node.h>
-#include <isaacsim/ros2/tf_viewer/ITransformListener.h>
-#include <isaacsim/ros2/tf_viewer/Tf2Factory.h>
+#include <isaacsim/ros2/core/Ros2Distro.hpp>
+#include <isaacsim/ros2/core/Ros2Node.hpp>
+#include <isaacsim/ros2/tf_viewer/ITransformListener.hpp>
+#include <isaacsim/ros2/tf_viewer/Tf2Factory.hpp>
 
 /**
  * @brief Plugin descriptor for the ROS 2 transform listener plugin.

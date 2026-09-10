@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.6.3] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
 ## [3.6.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.
@@ -143,7 +147,7 @@
 
 ## [3.0.3] - 2025-05-15
 ### Changed
-- UsdUtilities.h was updated
+- UsdUtilities.hpp was updated
 
 ## [3.0.2] - 2025-05-11
 ### Changed

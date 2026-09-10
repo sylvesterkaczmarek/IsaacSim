@@ -16,7 +16,7 @@
 #include <carb/BindingsPythonUtils.h>
 #include <carb/logging/Log.h>
 
-#include <isaacsim/core/nodes/ICoreNodes.h>
+#include <isaacsim/core/nodes/ICoreNodes.hpp>
 
 CARB_BINDINGS("isaacsim.core.nodes.python")
 

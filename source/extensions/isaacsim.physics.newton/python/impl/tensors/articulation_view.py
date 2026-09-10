@@ -109,7 +109,7 @@ class NewtonArticulationView:
         """Notify the solver that joint DOF properties (gains, limits, etc.) have changed."""
         if self._newton_stage.solver is not None:
             try:
-                self._newton_stage.solver.notify_model_changed(newton.solvers.SolverNotifyFlags.JOINT_DOF_PROPERTIES)
+                self._newton_stage.solver.notify_model_changed(newton.ModelFlags.JOINT_DOF_PROPERTIES)
             except AttributeError:
                 pass
 
@@ -208,7 +208,7 @@ class NewtonArticulationView:
         wp.launch(
             sync_ctrl_direct_targets,
             dim=(nworlds, dofs_per_world),
-            inputs=[dof_map, control.joint_target_pos, dofs_per_world, ctrls_per_world],
+            inputs=[dof_map, control.joint_target_q, dofs_per_world, ctrls_per_world],
             outputs=[mujoco_ctrl],
             device=model.device,
         )
@@ -247,7 +247,7 @@ class NewtonArticulationView:
 
         if self._newton_stage.solver is not None:
             try:
-                self._newton_stage.solver.notify_model_changed(newton.solvers.SolverNotifyFlags.ACTUATOR_PROPERTIES)
+                self._newton_stage.solver.notify_model_changed(newton.ModelFlags.ACTUATOR_PROPERTIES)
             except AttributeError:
                 pass
 
@@ -893,13 +893,13 @@ class NewtonArticulationView:
             wp.launch(
                 get_dof_attributes,
                 dim=(self.count, self.max_dofs),
-                inputs=[control.joint_target_pos, self._backend.dof_axis_indices, self.max_dofs],
+                inputs=[control.joint_target_q, self._backend.dof_axis_indices, self.max_dofs],
                 outputs=[self._convert_to_warp(self._dof_position_targets)],
                 device=str(self._frontend.device),
             )
             return self._dof_position_targets
         else:
-            return wp.indexedarray(control.joint_target_pos, self._backend.dof_axis_indices)
+            return wp.indexedarray(control.joint_target_q, self._backend.dof_axis_indices)
 
     def get_dof_velocity_targets(self, copy: bool = copy_data) -> Any:
         """Get joint velocity targets (for velocity control).
@@ -919,13 +919,13 @@ class NewtonArticulationView:
             wp.launch(
                 get_dof_attributes,
                 dim=(self.count, self.max_dofs),
-                inputs=[control.joint_target_vel, self._backend.dof_axis_indices, self.max_dofs],
+                inputs=[control.joint_target_qd, self._backend.dof_axis_indices, self.max_dofs],
                 outputs=[self._convert_to_warp(self._dof_velocity_targets)],
                 device=str(self._frontend.device),
             )
             return self._dof_velocity_targets
         else:
-            return wp.indexedarray(control.joint_target_vel, self._backend.dof_axis_indices)
+            return wp.indexedarray(control.joint_target_qd, self._backend.dof_axis_indices)
 
     def _update_articulation_state(
         self, indices: Any, indices_mask: Any | None = None, update_positions: bool = True
@@ -1253,7 +1253,7 @@ class NewtonArticulationView:
                 self._backend.dof_axis_indices,
                 self.max_dofs,
             ],
-            outputs=[control.joint_target_pos],
+            outputs=[control.joint_target_q],
             device=str(self._frontend.device),
         )
         self._sync_ctrl_direct_position_targets()
@@ -1278,7 +1278,7 @@ class NewtonArticulationView:
                 self._backend.dof_axis_indices,
                 self.max_dofs,
             ],
-            outputs=[control.joint_target_vel],
+            outputs=[control.joint_target_qd],
             device=str(self._frontend.device),
         )
 

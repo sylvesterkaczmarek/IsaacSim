@@ -34,9 +34,9 @@ class SpringDamperFollower:
         mass: Mass of the system, affecting inertia and response time.
         stiffness: Spring stiffness coefficient, controlling how strongly the system pulls toward the target.
         damping: Damping coefficient, controlling oscillation reduction and settling behavior.
-        current: Current position as a 3D vector.
-        target: Target position as a 3D vector.
-        vel: Current velocity as a 3D vector.
+        current: Current position as a Gf.Vec3d.
+        target: Target position as a Gf.Vec3d.
+        vel: Current velocity as a Gf.Vec3d.
     """
 
     def __init__(
@@ -72,7 +72,7 @@ class SpringDamperFollower:
 class DynamicCamera:
     """A dynamic camera system that provides smooth camera movements using spring-damper physics.
 
-    This class creates a USD camera with physically-based motion control using spring-damper systems
+    This class creates a USD camera with physically based motion control using spring-damper systems
     for position, look target, and focus distance. The camera movements are smooth and natural,
     with configurable mass, stiffness, and damping parameters for different motion characteristics.
 

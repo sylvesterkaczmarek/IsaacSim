@@ -22,7 +22,7 @@ import omni.usd
 from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics
 from usd.schema.isaac import robot_schema
 
-from ..widget import CollisionDetectorWidget, RigidBodyPairData
+from ..widget import CollisionDetectorWidget, RigidBodyPairData, _iter_body_prims
 
 
 class TestCollisionDetection(omni.kit.test.AsyncTestCase):
@@ -265,3 +265,106 @@ class TestCollisionDetection(omni.kit.test.AsyncTestCase):
         pairs = self._detect(include_env=False)
         pair = self._find_pair(pairs, "Link1", "Obstacle")
         self.assertIsNone(pair, "Filtered robot-env pair should not appear with env collisions disabled")
+
+    # ------------------------------------------------------------------
+    # Nested rigid body traversal
+    # ------------------------------------------------------------------
+
+    def _add_nested_rigid_body(self, parent_path: str) -> str:
+        """Add a child rigid body with its own collider under an existing link.
+
+        Args:
+            parent_path: Path of the parent rigid body.
+
+        Returns:
+            Path of the nested rigid body prim.
+        """
+        nested_path = f"{parent_path}/Nested"
+        nested = UsdGeom.Xform.Define(self._stage, nested_path).GetPrim()
+        UsdPhysics.RigidBodyAPI.Apply(nested)
+        cube = UsdGeom.Cube.Define(self._stage, f"{nested_path}/Collision")
+        cube.CreateSizeAttr(10.0)
+        UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
+        return nested_path
+
+    async def test_iter_body_prims_prunes_nested_bodies(self) -> None:
+        """_iter_body_prims yields the root but skips nested rigid bodies and their children."""
+        nested_path = self._add_nested_rigid_body("/World/Robot/Link1")
+        await omni.kit.app.get_app().next_update_async()
+
+        root = self._stage.GetPrimAtPath("/World/Robot/Link1")
+        visited = {str(p.GetPath()) for p in _iter_body_prims(root)}
+        self.assertIn("/World/Robot/Link1", visited)
+        self.assertIn("/World/Robot/Link1/Collision", visited)
+        self.assertNotIn(nested_path, visited, "Nested rigid body prim must be pruned")
+        self.assertNotIn(f"{nested_path}/Collision", visited, "Nested rigid body children must be pruned")
+
+    async def test_collect_gprims_halts_at_nested_rigid_body(self) -> None:
+        """Gprims under a nested rigid body are not attributed to the parent body."""
+        nested_path = self._add_nested_rigid_body("/World/Robot/Link1")
+        await omni.kit.app.get_app().next_update_async()
+
+        parent_gprims = CollisionDetectorWidget._collect_gprims(self._stage, "/World/Robot/Link1")
+        self.assertIn("/World/Robot/Link1/Collision", parent_gprims)
+        self.assertNotIn(
+            f"{nested_path}/Collision",
+            parent_gprims,
+            "Nested rigid body geometry must not be collected under the parent body",
+        )
+
+    async def test_collect_gprims_includes_nested_body_when_queried_directly(self) -> None:
+        """A nested rigid body still owns its own geometry when queried directly."""
+        nested_path = self._add_nested_rigid_body("/World/Robot/Link1")
+        await omni.kit.app.get_app().next_update_async()
+
+        nested_gprims = CollisionDetectorWidget._collect_gprims(self._stage, nested_path)
+        self.assertEqual(nested_gprims, {f"{nested_path}/Collision"})
+
+    async def test_row_selection_highlights_own_geometry_not_nested_bodies(self) -> None:
+        """Selecting a pair highlights each body's own geometry, not nested child bodies.
+
+        The highlight is driven by per-body selection groups (``_group_prims``),
+        not by a stage selection. A body's group must contain its own colliders
+        but never the geometry of a nested child rigid body, and the stage
+        selection is left empty so it cannot fight the group highlight.
+        """
+        nested_path = self._add_nested_rigid_body("/World/Robot/Link1")
+        await omni.kit.app.get_app().next_update_async()
+
+        with ui.Frame():
+            widget = CollisionDetectorWidget()
+        try:
+            pairs = [
+                RigidBodyPairData(
+                    body_a_name="Link1",
+                    body_b_name="Link4",
+                    body_a_path="/World/Robot/Link1",
+                    body_b_path="/World/Robot/Link4",
+                )
+            ]
+            widget._pairs = pairs
+            widget._build_body_color_map()
+            widget._tree_model.set_data(pairs)
+            item = widget._tree_model._all_items[0]
+            widget._on_tree_selection_changed([item])
+
+            link1_group = widget._group_prims.get("/World/Robot/Link1", set())
+            self.assertIn(
+                "/World/Robot/Link1/Collision",
+                link1_group,
+                "Link1's own collider must be in its highlight group",
+            )
+            self.assertNotIn(
+                f"{nested_path}/Collision",
+                link1_group,
+                "Nested rigid body geometry must not be added to the parent body's group",
+            )
+            self.assertNotIn(
+                nested_path,
+                widget._group_prims,
+                "A nested body that is not part of the pair must not get its own group",
+            )
+            selected = omni.usd.get_context().get_selection().get_selected_prim_paths()
+            self.assertEqual(selected, [], "Row selection must not author a stage selection")
+        finally:
+            widget.destroy()

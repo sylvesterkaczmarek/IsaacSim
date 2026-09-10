@@ -61,7 +61,7 @@ benchmark = BaseIsaacBenchmark(
     },
     backend_type=args.backend_type,
 )
-robot_path = "/Isaac/Robots/Fraunhofer/Evobot/evobot.usd"
+robot_path = "/Isaac/Robots_Multiphysics/Fraunhofer/Evobot/evobot.usda"
 scene_path = "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd"
 benchmark.fully_load_stage(benchmark.assets_root_path + scene_path)
 stage = omni.usd.get_context().get_stage()
@@ -80,11 +80,13 @@ for num_robot in n_robot:
         robot_position = np.array([-2 * (i % MAX_IN_LINE), -2 * np.floor(i / MAX_IN_LINE), 0])
         current_robot = WheeledRobot(
             prim_path=robot_prim_path,
+            robot_path="head_link",
             wheel_dof_names=["left_wheel_joint", "right_wheel_joint"],
             create_robot=True,
             usd_path=robot_usd_path,
             position=robot_position,
         )
+        stage.GetPrimAtPath(robot_prim_path).GetVariantSets().SetSelection("Physics", "physx")
 
         omni.kit.app.get_app().update()
         omni.kit.app.get_app().update()

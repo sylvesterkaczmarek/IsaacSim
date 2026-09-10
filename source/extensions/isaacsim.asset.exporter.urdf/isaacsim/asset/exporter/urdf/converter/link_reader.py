@@ -179,6 +179,25 @@ def _resolve_prototype(prim: Usd.Prim) -> Usd.Prim:
     return prim
 
 
+def _computed_purpose(prim: Usd.Prim) -> str:
+    """Return the prim's inherited purpose, falling back to the local value.
+
+    USD purpose is inheritable, so a "guide" authored on an ancestor (common
+    when a mesh sits under a `collisions` Xform) applies to the descendant even
+    when its own purpose attribute is the default.
+
+    Args:
+        prim: USD prim to read.
+
+    Returns:
+        The computed purpose token.
+    """
+    imageable = UsdGeom.Imageable(prim)
+    if not imageable:
+        return UsdGeom.Tokens.default_
+    return imageable.ComputePurpose()
+
+
 def _is_collision_prim(prim: Usd.Prim) -> bool:
     """Check if prim is collision geometry.
 
@@ -193,9 +212,7 @@ def _is_collision_prim(prim: Usd.Prim) -> bool:
     source = _resolve_prototype(prim)
     if source.HasAPI(UsdPhysics.CollisionAPI):
         return True
-    imageable = UsdGeom.Imageable(source)
-    purpose = imageable.GetPurposeAttr().Get()
-    return purpose == UsdGeom.Tokens.guide
+    return _computed_purpose(source) == UsdGeom.Tokens.guide
 
 
 def _is_visual_prim(prim: Usd.Prim) -> bool:
@@ -210,8 +227,10 @@ def _is_visual_prim(prim: Usd.Prim) -> bool:
         True if the prim is visual geometry, False otherwise.
     """
     source = _resolve_prototype(prim)
-    imageable = UsdGeom.Imageable(source)
-    purpose = imageable.GetPurposeAttr().Get()
+    # Use the computed purpose so an inherited "guide" on an ancestor (e.g. a
+    # collisions Xform wrapping the mesh) is respected and the mesh is not
+    # mistakenly exported as a visual.
+    purpose = _computed_purpose(source)
     if purpose == UsdGeom.Tokens.guide:
         return False
     return purpose in (UsdGeom.Tokens.default_, UsdGeom.Tokens.render, None, "")

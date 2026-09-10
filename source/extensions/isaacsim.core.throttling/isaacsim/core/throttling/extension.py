@@ -24,6 +24,7 @@ import carb.eventdispatcher
 import omni.ext
 import omni.kit.app
 import omni.timeline
+from isaacsim.core.experimental.utils import stage as stage_utils
 
 ASYNC_TOGGLE_SETTING = "/exts/isaacsim.core.throttling/enable_async"
 MANUAL_TOGGLE_SETTING = "/exts/isaacsim.core.throttling/enable_manualmode"
@@ -243,6 +244,18 @@ class Extension(omni.ext.IExt):
         Args:
             event: Timeline play event.
         """
+        try:
+            start_time_code, end_time_code, _ = stage_utils.get_stage_time_code()
+        except ValueError:
+            pass
+        else:
+            if start_time_code == end_time_code:
+                carb.log_warn(
+                    "The current USD stage has no usable time-code range. Timeline playback will loop over a "
+                    "single frame, which prevents time-accumulating sensors and controllers from producing output. "
+                    "Author distinct startTimeCode and endTimeCode values in the root layer before playing."
+                )
+
         _settings = carb.settings.get_settings()
         _settings.set("/rtx/ecoMode/enabled", False)
         _settings.set("/exts/omni.kit.hydra_texture/gizmos/enabled", False)

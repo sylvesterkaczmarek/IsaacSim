@@ -1,6 +1,6 @@
 [package]
 # Semantic Versioning is used: https://semver.org/
-version = "1.6.0"
+version = "1.6.2"
 category = "Simulation"
 title = "Isaac Loop Runner"
 description = "Custom Loop Runner for Isaac Sim"
@@ -96,4 +96,8 @@ args = [
     "--/rtx/reservedDescriptors=900000",
     ### Extension specific args
     "--/rtx/ecoMode/enabled=True"
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]

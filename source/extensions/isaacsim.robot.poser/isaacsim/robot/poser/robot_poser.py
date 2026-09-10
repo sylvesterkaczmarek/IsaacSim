@@ -33,20 +33,14 @@ from typing import Any
 import numpy as np
 
 # Ensure the default LM solver is registered at import time.
-import usd.schema.isaac.robot_schema.lm_ik as _lm_ik  # noqa: F401
 from pxr import Gf, Sdf, Tf, Usd, UsdGeom
 from usd.schema.isaac.robot_schema import Attributes, Classes, Relations
-from usd.schema.isaac.robot_schema.ik_solver import IKSolver, IKSolverRegistry, pose_error
-from usd.schema.isaac.robot_schema.kinematic_chain import (
-    KinematicChain,
-    _joint_is_revolute,
-)
-from usd.schema.isaac.robot_schema.math import (
-    Transform,
-    VecN,
-    _prim_pose_in_robot_frame,
-)
 from usd.schema.isaac.robot_schema.utils import GetAllNamedPoses
+
+from . import lm_ik as _lm_ik  # noqa: F401
+from .ik_solver import IKSolver, IKSolverRegistry, pose_error
+from .kinematic_chain import KinematicChain, _joint_is_revolute
+from .math import Transform, VecN, _prim_pose_in_robot_frame
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +271,7 @@ def _build_cold_start_seeds(
 class RobotPoser:
     """High-level IK controller bound to a specific robot.
 
-    Wraps a :class:`~usd.schema.isaac.robot_schema.kinematic_chain.KinematicChain` (which
+    Wraps a :class:`~isaacsim.robot.poser.kinematic_chain.KinematicChain` (which
     owns the joint chain, kinematic tree, and FK/USD I/O) and adds IK solving,
     solution seeding, and unit conversion on top.
 
@@ -341,12 +335,12 @@ class RobotPoser:
 
     @property
     def joints(self) -> list:
-        """Copy of the internal joint chain (list of :class:`~usd.schema.isaac.robot_schema.math.Joint`)."""
+        """Copy the internal joint chain."""
         return self._chain.joints if self._chain is not None else []
 
     @property
     def chain(self) -> KinematicChain | None:
-        """The underlying :class:`~usd.schema.isaac.robot_schema.kinematic_chain.KinematicChain`, or ``None``."""
+        """Get the underlying :class:`~isaacsim.robot.poser.kinematic_chain.KinematicChain`, or ``None``."""
         return self._chain
 
     @property
@@ -363,7 +357,7 @@ class RobotPoser:
     def set_chain(self, start_prim: Usd.Prim, end_prim: Usd.Prim) -> None:
         """Set or switch the kinematic chain.
 
-        Builds a new :class:`~usd.schema.isaac.robot_schema.kinematic_chain.KinematicChain`
+        Builds a new :class:`~isaacsim.robot.poser.kinematic_chain.KinematicChain`
         and resets the solution seed.
 
         Args:

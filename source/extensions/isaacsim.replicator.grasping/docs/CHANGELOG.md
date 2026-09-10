@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.6] - 2026-06-26
+### Changed
+- Replace package-root star imports with explicit public API imports.
+
 ## [1.1.5] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

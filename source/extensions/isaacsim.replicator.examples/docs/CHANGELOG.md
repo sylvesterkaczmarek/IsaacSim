@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.12.4] - 2026-08-28
+### Changed
+- Raise SimReady assets RGB image comparison tolerance to 7.5.
+- Increase rt subframes to 8 for the sphere scan capture randomizer example.
+
+### Fixed
+- Regenerate object-reconstruction and SimReady golden images.
+
+## [1.12.3] - 2026-08-10
+### Fixed
+- Regenerate SimReady, object-reconstruction, and Cosmos warehouse golden images for the current renderer output.
+
+## [1.12.2] - 2026-07-28
+### Changed
+- Use `isaacsim.robot_motion.examples` for state-machine tutorial test dependencies.
+
+## [1.12.1] - 2026-07-17
+### Added
+- RGB golden rgb images for default scenarios of scene-based and object-based SDG examples.
+
+## [1.12.0] - 2026-06-25
+### Added
+- Extension tests for Isaac Randomizers script-editor snippets (lights, textures, sequential randomizations, physics-based volume filling)
+
+### Fixed
+- Make custom sphere randomizer nodes reproducible with the Replicator global seed.
+
+## [1.11.7] - 2026-06-12
+### Changed
+- Split motion blur tests into `test_sdg_motion_blur.py` with golden RGB validation.
+- Split the motion blur example, snippet, and tests into separate raytracing (`motion_blur_raytracing*`) and path tracing (`motion_blur_pathtracing*`) versions, each exposing render-mode-specific finetuning parameters.
+
 ## [1.11.6] - 2026-06-10
 ### Fixed
 - Add warmup steps to motion blur example test to make it more stable in CI

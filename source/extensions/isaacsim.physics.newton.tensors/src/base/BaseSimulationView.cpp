@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "BaseSimulationView.h"
+#include "BaseSimulationView.hpp"
 
 #include <carb/logging/Log.h>
 
@@ -48,6 +48,16 @@ SimViewInit BaseSimulationView::initNewton(long stageId)
         if (d.newtonStage.is_none())
         {
             CARB_LOG_ERROR("Newton stage not available - is isaacsim.physics.newton enabled?");
+            return d;
+        }
+
+        // A prior initialize_newton() failure for this play session sets _init_failed.
+        // Do not retry or re-log on every tensor view creation until the timeline stops
+        // (NewtonStage.on_timeline_event clears _init_failed on STOP).
+        const bool initFailed =
+            py::hasattr(d.newtonStage, "_init_failed") && d.newtonStage.attr("_init_failed").cast<bool>();
+        if (initFailed)
+        {
             return d;
         }
 
@@ -147,11 +157,18 @@ bool BaseSimulationView::setGravity(const carb::Float3& gravity)
     {
         if (!m_model.is_none())
         {
+            py::list gravity_shape = m_model.attr("gravity").attr("shape").cast<py::list>();
+            int n_worlds = gravity_shape[0].cast<int>();
             py::list gravityList;
-            gravityList.append(gravity.x);
-            gravityList.append(gravity.y);
-            gravityList.append(gravity.z);
-            m_model.attr("gravity") = gravityList;
+            for (int i = 0; i < n_worlds; ++i)
+            {
+                gravityList.append(gravity.x);
+                gravityList.append(gravity.y);
+                gravityList.append(gravity.z);
+            }
+            py::module_ wpMod = py::module_::import("warp");
+            m_model.attr("gravity") = wpMod.attr("from_numpy")(
+                gravityList, /*dtype*/ wpMod.attr("vec3"), /*shape*/ gravity_shape, /*device*/ m_model.attr("device"));
         }
         return true;
     }
@@ -161,7 +178,6 @@ bool BaseSimulationView::setGravity(const carb::Float3& gravity)
         return false;
     }
 }
-
 bool BaseSimulationView::getGravity(carb::Float3& gravity)
 {
     if (!m_valid)
@@ -172,10 +188,11 @@ bool BaseSimulationView::getGravity(carb::Float3& gravity)
     {
         if (!m_model.is_none())
         {
-            py::list gravityList = m_model.attr("gravity").cast<py::list>();
-            gravity.x = gravityList[0].cast<float>();
-            gravity.y = gravityList[1].cast<float>();
-            gravity.z = gravityList[2].cast<float>();
+            py::array_t<float> gravityArray = m_model.attr("gravity").attr("numpy")();
+            float* ptr = static_cast<float*>(gravityArray.request().ptr);
+            gravity.x = ptr[0];
+            gravity.y = ptr[1];
+            gravity.z = ptr[2];
         }
         else
         {

@@ -132,6 +132,7 @@
   - def set_enabled_collisions(self, enabled: bool | list | np.ndarray | wp.array)
   - def get_enabled_collisions(self) -> wp.array
   - def apply_collision_apis(self)
+  - def remove_collision_apis(self)
   - def apply_physics_materials(self, materials: type['PhysicsMaterial'] | list[type['PhysicsMaterial']])
   - def get_applied_physics_materials(self) -> list[type['PhysicsMaterial'] | None]
 
@@ -170,6 +171,7 @@
   - def get_enabled_rigid_bodies(self) -> wp.array
   - def set_enabled_gravities(self, enabled: bool | list | np.ndarray | wp.array)
   - def get_enabled_gravities(self) -> wp.array
+  - def remove_physics_apis(self)
   - def set_enabled_contact_tracking(self, enabled: bool | list | np.ndarray | wp.array)
   - def get_enabled_contact_tracking(self) -> wp.array
   - def get_net_contact_forces(self) -> wp.array
@@ -191,6 +193,7 @@
   - def get_default_state(self) -> tuple[wp.array | None, wp.array | None]
   - def set_default_state(self, positions: list | np.ndarray | wp.array | None = None, orientations: list | np.ndarray | wp.array | None = None)
   - def apply_visual_materials(self, materials: type['VisualMaterial'] | list[type['VisualMaterial']])
+  - def apply_physics_materials(self, materials: type['PhysicsMaterial'] | list[type['PhysicsMaterial']])
   - def get_applied_visual_materials(self) -> list[type['VisualMaterial'] | None]
   - def get_world_poses(self) -> tuple[wp.array, wp.array]
   - def set_world_poses(self, positions: list | np.ndarray | wp.array | None = None, orientations: list | np.ndarray | wp.array | None = None)
@@ -200,7 +203,3 @@
   - def get_local_scales(self) -> wp.array
   - def reset_xform_op_properties(self)
   - def reset_to_default_state(self)
-
-- class Extension(omni.ext.IExt)
-  - def on_startup(self, ext_id: str)
-  - def on_shutdown(self)

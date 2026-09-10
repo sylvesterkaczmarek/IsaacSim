@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Any, Optional
+from typing import Any
 
 import carb
 import omni.ext
@@ -26,10 +26,10 @@ import omni.kit.actions.core
 import omni.usd
 from isaacsim.core.rendering_manager import ViewportManager
 from isaacsim.gui.components.menu import open_content_browser_to_path
-from isaacsim.storage.native.nucleus import get_assets_root_path
+from isaacsim.storage.native import get_assets_root_path
 from omni.kit.menu.utils import MenuHelperExtensionFull, MenuItemDescription, add_menu_items, remove_menu_items
 
-from .og_rtx_sensors import Ros2CameraGraph, Ros2RtxLidarGraph
+from .og_rtx_sensors import Ros2CameraGraph, Ros2RtxLidarGraph, Ros2RtxRadarGraph
 from .og_utils import Ros2ClockGraph, Ros2GenericPubGraph, Ros2JointStatesGraph, Ros2OdometryGraph, Ros2TfPubGraph
 
 
@@ -57,6 +57,12 @@ class Extension(omni.ext.IExt, MenuHelperExtensionFull):
             lambda: Ros2RtxLidarGraph(),
             "ROS 2 RTX Lidar",
             "RTX Lidar",
+            "Tools/Robotics/ROS 2 OmniGraphs",
+        )
+        self.menu_startup(
+            lambda: Ros2RtxRadarGraph(),
+            "ROS 2 RTX Radar",
+            "RTX Radar",
             "Tools/Robotics/ROS 2 OmniGraphs",
         )
         self.menu_startup(
@@ -160,7 +166,7 @@ class Extension(omni.ext.IExt, MenuHelperExtensionFull):
         # add_layout(self.__ros_menu_layout)
 
     def create_asset(
-        self, usd_path: str, stage_path: str, camera_position: Optional[Any] = None, camera_target: Optional[Any] = None
+        self, usd_path: str, stage_path: str, camera_position: Any | None = None, camera_target: Any | None = None
     ) -> None:
         """Create a USD asset reference on the stage.
 

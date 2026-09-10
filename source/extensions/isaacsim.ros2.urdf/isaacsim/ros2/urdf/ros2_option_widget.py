@@ -21,7 +21,8 @@ import typing
 import omni.ui as ui
 from isaacsim.asset.importer.urdf import URDFImporterConfig
 from isaacsim.asset.importer.urdf.ui.impl.style import get_option_style
-from isaacsim.gui.components.ui_utils import checkbox_builder, dropdown_builder, str_builder, string_filed_builder
+from isaacsim.gui.components import dropdown_builder, str_builder
+from isaacsim.gui.components.ui_utils import checkbox_builder, string_filed_builder
 
 
 def _option_header(collapsed: bool, title: str) -> None:

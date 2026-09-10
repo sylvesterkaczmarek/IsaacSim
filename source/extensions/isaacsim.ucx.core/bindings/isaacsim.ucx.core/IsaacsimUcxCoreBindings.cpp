@@ -15,8 +15,8 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/ucx/core/UcxListener.h>
-#include <isaacsim/ucx/core/UcxListenerRegistry.h>
+#include <isaacsim/ucx/core/UcxListener.hpp>
+#include <isaacsim/ucx/core/UcxListenerRegistry.hpp>
 
 CARB_BINDINGS("isaacsim.ucx.core.python")
 

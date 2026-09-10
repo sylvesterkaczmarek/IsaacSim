@@ -15,7 +15,8 @@
 
 """Extension for managing deprecated settings and OmniGraph nodes in Isaac Sim."""
 
+from .api import deprecated as deprecated
 from .api import import_module as import_module
 from .extension import *
 
-__all__ = ["import_module"]
+__all__ = ["deprecated", "import_module"]

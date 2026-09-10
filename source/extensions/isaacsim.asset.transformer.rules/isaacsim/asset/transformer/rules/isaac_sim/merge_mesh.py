@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from isaacsim.asset.importer.utils.impl import merge_mesh_utils
+from isaacsim.asset.importer.utils import merge_mesh_utils
 from isaacsim.asset.transformer import RuleConfigurationParam, RuleInterface
 
 

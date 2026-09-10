@@ -51,7 +51,11 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
 
     # test to make sure this runs
     async def test_generate_path_diagonal(self) -> None:
-        """Test generating a diagonal path from (0,0) to (2,2) in a 3x3 free space grid."""
+        """Test generating a diagonal path from (0,0) to (2,2) in a 3x3 free space grid.
+
+        Raises:
+            AssertionError: If the generated path does not match the expected diagonal path.
+        """
         start = (0, 0)
         end = (2, 2)
 
@@ -66,7 +70,11 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.allclose(path, ground_truth))
 
     async def test_generate_path_l_shaped(self) -> None:
-        """Test generating an L-shaped path when direct diagonal movement is blocked by obstacles."""
+        """Test generating an L-shaped path when direct diagonal movement is blocked by obstacles.
+
+        Raises:
+            AssertionError: If the generated path does not match the expected L-shaped path.
+        """
         start = (0, 0)
         end = (2, 2)
 
@@ -89,7 +97,11 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.allclose(path, ground_truth))
 
     async def test_compress_path_line(self) -> None:
-        """Test compressing a straight line path by removing intermediate collinear points."""
+        """Test compressing a straight line path by removing intermediate collinear points.
+
+        Raises:
+            AssertionError: If the compressed path does not match the expected straight line path.
+        """
         # 111 -> 1-1
         path = np.array([[0, 0], [0, 1], [0, 2]]).astype(np.float32)
 
@@ -100,7 +112,11 @@ class TestPathPlanner(omni.kit.test.AsyncTestCase):
         self.assertTrue(np.allclose(path_compressed, compressed_path_true))
 
     async def test_compress_path_bend(self) -> None:
-        """Test compressing a path with bends by removing intermediate points in straight segments."""
+        """Test compressing a path with bends by removing intermediate points in straight segments.
+
+        Raises:
+            AssertionError: If the compressed path does not match the expected path with bends.
+        """
         # 111----      1-1----
         # ---1---   => -------
         # ----111      ----1-1

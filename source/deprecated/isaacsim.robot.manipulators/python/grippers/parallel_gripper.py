@@ -24,12 +24,12 @@ from isaacsim.robot.manipulators.grippers.gripper import Gripper
 
 
 class ParallelGripper(Gripper):
-    """Provides high level functions to set/ get properties and actions of a parallel gripper.
+    """Provides high level functions to set/get properties and actions of a parallel gripper.
 
     (a gripper that has two fingers).
 
     Args:
-        end_effector_prim_path: Prim path of the Prim that corresponds to the gripper root/ end effector.
+        end_effector_prim_path: Prim path of the Prim that corresponds to the gripper root/end effector.
         joint_prim_names: The left finger joint prim name and the right finger joint prim name respectively.
         joint_opened_positions: Joint positions of the left finger joint and the right finger joint respectively when
             opened.
@@ -101,7 +101,7 @@ class ParallelGripper(Gripper):
         """Indices of active joints based on the use_mimic_joints setting.
 
         Returns:
-            List of active joint indices.
+            Active joint indices.
         """
         if self._use_mimic_joints:
             return [self._joint_dof_indicies[0]]
@@ -112,7 +112,7 @@ class ParallelGripper(Gripper):
         """Number of active joints based on the use_mimic_joints setting.
 
         Returns:
-            Number of active joints (1 or 2).
+            Number of active joints, either 1 when use_mimic_joints is enabled or 2 otherwise.
         """
         return 1 if self._use_mimic_joints else 2
 
@@ -124,7 +124,7 @@ class ParallelGripper(Gripper):
         dof_names: list,
         physics_sim_view: omni.physics.tensors.SimulationView = None,
     ) -> None:
-        """Create a physics simulation view if not passed and creates a rigid prim view using physX tensor api.
+        """Creates a physics simulation view if not passed and creates a rigid prim view using PhysX tensor API.
 
         This needs to be called after each hard reset (i.e stop + play on the timeline) before interacting with any
         of the functions of this class.
@@ -133,11 +133,11 @@ class ParallelGripper(Gripper):
             articulation_apply_action_func: apply_action function from the Articulation class.
             get_joint_positions_func: get_joint_positions function from the Articulation class.
             set_joint_positions_func: set_joint_positions function from the Articulation class.
-            dof_names: dof names from the Articulation class.
-            physics_sim_view: current physics simulation view.
+            dof_names: DOF names from the Articulation class.
+            physics_sim_view: Current physics simulation view.
 
         Raises:
-            Exception: If not all gripper dof names were resolved to dof handles and dof indices.
+            Exception: If not all gripper DOF names were resolved to DOF handles and DOF indices.
         """
         Gripper.initialize(self, physics_sim_view=physics_sim_view)
         self._get_joint_positions_func = get_joint_positions_func
@@ -166,12 +166,12 @@ class ParallelGripper(Gripper):
         return
 
     def open(self) -> None:
-        """Applies actions to the articulation that opens the gripper (ex: to release an object held)."""
+        """Applies actions to the articulation that opens the gripper, for example to release an object held."""
         self._articulation_apply_action_func(self.forward(action="open"))
         return
 
     def close(self) -> None:
-        """Applies actions to the articulation that closes the gripper (ex: to hold an object)."""
+        """Applies actions to the articulation that closes the gripper, for example to hold an object."""
         self._articulation_apply_action_func(self.forward(action="close"))
         return
 
@@ -179,7 +179,7 @@ class ParallelGripper(Gripper):
         """Sets the deltas to apply for finger joint positions when opening or closing the gripper.
 
         Args:
-            value: deltas to apply for finger joint positions when openning or closing the gripper.
+            value: Deltas to apply for finger joint positions when opening or closing the gripper.
                 [left, right].
         """
         self._action_deltas = value
@@ -211,7 +211,7 @@ class ParallelGripper(Gripper):
         return self._default_state
 
     def post_reset(self) -> None:
-        """Reset the gripper to its default state."""
+        """Resets the gripper to its default state."""
         Gripper.post_reset(self)
         if self._set_joint_positions_func is not None:
             self._set_joint_positions_func(positions=self._default_state, joint_indices=self.active_joint_indices)
@@ -235,9 +235,7 @@ class ParallelGripper(Gripper):
         return self._get_joint_positions_func(joint_indices=self.active_joint_indices)
 
     def forward(self, action: str) -> ArticulationAction:
-        """Calculates the ArticulationAction for all of the articulation joints that corresponds to "open".
-
-        or "close" actions.
+        """Calculates the ArticulationAction for all articulation joints that correspond to "open" or "close" actions.
 
         Args:
             action: "open" or "close" as an abstract action.
@@ -278,7 +276,7 @@ class ParallelGripper(Gripper):
         return ArticulationAction(joint_positions=target_joint_positions)
 
     def apply_action(self, control_actions: ArticulationAction) -> None:
-        """Applies actions to all the joints of an articulation that corresponds to the ArticulationAction of the finger joints only.
+        """Applies actions to all articulation joints from an ArticulationAction for the finger joints only.
 
         Args:
             control_actions: ArticulationAction for the left finger joint and the right finger joint respectively.

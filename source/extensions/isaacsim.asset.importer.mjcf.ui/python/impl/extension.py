@@ -25,7 +25,7 @@ import carb
 import omni.ext
 import omni.kit.tool.asset_importer as ai
 import omni.ui as ui
-from isaacsim.asset.importer.mjcf.impl import MJCFImporter, MJCFImporterConfig
+from isaacsim.asset.importer.mjcf import MJCFImporter, MJCFImporterConfig
 from isaacsim.core.experimental.utils import stage as stage_utils
 from omni.kit.helper.file_utils import asset_types
 from omni.kit.notification_manager import NotificationStatus, post_notification
@@ -251,13 +251,32 @@ class Extension(omni.ext.IExt):
         config.mjcf_path = path
         config.usd_path = export_folder
 
-        stage_utils.create_new_stage()
+        add_reference_to_stage = (
+            models["add_reference_to_stage"].get_value_as_bool() if models.get("add_reference_to_stage") else False
+        )
+
+        if not add_reference_to_stage:
+            stage_utils.create_new_stage()
 
         importer = MJCFImporter(config)
         output_path = importer.import_mjcf()
         if not output_path:
             carb.log_error(f"Failed to import MJCF file at path: {path}")
             return None
+
+        if add_reference_to_stage:
+            try:
+                prim_path = stage_utils.generate_next_free_path(
+                    f"/{Path(output_path).stem}",
+                    prepend_default_prim=False,
+                )
+                stage_utils.add_reference_to_stage(usd_path=output_path, path=prim_path)
+            except Exception as exc:
+                carb.log_error(f"Failed to add imported MJCF to the current stage: {exc}")
+                return None
+            self._last_config = copy.deepcopy(config)
+            return output_path
+
         result, _ = stage_utils.open_stage(output_path)
 
         self._last_config = copy.deepcopy(config)

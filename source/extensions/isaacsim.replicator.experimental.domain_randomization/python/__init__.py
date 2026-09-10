@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .impl import *
+from .impl import Extension as Extension
 from .scripts import context as context
 from .scripts import gate as gate
 from .scripts import physics_view as physics_view

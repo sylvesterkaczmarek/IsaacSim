@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
-#include "isaacsim/robot/schema/robot_schema.h"
-#include "isaacsim/robot/surface_gripper/SurfaceGripperManager.h"
+#include "isaacsim/robot/schema/robot_schema.hpp"
+#include "isaacsim/robot/surface_gripper/SurfaceGripperManager.hpp"
 
 #include <extensions/PxJoint.h>
 #include <omni/physics/tensors/BodyTypes.h>
@@ -29,7 +29,7 @@
 #include <PxRigidActor.h>
 
 // Threading utilities
-#include "isaacsim/robot/surface_gripper/ThreadUtils.h"
+#include "isaacsim/robot/surface_gripper/ThreadUtils.hpp"
 namespace isaacsim
 {
 namespace robot

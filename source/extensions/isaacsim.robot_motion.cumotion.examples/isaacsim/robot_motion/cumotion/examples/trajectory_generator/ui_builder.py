@@ -26,7 +26,7 @@ from typing import Any
 
 import omni.timeline
 import omni.ui as ui
-from isaacsim.gui.components.element_wrappers import Button, CollapsableFrame, StateButton
+from isaacsim.gui.components import Button, CollapsableFrame, StateButton
 from isaacsim.gui.components.style import get_style
 from omni.kit.async_engine import run_coroutine
 
@@ -55,7 +55,7 @@ class UIBuilder:
     # ------------------------------------------------------------- lifecycle
 
     def cleanup(self) -> None:
-        """Tear down the UI on extension shutdown or window close.
+        """Tear down the UI on extension shutdown or browser UI rebuild.
 
         Cancels any in-flight load task, cleans up wrapped widgets, and
         drops scenario references so the closing UsdStage can be fully

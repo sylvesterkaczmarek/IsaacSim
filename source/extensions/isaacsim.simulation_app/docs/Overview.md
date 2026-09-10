@@ -23,6 +23,19 @@ simulation_app = SimulationApp(config)
 simulation_app.close()
 ```
 
+#### Renderer GPU Selection
+
+Use `active_cuda_gpus` to select renderer GPUs by CUDA device index. CUDA device indices follow the order defined by
+`CUDA_VISIBLE_DEVICES`, while `active_gpu` uses the physical GPU order reported by `nvidia-smi`. Do not specify both
+options.
+
+```python
+from isaacsim.simulation_app import SimulationApp
+
+simulation_app = SimulationApp({"active_cuda_gpus": [0], "multi_gpu": False})
+simulation_app.close()
+```
+
 #### Application Control
 
 {class}`SimulationApp <isaacsim.simulation_app.SimulationApp>` provides several methods for controlling application execution:

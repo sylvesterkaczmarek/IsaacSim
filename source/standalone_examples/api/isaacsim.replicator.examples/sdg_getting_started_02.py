@@ -15,6 +15,7 @@
 
 """Demonstrate SDG with custom writers and multiple render products."""
 
+import argparse
 import os
 
 from isaacsim import SimulationApp
@@ -22,13 +23,25 @@ from isaacsim import SimulationApp
 simulation_app = SimulationApp(launch_config={"headless": False})
 
 import carb.settings
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.replicator.core as rep
-import omni.usd
 from omni.replicator.core import Writer
+
+NUM_STEPS = 3
+NUM_RENDER_PRODUCTS = 2
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--num-steps", type=int, default=NUM_STEPS, help="Number of capture steps to run.")
+args, _ = parser.parse_known_args()
 
 
 class MyWriter(Writer):
-    """Access and print annotator data from attached render products."""
+    """Access and print annotator data from attached render products.
+
+    Args:
+        camera_params: Whether to attach the camera-parameter annotator.
+        bounding_box_3d: Whether to attach the 3D bounding-box annotator.
+    """
 
     def __init__(self, camera_params: bool = True, bounding_box_3d: bool = True) -> None:
         # Organize data from render product perspective (legacy, annotator, renderProduct)
@@ -41,7 +54,11 @@ class MyWriter(Writer):
         self._frame_id = 0
 
     def write(self, data: dict) -> None:
-        """Print captured annotator data for each frame."""
+        """Print captured annotator data for each frame.
+
+        Args:
+            data: Annotator payload organized according to the writer's render-product data structure.
+        """
         print(f"[MyWriter][{self._frame_id}] data:")
         for key, value in data.items():
             print(f"  {key}: {value}")
@@ -52,10 +69,14 @@ class MyWriter(Writer):
 rep.writers.register_writer(MyWriter)
 
 
-def run_example() -> None:
-    """Run SDG with custom writer, pose writer, and annotator data access."""
+def run_example(num_steps: int) -> None:
+    """Run SDG with custom writer, pose writer, and annotator data access.
+
+    Args:
+        num_steps: Number of randomized frames to capture with each writer.
+    """
     # Create a new stage and disable capture on play
-    omni.usd.get_context().new_stage()
+    stage_utils.create_new_stage()
     rep.orchestrator.set_capture_on_play(False)
 
     # Set DLSS to Quality mode (2) for best SDG results , options: 0 (Performance), 1 (Balanced), 2 (Quality), 3 (Auto)
@@ -94,7 +115,7 @@ def run_example() -> None:
     pose_writer.attach([rp_top, rp_persp])
 
     # Trigger a data capture request (data will be written to disk by the writer)
-    for i in range(3):
+    for i in range(num_steps):
         print(f"Step {i}")
         rep.orchestrator.step()
 
@@ -114,29 +135,28 @@ def run_example() -> None:
     rp_persp.destroy()
 
 
-run_example()
+run_example(num_steps=args.num_steps)
 
 # <start-sdg-getting-started-02-test>
-import argparse
-import sys
-
-from isaacsim.core.utils.extensions import enable_extension
-
-enable_extension("isaacsim.test.utils")
-from isaacsim.test.utils.file_validation import validate_folder_contents
-
-parser = argparse.ArgumentParser()
-parser.add_argument(
+test_parser = argparse.ArgumentParser()
+test_parser.add_argument(
     "--test",
     action="store_true",
     help="Validate captured output files against expected counts and exit.",
 )
-args, _ = parser.parse_known_args()
+test_args, _ = test_parser.parse_known_args()
 
-if args.test:
+if test_args.test:
+    import sys
+
+    from isaacsim.core.utils.extensions import enable_extension
+
+    enable_extension("isaacsim.test.utils")
+    from isaacsim.test.utils.file_validation import validate_folder_contents
+
     # PoseWriter with write_debug_images=True writes 1 json + 1 png + 1 _overlay.png per capture,
-    # plus a single metadata.txt for the run. 3 steps x 2 render products = 6 captures.
-    num_captures = 3 * 2
+    # plus a single metadata.txt for the run.
+    num_captures = args.num_steps * NUM_RENDER_PRODUCTS
     out_dir = os.path.join(os.getcwd(), "_out_pose_writer")
     ok = validate_folder_contents(
         path=out_dir,

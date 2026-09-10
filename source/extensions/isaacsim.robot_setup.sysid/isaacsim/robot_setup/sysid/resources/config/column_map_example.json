@@ -1,0 +1,10 @@
+{
+  "time_column": "timestamp",
+  "position_columns": ["q1", "q2", "q3"],
+  "velocity_columns": ["dq1", "dq2", "dq3"],
+  "command_columns": ["cmd1", "cmd2", "cmd3"],
+  "torque_columns": ["tau1", "tau2", "tau3"],
+  "torque_semantics": "link_side",
+  "end_effector_pose_columns": ["ee_x", "ee_y", "ee_z", "ee_qx", "ee_qy", "ee_qz", "ee_qw"],
+  "contact_force_columns": ["contact_fx", "contact_fy", "contact_fz"]
+}

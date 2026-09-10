@@ -62,7 +62,11 @@ VERTICAL_RESOLUTION = 4.0
 
 
 def _build_lidar_rays() -> tuple[np.ndarray, np.ndarray]:
-    """Build a solid-state lidar ray pattern as Nx3 origins/directions arrays."""
+    """Build a solid-state lidar ray pattern as Nx3 origins/directions arrays.
+
+    Returns:
+        Ray origins at the sensor origin and unit directions spanning the configured azimuth and elevation ranges.
+    """
     h_count = int(HORIZONTAL_FOV / HORIZONTAL_RESOLUTION)
     v_count = int(VERTICAL_FOV / VERTICAL_RESOLUTION) + 1
     origins = np.zeros((h_count * v_count, 3), dtype=np.float32)

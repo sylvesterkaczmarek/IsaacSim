@@ -1,5 +1,5 @@
 [package]
-version = "1.1.3"
+version = "1.1.4"
 category = "Simulation"
 title = "Replicator Grasping Pipeline UI"
 description = "UI for the synthetic data generation workflow for grasping scenarios"
@@ -11,6 +11,7 @@ icon = "data/icon.png"
 writeTarget.kit = true
 
 [dependencies]
+"isaacsim.core.experimental.utils" = {}
 "isaacsim.gui.components" = {}
 "isaacsim.replicator.grasping" = {}
 "isaacsim.util.debug_draw" = {}

@@ -14,10 +14,10 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
-#include "Ros2Impl.h"
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "Ros2Impl.hpp"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 #include "pxr/usd/usdPhysics/joint.h"
 #include "sensor_msgs/image_encodings.hpp"
 

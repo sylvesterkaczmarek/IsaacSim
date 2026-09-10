@@ -1,5 +1,84 @@
 # Changelog
 
+## [1.9.0] - 2026-08-24
+### Added
+- `has_data()` on `SensorRuntime`, reporting render completion with annotator output while the render product still exists and annotators are attached. This lets callers bound an annotator warm-up wait without repeatedly fetching data when no render engine could be bound. It is a render-product-level gate, so it does not guarantee that a specific annotator has a frame ready.
+
+### Changed
+- `TiledCameraSensor` now derives from `SensorRuntime` and shares the annotator and render product lifecycle with the other sensor runtimes instead of duplicating it. The tiled-specific properties are unchanged, and the class additionally exposes the inherited `authoring_object` property, `attach_writer`/`detach_writer`, `annotator_init_params` and `writers` constructor arguments, and an `annotator_init_params` argument on `attach_annotators`. Setting `render_vars` now logs a warning, since tiled render products ignore it.
+- `CameraSensor.get_data` and `TiledCameraSensor.get_data`: information reported alongside an empty warm-up payload (e.g. `frameId`) is now preserved instead of being dropped. The payload itself is still `None` during warm-up.
+- `SensorRuntime` subclasses may set `_ALLOW_MULTIPLE_AUTHORING_OBJECTS` to wrap more than one prim, as batched runtimes require.
+- Depend on `omni.kit.hydra_texture` to observe Hydra render-completion events, which is what lets `has_data()` report readiness without fetching annotator data.
+
+## [1.8.2] - 2026-08-21
+### Changed
+- Updated Luxonis OAK depth-sensor golden coverage for revised sensor assets.
+
+## [1.8.1] - 2026-08-21
+### Fixed
+- Retain aliased input buffers for the lifetime of parsed generic model output structures.
+
+## [1.8.0] - 2026-08-18
+### Changed
+- `RtxCamera`, `Lidar`, `Radar`, `Acoustic` (and their sensor runtime classes): wrapping an existing prim of the expected type that lacks the sensor's API schema now applies the schema instead of raising `ValueError`.
+
+## [1.7.1] - 2026-08-14
+### Changed
+- Document that `annotator_init_params` cannot filter semantics per annotator: `semanticTypes`/`semanticFilter` applies to the whole render product, so bounding box and segmentation annotators sharing one render product share one filter.
+
+## [1.7.0] - 2026-08-11
+### Changed
+- `CameraSensor`: disable RTX post anti-aliasing on sensor-owned render products smaller than 300 pixels in either dimension, where DLSS returns buffers that do not match the requested resolution.
+
+### Fixed
+- `CameraSensor.get_data`: raise a descriptive error when an annotator returns an unexpected element count, instead of failing in the reshape.
+
+## [1.6.2] - 2026-08-08
+### Fixed
+- Prevent SPG Lua launch scripts from being rejected by the sandbox validator.
+
+## [1.6.1] - 2026-07-28
+### Added
+- `SensorAuthoring.asset_root_path` exposes the reference root of the USD asset a sensor was loaded from (`None` when not loaded from an asset).
+
+### Changed
+- `SensorAuthoring._create_from_usd` now returns the constructed sensor instance instead of the sensor prim path, and accepts the transform and constructor arguments it forwards. Existing keyword arguments keep their names and meaning; `usd_path` is now optional.
+
+### Fixed
+- `Lidar.create`, `Radar.create`, `Acoustic.create`, `RtxCamera.create`: author `positions` / `translations` / `orientations` / `scales` on the loaded asset's reference root instead of the sensor prim nested inside it. Previously the transform detached the sensor origin from the housing geometry and overwrote the vendor's mounting offset (e.g. the Ouster OS1 z-offset, the TI IWRL6432AOP three-axis offset). Assets whose sensor prim is the reference root, and sensors created without an asset, are unaffected.
+- `Lidar`, `Radar`, `Acoustic` now record the asset reference root like `RtxCamera` did, so pre-authored render-product discovery is scoped to the asset subtree rather than the whole stage.
+
+## [1.6.0] - 2026-07-21
+### Added
+- `SPGNode` and `SensorAuthoring.author_spg` (e.g. `RtxCamera.author_spg`) to author RTX Sensor Processing Graph (SPG) prim structure — one `UsdShade.Shader` per node plus the required `RenderProduct`/`RenderVar` AOVs — from user-authored CUDA kernels and their co-located Lua launch scripts. Wiring uses an `omni.graph`-style declarative `(src, dst)` connection list. Structural validation only; SPG semantics remain owned by `omni.rtx.spg`. An optional `copy_to` vendors the kernel sources alongside a sensor asset.
+- Standalone examples `spg_grayscale.py` and `spg_grayscale_invert.py` demonstrating single-shader and chained SPG authoring, and reading custom output AOVs back via `omni.replicator.core` `register_annotator_from_aov`.
+
+### Changed
+- Promote `_SensorAuthoring` / `_SensorRuntime` to public abstract bases `SensorAuthoring` / `SensorRuntime` (do not instantiate directly). Shared APIs such as `author_spg` are documented on the public bases.
+
+## [1.5.0] - 2026-07-13
+### Added
+- Runtime sensors now accept per-annotator initialization parameters via `annotator_init_params` at construction time and `attach_annotators(..., annotator_init_params=...)` after construction.
+
+### Fixed
+- `CameraSensor` and `SingleViewDepthCameraSensor` now attach the `pointcloud` annotator with `includeUnlabelled=True` by default, matching the deprecated camera API and allowing point clouds from unlabeled geometry.
+
+## [1.4.10] - 2026-07-07
+### Changed
+- `SUPPORTED_CAMERA_CONFIGS`: prefix the SICK (Inspector83x, InspectorP61x, safeVisionary2, Visionary-T Mini) and Stereolabs (ZED_X) camera `display_name` values with their vendor, so menu labels and derived action IDs are consistent with the other vendors.
+
+## [1.4.9] - 2026-07-06
+### Changed
+- `SingleViewDepthCameraSensor` now attaches to a pre-authored `RenderProduct` in a loaded USD asset when one exists, deriving `resolution` and `annotators` from it (both now optional), instead of always creating a new one. Requires `omni.replicator.core >= 1.13.28`.
+
+## [1.4.8] - 2026-06-29
+### Removed
+- Removed the retired SICK TiM781 asset from `SUPPORTED_LIDAR_CONFIGS`; use the SICK picoScan100 family instead.
+
+## [1.4.7] - 2026-06-12
+### Fixed
+- `SingleViewDepthCameraSensor`: correctly populates render vars for depth sensor SPG.
+
 ## [1.4.6] - 2026-06-12
 ### Fixed
 - `camera_utils.draw_annotator_data_to_image`: defer the `cv2` import to first use.

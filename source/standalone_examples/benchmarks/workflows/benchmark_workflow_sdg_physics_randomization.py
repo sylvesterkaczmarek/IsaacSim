@@ -150,7 +150,12 @@ from isaacsim.benchmark.services.metrics import measurements
 
 
 class FPSWriter(Writer):
-    """Lightweight writer that tracks replicator step speed (FPS)."""
+    """Lightweight writer that tracks replicator step speed (FPS).
+
+    Args:
+        annotators: Replicator annotator names to request for each frame. When ``None`` or empty, request only
+            RGB data.
+    """
 
     def __init__(self, annotators: list[str] | None = None) -> None:
         self._last_frame_time = None
@@ -158,7 +163,11 @@ class FPSWriter(Writer):
         self.annotators = annotators if annotators else ["rgb"]
 
     def write(self, data: dict[str, Any]) -> None:
-        """Record the time between consecutive Replicator frames."""
+        """Record the time between consecutive Replicator frames.
+
+        Args:
+            data: Annotator outputs for the current frame. The contents are ignored.
+        """
         if self._last_frame_time is None:
             self._last_frame_time = time.time()
             return
@@ -170,14 +179,22 @@ class FPSWriter(Writer):
 
 @MeasurementDataRecorderRegistry.register("replicator_fps")
 class ReplicatorFPSRecorder(MeasurementDataRecorder):
-    """Bridge between FPSWriter and benchmark metrics."""
+    """Bridge between FPSWriter and benchmark metrics.
+
+    Args:
+        context: Benchmark context to associate with the recorder, if available.
+    """
 
     def __init__(self, context: Any = None) -> None:
         self.context = context
         self._fps_writer = None
 
     def set_fps_writer(self, fps_writer: FPSWriter) -> None:
-        """Attach an FPS writer for metric extraction."""
+        """Attach an FPS writer for metric extraction.
+
+        Args:
+            fps_writer: Writer containing the frame-duration samples to summarize.
+        """
         self._fps_writer = fps_writer
 
     def start_collecting(self) -> None:
@@ -187,7 +204,12 @@ class ReplicatorFPSRecorder(MeasurementDataRecorder):
         """Stop collecting FPS measurements."""
 
     def get_data(self) -> MeasurementData:
-        """Return the collected FPS measurements."""
+        """Return the collected FPS measurements.
+
+        Returns:
+            Mean FPS, aggregate image rate, mean/minimum/maximum frame times, and total frame count, or an empty
+            collection when no samples exist.
+        """
         if not self._fps_writer or not self._fps_writer._times_per_frame:
             return MeasurementData()
 

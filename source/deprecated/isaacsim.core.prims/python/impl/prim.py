@@ -109,17 +109,18 @@ class Prim(object):
 
     @property
     def prim_paths(self) -> list[str]:
-        """List of prim paths in the stage encapsulated in this view.
+        """Prim paths in the stage encapsulated in this view.
 
         Returns:
-            List of prim paths in the stage encapsulated in this view.
+            The prim paths in the stage encapsulated in this view.
 
         Example:
 
         .. code-block:: python
 
             >>> prims.prim_paths
-            ['/World/envs/env_0', '/World/envs/env_1', '/World/envs/env_2', '/World/envs/env_3', '/World/envs/env_4']
+            ['/World/envs/env_0', '/World/envs/env_1', '/World/envs/env_2', '/World/envs/env_3',
+             '/World/envs/env_4']
         """
         return self._prim_paths
 
@@ -128,7 +129,7 @@ class Prim(object):
         """Name given to the prims view when instantiating it.
 
         Returns:
-            Name given to the prims view when instantiating it.
+            The name given to the prims view when instantiating it.
         """
         return self._name
 
@@ -137,7 +138,7 @@ class Prim(object):
         """Number of prims encapsulated in this view.
 
         Returns:
-            Number of prims encapsulated in this view.
+            The number of prims encapsulated in this view.
 
         Example:
 
@@ -150,10 +151,10 @@ class Prim(object):
 
     @property
     def prims(self) -> list[Usd.Prim]:
-        """List of USD Prim objects encapsulated in this view.
+        """USD Prim objects encapsulated in this view.
 
         Returns:
-            List of USD Prim objects encapsulated in this view.
+            The USD Prim objects encapsulated in this view.
 
         Example:
 
@@ -167,23 +168,23 @@ class Prim(object):
 
     @property
     def initialized(self) -> bool:
-        """Whether the prim view is initialized.
+        """Whether a physics simulation view is available for the prim view.
 
         Returns:
-            True if the view object was initialized (after the first call of .initialize()). False otherwise.
+            True if a physics simulation view is available from SimulationManager. False otherwise.
 
         Example:
 
         .. code-block:: python
 
-            >>> # given an initialized articulation view
+            >>> # given an active physics simulation view
             >>> prims.initialized
             True
         """
         return SimulationManager.get_physics_sim_view() is not None
 
     def post_reset(self) -> None:
-        """Reset the prims to its default state.
+        """Trigger post-reset handling for the prim view.
 
         Example:
 
@@ -195,15 +196,13 @@ class Prim(object):
         return
 
     def is_valid(self, indices: np.ndarray | list | torch.Tensor | wp.array | None = None) -> bool:
-        """Check that all prims have a valid USD Prim.
+        """Check whether the prim view is valid.
 
         Args:
-            indices: Indices to specify which prims to query. Shape (M,).
-                Where M <= size of the encapsulated prims in the view.
-                If None, all prims in the view are queried.
+            indices: Indices accepted for API compatibility. The current view validity is returned regardless of indices.
 
         Returns:
-            True if all prim paths specified in the view correspond to a valid prim in stage. False otherwise.
+            True if the prim view has not been invalidated by destroy or matching prim deletion. False otherwise.
 
         Example:
 
@@ -215,14 +214,14 @@ class Prim(object):
         return self._is_valid
 
     def initialize(self, physics_sim_view: omni.physics.tensors.SimulationView = None) -> None:
-        """Create a physics simulation view if not passed and set other properties using the PhysX tensor API.
+        """Refresh backend references from SimulationManager for this prim view.
 
         .. note::
 
-            For this particular class, calling this method will do nothing
+            This class does not create class-specific PhysX tensor API data.
 
         Args:
-            physics_sim_view: Current physics simulation view.
+            physics_sim_view: Current physics simulation view accepted for API compatibility.
 
         Example:
 

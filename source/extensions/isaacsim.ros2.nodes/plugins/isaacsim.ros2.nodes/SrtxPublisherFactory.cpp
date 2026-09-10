@@ -13,12 +13,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "Ros2SrtxCameraInfoPublisher.h"
-#include "Ros2SrtxImagePublisher.h"
-#include "Ros2SrtxLaserScanPublisher.h"
-#include "Ros2SrtxLidarPublisher.h"
+#include "Ros2SrtxCameraInfoPublisher.hpp"
+#include "Ros2SrtxImagePublisher.hpp"
+#include "Ros2SrtxLaserScanPublisher.hpp"
+#include "Ros2SrtxLidarPublisher.hpp"
 
-#include <isaacsim/ros2/nodes/SrtxPublisherFactory.h>
+#include <isaacsim/ros2/nodes/SrtxPublisherFactory.hpp>
 
 namespace isaacsim
 {

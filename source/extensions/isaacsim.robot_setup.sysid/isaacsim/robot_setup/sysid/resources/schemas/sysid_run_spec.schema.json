@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nvidia.com/isaac/schemas/sysid_run_spec.schema.json",
+  "title": "SysID Run Spec",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "type": "integer", "default": 2 },
+    "telemetry_quality": { "type": "object" },
+    "stage": {
+      "type": "object",
+      "properties": {
+        "input_path": { "type": "string" }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "properties": {
+        "source_type": { "enum": ["csv", "ros2_bag", "mcap", "lerobot"] },
+        "source_path": { "type": "string" },
+        "mapping_path": { "type": "string" },
+        "chunk_manifest_path": { "type": "string" },
+        "time_window": {
+          "type": "object",
+          "properties": {
+            "start": { "type": "number" },
+            "end": { "type": "number" }
+          }
+        },
+        "chunks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/chunk" }
+        },
+        "lerobot_episode_index": { "type": "integer", "minimum": 0 },
+        "auto_split": { "type": "boolean", "default": false },
+        "auto_split_train_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "default": 0.8
+        },
+        "auto_split_min_chunk_seconds": { "type": "number", "minimum": 0, "default": 1.0 },
+        "command_alignment_seconds": { "type": "number", "default": 0.0 }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "properties": {
+        "engine": { "enum": ["isaac_sim", "newton"], "default": "isaac_sim" },
+        "robot_prim_path": { "type": "string" },
+        "source_env_path": { "type": "string" },
+        "env_paths_root": { "type": "string" },
+        "parallel_clones": { "type": "boolean" },
+        "co_locate_clones": { "type": "boolean" },
+        "fabric_clones": { "type": "boolean" },
+        "offline_stepping": { "type": "boolean", "default": false },
+        "physics_backend": { "enum": ["auto", "physx", "newton"], "default": "auto" },
+        "actuator_runtime": {
+          "enum": ["auto", "implicit_drive", "newton_explicit", "mixed"],
+          "default": "auto"
+        },
+        "explicit_actuator_policy": {
+          "enum": ["authored_only", "promote_selected"],
+          "default": "authored_only"
+        },
+        "newton": {
+          "type": "object",
+          "properties": {
+            "device": { "type": "string", "default": "cpu" },
+            "actuator_source": { "enum": ["drive_defaults", "usd"], "default": "drive_defaults" },
+            "controller": { "enum": ["pd", "pid"], "default": "pd" },
+            "effort_clamp": { "enum": ["max_effort", "dc_motor", "none"], "default": "max_effort" },
+            "actuator_dt_mode": { "enum": ["physics_dt"], "default": "physics_dt" },
+            "solver": { "enum": ["mujoco", "featherstone_diff"], "default": "mujoco" },
+            "featherstone_substeps": { "type": "integer", "minimum": 1, "default": 4 },
+            "feedforward": { "enum": ["none", "gravity", "inverse_dynamics"], "default": "none" },
+            "cuda_graph_capture": { "type": "boolean", "default": true }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "space": {
+          "type": "object",
+          "properties": {
+            "include_basic": { "type": "boolean", "default": true },
+            "include_com_offsets": { "type": "boolean", "default": false },
+            "include_inertia_log_cholesky": { "type": "boolean", "default": false },
+            "include_joint_limit_scales": { "type": "boolean", "default": false },
+            "include_per_link_mass": { "type": "boolean", "default": false },
+            "include_command_delay": { "type": "boolean", "default": false }
+          }
+        },
+        "selected": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "param_type": {
+                "enum": [
+                  "joint_friction",
+                  "joint_stiffness",
+                  "joint_damping",
+                  "joint_integral_gain",
+                  "joint_armature",
+                  "actuator_command_delay_seconds",
+                  "link_mass",
+                  "link_com_offset_x",
+                  "link_com_offset_y",
+                  "link_com_offset_z",
+                  "link_inertia_log_cholesky",
+                  "joint_limit_lower_scale",
+                  "joint_limit_upper_scale"
+                ]
+              },
+              "dof_index": { "type": "integer" },
+              "link_index": { "type": "integer" },
+              "component_index": { "type": "integer" },
+              "category": { "enum": ["", "sysid", "calibration"] },
+              "initial": { "type": "number" },
+              "min": { "type": "number" },
+              "max": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "solver": {
+      "type": "object",
+      "properties": {
+        "optimizer": { "enum": ["auto", "levenberg_marquardt", "cma_es", "bayesian", "gradient_descent"] },
+        "damping_initial": { "type": "number", "exclusiveMinimum": 0 },
+        "epsilon": { "type": "number", "exclusiveMinimum": 0 },
+        "max_iterations": { "type": "integer", "minimum": 1 },
+        "max_rollout_steps": { "type": "integer", "minimum": 2 },
+        "use_analytical_jacobian": { "type": "boolean" },
+        "use_analytical_presolve": { "type": "boolean" },
+        "cma_population_size": { "type": ["integer", "null"], "minimum": 1 },
+        "cma_sigma": { "type": "number", "exclusiveMinimum": 0 },
+        "cma_batch_size": { "type": ["integer", "null"], "minimum": 1 },
+        "cma_seed": { "type": "integer", "minimum": 0, "default": 0 },
+        "bo_initial_samples": { "type": "integer", "minimum": 1 },
+        "bo_candidate_count": { "type": "integer", "minimum": 1 },
+        "bo_batch_size": { "type": "integer", "minimum": 1 },
+        "bo_seed": { "type": "integer", "minimum": 0, "default": 0 },
+        "gd_learning_rate": { "type": "number", "exclusiveMinimum": 0 },
+        "gd_num_restarts": { "type": "integer", "minimum": 1 },
+        "gd_seed": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "residuals": { "$ref": "residual_weights.schema.json" },
+    "outputs": {
+      "type": "object",
+      "properties": {
+        "apply_parameters_to_usd": { "type": "boolean" },
+        "write_usd_provenance": { "type": "boolean" },
+        "export_provenance_sidecar": { "type": "boolean" },
+        "provenance_path": { "type": "string" },
+        "remove_clones_after_run": { "type": "boolean" },
+        "render_validation_animation": { "type": "boolean", "default": false },
+        "validation_animation_path": { "type": "string" },
+        "validation_animation_fps": { "type": "integer", "minimum": 1, "default": 24 },
+        "validation_animation_max_frames": { "type": "integer", "minimum": 1, "default": 240 },
+        "compute_parameter_confidence": { "type": "boolean", "default": true },
+        "parameter_confidence_rollout_budget": { "type": "integer", "minimum": 1, "default": 2000000 }
+      }
+    },
+    "sampling": {
+      "type": "object",
+      "properties": {
+        "mode": { "enum": ["off", "auto", "always"] },
+        "target_dt_mode": { "enum": ["physics_dt_capped"] },
+        "command_interpolation": { "enum": ["zero_order_hold", "linear"] },
+        "measured_interpolation": { "enum": ["linear"] },
+        "auto_dt_ratio_threshold": { "type": "number", "minimum": 0 },
+        "auto_jitter_threshold": { "type": "number", "minimum": 0 },
+        "max_resampled_steps": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "chunk": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "role": { "enum": ["train", "validation"] },
+        "excitation": { "type": "string" },
+        "start": { "type": "number" },
+        "end": { "type": "number" },
+        "weight": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

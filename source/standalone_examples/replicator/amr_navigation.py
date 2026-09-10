@@ -20,21 +20,26 @@ from isaacsim import SimulationApp
 simulation_app = SimulationApp(launch_config={"headless": False})
 
 import argparse
+import asyncio
 import builtins
 import os
 import random
 from itertools import cycle
 
+import carb
 import carb.eventdispatcher
 import carb.settings
+import isaacsim.core.experimental.utils.app as app_utils
+import numpy as np
 import omni.client
 import omni.replicator.core as rep
 import omni.timeline
 import omni.usd
-import omni.usd.commands
-from isaacsim.core.utils.stage import create_new_stage
+from isaacsim.core.experimental.prims import XformPrim
+from isaacsim.core.experimental.utils.prim import get_prim_at_path
+from isaacsim.core.experimental.utils.stage import add_reference_to_stage, create_new_stage, define_prim, delete_prim
 from isaacsim.storage.native import get_assets_root_path
-from pxr import Gf, UsdGeom
+from pxr import UsdGeom
 
 DEFAULT_ENV_URLS = [
     "/Isaac/Environments/Grid/default_environment.usd",
@@ -45,21 +50,27 @@ DEFAULT_ENV_URLS = [
 
 
 def _parse_env_url_arg(env_url: str) -> str | None:
-    """Parse CLI environment arguments, where None/null selects the generic environment."""
+    """Parse CLI environment arguments, where None/null selects the generic environment.
+
+    Args:
+        env_url: Command-line environment value to normalize.
+
+    Returns:
+        The supplied URL, or ``None`` when the value requests the generated environment.
+    """
     return None if env_url.lower() in {"none", "null"} else env_url
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--num_frames", type=int, default=9, help="The number of frames to capture")
-parser.add_argument("--env_interval", type=int, default=3, help="Interval at which to change the environments")
+parser.add_argument("--num-captures", type=int, default=4, help="The number of frames to capture")
+parser.add_argument("--env-interval", type=int, default=1, help="Interval at which to change the environments")
 parser.add_argument(
-    "--env_urls",
+    "--env-urls",
     nargs="+",
     type=_parse_env_url_arg,
     default=None,
     help="Replace DEFAULT_ENV_URLS entirely. Use None for the generic environment.",
 )
-parser.add_argument("--use_temp_rp", action="store_true", help="Create and destroy render products for each SDG frame")
 args, unknown = parser.parse_known_args()
 
 
@@ -75,6 +86,7 @@ class NavSDGDemo:
 
     def __init__(self) -> None:
         """Initialize the navigation SDG demo with default values."""
+        self._carter = None
         self._carter_chassis = None
         self._carter_nav_target = None
         self._dolly = None
@@ -82,7 +94,6 @@ class NavSDGDemo:
         self._props = []
         self._cycled_env_urls = None
         self._env_interval = 1
-        self._timeline = None
         self._timeline_sub = None
         self._stage_event_sub = None
         self._stage = None
@@ -92,16 +103,14 @@ class NavSDGDemo:
         self._writer = None
         self._out_dir = None
         self._render_products = []
-        self._use_temp_rp = False
         self._in_running_state = False
 
     def start(
         self,
-        num_frames: int = 10,
+        num_frames: int = 4,
         out_dir: str | None = None,
         env_urls: list[str | None] | None = None,
-        env_interval: int = 3,
-        use_temp_rp: bool = False,
+        env_interval: int = 1,
         seed: int | None = None,
     ) -> None:
         """Start the SDG demo with the given configuration."""
@@ -114,7 +123,6 @@ class NavSDGDemo:
         self._out_dir = out_dir if out_dir is not None else os.path.join(os.getcwd(), "_out_nav_sdg_demo")
         self._cycled_env_urls = cycle(selected_env_urls)
         self._env_interval = env_interval
-        self._use_temp_rp = use_temp_rp
         self._frame_counter = 0
         self._trigger_distance = 2.0
         self._load_env()
@@ -122,8 +130,7 @@ class NavSDGDemo:
         self._randomize_dolly_light()
         self._randomize_prop_poses()
         self._setup_sdg()
-        self._timeline = omni.timeline.get_timeline_interface()
-        self._timeline.play()
+        app_utils.play()
         self._timeline_sub = carb.eventdispatcher.get_eventdispatcher().observe_event(
             event_name=omni.timeline.GLOBAL_EVENT_CURRENT_TIME_TICKED,
             on_event=self._on_timeline_event,
@@ -139,14 +146,18 @@ class NavSDGDemo:
     def clear(self) -> None:
         """Reset all state variables and unsubscribe from events."""
         self._cycled_env_urls = None
+        self._carter = None
         self._carter_chassis = None
         self._carter_nav_target = None
         self._dolly = None
         self._dolly_light = None
-        self._timeline = None
         self._frame_counter = 0
-        self._stage_event_sub = None
-        self._timeline_sub = None
+        if self._timeline_sub:
+            self._timeline_sub.reset()
+            self._timeline_sub = None
+        if self._stage_event_sub:
+            self._stage_event_sub.reset()
+            self._stage_event_sub = None
         self._clear_sdg_render_products()
         self._stage = None
         self._in_running_state = False
@@ -178,22 +189,16 @@ class NavSDGDemo:
         # Nova Carter
         rep.functional.create.scope(name="NavWorld")
         carter = rep.functional.create.reference(
-            position=(0, 0, 0),
+            position=(0, 0, 0.02),
             rotation=(0, 0, 0),
             usd_path=assets_root_path + self.CARTER_URL,
             parent="/NavWorld",
             name="CarterNav",
         )
-
-        # Iterate children until targetXform (for navigation target) and chassis_link (for current location) are found
-        for child in carter.GetChildren():
-            if child.GetName() == "targetXform":
-                self._carter_nav_target = child
-                break
-        for child in carter.GetChildren():
-            if child.GetName() == "chassis_link":
-                self._carter_chassis = child
-                break
+        carter_path = str(carter.GetPrimPath())
+        self._carter = carter
+        self._carter_nav_target = get_prim_at_path(f"{carter_path}/targetXform")
+        self._carter_chassis = get_prim_at_path(f"{carter_path}/chassis_link")
 
         # Dolly
         self._dolly = rep.functional.create.reference(
@@ -204,7 +209,6 @@ class NavSDGDemo:
             name="Dolly",
         )
 
-        # # Add colliders to the dolly and its geometry primitives
         for desc_prim in self._dolly.GetChildren():
             if desc_prim.IsA(UsdGeom.Gprim):
                 rep.functional.physics.apply_rigid_body(desc_prim)
@@ -236,37 +240,46 @@ class NavSDGDemo:
             prop_url = next(cycled_props_url)
             prop_name = os.path.splitext(os.path.basename(prop_url))[0]
             path = f"/NavWorld/Props/Prop_{prop_name}_{i}"
-            prim = self._stage.DefinePrim(path, "Xform")
-            prim.GetReferences().AddReference(prop_url)
-            self._props.append(prim)
+            define_prim(path, "Xform")
+            add_reference_to_stage(usd_path=prop_url, path=path)
+            self._props.append(path)
 
     def _randomize_dolly_pose(self) -> None:
         """Set random dolly position ensuring minimum distance from Carter."""
         min_dist_from_carter = 4
-        carter_loc = self._carter_chassis.GetAttribute("xformOp:translate").Get()
+        carter_loc = XformPrim(str(self._carter_chassis.GetPath())).get_local_poses()[0].numpy()[0]
         for _ in range(100):
             x, y = random.uniform(-6, 6), random.uniform(-6, 6)
-            dist = (Gf.Vec2f(x, y) - Gf.Vec2f(carter_loc[0], carter_loc[1])).GetLength()
+            dist = float(np.linalg.norm(np.array([x, y]) - carter_loc[:2]))
             if dist > min_dist_from_carter:
-                self._dolly.GetAttribute("xformOp:translate").Set((x, y, 0))
-                self._carter_nav_target.GetAttribute("xformOp:translate").Set((x, y, 0))
+                rep.functional.modify.pose(self._dolly, position_value=(x, y, 0))
+                rep.functional.modify.pose(self._carter_nav_target, position_value=(x, y, 0))
                 break
-        self._dolly.GetAttribute("xformOp:rotateXYZ").Set((0, 0, random.uniform(-180, 180)))
+        rep.functional.modify.pose(self._dolly, rotation_value=(0, 0, random.uniform(-180, 180)))
 
     def _randomize_dolly_light(self) -> None:
         """Position light above dolly with random color."""
-        dolly_loc = self._dolly.GetAttribute("xformOp:translate").Get()
-        self._dolly_light.GetAttribute("xformOp:translate").Set(dolly_loc + (0, 0, 3))
-        self._dolly_light.GetAttribute("inputs:color").Set(
-            (random.uniform(0, 1), random.uniform(0, 1), random.uniform(0, 1))
+        dolly_loc = XformPrim(str(self._dolly.GetPath())).get_local_poses()[0].numpy()[0]
+        rep.functional.modify.pose(
+            self._dolly_light, position_value=(float(dolly_loc[0]), float(dolly_loc[1]), float(dolly_loc[2]) + 3)
+        )
+        rep.functional.modify.attribute(
+            self._dolly_light, "inputs:color", (random.uniform(0, 1), random.uniform(0, 1), random.uniform(0, 1))
         )
 
     def _randomize_prop_poses(self) -> None:
         """Stack props above the dolly with random horizontal offsets."""
-        spawn_loc = self._dolly.GetAttribute("xformOp:translate").Get()
+        spawn_loc = XformPrim(str(self._dolly.GetPath())).get_local_poses()[0].numpy()[0].copy()
         spawn_loc[2] = spawn_loc[2] + 0.5
-        for prop in self._props:
-            prop.GetAttribute("xformOp:translate").Set(spawn_loc + (random.uniform(-1, 1), random.uniform(-1, 1), 0))
+        for prop_path in self._props:
+            rep.functional.modify.pose(
+                get_prim_at_path(prop_path),
+                position_value=(
+                    float(spawn_loc[0] + random.uniform(-1, 1)),
+                    float(spawn_loc[1] + random.uniform(-1, 1)),
+                    float(spawn_loc[2]),
+                ),
+            )
             spawn_loc[2] = spawn_loc[2] + 0.2
 
     def _setup_sdg(self) -> None:
@@ -297,21 +310,19 @@ class NavSDGDemo:
         left_camera_path = self._carter_chassis.GetPath().AppendPath(self.LEFT_CAMERA_REL_PATH)
         rp_left = rep.create.render_product(
             str(left_camera_path),
-            (1024, 1024),
+            (640, 640),
             name="left_sensor",
             force_new=True,
         )
         right_camera_path = self._carter_chassis.GetPath().AppendPath(self.RIGHT_CAMERA_REL_PATH)
         rp_right = rep.create.render_product(
             str(right_camera_path),
-            (1024, 1024),
+            (640, 640),
             name="right_sensor",
             force_new=True,
         )
         self._render_products = [rp_left, rp_right]
-        # For better performance the render products can be disabled when not in use, and re-enabled only during SDG
-        if self._use_temp_rp:
-            self._disable_render_products()
+        self._disable_render_products()
         self._writer.attach(self._render_products)
 
     def _clear_sdg_render_products(self) -> None:
@@ -322,8 +333,8 @@ class NavSDGDemo:
         for rp in self._render_products:
             rp.destroy()
         self._render_products.clear()
-        if self._stage.GetPrimAtPath("/Replicator"):
-            omni.kit.commands.execute("DeletePrimsCommand", paths=["/Replicator"])
+        if self._stage and self._stage.GetPrimAtPath("/Replicator"):
+            delete_prim("/Replicator")
 
     def _enable_render_products(self) -> None:
         """Enable texture updates on all render products."""
@@ -339,28 +350,28 @@ class NavSDGDemo:
 
     def _run_sdg(self) -> None:
         """Execute one SDG capture step synchronously."""
-        if self._use_temp_rp:
-            self._enable_render_products()
+        self._enable_render_products()
         rep.orchestrator.step(rt_subframes=16)
-        if self._use_temp_rp:
-            self._disable_render_products()
+        self._disable_render_products()
 
     async def _run_sdg_async(self) -> None:
         """Execute one SDG capture step asynchronously."""
-        if self._use_temp_rp:
-            self._enable_render_products()
+        self._enable_render_products()
         await rep.orchestrator.step_async(rt_subframes=16)
-        if self._use_temp_rp:
-            self._disable_render_products()
+        self._disable_render_products()
 
     def _load_next_env(self) -> None:
         """Replace current environment with the next one from the cycle."""
+        # Reset Carter Z to the spawn floor clearance so wheels clear the new surface
+        carter = XformPrim(str(self._carter.GetPath()))
+        translation = carter.get_local_poses()[0].numpy()[0]
+        carter.set_local_poses(translations=[[translation[0], translation[1], 0.02]])
         self._load_environment(next(self._cycled_env_urls))
 
     def _load_environment(self, env_url: str | None) -> None:
         """Load the next environment under a shared scope."""
         if self._stage.GetPrimAtPath(self.ENVIRONMENT_SCOPE_PATH):
-            omni.kit.commands.execute("DeletePrimsCommand", paths=[self.ENVIRONMENT_SCOPE_PATH])
+            delete_prim(self.ENVIRONMENT_SCOPE_PATH)
 
         rep.functional.create.scope(name="Environment")
         if env_url:
@@ -376,7 +387,7 @@ class NavSDGDemo:
         )
         rep.functional.physics.apply_collider(ground)
 
-    def _on_sdg_done(self, task: object) -> None:
+    def _on_sdg_done(self, task: asyncio.Task) -> None:
         """Callback invoked when async SDG step completes."""
         self._setup_next_frame()
 
@@ -385,10 +396,7 @@ class NavSDGDemo:
         self._frame_counter += 1
         if self._frame_counter >= self._num_frames:
             print(f"[SDG] Finished")
-            # Make sure the data has been written to disk before clearing the state
             if self._is_running_in_script_editor():
-                import asyncio
-
                 task = asyncio.ensure_future(rep.orchestrator.wait_until_complete_async())
                 task.add_done_callback(lambda t: self.clear())
             else:
@@ -401,9 +409,9 @@ class NavSDGDemo:
         self._randomize_prop_poses()
         if self._frame_counter % self._env_interval == 0:
             self._load_next_env()
-        # Set a new random distance from which to take capture the next frame
+        # Set a new random distance from which to capture the next frame
         self._trigger_distance = random.uniform(1.75, 2.5)
-        self._timeline.play()
+        app_utils.play()
         self._timeline_sub = carb.eventdispatcher.get_eventdispatcher().observe_event(
             event_name=omni.timeline.GLOBAL_EVENT_CURRENT_TIME_TICKED,
             on_event=self._on_timeline_event,
@@ -412,15 +420,16 @@ class NavSDGDemo:
 
     def _on_timeline_event(self, e: carb.eventdispatcher.Event) -> None:
         """Check distance to dolly and trigger SDG capture when close enough."""
-        carter_loc = self._carter_chassis.GetAttribute("xformOp:translate").Get()
-        dolly_loc = self._dolly.GetAttribute("xformOp:translate").Get()
-        dist = (Gf.Vec2f(dolly_loc[0], dolly_loc[1]) - Gf.Vec2f(carter_loc[0], carter_loc[1])).GetLength()
+        carter_loc = XformPrim(str(self._carter_chassis.GetPath())).get_local_poses()[0].numpy()[0]
+        dolly_loc = XformPrim(str(self._dolly.GetPath())).get_local_poses()[0].numpy()[0]
+        dist = float(np.linalg.norm(dolly_loc[:2] - carter_loc[:2]))
         if dist < self._trigger_distance:
             print(f"[SDG] Starting SDG for frame no. {self._frame_counter}")
-            self._timeline.pause()
+            app_utils.pause()
+            if self._timeline_sub:
+                self._timeline_sub.reset()
+                self._timeline_sub = None
             if self._is_running_in_script_editor():
-                import asyncio
-
                 task = asyncio.ensure_future(self._run_sdg_async())
                 task.add_done_callback(self._on_sdg_done)
             else:
@@ -432,15 +441,88 @@ out_dir = os.path.join(os.getcwd(), "_out_nav_sdg_demo", "")
 selected_env_urls = args.env_urls if args.env_urls is not None else DEFAULT_ENV_URLS
 nav_demo = NavSDGDemo()
 nav_demo.start(
-    num_frames=args.num_frames,
+    num_frames=args.num_captures,
     out_dir=out_dir,
     env_urls=selected_env_urls,
     env_interval=args.env_interval,
-    use_temp_rp=args.use_temp_rp,
     seed=22,
 )
 
 while simulation_app.is_running() and nav_demo.is_running():
     simulation_app.update()
+
+# <start-amr-navigation-test>
+import argparse
+import sys
+
+from isaacsim.core.utils.extensions import enable_extension
+
+enable_extension("isaacsim.test.utils")
+from isaacsim.test.utils.file_validation import validate_folder_contents
+
+num_frames = args.num_captures
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--test",
+    action="store_true",
+    help="Validate captured output files against expected counts and exit.",
+)
+args, _ = parser.parse_known_args()
+
+if args.test:
+    import omni.kit.app
+    from isaacsim.test.utils.image_comparison import compare_images_in_directories
+
+    # BasicWriter rgb on left+right cameras → 1 png per camera per frame.
+    expected_pngs = num_frames * 2
+    ok = validate_folder_contents(
+        path=out_dir,
+        recursive=True,
+        expected_counts={"png": expected_pngs},
+        fail_on_empty_files=True,
+    )
+    if not ok:
+        print(f"[SDG][Test][FAIL] Output validation failed for {out_dir}")
+        sys.exit(1)
+
+    rgb_mean_diff_tolerance = 5
+    enable_extension("isaacsim.replicator.examples")
+    replicator_examples_ext_path = (
+        omni.kit.app.get_app().get_extension_manager().get_extension_path_by_module("isaacsim.replicator.examples")
+    )
+    golden_dir = os.path.join(
+        replicator_examples_ext_path,
+        "isaacsim",
+        "replicator",
+        "examples",
+        "tests",
+        "data",
+        "golden",
+        "_out_nav_sdg_demo",
+    )
+    rgb_results = []
+    for golden_root, _, golden_files in os.walk(golden_dir):
+        if any(file_name.endswith(".png") for file_name in golden_files):
+            relative_root = os.path.relpath(golden_root, golden_dir)
+            test_root = out_dir if relative_root == "." else os.path.join(out_dir, relative_root)
+            rgb_results.append(
+                compare_images_in_directories(
+                    golden_dir=golden_root,
+                    test_dir=test_root,
+                    path_pattern=r"^rgb_.*\.png$",
+                    allclose_rtol=None,
+                    allclose_atol=None,
+                    mean_tolerance=rgb_mean_diff_tolerance,
+                    print_all_stats=False,
+                )
+            )
+    if not rgb_results or not all(result["all_passed"] for result in rgb_results):
+        print(
+            f"[SDG][Test][FAIL] RGB image comparison failed (tol={rgb_mean_diff_tolerance}). "
+            f"Golden dir: {golden_dir}, output dir: {out_dir}"
+        )
+        sys.exit(1)
+    print(f"[SDG][Test][PASS] Output validation succeeded for {out_dir} ({expected_pngs} pngs)")
+# <end-amr-navigation-test>
 
 simulation_app.close()

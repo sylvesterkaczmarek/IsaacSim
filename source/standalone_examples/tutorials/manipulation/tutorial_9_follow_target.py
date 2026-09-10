@@ -71,7 +71,14 @@ _TARGET_PATH = "/World/TargetCube"
 
 
 def get_estimated_state(articulation: Articulation) -> mg.RobotState:
-    """Get the current articulation state for RMPflow."""
+    """Get the current articulation state for RMPflow.
+
+    Args:
+        articulation: Robot articulation from which to read joint positions and velocities.
+
+    Returns:
+        Robot state containing current position and velocity values labeled by articulation DOF name.
+    """
     names = articulation.dof_names
     return mg.RobotState(
         joints=mg.JointState.from_name(
@@ -83,7 +90,15 @@ def get_estimated_state(articulation: Articulation) -> mg.RobotState:
 
 
 def create_setpoint_state(cumotion_robot: CumotionRobot, target_object: GeomPrim) -> mg.RobotState:
-    """Create an end-effector setpoint from the target object pose."""
+    """Create an end-effector setpoint from the target object pose.
+
+    Args:
+        cumotion_robot: Robot description that supplies the available tool-frame names.
+        target_object: Geometry whose world position becomes the tool-frame target.
+
+    Returns:
+        Spatial robot state targeting the first tool frame at the object's position with a fixed downward orientation.
+    """
     tool_frame = cumotion_robot.robot_description.tool_frame_names()[0]
     site_space = cumotion_robot.robot_description.tool_frame_names()
     target_positions, _ = target_object.get_world_poses()
@@ -102,7 +117,15 @@ def create_setpoint_state(cumotion_robot: CumotionRobot, target_object: GeomPrim
 async def setup_scene_and_controller(
     with_obstacle: bool,
 ) -> tuple[RmpFlowController, CumotionRobot, Articulation, mg.WorldBinding, GeomPrim]:
-    """Create the scene, world binding, cuMotion robot, and controller."""
+    """Create the scene, world binding, cuMotion robot, and controller.
+
+    Args:
+        with_obstacle: Whether to add a collision obstacle between the robot and target.
+
+    Returns:
+        RMPflow controller, cuMotion robot description, robot articulation, initialized collision-world binding, and
+        draggable target geometry.
+    """
     assets_root_path = await get_assets_root_path_async()
     stage_utils.add_reference_to_stage(
         usd_path=assets_root_path + "/Isaac/Samples/Rigging/Manipulator/configure_manipulator/ur10e/ur/ur_gripper.usd",
@@ -180,7 +203,18 @@ def reset_rmpflow(
     target_object: GeomPrim,
     t: float,
 ) -> None:
-    """Reset RMPflow using the current articulation and target states."""
+    """Reset RMPflow using the current articulation and target states.
+
+    Args:
+        controller: RMPflow controller whose internal state should be reinitialized.
+        cumotion_robot: Robot description used to identify the controlled tool frame.
+        articulation: Robot articulation that supplies the initial joint state.
+        target_object: Geometry that supplies the initial end-effector target position.
+        t: Current controller time in seconds.
+
+    Raises:
+        RuntimeError: If the RMPflow controller rejects the reset state.
+    """
     estimated = get_estimated_state(articulation)
     setpoint = create_setpoint_state(cumotion_robot, target_object)
     if not controller.reset(estimated, setpoint, t=t):
@@ -196,7 +230,16 @@ def run_step(
     target_object: GeomPrim,
     t: float,
 ) -> None:
-    """Advance one follow-target control step."""
+    """Advance one follow-target control step.
+
+    Args:
+        controller: RMPflow controller used to compute the next joint target.
+        cumotion_robot: Robot description used to identify the controlled tool frame.
+        articulation: Robot articulation that supplies current state and receives position targets.
+        world_binding: Collision-world binding whose transforms are synchronized before planning.
+        target_object: Draggable geometry that supplies the desired end-effector position.
+        t: Current controller time in seconds.
+    """
     world_binding.get_world_interface().update_world_to_robot_root_transforms(articulation.get_world_poses())
     world_binding.synchronize_transforms()
 
@@ -218,7 +261,12 @@ def run_step(
 
 
 def main(args: argparse.Namespace, app: SimulationApp) -> None:
-    """Run the follow-target tutorial."""
+    """Run the follow-target tutorial.
+
+    Args:
+        args: Parsed options controlling device, robot configuration, obstacle creation, headless mode, and test length.
+        app: Running simulation application used for asynchronous setup and frame updates.
+    """
     SimulationManager.setup_simulation(dt=1.0 / 60.0, device=args.device)
 
     controller, cumotion_robot, articulation, world_binding, target_object = app.run_coroutine(

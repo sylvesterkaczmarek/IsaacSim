@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Surface Gripper Object Grasping Example
+"""Surface-gripper object-grasping example.
 
 Scene:
     - Ground plane.
@@ -116,7 +116,19 @@ def _make_dynamic_cube(
     *,
     disable_gravity: bool = False,
 ) -> RigidPrim:
-    """Create a dynamic rigid cube and wrap it in a RigidPrim for pose readback."""
+    """Create a dynamic rigid cube and wrap it in a RigidPrim for pose readback.
+
+    Args:
+        path: Stage path at which to create the cube.
+        size: Cube edge length in stage units.
+        position: Initial world-space position.
+        color: Display color with RGB components between zero and one.
+        mass: Rigid-body mass in kilograms.
+        disable_gravity: Whether gravity should be disabled for the cube.
+
+    Returns:
+        Wrapper for reading and modifying the created rigid body.
+    """
     _make_cube_geom(path, size, position, color)
     # RigidPrim applies the rigid-body APIs and sets the mass and gravity state.
     rigid_prim = RigidPrim(path, masses=[mass])
@@ -126,6 +138,14 @@ def _make_dynamic_cube(
 
 
 def build_scene(stage: Any) -> tuple[RigidPrim, RigidPrim]:
+    """Build the surface-gripper demonstration scene.
+
+    Args:
+        stage: USD stage on which to author the scene.
+
+    Returns:
+        The gripper body and target cube wrappers.
+    """
     stage_utils.set_stage_up_axis("Z")
     stage_utils.define_prim("/physicsScene", "PhysicsScene")
     GroundPlane("/World/GroundPlane")
@@ -232,6 +252,11 @@ def build_scene(stage: Any) -> tuple[RigidPrim, RigidPrim]:
 
 
 def step_for(frames: int) -> None:
+    """Advance the simulation for a fixed number of frames.
+
+    Args:
+        frames: Number of frames to advance.
+    """
     # With the timeline playing, each app update advances physics by one dt.
     for _ in range(frames):
         simulation_app.update()
@@ -243,12 +268,21 @@ def _world_z(rigid_prim: RigidPrim) -> float:
 
 
 def set_gripper_target_z(target_world_z: float) -> None:
-    """Drive the gripper body to a world Z by setting the prismatic drive target."""
+    """Drive the gripper body to a world Z by setting the prismatic drive target.
+
+    Args:
+        target_world_z: Desired gripper-body height in world coordinates.
+    """
     target_attr = prim_utils.get_prim_at_path(DRIVE_JOINT_PATH).GetAttribute("drive:linear:physics:targetPosition")
     target_attr.Set(target_world_z - CARRIER_Z)
 
 
 def main() -> int:
+    """Run the surface-gripper demonstration.
+
+    Returns:
+        Zero when every grasp-and-release check passes, otherwise one.
+    """
     stage = stage_utils.create_new_stage()
     stage_utils.set_stage_units(meters_per_unit=1.0)
     gripper_body, cube = build_scene(stage)

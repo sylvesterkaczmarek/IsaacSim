@@ -21,6 +21,7 @@ import os
 
 import carb
 import carb.eventdispatcher
+import isaacsim.core.experimental.utils.prim as prim_utils
 import omni.kit.app
 import omni.ui as ui
 import omni.usd
@@ -230,12 +231,12 @@ class SyntheticRecorderWindow(MenuHelperWindow):
         else:
             self._load_config(os.path.join(self._config_dir, "default_config.json"))
 
-        # Listen to stage closing event to stop the recorder
+        # Listen to stage closed event to stop the recorder
         self._usd_context = omni.usd.get_context()
         self._sub_stage_event = carb.eventdispatcher.get_eventdispatcher().observe_event(
-            event_name=self._usd_context.stage_event_name(omni.usd.StageEventType.CLOSING),
-            on_event=self._on_stage_closing_event,
-            observer_name="isaacsim.replicator.synthetic_recorder._on_stage_closing_event",
+            event_name=self._usd_context.stage_event_name(omni.usd.StageEventType.CLOSED),
+            on_event=self._on_stage_closed_event,
+            observer_name="isaacsim.replicator.synthetic_recorder._on_stage_closed_event",
         )
 
         # Listen to editor quit event to stop the recorder, and save the last config file
@@ -273,13 +274,14 @@ class SyntheticRecorderWindow(MenuHelperWindow):
         """
         self._collapsed_states[key] = collapsed
 
-    def _on_stage_closing_event(self, e: carb.events.IEvent) -> None:
-        """Callback function for stage closing event.
+    def _on_stage_closed_event(self, e: carb.events.IEvent) -> None:
+        """Callback function for stage closed event.
 
         Args:
-            e: The stage closing event.
+            e: The stage closed event.
         """
-        self._recorder.clear_recorder()
+        if self._recorder is not None:
+            self._recorder.clear_recorder()
 
     def _on_editor_quit_event(self, e: carb.events.IEvent) -> None:
         """Callback function for editor quit event.
@@ -287,7 +289,8 @@ class SyntheticRecorderWindow(MenuHelperWindow):
         Args:
             e: The editor quit event.
         """
-        self._recorder.clear_recorder()
+        if self._recorder is not None:
+            self._recorder.clear_recorder()
         self._save_config(self._last_config_path)
 
     def _open_dir(self, path: str) -> None:
@@ -763,9 +766,10 @@ class SyntheticRecorderWindow(MenuHelperWindow):
     def _add_new_rp_field(self) -> None:
         """Add a new UI render product entry."""
         context = omni.usd.get_context()
-        stage = context.get_stage()
         selected_prims = context.get_selection().get_selected_prim_paths()
-        selected_cameras = [path for path in selected_prims if stage.GetPrimAtPath(path).GetTypeName() == "Camera"]
+        selected_cameras = [
+            path for path in selected_prims if prim_utils.get_prim_at_path(path).GetTypeName() == "Camera"
+        ]
 
         if selected_cameras:
             for path in selected_cameras:

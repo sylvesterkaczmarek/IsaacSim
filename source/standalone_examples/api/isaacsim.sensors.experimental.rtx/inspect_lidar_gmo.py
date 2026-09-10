@@ -170,7 +170,11 @@ class GmoLidarInspectWriter(Writer):
         self._frame_count = 0
 
     def write(self, data: dict[str, object]) -> None:
-        """Inspect lidar GenericModelOutput data."""
+        """Inspect lidar GenericModelOutput data.
+
+        Args:
+            data: Writer payload containing lidar GenericModelOutput data grouped by render product.
+        """
         if "renderProducts" not in data:
             return
         for _rp_name, rp_data in data["renderProducts"].items():

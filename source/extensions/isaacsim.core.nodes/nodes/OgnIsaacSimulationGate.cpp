@@ -14,7 +14,7 @@
 // limitations under the License.
 
 
-#include <isaacsim/core/nodes/ICoreNodes.h>
+#include <isaacsim/core/nodes/ICoreNodes.hpp>
 #include <omni/fabric/FabricUSD.h>
 #include <omni/timeline/ITimeline.h>
 

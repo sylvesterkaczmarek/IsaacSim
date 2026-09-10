@@ -56,7 +56,11 @@ class FollowState(DfState):
         self.follow_sphere.set_world_pose(*self.robot.arm.get_fk_pq().as_tuple())
 
     def step(self) -> Any:
-        """Send the end effector toward the follow sphere, clamping height above the ground."""
+        """Send the end effector toward the follow sphere, clamping height above the ground.
+
+        Returns:
+            This state so the state machine continues following the sphere.
+        """
         target_position, _ = self.follow_sphere.get_world_pose()
         target_position[2] = max(target_position[2], 0.02)
         self.robot.arm.send_end_effector(target_position=target_position)
@@ -64,7 +68,11 @@ class FollowState(DfState):
 
 
 class FollowContext(DfRobotApiContext):
-    """Extend the robot API context with end-effector and gripper monitors."""
+    """Extend the robot API context with end-effector and gripper monitors.
+
+    Args:
+        robot: Robot command interface and follow-sphere state to monitor.
+    """
 
     def __init__(self, robot: Any) -> None:
         super().__init__(robot)

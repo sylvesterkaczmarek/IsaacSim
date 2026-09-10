@@ -196,6 +196,9 @@ class TestOgnWritePhysicsArticulationView(omni.kit.test.AsyncTestCase):
 
         Verifies that setting joint velocity values through the domain randomization system
         correctly applies to the articulation's degrees of freedom velocities.
+
+        Raises:
+            AssertionError: If the articulation's degrees of freedom velocities do not match the randomized values.
         """
         value = [100, 200, 300, 400, 500, 600, 700, 800, 900]
         await self._setup_random_attribute(attribute_name="joint_velocities", value=value)
@@ -208,6 +211,9 @@ class TestOgnWritePhysicsArticulationView(omni.kit.test.AsyncTestCase):
 
         Verifies that setting lower DOF limit values through the domain randomization system
         correctly applies to the articulation's joint limits.
+
+        Raises:
+            AssertionError: If the articulation's lower DOF limits do not match the randomized values.
         """
         value = [-10, -20, -30, -40, -50, -60, -70, -80, -90]
         await self._setup_random_attribute(attribute_name="lower_dof_limits", value=value)
@@ -220,6 +226,9 @@ class TestOgnWritePhysicsArticulationView(omni.kit.test.AsyncTestCase):
 
         Verifies that setting upper DOF limit values through the domain randomization system
         correctly applies to the articulation's joint limits.
+
+        Raises:
+            AssertionError: If the articulation's upper DOF limits do not match the randomized values.
         """
         value = [100, 200, 300, 400, 500, 600, 700, 800, 900]
         await self._setup_random_attribute(attribute_name="upper_dof_limits", value=value)
@@ -232,6 +241,9 @@ class TestOgnWritePhysicsArticulationView(omni.kit.test.AsyncTestCase):
 
         Verifies that setting maximum effort values through the domain randomization system
         correctly applies to the articulation's DOF maximum forces.
+
+        Raises:
+            AssertionError: If the articulation's DOF maximum forces do not match the randomized values.
         """
         value = [100, 200, 300, 400, 500, 600, 700, 800, 900]
         await self._setup_random_attribute(attribute_name="max_efforts", value=value)
@@ -244,6 +256,9 @@ class TestOgnWritePhysicsArticulationView(omni.kit.test.AsyncTestCase):
 
         Verifies that setting joint armature values through the domain randomization system
         correctly applies to the articulation's DOF armatures.
+
+        Raises:
+            AssertionError: If the articulation's DOF armatures do not match the randomized values.
         """
         value = [100, 200, 300, 400, 500, 600, 700, 800, 900]
         await self._setup_random_attribute(attribute_name="joint_armatures", value=value)
@@ -256,6 +271,9 @@ class TestOgnWritePhysicsArticulationView(omni.kit.test.AsyncTestCase):
 
         Verifies that setting joint maximum velocity values through the domain randomization system
         correctly applies to the articulation's DOF maximum velocities.
+
+        Raises:
+            AssertionError: If the articulation's DOF maximum velocities do not match the randomized values.
         """
         value = [100, 200, 300, 400, 500, 600, 700, 800, 900]
         await self._setup_random_attribute(attribute_name="joint_max_velocities", value=value)
@@ -277,6 +295,9 @@ class TestOgnWritePhysicsArticulationView(omni.kit.test.AsyncTestCase):
 
         Verifies that setting body mass values through the domain randomization system
         correctly applies to the articulation's body masses. Only runs on CPU device.
+
+        Raises:
+            AssertionError: If the articulation's body masses do not match the randomized values on CPU device.
         """
         if self._articulation_view._device == "cpu":
             value = [100] * self._articulation_view.count * self._articulation_view.num_bodies
@@ -290,6 +311,9 @@ class TestOgnWritePhysicsArticulationView(omni.kit.test.AsyncTestCase):
 
         Verifies that setting body inertia diagonal values through the domain randomization system
         correctly applies to the articulation's body inertia tensors. Only runs on CPU device.
+
+        Raises:
+            AssertionError: If the articulation's body inertia diagonals do not match the randomized values on CPU device.
         """
         if self._articulation_view._device == "cpu":
             inertias = [0.1, 0.1, 0.1] * self._articulation_view.count * self._articulation_view.num_bodies
@@ -304,6 +328,9 @@ class TestOgnWritePhysicsArticulationView(omni.kit.test.AsyncTestCase):
 
         Verifies that setting material property values through the domain randomization system
         correctly applies to the articulation's physics material properties.
+
+        Raises:
+            AssertionError: If the articulation's physics material properties do not match the randomized values.
         """
         value = [0.5] * self._articulation_view.count * self._articulation_view.num_shapes * 3
         await self._setup_random_attribute(attribute_name="material_properties", value=value)

@@ -38,6 +38,8 @@ class DeformableMaterial:
         *args: Positional arguments (ignored; class always raises NotImplementedError).
         **kwargs: Keyword arguments (ignored; class always raises NotImplementedError).
 
+    Raises:
+        NotImplementedError: Always raised because DeformableMaterial is no longer available.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -56,6 +58,8 @@ class DeformableMaterialView:
         *args: Positional arguments (ignored; class always raises NotImplementedError).
         **kwargs: Keyword arguments (ignored; class always raises NotImplementedError).
 
+    Raises:
+        NotImplementedError: Always raised because DeformableMaterialView is no longer available.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

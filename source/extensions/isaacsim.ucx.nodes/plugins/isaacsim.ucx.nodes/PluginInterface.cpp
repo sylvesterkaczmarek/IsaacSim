@@ -21,7 +21,7 @@
 #include <carb/logging/Log.h>
 #include <carb/settings/ISettings.h>
 
-#include <isaacsim/ucx/nodes/IUcxNodes.h>
+#include <isaacsim/ucx/nodes/IUcxNodes.hpp>
 #include <omni/fabric/IToken.h>
 #include <omni/graph/core/NodeTypeRegistrar.h>
 #include <omni/graph/core/ogn/Registration.h>

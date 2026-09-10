@@ -49,7 +49,16 @@ data_logger = my_world.get_data_logger()
 
 
 def frame_logging_func(tasks: Any, scene: Any) -> dict[str, list[float]]:
-    """Return joint position data for the current simulation frame."""
+    """Return joint position data for the current simulation frame.
+
+    Args:
+        tasks: Current task data supplied by the data logger. This callback does not use it.
+        scene: Scene containing the Franka articulation to sample.
+
+    Returns:
+        Mapping containing measured positions under ``joint_positions`` and commanded positions under
+        ``applied_joint_positions``.
+    """
     return {
         "joint_positions": scene.get_object("my_franka_1").get_joint_positions().tolist(),
         "applied_joint_positions": scene.get_object("my_franka_1").get_applied_action().joint_positions.tolist(),

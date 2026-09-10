@@ -154,7 +154,7 @@ def apply_robot_schema(robot_path: str) -> None:
     """Applies Isaac Robot Schema to the robot prim and its components.
 
     Applies RobotAPI to the main robot prim, LinkAPI to all robot links, and JointAPI
-    to all joints. Creates relationships between the robot and its links/joints as
+    to all joints. Creates relationships between the robot and its links and joints as
     defined by the Isaac Robot Schema.
 
     Args:

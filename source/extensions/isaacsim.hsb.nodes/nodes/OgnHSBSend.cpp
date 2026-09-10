@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
 #include "dlpack/dlpack.h"
@@ -23,8 +23,8 @@
 #include <carb/tasking/ITasking.h>
 #include <carb/tasking/TaskingUtils.h>
 
-#include <isaacsim/core/includes/BaseResetNode.h>
-#include <isaacsim/hsb/core/HSBSender.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
+#include <isaacsim/hsb/core/HSBSender.hpp>
 
 #include <OgnHSBSendDatabase.h>
 #include <memory>
@@ -114,6 +114,38 @@ private:
         createEndpoint(db);
         if (m_sender)
         {
+            // Program the rig calibration EEPROM with the intrinsics + extrinsics provided
+            // by the upstream OgnHSBCameraHelper (driven by the USDA Camera prim). If no
+            // values were wired, the EEPROM stays zero-initialized and cuVSLAM downstream
+            // will reject with "Focal length must be > 0" — that's a hookup error in the
+            // scene, not a runtime failure.
+            const size_t intrSize = db.inputs.calibrationIntrinsics.size();
+            if (intrSize >= 8)
+            {
+                isaacsim::hsb::core::CameraCalibration calib{};
+                const auto& intr = db.inputs.calibrationIntrinsics.cpu();
+                for (size_t side = 0; side < 2; ++side)
+                {
+                    for (size_t k = 0; k < 4; ++k)
+                    {
+                        calib.intrinsics[side][k] = intr[side * 4 + k];
+                    }
+                }
+                const auto& trans = db.inputs.calibrationTranslation();
+                calib.T[0] = trans[0];
+                calib.T[1] = trans[1];
+                calib.T[2] = trans[2];
+                m_sender->setCalibration(calib);
+            }
+            else if (intrSize > 0)
+            {
+                CARB_LOG_WARN(
+                    "[HSB Bridge] calibrationIntrinsics has size %zu, expected 8 "
+                    "([L_fx, L_fy, L_cx, L_cy, R_fx, R_fy, R_cx, R_cy]); "
+                    "ignoring and leaving rig EEPROM zero-initialized.",
+                    intrSize);
+            }
+
             m_sender->connect();
         }
     }

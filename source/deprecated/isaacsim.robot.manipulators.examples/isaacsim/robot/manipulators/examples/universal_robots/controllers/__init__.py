@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Contains controllers for Universal Robots manipulator examples."""
+
 from isaacsim.robot.manipulators.examples.universal_robots.controllers.pick_place_controller import (
     PickPlaceController as PickPlaceController,
 )

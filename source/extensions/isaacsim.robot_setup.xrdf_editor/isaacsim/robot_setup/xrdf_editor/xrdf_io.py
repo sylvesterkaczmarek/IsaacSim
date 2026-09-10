@@ -342,6 +342,9 @@ def _write_yaml_item(f: TextIO, item: Any, tabbing: str) -> None:
         tabbing: Leading indentation string.
     """
     if isinstance(item, dict):
+        if len(item) == 0:
+            f.write(f"{tabbing}{{}}\n")
+            return
         for k in list(item.keys()):
             f.write(f"{tabbing}{k}: ")
             tabbing = " " * len(tabbing)
@@ -446,7 +449,12 @@ def build_xrdf_dict(inputs: XrdfWriteInputs) -> dict[str, Any]:
     if sphere_dict is None:
         sphere_dict = {}
         parsed_file["geometry"][geometry_group_name]["spheres"] = sphere_dict
-    for link in inputs.ordered_links:
+    # Editors before 3.7.0 keyed a nested link by its path fragment relative to
+    # the articulation root ("base_link/arm_link") rather than its link name, so
+    # dropping only exact link names leaves that stale entry in a merge source
+    # next to the freshly written one, duplicating the link's collision geometry.
+    ordered_link_names = set(inputs.ordered_links)
+    for link in [key for key in sphere_dict if key.rsplit("/", 1)[-1] in ordered_link_names]:
         sphere_dict.pop(link, None)
     if inputs.sphere_dict_writer is not None:
         inputs.sphere_dict_writer(inputs.articulation_base_path, sphere_dict)

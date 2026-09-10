@@ -38,16 +38,16 @@ from pxr import Gf, PhysicsSchemaTools, Usd
 
 
 class GroundPlane(object):
-    """High level wrapper to create/encapsulate a ground plane.
+    """High level wrapper to create or encapsulate a ground plane.
 
     Args:
         prim_path: Prim path of the Prim to encapsulate or create.
-        name: Shortname to be used as a key by Scene class.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
         size: Length of each edge.
         z_position: Ground plane position in the z-axis.
         scale: Local scale to be applied to the prim's dimensions.
-        visible: Set to false for an invisible prim in the stage while rendering.
+        visible: Set to False for an invisible prim in the stage while rendering.
         color: Color of the visual plane.
         physics_material: Physics material to be applied to the held prim.
             If not specified, a default physics material will be added.
@@ -65,7 +65,6 @@ class GroundPlane(object):
         >>> plane = GroundPlane(prim_path="/World/GroundPlane", z_position=0)
         >>> plane
         <isaacsim.core.api.objects.ground_plane.GroundPlane object at 0x7f15d003fb50>
-
     """
 
     def __init__(
@@ -158,7 +157,6 @@ class GroundPlane(object):
 
             >>> plane.prim_path
             /World/GroundPlane
-
         """
         return self._xform_prim.prim_path
 
@@ -175,7 +173,6 @@ class GroundPlane(object):
 
             >>> plane.name
             ground_plane
-
         """
         return self._xform_prim.name
 
@@ -192,7 +189,6 @@ class GroundPlane(object):
 
             >>> plane.prim
             Usd.Prim(</World/GroundPlane>)
-
         """
         return self._xform_prim.prim
 
@@ -209,7 +205,6 @@ class GroundPlane(object):
 
             >>> plane.xform_prim
             <isaacsim.core.prims.single_xform_prim.SingleXFormPrim object at 0x7f1578d32560>
-
         """
         return self._xform_prim
 
@@ -226,7 +221,6 @@ class GroundPlane(object):
 
             >>> plane.collision_geometry_prim
             <isaacsim.core.prims.single_geometry_prim.SingleGeometryPrim object at 0x7f15ff3461a0>
-
         """
         return self._collision_prim
 
@@ -246,7 +240,6 @@ class GroundPlane(object):
         .. code-block:: python
 
             >>> plane.initialize()
-
         """
         self._xform_prim.initialize(physics_sim_view=physics_sim_view)
         self._collision_prim.initialize(physics_sim_view=physics_sim_view)
@@ -260,7 +253,6 @@ class GroundPlane(object):
         .. code-block:: python
 
             >>> plane.post_reset()
-
         """
         self._xform_prim.post_reset()
         self._collision_prim.post_reset()
@@ -270,7 +262,7 @@ class GroundPlane(object):
         """Check if the prim path has a valid USD Prim at it.
 
         Returns:
-            True is the current prim path corresponds to a valid prim in stage. False otherwise.
+            True if the current prim path corresponds to a valid prim in stage. False otherwise.
 
         Example:
 
@@ -279,18 +271,17 @@ class GroundPlane(object):
             >>> # given an existing and valid prim
             >>> plane.is_valid()
             True
-
         """
         return self._xform_prim.is_valid()
 
     def apply_physics_material(self, physics_material: PhysicsMaterial, weaker_than_descendants: bool = False) -> None:
-        """Used to apply physics material to the held prim and optionally its descendants.
+        """Apply physics material to the held prim and optionally its descendants.
 
         Args:
-            physics_material: Physics material to be applied to the held prim. This where you want to
-                define friction, restitution..etc. Note: if a physics material is not
+            physics_material: Physics material to be applied to the held prim. This is where you want to
+                define friction, restitution, etc. Note: if a physics material is not
                 defined, the defaults will be used from PhysX.
-            weaker_than_descendants: True if the material shouldn't override the descendants
+            weaker_than_descendants: True if the material should not override the descendants
                 materials, otherwise False.
 
         Example:
@@ -307,7 +298,6 @@ class GroundPlane(object):
             ...     restitution=0.1
             ... )
             >>> plane.apply_physics_material(material)
-
         """
         self._collision_prim.apply_physics_material(
             physics_material=physics_material, weaker_than_descendants=weaker_than_descendants
@@ -315,7 +305,7 @@ class GroundPlane(object):
         return
 
     def get_applied_physics_material(self) -> PhysicsMaterial:
-        """Returns the current applied physics material in case it was applied using apply_physics_material or not.
+        """Return the current applied physics material in case it was applied using apply_physics_material or not.
 
         Returns:
             The current applied physics material.
@@ -326,14 +316,13 @@ class GroundPlane(object):
 
             >>> plane.get_applied_physics_material()
             <isaacsim.core.api.materials.physics_material.PhysicsMaterial object at 0x7f517ff62920>
-
         """
         return self._collision_prim.get_applied_physics_material()
 
     def set_world_pose(
         self, position: Sequence[float] | None = None, orientation: Sequence[float] | None = None
     ) -> None:
-        """Sets prim's pose with respect to the world's frame.
+        """Sets the prim's pose with respect to the world's frame.
 
         .. warning::
 
@@ -352,19 +341,20 @@ class GroundPlane(object):
 
         .. code-block:: python
 
-            >>> plane.set_world_pose(position=np.array([0.0, 0.0, 0.5]), orientation=np.array([1., 0., 0., 0.]))
-
+            >>> plane.set_world_pose(
+            ...     position=np.array([0.0, 0.0, 0.5]), orientation=np.array([1., 0., 0., 0.])
+            ... )
         """
         self._collision_prim.set_world_pose(position=position, orientation=orientation)
         self._xform_prim.set_world_pose(position=position, orientation=orientation)
         return
 
     def get_world_pose(self) -> tuple[np.ndarray, np.ndarray]:
-        """Get prim's pose with respect to the world's frame.
+        """Gets the prim's pose with respect to the world's frame.
 
         Returns:
             First index is the position in the world frame (with shape (3, )).
-            Second index is quaternion orientation (with shape (4, )) in the world frame
+            Second index is quaternion orientation (with shape (4, )) in the world frame.
 
         Example:
 
@@ -376,15 +366,14 @@ class GroundPlane(object):
             [0. 0. 0.]
             >>> orientation
             [1. 0. 0. 0.]
-
         """
         return self._xform_prim.get_world_pose()
 
     def get_default_state(self) -> XFormPrimState:
-        """Get the default prim states (spatial position and orientation).
+        """Gets the default prim states (spatial position and orientation).
 
         Returns:
-            An object that contains the default state of the prim (position and orientation)
+            An object that contains the default state of the prim (position and orientation).
 
         Example:
 
@@ -398,14 +387,13 @@ class GroundPlane(object):
             [0. 0. 0.]
             >>> state.orientation
             [1. 0. 0. 0.]
-
         """
         return self._xform_prim.get_default_state()
 
     def set_default_state(
         self, position: Sequence[float] | None = None, orientation: Sequence[float] | None = None
     ) -> None:
-        """Sets the default state of the prim (position and orientation), that will be used after each reset.
+        """Sets the default state of the prim (position and orientation), which will be used after each reset.
 
         Args:
             position: Position in the world frame of the prim. Shape is (3, ).
@@ -417,11 +405,12 @@ class GroundPlane(object):
         .. code-block:: python
 
             >>> # configure default state
-            >>> plane.set_default_state(position=np.array([0.0, 0.0, -1.0]), orientation=np.array([1, 0, 0, 0]))
+            >>> plane.set_default_state(
+            ...     position=np.array([0.0, 0.0, -1.0]), orientation=np.array([1, 0, 0, 0])
+            ... )
             >>>
             >>> # set default states during post-reset
             >>> plane.post_reset()
-
         """
         self._xform_prim.set_default_state(position=position, orientation=orientation)
         self._collision_prim.set_default_state(position=position, orientation=orientation)

@@ -18,7 +18,7 @@
 from collections.abc import Callable
 
 import omni.ui as ui
-from isaacsim.gui.components.element_wrappers import CheckBox, DropDown, Frame
+from isaacsim.gui.components import CheckBox, DropDown, Frame
 from isaacsim.gui.components.widgets import DynamicComboBoxModel
 
 LABEL_WIDTH = 160

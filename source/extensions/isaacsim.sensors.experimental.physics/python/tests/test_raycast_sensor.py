@@ -19,14 +19,16 @@ from __future__ import annotations
 
 from typing import Any
 
+import isaacsim.core.experimental.utils.prim as prim_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
 import omni.kit.test
 import omni.timeline
 import omni.usd
 from isaacsim.core.experimental.objects import Cube
 from isaacsim.core.experimental.prims import GeomPrim, RigidPrim
-from isaacsim.core.simulation_manager import SimulationManager
-from isaacsim.sensors.experimental.physics import Raycast, RaycastSensor
+from isaacsim.core.simulation_manager import PhysicsScene, SimulationManager
+from isaacsim.sensors.experimental.physics import IMU, IMUSensor, Raycast, RaycastSensor
 from pxr import Gf, Sdf, UsdGeom, UsdPhysics
 
 from .common import step_simulation
@@ -590,6 +592,69 @@ class TestRaycastSensorLifecycle(omni.kit.test.AsyncTestCase):
 
         reading = iface.get_sensor_reading("/World/NonExistent/FakeSensor")
         self.assertFalse(reading.is_valid, "Reading should be invalid for non-existent sensor")
+
+    async def test_pause_resume_with_imu_on_same_articulation(self) -> None:
+        """Raycast and IMU sharing an articulation survive pause/resume."""
+        stage_utils.set_stage_up_axis("Z")
+        stage_utils.set_stage_units(meters_per_unit=1.0)
+        PhysicsScene("/World/PhysicsScene")
+
+        Cube("/World/Ground", sizes=1.0, translations=[0.0, 0.0, -0.5], scales=[50.0, 50.0, 1.0])
+        GeomPrim("/World/Ground", apply_collision_apis=True)
+
+        art_path = "/Dummy"
+        stage_utils.define_prim(art_path, "Xform")
+        prim_utils.ensure_api(art_path, UsdPhysics.ArticulationRootAPI)
+
+        base_path = f"{art_path}/base_link"
+        Cube(base_path, sizes=0.2, positions=[0.0, 0.0, 1.0])
+        GeomPrim(base_path, apply_collision_apis=True)
+        RigidPrim(base_path, masses=[1.0])
+
+        imu_link_path = f"{base_path}/base_imu_link"
+        stage_utils.define_prim(imu_link_path, "Xform")
+
+        child_path = f"{art_path}/child_link"
+        Cube(child_path, sizes=0.1, positions=[0.3, 0.0, 1.0])
+        GeomPrim(child_path, apply_collision_apis=True)
+        RigidPrim(child_path, masses=[0.1])
+
+        joint = UsdPhysics.RevoluteJoint(stage_utils.define_prim(f"{art_path}/joint", "PhysicsRevoluteJoint"))
+        joint.CreateAxisAttr("Z")
+        joint.CreateBody0Rel().SetTargets([Sdf.Path(base_path)])
+        joint.CreateBody1Rel().SetTargets([Sdf.Path(child_path)])
+        joint.CreateLocalPos0Attr().Set(Gf.Vec3f(0.15, 0.0, 0.0))
+        joint.CreateLocalPos1Attr().Set(Gf.Vec3f(-0.15, 0.0, 0.0))
+
+        raycast = RaycastSensor(
+            Raycast.create(
+                f"{base_path}/repro_raycast",
+                ray_origins=[[0.0, 0.0, 0.0]],
+                ray_directions=[[0.0, 0.0, -1.0]],
+                min_range=0.05,
+                max_range=10.0,
+                output_frame="WORLD",
+                translations=[[0.2, 0.0, 0.0]],
+            )
+        )
+        imu = IMUSensor(IMU.create(f"{imu_link_path}/repro_imu", translations=[[0.0, 0.0, 0.0]]))
+        self.assertIsNotNone(raycast)
+        self.assertIsNotNone(imu)
+        await omni.kit.app.get_app().next_update_async()
+
+        self._timeline.play()
+        await step_simulation(0.1)
+
+        self._timeline.pause()
+        for _ in range(5):
+            await omni.kit.app.get_app().next_update_async()
+
+        self._timeline.play()
+        await step_simulation(0.2)
+
+        reading = raycast.get_sensor_reading()
+        self.assertTrue(reading.is_valid, "Raycast reading should recover after pause/resume")
+        self.assertEqual(reading.ray_count, 1)
 
     async def test_mismatched_origins_vs_numrays_disables_sensor(self) -> None:
         """Sensor with rayOrigins length != numRays produces invalid readings."""

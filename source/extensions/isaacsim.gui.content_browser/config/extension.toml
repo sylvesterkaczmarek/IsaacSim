@@ -1,5 +1,5 @@
 [package]
-version = "0.4.3"
+version = "0.5.1"
 category = "other"
 title = "Content Browser"
 description = "Extends the Omniverse content browser with an Isaac Sim collection providing quick access to curated robot models, environments, materials, and sensor assets."
@@ -14,6 +14,7 @@ writeTarget.kit = true
 "isaacsim.storage.native" = {}
 "omni.kit.widget.filebrowser" = {}
 "omni.kit.window.content_browser" = {}
+"omni.kit.window.file_importer" = {}
 "omni.kit.window.filepicker" = {}
 "omni.simready.content.browser" = {}
 "omni.usd.core" = {}
@@ -48,8 +49,16 @@ exts."isaacsim.gui.content_browser".folders = [
 name = "startup"
 enabled = false
 
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
+
 [[test]]
 enabled = true
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
 
 # disable startup test
 [documentation]

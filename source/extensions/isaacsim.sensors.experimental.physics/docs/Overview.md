@@ -13,7 +13,14 @@ align: center
 
 ### Contact Sensor
 
-{class}`ContactSensor <isaacsim.sensors.experimental.physics.ContactSensor>` provides collision detection and force measurement capabilities with configurable thresholds and radius filtering. Pair it with the {class}`Contact <isaacsim.sensors.experimental.physics.Contact>` authoring class to create a new prim, which automatically applies the necessary PhysxContactReportAPI to enable contact reporting.
+{class}`ContactSensor <isaacsim.sensors.experimental.physics.ContactSensor>` provides collision detection and force measurement with configurable thresholds and radius filtering. Pair it with the {class}`Contact <isaacsim.sensors.experimental.physics.Contact>` authoring class to create the sensor prim. Runtime data comes from the physics tensor API (`IRigidContactView`), which works with both PhysX and Newton.
+
+The sensor must be authored under an enabled rigid-body ancestor. Collision APIs are still required on the geometry that produces contacts. A collider without a rigid body is not a valid host: the tensor contact view is body-centric. Static collision shapes alone cannot host the sensor.
+
+Backend differences:
+
+- PhysX: `Contact.create()` applies `PhysxContactReportAPI` on the parent rigid body so PhysX can populate contact buffers consumed by the tensor view.
+- Newton: `PhysxContactReportAPI` is not applied. Newton exposes contacts through its tensor backend; this path does not use the PhysX Contact Report API. Apply `UsdPhysics.MassAPI` to each dynamic rigid body and assign a nonzero mass. `RigidBodyAPI` alone does not provide the mass needed to create a free joint for the default MuJoCo solver.
 
 ```python
 from isaacsim.sensors.experimental.physics import Contact, ContactSensor
@@ -52,7 +59,7 @@ if reading.is_valid:
     print(f"Joint torque: {reading.value}")
 ```
 
-The sensor provides {class}`EffortSensorReading <isaacsim.sensors.experimental.physics.EffortSensorReading>` objects containing validity status, simulation time, and effort values. It supports configurable data buffering and dynamic DOF name updates.
+The sensor provides {class}`EffortSensorReading <isaacsim.sensors.experimental.physics.EffortSensorReading>` objects containing validity status, simulation time, and effort values. Newton does not currently expose projected joint forces, so effort readings are invalid under Newton rather than being substituted with commanded actuation force. The sensor supports configurable data buffering and dynamic DOF name updates.
 
 ### IMU Sensor
 
@@ -75,7 +82,7 @@ print(f"Angular velocity: {frame['angular_velocity']}")
 print(f"Orientation: {frame['orientation']}")
 ```
 
-The sensor returns structured frame data with filtered measurements and supports gravity inclusion control for acceleration readings.
+The sensor returns structured frame data with filtered measurements. `read_gravity` (deprecated) selects what the linear acceleration channel reports: `True` gives specific force, what an accelerometer measures (`+g` at rest, `0` in free fall), and `False` gives the body's coordinate acceleration (`0` at rest, `-g` in free fall). `g` lands on whichever sensor axis opposes gravity, in stage linear units per second squared — `9.81` on a metre stage, `981` on a centimetre one. The reading models an accelerometer at the body origin, so it excludes lever-arm terms.
 
 ### Joint State Sensor
 
@@ -127,6 +134,8 @@ print(f"Depths: {frame['depths']}")
 ### Frame-Based Data Access
 
 All sensors implement a consistent frame-based data interface through `get_data()`, returning dictionaries with measurement values, timestamps, and validity information. For lower-level access, each sensor also exposes `get_sensor_reading()`, which returns the raw C++ sensor reading struct directly. This standardized approach simplifies sensor data processing across different sensor types.
+
+`ContactSensor.get_data()` and `IMUSensor.get_data()` return an independent frame on every call — a new dictionary, holding newly allocated numpy arrays for the IMU — so two results can be held and compared safely. Use `get_sensor_reading()` on a hot path to read the same values without allocating a frame. Both frames are refreshed only when the underlying reading is valid, so an invalid reading reports the previous values unchanged; use `get_sensor_reading()` and check `is_valid` to distinguish fresh data from stale data.
 
 ### Sensor Control
 

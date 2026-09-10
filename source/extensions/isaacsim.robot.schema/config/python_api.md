@@ -42,6 +42,14 @@
   - def GetStreamingAttr(self) -> Usd.Attribute
   - def CreateStreamingAttr(self, value: Any = None) -> Usd.Attribute
 
+## Other
+
+- warnings: builtin module
+- Any: unknown
+- Sdf: unknown
+- Tf: unknown
+- Usd: unknown module
+
 # Public API for module omni.isaac.IsaacSensorSchema:
 
 ## Classes
@@ -109,12 +117,27 @@
 
 - class IsaacRtxRadarSensorAPI(_APISchemaWrapper)
 
+## Other
+
+- warnings: builtin module
+- Any: unknown
+- Sdf: unknown
+- Tf: unknown
+- Usd: unknown module
+
 # Public API for module usd.schema.isaac:
 
 ## Variables
 
 - logger: Unknown
 - ext_path: Unknown
+
+## Other
+
+- logging: builtin module
+- os: builtin module
+- Plug: unknown
+
 
 # Public API for module usd.schema.isaac.robot_schema:
 
@@ -192,3 +215,15 @@
 ## Variables
 
 - logger: Unknown
+
+## Other
+
+- annotations: unknown
+- logging: builtin module
+- os: builtin module
+- Iterable: unknown
+- Enum: unknown
+- lru_cache: unknown
+- pxr: unknown module
+- Sdf: unknown
+- Usd: unknown module

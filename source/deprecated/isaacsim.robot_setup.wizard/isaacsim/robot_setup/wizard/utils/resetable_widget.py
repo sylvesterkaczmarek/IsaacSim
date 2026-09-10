@@ -40,11 +40,20 @@ class ResetButton:
 
     @property
     def enable(self) -> bool:
-        """Current enable state of the reset button."""
+        """Current enable state of the reset button.
+
+        Returns:
+            True if the reset button is enabled, False otherwise.
+        """
         return self._enable
 
     @enable.setter
     def enable(self, enable: Any) -> None:
+        """Sets whether the reset button accepts user interaction.
+
+        Args:
+            enable: Whether the reset button is enabled.
+        """
         self._enable = enable
         self._reset_button.enabled = enable
 
@@ -74,11 +83,7 @@ class ResetButton:
             ui.Spacer()
 
     def _restore_defaults(self) -> None:
-        """Restores the initial value by hiding the reset button and executing the reset callback.
-
-        Returns:
-            None if the button is not enabled.
-        """
+        """Restores the initial value by hiding the reset button and executing the reset callback."""
         if not self._enable:
             return
         self._reset_button.visible = False
@@ -117,6 +122,11 @@ class ResetableField:
 
     @enable.setter
     def enable(self, enable: Any) -> None:
+        """Sets whether the resetable field and its reset button are enabled.
+
+        Args:
+            enable: Whether the resetable field and its reset button are enabled.
+        """
         self._enable = enable
         self._field.enabled = enable
         self._reset_button.enable = enable
@@ -192,7 +202,8 @@ class ResetableComboBox:
     def _build_ui(self) -> None:
         """Builds the user interface for the resetable combo box.
 
-        Creates a horizontal layout containing the combo box widget and a reset button. The combo box is populated with the provided values and the reset button is positioned to the right.
+        Creates a horizontal layout containing the combo box widget and a reset button. The combo box is populated with
+        the provided values and the reset button is positioned to the right.
         """
         with ui.HStack(height=22, spacing=10):
             self._box = ui.ComboBox(self._init_index, *self._values)
@@ -205,7 +216,8 @@ class ResetableComboBox:
     def _on_reset_fn(self) -> None:
         """Handles the reset button click event.
 
-        Resets the combo box to its initial index and value if it has been changed, then triggers the on_change callback if provided.
+        Resets the combo box to its initial index and value if it has been changed, then triggers the on_change callback
+        if provided.
         """
         if self._current_index != self._init_index:
             self._box.model.get_item_value_model().set_value(self._init_index)
@@ -216,7 +228,8 @@ class ResetableComboBox:
     def _update_value(self, model: object, item: object) -> None:
         """Updates the combo box value when selection changes.
 
-        Retrieves the selected index from the model, updates the current index, sets the corresponding string value in the value model, refreshes the reset button visibility, and triggers the on_change callback.
+        Retrieves the selected index from the model, updates the current index, sets the corresponding string value in
+        the value model, refreshes the reset button visibility, and triggers the on_change callback.
 
         Args:
             model: The combo box model containing the item data.
@@ -268,6 +281,11 @@ class ResetableLabelField:
 
     @enable.setter
     def enable(self, enable: Any) -> None:
+        """Sets whether the field, label overlay, and reset button are enabled for user interaction.
+
+        Args:
+            enable: Whether the field, label overlay, and reset button are enabled.
+        """
         self._enable = enable
         self._field.enabled = enable
         self._reset_button.enable = enable
@@ -282,7 +300,7 @@ class ResetableLabelField:
             model: The model to extract the value from.
 
         Returns:
-            The extracted value as string, int, or float depending on model type.
+            The extracted value as string, int, or float depending on model type, or an empty string if unsupported.
         """
         if isinstance(model, ui.SimpleStringModel):
             return model.get_value_as_string()
@@ -349,11 +367,7 @@ class ResetableLabelField:
         self._field.visible = False
 
     def _begin_edit(self) -> None:
-        """Switches from label display mode to edit mode when the field is clicked.
-
-        Returns:
-            None if the field is not enabled.
-        """
+        """Switches from label display mode to edit mode when the field is clicked."""
         if not self._enable:
             return
         self._rect.visible = False

@@ -1,5 +1,5 @@
 [package]
-version = "2.2.1"
+version = "2.2.2"
 category = "Simulation"
 title = "Isaac Sim Manipulators UI"
 description = "Provides UI menus for creating OmniGraph-based robot controllers including joint position, joint velocity, and gripper control interfaces."
@@ -11,7 +11,7 @@ icon = "data/icon.png"
 writeTarget.kit = true
 
 [deprecation]
-warning = "Extension deprecated since Isaac Sim 6.0.0. Refer to isaacsim.robot.experimental.manipulators.examples for recommended alternatives."
+warning = "Extension deprecated since Isaac Sim 6.0.0. Refer to isaacsim.robot_motion.examples for maintained examples."
 
 [dependencies]
 "isaacsim.core.api" = {}

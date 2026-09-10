@@ -140,21 +140,21 @@ def unscale(x: torch.Tensor, lower: torch.Tensor, upper: torch.Tensor) -> torch.
 
 
 def unscale_np(x: np.ndarray, lower: np.ndarray, upper: np.ndarray) -> np.ndarray:
-    """Denormalizes values from [-1, 1] range back to original [lower, upper] range using NumPy operations.
+    """Scales values from [lower, upper] range to [-1, 1] range using NumPy operations.
 
     Args:
-        x: Input values to denormalize.
-        lower: Lower bound of the target range.
-        upper: Upper bound of the target range.
+        x: Input values to scale.
+        lower: Lower bound of the source range.
+        upper: Upper bound of the source range.
 
     Returns:
-        Denormalized values in the original range.
+        Values scaled to [-1, 1] range.
     """
     return (2.0 * x - upper - lower) / (upper - lower)
 
 
 def set_seed(seed: int, torch_deterministic: bool = False) -> int:
-    """Set seed across modules.
+    """Sets seeds across modules.
 
     Sets random seeds for Python, NumPy, PyTorch, Warp, and environment variables to ensure
     reproducibility across different libraries. Optionally enables deterministic algorithms
@@ -232,10 +232,10 @@ def cos(data: object) -> object:
 
 
 def transpose_2d(data: object) -> object:
-    """Transposes a 2D tensor by swapping dimensions 0 and 1.
+    """Transposes a 1D or 2D tensor by swapping dimensions 0 and 1.
 
     Args:
-        data: Input 2D tensor to transpose.
+        data: Input 1D or 2D tensor to transpose.
 
     Raises:
         ValueError: If input tensor has more than 2 dimensions.

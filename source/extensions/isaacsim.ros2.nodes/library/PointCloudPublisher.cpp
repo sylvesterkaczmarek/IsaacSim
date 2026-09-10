@@ -17,7 +17,7 @@
 #include <carb/logging/Log.h>
 #include <carb/profiler/Profile.h>
 
-#include <isaacsim/ros2/nodes/PointCloudPublisher.h>
+#include <isaacsim/ros2/nodes/PointCloudPublisher.hpp>
 
 #include <cstring>
 

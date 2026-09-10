@@ -30,7 +30,7 @@ class TestGeneric(omni.kit.test.AsyncTestCase):
 
     # Before running each test
     async def setUp(self) -> None:
-        """Set up test fixtures."""
+        """Set up test fixtures for generic range sensor tests."""
         self._sensor = _range_sensor.acquire_generic_sensor_interface()
         self._timeline = omni.timeline.get_timeline_interface()
         await omni.usd.get_context().new_stage_async()
@@ -53,7 +53,7 @@ class TestGeneric(omni.kit.test.AsyncTestCase):
 
     # After running each test
     async def tearDown(self) -> None:
-        """Tear down test fixtures."""
+        """Tear down test fixtures by stopping the timeline."""
         self._timeline.stop()
 
     async def add_cube(self, path: str, size: float, offset: object) -> UsdGeom.Cube:
@@ -78,7 +78,11 @@ class TestGeneric(omni.kit.test.AsyncTestCase):
 
     # Tests a static sensor with a cube in front of it
     async def test_set_pattern_generic(self) -> None:
-        """Test set pattern generic."""
+        """Test that a generic range sensor pattern reports one cube hit and three misses.
+
+        Raises:
+            AssertionError: If the linear depth data does not contain the expected hit and miss counts.
+        """
         # Add a cube
         cubePath = "/World/Cube"
         await self.add_cube(cubePath, 1.000, Gf.Vec3f(-2.000, 0.0, 0.500))
@@ -129,7 +133,11 @@ class TestGeneric(omni.kit.test.AsyncTestCase):
 
     # Tests a static sensor with a cube in front of it
     async def test_offset_generic(self) -> None:
-        """Test offset generic."""
+        """Test that generic range sensor ray offsets produce zero intensity readings.
+
+        Raises:
+            AssertionError: If the summed intensity data is not zero.
+        """
         # Add a cube
         cubePath = "/World/Cube"
         await self.add_cube(cubePath, 1.000, Gf.Vec3f(-2.000, 0.0, 0.500))

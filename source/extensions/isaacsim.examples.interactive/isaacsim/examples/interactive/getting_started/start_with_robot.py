@@ -21,7 +21,7 @@ import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.timeline
 from isaacsim.core.rendering_manager import ViewportManager
 from isaacsim.core.simulation_manager import IsaacEvents, SimulationManager
-from isaacsim.examples.base.base_sample_experimental import BaseSample
+from isaacsim.examples.base import BaseSample
 from isaacsim.storage.native import get_assets_root_path
 
 

@@ -24,16 +24,13 @@ world-binding state live on the scenario.
 import asyncio
 from typing import Any
 
-import omni.timeline
 import omni.ui as ui
-from isaacsim.gui.components.element_wrappers import Button, CollapsableFrame, StateButton
+from isaacsim.core.experimental.utils import app as app_utils
+from isaacsim.gui.components import Button, CollapsableFrame, StateButton
 from isaacsim.gui.components.style import get_style
 from omni.kit.async_engine import run_coroutine
 
 from .scenario import CumotionWorldInterfaceExample
-
-_UPDATE_STYLE_ITEMS = ["synchronize", "synchronize_transforms", "synchronize_properties"]
-_DEFAULT_UPDATE_STYLE_INDEX = 1  # synchronize_transforms - matches scenario default
 
 
 class UIBuilder:
@@ -45,21 +42,19 @@ class UIBuilder:
 
     The UI has two sections:
       - **World Controls** - Load the scene and reset the scenario.
-      - **Run Scenario** - Update style combo + start/stop the sync loop.
+      - **Run Scenario** - Start or stop the transform synchronization loop.
     """
 
     def __init__(self) -> None:
         self.frames: list[Any] = []
         self.wrapped_ui_elements: list[Any] = []
-        self._timeline = omni.timeline.get_timeline_interface()
         self._load_task: asyncio.Task | None = None
-        self._update_style_items = list(_UPDATE_STYLE_ITEMS)
         self._scenario: CumotionWorldInterfaceExample | None = CumotionWorldInterfaceExample()
 
     # ------------------------------------------------------------- lifecycle
 
     def cleanup(self) -> None:
-        """Tear down the UI on extension shutdown or window close.
+        """Tear down the UI on extension shutdown or browser UI rebuild.
 
         Cancels any in-flight load task, cleans up wrapped widgets, and
         drops scenario references so the closing UsdStage can be fully
@@ -122,19 +117,8 @@ class UIBuilder:
                 self._reset_btn.enabled = False
                 self.wrapped_ui_elements.append(self._reset_btn)
 
-        with CollapsableFrame("Run Scenario"):
+        with CollapsableFrame("Run Scenario", collapsed=False):
             with ui.VStack(style=get_style(), spacing=5, height=0):
-                with ui.HStack(style=get_style(), spacing=5):
-                    ui.Label("Update Style:", width=120, alignment=ui.Alignment.LEFT_CENTER)
-                    self._update_style_combo = ui.ComboBox(
-                        _DEFAULT_UPDATE_STYLE_INDEX,
-                        *self._update_style_items,
-                        name="UpdateStyleComboBox",
-                        width=ui.Fraction(1),
-                        alignment=ui.Alignment.LEFT_CENTER,
-                    )
-                    self._update_style_combo.model.add_item_changed_fn(self._on_update_style_changed)
-
                 self._scenario_state_btn = StateButton(
                     "Run Scenario",
                     "RUN",
@@ -167,28 +151,18 @@ class UIBuilder:
 
     def _on_reset_btn(self) -> None:
         """Handle RESET click - stop the timeline and rebuild the world binding."""
-        self._timeline.stop()
+        app_utils.stop()
         self._scenario.reset()
         self._scenario_state_btn.reset()
         self._scenario_state_btn.enabled = True
 
-    def _on_update_style_changed(self, model: Any, _val: Any) -> None:
-        """Push the new combo selection into the scenario.
-
-        Args:
-            model: Combo box model containing the selected update style index.
-            _val: Unused value supplied by the item-changed callback.
-        """
-        selected_index = model.get_item_value_model().as_int
-        self._scenario.set_update_style(self._update_style_items[selected_index])
-
     def _on_run_scenario_a_text(self) -> None:
         """Play the timeline when the Run Scenario StateButton is clicked with a_text "RUN"."""
-        self._timeline.play()
+        app_utils.play()
 
     def _on_run_scenario_b_text(self) -> None:
         """Pause the timeline when the Run Scenario StateButton is clicked with b_text "STOP"."""
-        self._timeline.pause()
+        app_utils.pause()
 
     # ------------------------------------------------------------ per-tick
 

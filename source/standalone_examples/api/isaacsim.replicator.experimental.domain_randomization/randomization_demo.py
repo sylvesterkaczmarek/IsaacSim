@@ -93,7 +93,7 @@ Sphere("/World/envs/env_0/object", radii=0.1, positions=[0.75, 0.0, 0.2])
 GeomPrim("/World/envs/env_0/object", apply_collision_apis=True)
 RigidPrim("/World/envs/env_0/object", masses=0.02)
 add_reference_to_stage(
-    usd_path=assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
+    usd_path=assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda",
     path="/World/envs/env_0/franka",
 )
 

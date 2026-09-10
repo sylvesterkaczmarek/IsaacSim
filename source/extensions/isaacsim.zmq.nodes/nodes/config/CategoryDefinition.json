@@ -1,0 +1,6 @@
+{
+    "categoryDefinitions": {
+        "$description": "These categories are applied to Isaac Sim ZMQ Bridge nodes",
+        "isaacZmq": "Nodes implementing ZMQ functionality for streaming simulation data via ZeroMQ"
+    }
+}

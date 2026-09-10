@@ -27,7 +27,7 @@ torch = import_module("torch")
 
 
 def gf_quat_to_tensor(orientation: Gf.Quatd | Gf.Quatf | Gf.Quaternion, device: object = None) -> torch.Tensor:
-    """Converts a pxr Quaternion type to a torch array (scalar first).
+    """Converts a pxr Quaternion type to a torch tensor in scalar-first format.
 
     Args:
         orientation: Input quaternion from USD.
@@ -45,18 +45,17 @@ def gf_quat_to_tensor(orientation: Gf.Quatd | Gf.Quatf | Gf.Quaternion, device: 
 def euler_angles_to_quats(
     euler_angles: torch.Tensor, degrees: bool = False, extrinsic: bool = True, device: object = None
 ) -> torch.Tensor:
-    """Vectorized version of converting euler angles to quaternion (scalar first).
+    """Converts Euler angles to quaternions in scalar-first format.
 
     Args:
-        euler_angles: euler angles with shape (N, 3)
-        degrees: True if degrees, False if radians.
-        extrinsic: True if the euler angles follows the extrinsic angles
-            convention (equivalent to ZYX ordering but returned in the reverse) and False if it follows
-            the intrinsic angles conventions (equivalent to XYZ ordering).
+        euler_angles: Euler angles with shape (N, 3).
+        degrees: Whether the Euler angles are in degrees instead of radians.
+        extrinsic: Whether the Euler angles follow the extrinsic angles convention, equivalent to ZYX ordering
+            but returned in reverse. If False, uses intrinsic angles convention, equivalent to XYZ ordering.
         device: Device to place the tensor on.
 
     Returns:
-        quaternions representation of the angles (N, 4) - scalar first.
+        Quaternion representation of the angles with shape (N, 4) in scalar-first format.
     """
     if extrinsic:
         order = "xyz"
@@ -74,14 +73,14 @@ def euler_angles_to_quats(
 
 
 def rot_matrices_to_quats(rotation_matrices: torch.Tensor, device: object = None) -> torch.Tensor:
-    """Vectorized version of converting rotation matrices to quaternions.
+    """Converts rotation matrices to quaternions in scalar-first format.
 
     Args:
-        rotation_matrices: N Rotation matrices with shape (N, 3, 3) or (3, 3)
+        rotation_matrices: Rotation matrices with shape (N, 3, 3) or (3, 3).
         device: Device to place the tensor on.
 
     Returns:
-        quaternion representation of the rotation matrices (N, 4) or (4,) - scalar first
+        Quaternion representation of the rotation matrices with shape (N, 4) or (4,) in scalar-first format.
     """
     rot = Rotation.from_matrix(rotation_matrices.cpu().numpy())
     result = rot.as_quat()
@@ -478,13 +477,13 @@ def quat_diff_rad(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 
 # NB: do not make this function jit, since it is passed around as an argument.
 def normalise_quat_in_pose(pose: object) -> object:  # noqa: N802
-    """Takes a pose and normalises the quaternion portion of it.
+    """Normalises the quaternion portion of a pose.
 
     Args:
-        pose: shape N, 7
+        pose: Pose with shape N, 7.
 
     Returns:
-        Pose with normalised quat. Shape N, 7
+        Pose with normalised quaternion and shape N, 7.
     """
     pos = pose[:, 0:3]
     quat = pose[:, 3:7]
@@ -560,7 +559,7 @@ def compute_rot(
 
 
 def xyzw2wxyz(q: object) -> object:
-    """Converts quaternion from [x, y, z, w] to [w, x, y, z] format.
+    """Converts a quaternion from [x, y, z, w] to [w, x, y, z] format.
 
     Args:
         q: Quaternion tensor in [x, y, z, w] format.
@@ -572,7 +571,7 @@ def xyzw2wxyz(q: object) -> object:
 
 
 def wxyz2xyzw(q: object) -> object:
-    """Converts quaternion from [w, x, y, z] to [x, y, z, w] format.
+    """Converts a quaternion from [w, x, y, z] to [x, y, z, w] format.
 
     Args:
         q: Quaternion tensor in [w, x, y, z] format.

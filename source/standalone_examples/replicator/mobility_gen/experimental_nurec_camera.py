@@ -24,15 +24,23 @@ Experimental — interface subject to change in future versions. Import only aft
 
 from __future__ import annotations
 
+from typing import Any
+
 import omni.replicator.core as rep
 from isaacsim.replicator.experimental.mobility_gen import MobilityGenCamera
 
 
-def _spg_rgb_source(stage) -> str | None:
+def _spg_rgb_source(stage: Any) -> str | None:
     """Return an authored RenderProduct path to clone for ISP-developed RGB.
 
     Returns None for a non-SPG stage, or when isaacsim.replicator.nurec_utils is not enabled, so the
     caller falls back to a plain RenderProduct.
+
+    Args:
+        stage: Stage whose root layer may contain SPG metadata.
+
+    Returns:
+        Authored SPG RenderProduct prim path, or ``None`` when the stage cannot provide one.
     """
     if stage is None:
         return None
@@ -55,6 +63,10 @@ class ExperimentalNuRecCamera(MobilityGenCamera):
     work as-is.
 
     Experimental — interface subject to change in future versions.
+
+    Args:
+        prim_path: Path of the camera prim to wrap.
+        resolution: Width and height of the generated RGB images in pixels.
     """
 
     def __init__(self, prim_path: str, resolution: tuple[int, int]) -> None:
@@ -99,12 +111,15 @@ class ExperimentalNuRecCamera(MobilityGenCamera):
         super().disable_rendering()
 
 
-def substitute_cameras_with_nurec(module) -> None:
+def substitute_cameras_with_nurec(module: Any) -> None:
     """Replace every MobilityGenCamera under ``module`` with an ExperimentalNuRecCamera in place.
 
     Keeps each camera's prim path, resolution, and attribute name, so the writer's state keys are
     unchanged. Call after load_scenario and before enable_rgb_rendering. Needed because the sensor rig
     constructs MobilityGenCamera directly.
+
+    Args:
+        module: Root scenario module whose camera children should be replaced recursively.
     """
     for name, child in list(module.children().items()):
         if isinstance(child, ExperimentalNuRecCamera):

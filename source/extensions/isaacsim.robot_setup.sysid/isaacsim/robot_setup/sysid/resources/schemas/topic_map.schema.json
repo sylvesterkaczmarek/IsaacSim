@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nvidia.com/isaac/schemas/sysid_topic_map.schema.json",
+  "title": "SysID Topic Mapping",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["position_topic"],
+  "properties": {
+    "time_topic": { "type": ["string", "null"] },
+    "time_field": { "type": "string" },
+    "position_topic": { "type": "string" },
+    "position_fields": { "type": "array", "items": { "type": "string" } },
+    "velocity_topic": { "type": ["string", "null"] },
+    "velocity_fields": { "type": "array", "items": { "type": "string" } },
+    "command_topic": { "type": ["string", "null"] },
+    "command_fields": { "type": "array", "items": { "type": "string" } },
+    "torque_topic": { "type": ["string", "null"] },
+    "torque_fields": { "type": "array", "items": { "type": "string" } },
+    "torque_semantics": { "enum": ["link_side", "external"] },
+    "end_effector_pose_topic": { "type": ["string", "null"] },
+    "end_effector_pose_fields": { "type": "array", "items": { "type": "string" } },
+    "contact_force_topic": { "type": ["string", "null"] },
+    "contact_force_fields": { "type": "array", "items": { "type": "string" } },
+    "joint_names": { "type": ["array", "null"], "items": { "type": "string" } }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["torque_topic"],
+        "properties": { "torque_topic": { "type": "string" } }
+      },
+      "then": { "required": ["torque_semantics"] }
+    }
+  ]
+}

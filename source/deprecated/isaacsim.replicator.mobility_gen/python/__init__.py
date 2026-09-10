@@ -13,5 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Exposes the public API from the isaacsim.replicator.mobility_gen.impl module."""
+
 from .bindings import _path_planner  # noqa: F401
 from .impl import *

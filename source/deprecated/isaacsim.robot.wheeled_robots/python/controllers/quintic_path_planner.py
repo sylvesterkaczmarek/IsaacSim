@@ -66,6 +66,9 @@ class QuinticPolynomial:
     and end points, ensuring smooth motion profiles suitable for robotic path planning.
 
     The quintic polynomial has the form:
+
+    .. code-block:: python
+
         x(t) = a0 + a1*t + a2*t^2 + a3*t^3 + a4*t^4 + a5*t^5
 
     The class provides methods to evaluate the polynomial and its derivatives at any time t, allowing calculation
@@ -193,14 +196,8 @@ def quintic_polynomials_planner(
         dt: Time step [s].
 
     Returns:
-        A tuple containing (time, rx, ry, ryaw, rv, ra, rj) where:
-        - time: Time values along the trajectory
-        - rx: X position trajectory
-        - ry: Y position trajectory
-        - ryaw: Yaw angle trajectory
-        - rv: Velocity trajectory
-        - ra: Acceleration trajectory
-        - rj: Jerk trajectory
+        A tuple containing (time, rx, ry, ryaw, rv, ra, rj), with time values, x positions, y positions,
+        yaw angles, velocities, accelerations, and jerk values along the trajectory.
 
     Raises:
         ValueError: If no trajectory satisfies the acceleration and jerk constraints.

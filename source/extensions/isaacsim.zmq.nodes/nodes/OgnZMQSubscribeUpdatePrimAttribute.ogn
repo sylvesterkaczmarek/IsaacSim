@@ -1,0 +1,51 @@
+{
+    "ZMQSubscribeUpdatePrimAttribute": {
+        "version": 1,
+        "icon": "icons/isaac-sim.svg",
+        "description": "Receives generic prim-attribute update commands from an external ZMQ server. Performs a non-blocking receive on each tick. Fires execOut only when a command is available. Decodes the command into primPath/attributeName/value, intended to feed an omni.graph.nodes.WritePrimAttribute node (usePath=true).",
+        "metadata": {
+            "uiName": "ZMQ Subscribe Update Prim Attribute"
+        },
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": "isaacZmq",
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "Tick"
+            },
+            "ip": {
+                "type": "string",
+                "description": "IP address of the external ZMQ server",
+                "default": "localhost"
+            },
+            "port": {
+                "type": "uint",
+                "description": "Port on which the external ZMQ server is publishing prim-attribute update commands",
+                "default": 5557
+            },
+            "topicName": {
+                "type": "string",
+                "description": "ZMQ topic subscribed to (first multipart frame); defaults to the message type. Set a unique value (e.g. \"robot_0/update_prim_attribute\") to distinguish multiple data sources.",
+                "default": "update_prim_attribute"
+            }
+        },
+        "outputs": {
+            "execOut": {
+                "type": "execution",
+                "description": "Fires when a prim-attribute update command is received"
+            },
+            "primPath": {
+                "type": "token",
+                "description": "USD prim path to update (feed WritePrimAttribute.inputs:primPath with usePath=true)"
+            },
+            "attributeName": {
+                "type": "token",
+                "description": "Attribute name to write (feed WritePrimAttribute.inputs:name)"
+            },
+            "value": {
+                "type": "double",
+                "description": "Scalar value to write (feed WritePrimAttribute.inputs:value)"
+            }
+        }
+    }
+}

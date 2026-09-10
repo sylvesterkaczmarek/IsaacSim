@@ -24,10 +24,8 @@ import cumotion
 import isaacsim.robot_motion.experimental.motion_generation as mg
 import numpy as np
 import warp as wp
-from isaacsim.core.experimental.materials import OmniPbrMaterial
-from isaacsim.core.experimental.objects import Capsule, Cube, Sphere
-from isaacsim.core.experimental.prims import XformPrim
 
+from .cumotion_debug_visualizer import CumotionDebugVisualizer
 from .utils import (
     ColliderBatchTransformOutput,
     batch_compute_collider_transforms,
@@ -160,13 +158,7 @@ class CumotionWorldInterface(mg.WorldInterface):
         world_to_robot_base: Transform from world frame to robot base frame. Defaults
             to None (identity transform). This is a tuple of position and quaternion,
             where the quaternion is in the form (w, x, y, z).
-        visualize_debug_prims: Whether to create visual debug primitives for collision
-            geometry. Defaults to False.
-        visual_debug_enabled_prim_rgb: RGB color for enabled obstacle debug visualization.
-            Defaults to None (red).
-        visual_debug_disabled_prim_rgb: RGB color for disabled obstacle debug visualization.
-            Defaults to None (green).
-        visual_debug_prim_alpha: Alpha transparency for debug visualization. Defaults to 0.3.
+        debug_visualizer: Optional visualizer used to display collision geometry.
         device: Device used by the interface for internally-allocated warp
             arrays and for the per-frame collider transform composition.
             Accepts the same values as :func:`wp.get_device` (``None``,
@@ -182,20 +174,13 @@ class CumotionWorldInterface(mg.WorldInterface):
 
         .. code-block:: python
 
-            world_interface = CumotionWorldInterface(
-                visualize_debug_prims=True,
-                visual_debug_enabled_prim_rgb=[0.0, 1.0, 0.0],
-                visual_debug_prim_alpha=0.5,
-            )
+            world_interface = CumotionWorldInterface()
     """
 
     def __init__(
         self,
         world_to_robot_base: tuple[wp.array, wp.array] | None = None,
-        visualize_debug_prims: bool = False,
-        visual_debug_enabled_prim_rgb: list[float] | None = None,
-        visual_debug_disabled_prim_rgb: list[float] | None = None,
-        visual_debug_prim_alpha: float = 0.3,
+        debug_visualizer: CumotionDebugVisualizer | None = None,
         device: wp.DeviceLike = None,
     ) -> None:
         self._device: wp.Device = wp.get_device(device)
@@ -245,55 +230,14 @@ class CumotionWorldInterface(mg.WorldInterface):
 
         # storing all of the obstacle data in pre-built arrays:
         self._all_obstacle_handles: list[cumotion.World.ObstacleHandle] = []
-        self._all_debug_prim_paths: list[str] = []
+        self._all_debug_prim_paths: list[str | None] = []
         self._n_colliders_in_each_object: np.ndarray = np.empty([0], dtype=np.int32)
 
         # Cache of pre-allocated warp arrays for _update_prim_world_to_object_transforms.
         # Set to None when the obstacle structure changes so it is rebuilt on next call.
         self._transform_batch_cache: _TransformBatchCache | None = None
 
-        # if we want to do debug visuals, set those up here:
-        # Do we want to draw debug sphere for mesh files?
-        self._visualize_debug_prims = visualize_debug_prims
-
-        if not visualize_debug_prims:
-            return
-
-        # Set up the "disabled obstacle" material
-        if visual_debug_disabled_prim_rgb is None:
-            visual_debug_disabled_prim_rgb = [0.0, 1.0, 0.0]
-        self._visual_debug_disabled_prim_material = OmniPbrMaterial(
-            paths="/CumotionDebug/DisabledMaterial",
-        )
-        self._visual_debug_disabled_prim_material.set_input_values(
-            "diffuse_color_constant", visual_debug_disabled_prim_rgb
-        )
-        self._visual_debug_disabled_prim_material.set_input_values("enable_opacity", [True])
-        self._visual_debug_disabled_prim_material.set_input_values("opacity_constant", [visual_debug_prim_alpha])
-
-        # Set up the "enabled obstacle" material
-        if visual_debug_enabled_prim_rgb is None:
-            visual_debug_enabled_prim_rgb = [1.0, 0.0, 0.0]
-        self._visual_debug_enabled_prim_material = OmniPbrMaterial(
-            paths="/CumotionDebug/EnabledMaterial",
-        )
-        self._visual_debug_enabled_prim_material.set_input_values(
-            "diffuse_color_constant", visual_debug_enabled_prim_rgb
-        )
-        self._visual_debug_enabled_prim_material.set_input_values("enable_opacity", [True])
-        self._visual_debug_enabled_prim_material.set_input_values("opacity_constant", [visual_debug_prim_alpha])
-
-    def _set_debug_material(self, debug_visual: Any, enabled: bool) -> None:
-        """Set the debug material for a visual prim based on enabled state.
-
-        Args:
-            debug_visual: Visual prim object to apply material to.
-            enabled: Whether the obstacle is enabled (True) or disabled (False).
-        """
-        if enabled:
-            debug_visual.apply_visual_materials(self._visual_debug_enabled_prim_material)
-            return
-        debug_visual.apply_visual_materials(self._visual_debug_disabled_prim_material)
+        self._debug_visualizer = debug_visualizer
 
     @property
     def world_view(self) -> cumotion.WorldView:
@@ -374,10 +318,13 @@ class CumotionWorldInterface(mg.WorldInterface):
             obstacle.set_attribute(cumotion.Obstacle.Attribute.RADIUS, radius)
 
             debug_prim_path = None
-            if self._visualize_debug_prims:
-                debug_prim_path = self._debug_collision_prim_name_generate(original_prim_name=prim_path, i_geometry=0)
-                sphere = Sphere(paths=debug_prim_path, radii=radius)
-                self._set_debug_material(sphere, enabled.item())
+            if self._debug_visualizer is not None:
+                debug_prim_path = self._debug_visualizer.create_sphere(
+                    source_prim_path=prim_path,
+                    geometry_index=0,
+                    radius=radius,
+                    enabled=bool(enabled.item()),
+                )
 
             transform_world_to_object_index = self._extend_world_to_objects_matrix(position, quaternion)
 
@@ -486,18 +433,13 @@ class CumotionWorldInterface(mg.WorldInterface):
             )
 
             debug_prim_path = None
-            if self._visualize_debug_prims:
-                # create the debug visual prim:
-                debug_prim_path = self._debug_collision_prim_name_generate(
-                    original_prim_name=prim_path,
-                    i_geometry=0,
+            if self._debug_visualizer is not None:
+                debug_prim_path = self._debug_visualizer.create_cube(
+                    source_prim_path=prim_path,
+                    geometry_index=0,
+                    side_lengths=side_lengths,
+                    enabled=bool(enabled.item()),
                 )
-                visual_cube = Cube(
-                    paths=debug_prim_path,
-                    sizes=1.0,
-                    scales=side_lengths,
-                )
-                self._set_debug_material(visual_cube, enabled.item())
 
             # Set the obstacle in the world:
             obstacle_handle = self._world.add_obstacle(obstacle)
@@ -575,17 +517,13 @@ class CumotionWorldInterface(mg.WorldInterface):
 
             # For debugging - we can optionally draw collision spheres:
             debug_prim_path = None
-            if self._visualize_debug_prims:
-                # Get a unique prim name for this sphere:
-                debug_prim_path = self._debug_collision_prim_name_generate(
-                    original_prim_name=prim_name,
-                    i_geometry=i_sphere,
+            if self._debug_visualizer is not None:
+                debug_prim_path = self._debug_visualizer.create_sphere(
+                    source_prim_path=prim_name,
+                    geometry_index=i_sphere,
+                    radius=float(sphere.radius),
+                    enabled=enabled,
                 )
-
-                # Create the sphere:
-                sphere_core_object = Sphere(paths=debug_prim_path)
-                sphere_core_object.set_radii(sphere.radius, indices=0)
-                self._set_debug_material(sphere_core_object, enabled)
 
             return _CumotionCollider(
                 obstacle_handle=obstacle_handle,
@@ -766,10 +704,13 @@ class CumotionWorldInterface(mg.WorldInterface):
                 raise ValueError(f"Invalid axis: {axis}. Expected 'X', 'Y', or 'Z'.")
 
             debug_prim_path = None
-            if self._visualize_debug_prims:
-                debug_prim_path = self._debug_collision_prim_name_generate(original_prim_name=prim_path, i_geometry=0)
-                visual_box = Cube(paths=debug_prim_path, sizes=1.0, scales=side_lengths)
-                self._set_debug_material(visual_box, enabled.item())
+            if self._debug_visualizer is not None:
+                debug_prim_path = self._debug_visualizer.create_cube(
+                    source_prim_path=prim_path,
+                    geometry_index=0,
+                    side_lengths=side_lengths,
+                    enabled=bool(enabled.item()),
+                )
 
             obstacle_handle = self._world.add_obstacle(obstacle)
 
@@ -915,14 +856,14 @@ class CumotionWorldInterface(mg.WorldInterface):
                 raise ValueError(f"Invalid axis: {axis}. Expected 'X', 'Y', or 'Z'.")
 
             debug_prim_path = None
-            if self._visualize_debug_prims:
-                debug_prim_path = self._debug_collision_prim_name_generate(original_prim_name=prim_path, i_geometry=0)
-                visual_capsule = Capsule(
-                    paths=debug_prim_path,
-                    radii=scaled_radius,
-                    heights=scaled_height,
+            if self._debug_visualizer is not None:
+                debug_prim_path = self._debug_visualizer.create_capsule(
+                    source_prim_path=prim_path,
+                    geometry_index=0,
+                    radius=scaled_radius,
+                    height=scaled_height,
+                    enabled=bool(enabled.item()),
                 )
-                self._set_debug_material(visual_capsule, enabled.item())
 
             obstacle_handle = self._world.add_obstacle(obstacle)
 
@@ -1049,14 +990,13 @@ class CumotionWorldInterface(mg.WorldInterface):
             collider_translation = scale * center
 
             debug_prim_path = None
-            if self._visualize_debug_prims:
-                debug_prim_path = self._debug_collision_prim_name_generate(original_prim_name=prim_path, i_geometry=0)
-                visual_cube = Cube(
-                    paths=debug_prim_path,
-                    sizes=1.0,
-                    scales=side_lengths,
+            if self._debug_visualizer is not None:
+                debug_prim_path = self._debug_visualizer.create_cube(
+                    source_prim_path=prim_path,
+                    geometry_index=0,
+                    side_lengths=side_lengths,
+                    enabled=bool(enabled.item()),
                 )
-                self._set_debug_material(visual_cube, enabled.item())
 
             obstacle_handle = self._world.add_obstacle(obstacle)
 
@@ -1342,7 +1282,7 @@ class CumotionWorldInterface(mg.WorldInterface):
                     quaternions_object_to_collider=cache.quaternions_obj_to_colliders_np,
                     collider_to_object_indices=cache.collider_to_obj_indices_np,
                 )
-                if not self._visualize_debug_prims:
+                if self._debug_visualizer is None:
                     positions_world_to_colliders_np = None
                     quaternions_world_to_colliders_np = None
             else:
@@ -1373,7 +1313,7 @@ class CumotionWorldInterface(mg.WorldInterface):
                 quaternions_base_to_colliders_np = output_batch.quaternions_base_to_collider.numpy()
                 # Same four-name contract as the CPU branch: world-frame arrays only when
                 # debug visualization is enabled (avoids UnboundLocalError if this block is refactored).
-                if self._visualize_debug_prims:
+                if self._debug_visualizer is not None:
                     positions_world_to_colliders_np = output_batch.positions_world_to_collider.numpy()
                     quaternions_world_to_colliders_np = output_batch.quaternions_world_to_collider.numpy()
                 else:
@@ -1393,18 +1333,21 @@ class CumotionWorldInterface(mg.WorldInterface):
             self._world.set_pose(obstacle_handle, pose)
 
         if (
-            self._visualize_debug_prims
+            self._debug_visualizer is not None
             and positions_world_to_colliders_np is not None
             and quaternions_world_to_colliders_np is not None
         ):
             debug_prim_names: list[str] = []
             for cd in collision_data_array:
-                debug_prim_names.extend(
-                    self._all_debug_prim_paths[cd.obstacle_handle_starting_index : cd.obstacle_handle_ending_index]
-                )
-            xform_prim = XformPrim(paths=debug_prim_names)
-            xform_prim.set_local_poses(
-                translations=positions_world_to_colliders_np,
+                for path in self._all_debug_prim_paths[
+                    cd.obstacle_handle_starting_index : cd.obstacle_handle_ending_index
+                ]:
+                    if path is None:
+                        raise RuntimeError("Missing cuMotion debug prim path for an active visualizer")
+                    debug_prim_names.append(path)
+            self._debug_visualizer.update_poses(
+                paths=debug_prim_names,
+                positions=positions_world_to_colliders_np,
                 orientations=quaternions_world_to_colliders_np,
             )
 
@@ -1500,7 +1443,7 @@ class CumotionWorldInterface(mg.WorldInterface):
         endidx = collision_data.obstacle_handle_ending_index
         obstacle_handles = self._all_obstacle_handles[startidx:endidx]
 
-        if self._visualize_debug_prims:
+        if self._debug_visualizer is not None:
             debug_paths = self._all_debug_prim_paths[startidx:endidx]
 
         self.__world_view.update()
@@ -1512,23 +1455,11 @@ class CumotionWorldInterface(mg.WorldInterface):
                 continue
             set_enable_function(obstacle_handle)
 
-            if self._visualize_debug_prims:
-                self._set_debug_material(XformPrim(debug_paths[i]), enabled)
-
-    def _debug_collision_prim_name_generate(self, original_prim_name: str, i_geometry: int) -> str:
-        """Generate a unique debug prim path for collision visualization.
-
-        Args:
-            original_prim_name: Original prim path name.
-            i_geometry: Index of the geometry part (for multi-part obstacles).
-
-        Returns:
-            Generated debug prim path in the format "/CumotionDebug/{original_name}/Part{i}".
-        """
-        if original_prim_name.startswith("/"):
-            original_prim_name = original_prim_name[1:]
-        altered_prim_name = f"/CumotionDebug/{original_prim_name}/Part{i_geometry}"
-        return altered_prim_name
+            if self._debug_visualizer is not None:
+                debug_path = debug_paths[i]
+                if debug_path is None:
+                    raise RuntimeError("Missing cuMotion debug prim path for an active visualizer")
+                self._debug_visualizer.set_enabled(debug_path, enabled)
 
     def _validate_prim_paths(self, prim_paths: list[str]) -> bool:
         """Validate that all prim paths are currently tracked.

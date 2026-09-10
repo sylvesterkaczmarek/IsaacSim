@@ -5,10 +5,8 @@ alwaysApply: true
 
 # Agent Skills Location
 
-Skills for this repo live under `skills/` as `SKILL.md` files. Enumerate them with a traversal that includes every nested directory even when search tools would normally skip ignored paths:
+Skills for this repo live under `skills/` as `SKILL.md` files.
 
-```bash
-find skills -type f -name SKILL.md -print
-```
+Route to skills by the `description` field in each `SKILL.md` frontmatter, which states when that skill applies. Load individual `SKILL.md` files **on demand only** — read a skill's file when the user's request matches its domain (e.g., `skills/profile-isaac-sim/SKILL.md` for performance work). Do not bulk-load all skills upfront.
 
-Read the relevant `SKILL.md` when your task overlaps the skill's subject (e.g., `skills/profile-isaac-sim/SKILL.md` for performance work).
+Read [`skills/SKILLS.md`](../../skills/SKILLS.md). Route to skills **on demand only** — read a skill's file when the user's request matches its domain (e.g., `skills/profile-isaac-sim/SKILL.md` for performance work). Do not bulk-load all skills upfront.

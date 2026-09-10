@@ -25,7 +25,8 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import carb
-from pxr import Sdf, Usd, UsdUtils
+from isaacsim.physics.newton.impl._warning_logging import _log_python_warnings
+from pxr import Sdf, Usd, UsdPhysics, UsdUtils
 
 if TYPE_CHECKING:
     from .tensors.articulation_view import NewtonArticulationView
@@ -141,6 +142,7 @@ class NewtonPropertyQueryInterface:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._articulation_cache = {}  # type: ignore[has-type]
+            cls._instance._descriptor_cache = {}  # type: ignore[has-type]
             cls._instance._stage_event_subscription = None  # type: ignore[has-type]
         return cls._instance
 
@@ -150,7 +152,12 @@ class NewtonPropertyQueryInterface:
         Args:
             stage_id: USD stage cache ID whose cached responses should be dropped.
         """
-        self._articulation_cache = {key: value for key, value in self._articulation_cache.items() if key[0] != stage_id}  # type: ignore[has-type]
+        self._articulation_cache = {
+            key: value for key, value in self._articulation_cache.items() if key[0] != stage_id
+        }  # type: ignore[has-type]
+        self._descriptor_cache = {
+            key: value for key, value in self._descriptor_cache.items() if key[0] != stage_id
+        }  # type: ignore[has-type]
 
     def _ensure_stage_event_subscription(self) -> None:
         """Subscribe once to USD stage CLOSED events to drop stale cache entries."""
@@ -169,6 +176,7 @@ class NewtonPropertyQueryInterface:
             current_stage = usd_context.get_stage()
             if current_stage is None:
                 self._articulation_cache.clear()
+                self._descriptor_cache.clear()
                 return
             current_stage_id = UsdUtils.StageCache.Get().GetId(current_stage).ToLongInt()
             self._invalidate_cache_for_stage(current_stage_id)
@@ -392,20 +400,23 @@ class NewtonPropertyQueryInterface:
         from pxr import PhysicsSchemaTools
 
         collapse_fixed_joints = self._get_collapse_fixed_joints_setting()
+        articulation_path = articulation_prim.GetPath().pathString
+        root_path = self._resolve_add_usd_root_path(stage, articulation_prim)
 
         builder = newton.ModelBuilder()
-        builder.add_usd(
-            source=stage,
-            root_path=articulation_prim.GetPath().pathString,
-            collapse_fixed_joints=collapse_fixed_joints,
-            schema_resolvers=[SchemaResolverNewton(), SchemaResolverPhysx()],
-            only_load_enabled_rigid_bodies=True,
-            load_visual_shapes=False,
-            load_sites=False,
-            skip_mesh_approximation=True,
-            parse_mujoco_options=False,
-            verbose=False,
-        )
+        with _log_python_warnings():
+            builder.add_usd(
+                source=stage,
+                root_path=root_path,
+                collapse_fixed_joints=collapse_fixed_joints,
+                schema_resolvers=[SchemaResolverNewton(), SchemaResolverPhysx()],
+                only_load_enabled_rigid_bodies=True,
+                load_visual_shapes=False,
+                load_sites=False,
+                skip_mesh_approximation=True,
+                parse_mujoco_options=False,
+                verbose=False,
+            )
 
         # Mirror NewtonArticulationView's filtering rules so pre-physics metadata
         # matches what the runtime view publishes:
@@ -414,7 +425,13 @@ class NewtonPropertyQueryInterface:
         #   * Keep only joint types the runtime view enumerates as articulation
         #     joints; everything else (FIXED, FREE, DISTANCE, CABLE, ...) is dropped.
         # See ``_build_articulations_helper`` in ``isaacsim/physics/newton/impl/tensors/backend.py``.
-        articulation_root_joints: set[int] = set(builder.articulation_start)
+        articulation_index = self._find_builder_articulation_index(builder.articulation_label, articulation_path)
+        joint_start = builder.articulation_start[articulation_index]
+        if articulation_index + 1 < len(builder.articulation_start):
+            joint_end = builder.articulation_start[articulation_index + 1]
+        else:
+            joint_end = builder.joint_count
+
         included_joint_types = {
             newton.JointType.PRISMATIC,
             newton.JointType.REVOLUTE,
@@ -423,10 +440,16 @@ class NewtonPropertyQueryInterface:
         }
 
         body_to_inbound_joint: dict[int, int] = {}
-        for joint_index, child_body in enumerate(builder.joint_child):
+        articulation_body_indices: set[int] = set()
+        for joint_index in range(joint_start, joint_end):
+            parent_body = builder.joint_parent[joint_index]
+            child_body = builder.joint_child[joint_index]
+            if parent_body >= 0:
+                articulation_body_indices.add(parent_body)
             if child_body < 0:
                 continue
-            if joint_index in articulation_root_joints:
+            articulation_body_indices.add(child_body)
+            if joint_index == joint_start:
                 continue
             if builder.joint_type[joint_index] not in included_joint_types:
                 continue
@@ -434,6 +457,8 @@ class NewtonPropertyQueryInterface:
 
         links: list[NewtonPropertyQueryArticulationLink] = []
         for body_index, body_label in enumerate(builder.body_label):
+            if body_index not in articulation_body_indices:
+                continue
             link = NewtonPropertyQueryArticulationLink()
             link._rigid_body = PhysicsSchemaTools.sdfPathToInt(Sdf.Path(body_label))
             joint_index = body_to_inbound_joint.get(body_index)  # type: ignore[assignment]
@@ -444,6 +469,186 @@ class NewtonPropertyQueryInterface:
                 link._joint_dof = linear_axes + angular_axes
             links.append(link)
         return links
+
+    def _resolve_add_usd_root_path(self, stage: Usd.Stage, articulation_prim: Usd.Prim) -> str:
+        """Return the ``add_usd`` root path for the articulation of ``articulation_prim``.
+
+        The USD physics parser owns articulation membership. Prefer the nearest
+        ``IsaacRobotAPI`` ancestor as a narrow parser scope, then fall back to the
+        stage pseudo-root for generic USD layouts where articulated bodies and
+        joints may live outside the robot namespace.
+
+        Args:
+            stage: USD stage containing the articulation.
+            articulation_prim: USD prim passed to ``query_prim``.
+
+        Returns:
+            USD path string to use as the ``add_usd`` root.
+        """
+        articulation_path = articulation_prim.GetPath().pathString
+        scope_paths = self._descriptor_scope_paths(articulation_prim)
+        for scope_path in scope_paths:
+            bodies, joints = self._query_articulation_descriptor(stage, scope_path, articulation_path)
+            if not bodies:
+                continue
+            return self._common_ancestor_path({articulation_path} | bodies | joints)
+
+        carb.log_warn(
+            f"Newton property query: USD physics parser did not report articulated bodies for "
+            f"'{articulation_path}'; falling back to legacy root resolution"
+        )
+        return self._resolve_add_usd_root_path_legacy(articulation_prim)
+
+    @staticmethod
+    def _resolve_add_usd_root_path_legacy(articulation_prim: Usd.Prim) -> str:
+        """Return the legacy parent-of-joint ``add_usd`` root path.
+
+        When ``ArticulationRootAPI`` is authored on a ``UsdPhysics.Joint`` (a fixed
+        "root joint" that anchors a fixed-base articulation), the joint prim itself
+        has no rigid-body subtree, so ``newton.ModelBuilder.add_usd`` rooted there
+        parses nothing. The enclosing (parent) prim is the container that holds the
+        articulation's links, so use it instead. For every other case the prim is
+        used unchanged.
+
+        Args:
+            articulation_prim: USD prim passed to ``query_prim``.
+
+        Returns:
+            USD path string to use as the ``add_usd`` root.
+        """
+        if articulation_prim.IsA(UsdPhysics.Joint):
+            parent = articulation_prim.GetParent()
+            if parent and parent.IsValid() and not parent.IsPseudoRoot():
+                return parent.GetPath().pathString
+        return articulation_prim.GetPath().pathString
+
+    @staticmethod
+    def _descriptor_scope_paths(articulation_prim: Usd.Prim) -> list[Sdf.Path]:
+        """Return parser scopes to try for an articulation descriptor.
+
+        The robot schema scope is a performance optimization for typical Isaac
+        assets. The stage pseudo-root remains the correctness fallback for generic
+        USD articulations whose relationships cross namespace boundaries.
+
+        Args:
+            articulation_prim: USD prim passed to ``query_prim``.
+
+        Returns:
+            Candidate parser scope paths in priority order.
+        """
+        scope_paths: list[Sdf.Path] = []
+        current = articulation_prim
+        while current is not None and current.IsValid() and not current.IsPseudoRoot():
+            if NewtonPropertyQueryInterface._has_isaac_robot_api(current):
+                scope_paths.append(current.GetPath())
+                break
+            current = current.GetParent()
+        if Sdf.Path.absoluteRootPath not in scope_paths:
+            scope_paths.append(Sdf.Path.absoluteRootPath)
+        return scope_paths
+
+    @staticmethod
+    def _has_isaac_robot_api(prim: Usd.Prim) -> bool:
+        """Return whether ``prim`` authors ``IsaacRobotAPI``.
+
+        Args:
+            prim: USD prim to inspect.
+
+        Returns:
+            True if ``IsaacRobotAPI`` is applied to ``prim``.
+        """
+        if prim.HasAPI("IsaacRobotAPI"):
+            return True
+        api_schemas = prim.GetMetadata("apiSchemas")
+        return api_schemas is not None and "IsaacRobotAPI" in api_schemas.GetAddedOrExplicitItems()
+
+    def _query_articulation_descriptor(
+        self, stage: Usd.Stage, scope_path: Sdf.Path, articulation_path: str
+    ) -> tuple[set[str], set[str]]:
+        """Return parser-reported body and joint membership for an articulation.
+
+        Args:
+            stage: USD stage to inspect.
+            scope_path: Parser scope passed to ``UsdPhysics.LoadUsdPhysicsFromRange``.
+            articulation_path: Path of the prim with ``ArticulationRootAPI``.
+
+        Returns:
+            Sets of articulated body paths and joint paths. Both sets are empty if
+            the scoped parse cannot report the requested articulation.
+        """
+        stage_id = UsdUtils.StageCache.Get().GetId(stage).ToLongInt()
+        cache_key = (stage_id, scope_path.pathString)
+        descriptors = self._descriptor_cache.get(cache_key)  # type: ignore[has-type]
+        if descriptors is None:
+            descriptors = self._query_articulation_descriptors(stage, scope_path)
+            self._descriptor_cache[cache_key] = descriptors  # type: ignore[has-type]
+        return descriptors.get(articulation_path, (set(), set()))
+
+    @staticmethod
+    def _query_articulation_descriptors(stage: Usd.Stage, scope_path: Sdf.Path) -> dict[str, tuple[set[str], set[str]]]:
+        """Return articulation descriptors keyed by articulation root path.
+
+        Args:
+            stage: USD stage to inspect.
+            scope_path: Parser scope passed to ``UsdPhysics.LoadUsdPhysicsFromRange``.
+
+        Returns:
+            Mapping from articulation root path to parser-reported body and joint
+            membership.
+        """
+        try:
+            ret_dict = UsdPhysics.LoadUsdPhysicsFromRange(stage, [scope_path], excludePaths=[])
+        except Exception as exc:  # noqa: BLE001 - parser errors fall back to legacy root resolution
+            carb.log_warn(f"Newton property query: LoadUsdPhysicsFromRange failed for '{scope_path}': {exc}")
+            return {}
+
+        articulation_data = ret_dict.get(UsdPhysics.ObjectType.Articulation)
+        if articulation_data is None:
+            return {}
+
+        descriptors: dict[str, tuple[set[str], set[str]]] = {}
+        paths, descriptions = articulation_data
+        for path, description in zip(paths, descriptions):
+            bodies = {path.pathString for path in description.articulatedBodies if path != Sdf.Path.emptyPath}
+            joints = {path.pathString for path in description.articulatedJoints if path != Sdf.Path.emptyPath}
+            descriptors[path.pathString] = (bodies, joints)
+        return descriptors
+
+    @staticmethod
+    def _common_ancestor_path(paths: set[str]) -> str:
+        """Return the deepest common ancestor path of ``paths``.
+
+        Args:
+            paths: Non-empty set of absolute USD prim path strings.
+
+        Returns:
+            USD path string of the deepest prim enclosing every input path.
+        """
+        common = Sdf.Path(next(iter(paths)))
+        for path in paths:
+            common = common.GetCommonPrefix(Sdf.Path(path))
+        return common.pathString
+
+    @staticmethod
+    def _find_builder_articulation_index(articulation_labels: list[str], articulation_path: str) -> int:
+        """Return the builder articulation index for ``articulation_path``.
+
+        Args:
+            articulation_labels: Labels from ``newton.ModelBuilder``.
+            articulation_path: Path of the queried articulation root.
+
+        Returns:
+            Matching builder articulation index.
+
+        Raises:
+            RuntimeError: If no unique articulation matches.
+        """
+        indices = [index for index, label in enumerate(articulation_labels) if label == articulation_path]
+        if not indices:
+            raise RuntimeError(f"Newton did not import the articulation rooted at {articulation_path}")
+        if len(indices) > 1:
+            raise RuntimeError(f"Newton imported multiple articulations rooted at {articulation_path}")
+        return indices[0]
 
     @staticmethod
     def _get_collapse_fixed_joints_setting() -> bool:

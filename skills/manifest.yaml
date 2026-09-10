@@ -1,0 +1,261 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Source of record for which skills exist, what ships, and how they are grouped.
+#
+# The skill table in skills/SKILLS.md is generated from this file by
+# tools/isaac/pre_merge/generate_skills_index.py; the prose around that table is
+# hand-written in SKILLS.md itself. Adding a skill means adding one entry under
+# `skills:` below, and the generator fails when a skill on disk has no entry.
+#
+# The table carries names and categories only. What a skill does, and when to use
+# it, lives in that skill's frontmatter `description`, which is what agents route
+# on — the index does not restate it.
+#
+# `audience` and `scope` follow from whether a skill sits under skills/_internal/,
+# and the generator rejects entries where they disagree with the path.
+
+# Section order in the generated table. Skills are grouped by their `category`
+# below, in the order they appear under `skills:`.
+categories:
+  - title: Repo-native, public
+  - title: Foundations and operating loop
+  - title: Robot asset pipeline
+  - title: Physics
+  - title: Mobile robot navigation
+  - title: Manipulation
+  - title: Sensors and perception
+  - title: Synthetic data generation
+    cross_refs:
+      - skill: mobility-gen
+        text: mobile-robot variant
+        see: Mobile robot navigation
+  - title: Action and event data generation
+  - title: Rendering
+  - title: USD pipeline
+  - title: ROS 2
+
+skills:
+  # ── Public user-facing skills
+  - path: skills/isaac-sim-assets
+    audience: user
+    scope: external
+    category: Repo-native, public
+
+  - path: skills/isaac-sim-installation
+    audience: user
+    scope: external
+    category: Repo-native, public
+
+  - path: skills/isaac-sim-migration
+    audience: user
+    scope: external
+    category: Repo-native, public
+
+  - path: skills/isaac-sim-remote
+    audience: user
+    scope: external
+    category: Repo-native, public
+
+  - path: skills/profile-isaac-sim
+    audience: user
+    scope: external
+    category: Repo-native, public
+
+  - path: skills/validation-diff-gifs
+    audience: user
+    scope: external
+    category: Repo-native, public
+
+  - path: skills/isaac-sim-orchestrator
+    audience: user
+    scope: external
+    category: Foundations and operating loop
+
+  - path: skills/isaac-sim-workflow
+    audience: user
+    scope: external
+    category: Foundations and operating loop
+
+  - path: skills/meta-skills
+    audience: user
+    scope: external
+    category: Foundations and operating loop
+
+  - path: skills/skill-distillation
+    audience: user
+    scope: external
+    category: Foundations and operating loop
+
+  - path: skills/isaac-sim-validator
+    audience: user
+    scope: external
+    category: Foundations and operating loop
+
+  - path: skills/isaac-sim-troubleshooting
+    audience: user
+    scope: external
+    category: Foundations and operating loop
+
+  - path: skills/urdf-mjcf-to-usd-conversion
+    audience: user
+    scope: external
+    category: Robot asset pipeline
+
+  - path: skills/usd-articulation
+    audience: user
+    scope: external
+    category: Robot asset pipeline
+
+  - path: skills/physics-simulation
+    audience: user
+    scope: external
+    category: Physics
+
+  - path: skills/navigation-primitives
+    audience: user
+    scope: external
+    category: Mobile robot navigation
+
+  - path: skills/occupancy-map
+    audience: user
+    scope: external
+    category: Mobile robot navigation
+
+  - path: skills/isaac-sim-robot-navigation
+    audience: user
+    scope: external
+    category: Mobile robot navigation
+
+  - path: skills/mobility-gen
+    audience: user
+    scope: external
+    category: Mobile robot navigation
+
+  - path: skills/manipulation-ik
+    audience: user
+    scope: external
+    category: Manipulation
+
+  - path: skills/motion-generation
+    audience: user
+    scope: external
+    category: Manipulation
+
+  - path: skills/isaac-sim-sensor
+    audience: user
+    scope: external
+    category: Sensors and perception
+
+  - path: skills/isaac-camera
+    audience: user
+    scope: external
+    category: Sensors and perception
+
+  - path: skills/data-collection-sim
+    audience: user
+    scope: external
+    category: Synthetic data generation
+
+  - path: skills/action-and-event-data-generation
+    audience: user
+    scope: external
+    category: Action and event data generation
+
+  - path: skills/actor-sdg-sweep-config
+    audience: user
+    scope: external
+    category: Action and event data generation
+
+  - path: skills/actor-sdg-generate-lighting-variations
+    audience: user
+    scope: external
+    category: Action and event data generation
+
+  - path: skills/object-bin-packing
+    audience: user
+    scope: external
+    category: Action and event data generation
+
+  - path: skills/generate-incident-config
+    audience: user
+    scope: external
+    category: Action and event data generation
+
+  - path: skills/run-incident-events
+    audience: user
+    scope: external
+    category: Action and event data generation
+
+  - path: skills/vlm-scene-captioning
+    audience: user
+    scope: external
+    category: Action and event data generation
+
+  - path: skills/behavior-tree-generation
+    audience: user
+    scope: external
+    category: Action and event data generation
+
+  - path: skills/place-camera-max-coverage
+    audience: user
+    scope: external
+    category: Action and event data generation
+
+  - path: skills/place-camera-aim-at
+    audience: user
+    scope: external
+    category: Action and event data generation
+
+  - path: skills/calibrate-metropolis-camera
+    audience: user
+    scope: external
+    category: Action and event data generation
+
+  - path: skills/isaac-sim-rendering
+    audience: user
+    scope: external
+    category: Rendering
+
+  - path: skills/isaac-sim-headless-deployment
+    audience: user
+    scope: external
+    category: Rendering
+
+  - path: skills/spatial-reasoning
+    audience: user
+    scope: external
+    category: USD pipeline
+
+  - path: skills/usd-pipeline
+    audience: user
+    scope: external
+    category: USD pipeline
+
+  - path: skills/usd-composition-architecture
+    audience: user
+    scope: external
+    category: USD pipeline
+
+  - path: skills/isaac-sim-ros-workspaces
+    audience: user
+    scope: external
+    category: ROS 2
+
+  - path: skills/isaac-sim-ros2-bridge
+    audience: user
+    scope: external
+    category: ROS 2
+

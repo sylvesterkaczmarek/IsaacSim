@@ -34,7 +34,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
 
-import omni.timeline
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.prim as prim_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
+import omni.usd
 from isaacsim.core.experimental.prims import Articulation, RigidPrim
 
 from ..coordinate_utils import CoordinateSystem, transform_pose
@@ -287,12 +290,11 @@ def _count_chain_dofs(art_path: str, ee_link_name: str) -> int | None:
     """
     from collections import deque
 
-    import omni.usd
-    from pxr import Sdf, Usd, UsdPhysics
+    from pxr import Sdf, UsdPhysics
 
-    stage = omni.usd.get_context().get_stage()
-    if not stage:
+    if not stage_utils.is_stage_set() and omni.usd.get_context().get_stage() is None:
         return None
+    stage = stage_utils.get_current_stage()
 
     try:
         robot = Articulation(art_path)
@@ -326,9 +328,14 @@ def _count_chain_dofs(art_path: str, ee_link_name: str) -> int | None:
         prim = stage.GetPrimAtPath(root_path)
         if not prim:
             continue
-        for p in Usd.PrimRange(prim):
+        joint_prims = prim_utils.get_all_matching_child_prims(
+            prim,
+            predicate=lambda candidate, _: candidate.IsA(UsdPhysics.Joint),
+            include_self=True,
+        )
+        for p in joint_prims:
             jp = str(p.GetPath())
-            if jp in visited_joint_paths or not p.IsA(UsdPhysics.Joint):
+            if jp in visited_joint_paths:
                 continue
             visited_joint_paths.add(jp)
 
@@ -806,8 +813,19 @@ class RobotIKController:
         except Exception as e:
             return IKValidationResult(valid=False, message=f"Invalid articulation: {e}")
 
-        link_names = list(robot.link_names)
-        dof_names = list(robot.dof_names)
+        link_names_raw = robot.link_names
+        dof_names_raw = robot.dof_names
+        if link_names_raw is None or dof_names_raw is None:
+            hint = ""
+            if str(art_path).endswith("root_joint"):
+                hint = " Move ArticulationRootAPI from root_joint to base_link."
+            return IKValidationResult(
+                valid=False,
+                message=(f"Articulation at '{art_path}' has no links/DOFs (invalid root?).{hint}"),
+            )
+
+        link_names = list(link_names_raw)
+        dof_names = list(dof_names_raw)
         num_dofs = len(dof_names)
 
         if arm.num_arm_dofs > num_dofs:
@@ -999,7 +1017,7 @@ class RobotIKController:
             right_pos: Value for right pos.
             right_orient: Value for right orient.
         """
-        timeline_playing = omni.timeline.get_timeline_interface().is_playing()
+        timeline_playing = app_utils.is_playing()
         poses = {"left": (left_pos, left_orient), "right": (right_pos, right_orient)}
 
         for side, (pos, orient) in poses.items():

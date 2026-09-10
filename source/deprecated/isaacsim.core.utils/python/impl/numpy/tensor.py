@@ -51,12 +51,12 @@ def convert(data: object, device: object = None, dtype: str = "float32", indexed
 
     Args:
         data: Input data to convert.
-        device: Device parameter (not used in NumPy implementation).
+        device: Device parameter not used in the NumPy implementation.
         dtype: Target data type for conversion.
-        indexed: Indexing parameter (not used in current implementation).
+        indexed: Indexing parameter not used in current implementation.
 
     Returns:
-        The converted NumPy array with the specified data type.
+        The converted NumPy array with the specified data type, or None if the type is not supported.
     """
     return as_type(np.asarray(data), dtype)
 
@@ -67,10 +67,10 @@ def create_zeros_tensor(shape: object, dtype: str, device: object = None) -> np.
     Args:
         shape: Shape of the tensor to create.
         dtype: Data type for the tensor elements.
-        device: Device parameter (not used in NumPy implementation).
+        device: Device parameter not used in the NumPy implementation.
 
     Returns:
-        A tensor filled with zeros of the specified shape and data type.
+        A tensor filled with zeros of the specified shape and data type, or None if the type is not supported.
     """
     return as_type(np.zeros(shape), dtype)
 
@@ -81,10 +81,10 @@ def create_tensor_from_list(data: list, dtype: str, device: object = None) -> np
     Args:
         data: List data to convert to tensor.
         dtype: Target data type for the tensor.
-        device: Device parameter (not used in NumPy implementation).
+        device: Device parameter not used in the NumPy implementation.
 
     Returns:
-        A tensor created from the list with the specified data type.
+        A tensor created from the list with the specified data type, or None if the type is not supported.
     """
     return as_type(np.array(data), dtype)
 
@@ -94,7 +94,7 @@ def clone_tensor(data: np.ndarray, device: object = None) -> np.ndarray:
 
     Args:
         data: The data to clone.
-        device: Device parameter (not used in NumPy implementation).
+        device: Device parameter not used in the NumPy implementation.
 
     Returns:
         A copy of the input data.
@@ -108,7 +108,7 @@ def resolve_indices(indices: object, count: int, device: object = None) -> np.nd
     Args:
         indices: Input indices as list, array, or None.
         count: Total count for generating indices when indices is None.
-        device: Device parameter (not used in NumPy implementation).
+        device: Device parameter not used in the NumPy implementation.
 
     Returns:
         Resolved indices as a NumPy array.
@@ -126,7 +126,7 @@ def move_data(data: np.ndarray, device: object = None) -> np.ndarray:
 
     Args:
         data: Data to move.
-        device: Target device (not used in NumPy implementation).
+        device: Target device not used in the NumPy implementation.
 
     Returns:
         The input data unchanged.
@@ -138,12 +138,12 @@ def tensor_cat(data: list, device: object = None, dim: int = -1) -> np.ndarray:
     """Concatenate tensors along a specified dimension.
 
     Args:
-        data: List of numpy arrays to concatenate.
-        device: Device to place the result on (ignored in numpy backend).
+        data: List of NumPy arrays to concatenate.
+        device: Device parameter ignored by the NumPy implementation.
         dim: Dimension along which to concatenate the arrays.
 
     Returns:
-        The concatenated numpy array.
+        The concatenated NumPy array.
     """
     return np.concatenate(data, axis=dim)
 
@@ -184,17 +184,17 @@ def tensor_stack(data: list, dim: int = 0) -> np.ndarray:
     """Stack tensors along a new dimension.
 
     Args:
-        data: List of numpy arrays to stack.
+        data: List of NumPy arrays to stack.
         dim: Dimension along which to stack the arrays.
 
     Returns:
-        The stacked numpy array.
+        The stacked NumPy array.
     """
     return np.stack(data, axis=dim)
 
 
 def to_list(data: object) -> list:
-    """Convert numpy array to list format.
+    """Convert NumPy array data to list format.
 
     Args:
         data: Data to convert to list. If already a list, returns unchanged.
@@ -208,13 +208,13 @@ def to_list(data: object) -> list:
 
 
 def to_numpy(data: np.ndarray) -> np.ndarray:
-    """Convert data to numpy array format.
+    """Convert data to NumPy array format.
 
     Args:
-        data: Data to convert to numpy format.
+        data: Data to convert to NumPy format.
 
     Returns:
-        The input data unchanged (already in numpy format).
+        The input data unchanged.
     """
     return data
 

@@ -23,19 +23,19 @@ from isaacsim.storage.native import get_assets_root_path
 def load_behavior_module(behavior_filepath: str, module_name: str = "behavior") -> ModuleType:
     """Load and return a behavior module.
 
-    A behavior module is a python module with a make_decider_network() method. If that method is not
+    A behavior module is a Python module with a make_decider_network() method. If that method is not
     found, a RuntimeError is raised.
 
     Args:
         behavior_filepath: The path to the module file to be loaded.
-        module_name: An optional name of the module to load. Defaults to "behavior".
+        module_name: The name of the module to load.
 
     Returns:
         The loaded module. One can call module.make_decider_network(robot) to create and return the
         decider network representing the behavior.
 
     Raises:
-        RuntimeError: If the module doesn't have a make_decider_network() method.
+        RuntimeError: If the module does not have a make_decider_network() method.
     """
     from importlib.machinery import SourceFileLoader
 

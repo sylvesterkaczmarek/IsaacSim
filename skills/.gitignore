@@ -1,0 +1,5 @@
+# Python bytecode caches produced when the skills-test harness imports/executes
+# skill scripts. These are local build artifacts and must never be committed.
+__pycache__/
+*.pyc
+*.pyo

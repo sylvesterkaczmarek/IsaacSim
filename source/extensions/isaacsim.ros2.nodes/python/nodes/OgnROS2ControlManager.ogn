@@ -1,0 +1,58 @@
+{
+    "isaacsim.ros2.control.ROS2ControlManager": {
+        "version": 2,
+        "language": "Python",
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": "isaacRos2",
+        "scheduling": ["compute-on-request"],
+        "description": "Configures and starts a ros2_control ControllerManager bound to a USD articulation. On the first tick, walks the USD hierarchy under targetPrim, synthesizes a URDF, and spins up the in-process ControllerManager. Subsequent ticks are no-ops; the actual read/update/write loop runs from physics post-step callbacks at the configured controller-manager update rate, capped by the physics rate.",
+        "uiName": "ROS2 Control Manager",
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "Execute"
+            },
+            "targetPrim": {
+                "type": "target",
+                "description": "A single ArticulationRootAPI prim, or a parent prim containing exactly one ArticulationRootAPI prim."
+            },
+            "controllerConfig": {
+                "type": "string",
+                "description": "Path to a standard ros2_control YAML (the same file you would pass to ros2_control_node on a real robot)."
+            },
+            "urdfPath": {
+                "type": "string",
+                "default": "",
+                "description": "Optional URDF path for sensor / hardware-param overlay. Auto-populated from customLayerData[\"isaac:sourceUrdf\"] if empty and the URDF importer set it at import time."
+            },
+            "namespace": {
+                "type": "string",
+                "default": "",
+                "description": "ROS 2 namespace applied to the ControllerManager, all controllers, and the latched /robot_description publisher."
+            },
+            "publishRobotDescription": {
+                "type": "bool",
+                "default": true,
+                "description": "If true, latch the synthesized URDF on /<namespace>/robot_description (transient_local QoS) so MoveIt 2 / RViz / external robot_state_publisher can pick it up."
+            },
+            "useSimTime": {
+                "type": "bool",
+                "default": true,
+                "description": "If true, set use_sim_time on the ControllerManager. Provide /clock with a ROS2 Publish Clock node or another ROS clock source."
+            }
+        },
+        "outputs": {
+            "execOut": {
+                "type": "execution",
+                "description": "Fires once on the first tick after the ControllerManager is configured. Subsequent ticks are no-ops and do not fire this output."
+            }
+        },
+        "state": {
+            "configured": {
+                "type": "bool",
+                "default": false,
+                "description": "True after successful setup; a timeline Stop schedules setup to run again on the next compute."
+            }
+        }
+    }
+}

@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id = "hello_world.python"
+title = "Python Hello World"
+summary = "Report a message through the public Python logging API."
+owners = ["isaacsim.common.logging"]
+topics = ["logging", "python"]
+
+[build]
+adapter = "none"
+
+[run]
+adapter = "python"
+path = "main.py"
+
+[requirements]
+system = ["python"]
+
+[[requirements.modules]]
+name = "isaacsim_common"
+surfaces = ["python"]
+
+[[test]]
+name = "default"
+stdout_contains = ["[isaacsim.examples.hello_world.python] Hello World from Python."]

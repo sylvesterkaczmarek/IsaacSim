@@ -22,6 +22,7 @@ integration, and removed metadata forwarding behavior.
 from __future__ import annotations
 
 import json
+import math
 import sys
 import types
 import unittest
@@ -848,6 +849,90 @@ class TestConfiguredSrtxSensorSets(omni.kit.test.AsyncTestCase):
         )
         self.assertEqual(capture_calls, [("ss-configured", "/Render/Product/Lidar/GenericModelOutput")])
         self.assertEqual(state._srtx_sensor_set, "ss-configured")
+
+    async def test_rotary_laser_scan_metadata_respects_authored_valid_arc(self) -> None:
+        """Rotary LaserScan metadata should convert authored discrete arcs to ROS angles."""
+        lidar_helper = _load_module("test_ogn_ros2_rtx_lidar_helper_metadata", LIDAR_HELPER_PATH)
+
+        class FakeAttribute:
+            def __init__(self, value: object) -> None:
+                self._value = value
+
+            def Get(self) -> object:
+                return self._value
+
+        class FakePrim:
+            def __init__(self, attributes: dict[str, object]) -> None:
+                self._attributes = attributes
+
+            def IsA(self, schema_type: object) -> bool:
+                return False
+
+            def GetAttribute(self, name: str) -> FakeAttribute:
+                return FakeAttribute(self._attributes.get(name))
+
+        common_attributes = {
+            "omni:sensor:Core:scanRateBaseHz": 10.0,
+            "omni:sensor:Core:nearRangeM": 0.1,
+            "omni:sensor:Core:farRangeM": 30.0,
+            "omni:sensor:Core:patternFiringRateHz": 10800,
+            "omni:sensor:Core:scanType": "ROTARY",
+        }
+        cases = [
+            # Full-circle behavior stays on the established interval with an
+            # inclusive angle_max at the final discrete sample.
+            (0.0, 360.0, 225.0, "CW", -180.0, 179.6666667, 360.0, 1080),
+            # GXO CW profile: Kit emits +135 through -134 2/3 degrees.
+            (0.0, 270.0, 225.0, "CW", -134.6666667, 135.0, 270.0, 810),
+            # The equivalent CCW profile starts from its authored valid end.
+            (90.0, 360.0, 225.0, "CCW", 135.0, 404.6666667, 270.0, 810),
+            # Non-integral FOV/resolution uses Kit's ceil count.
+            (28.68, 154.02, -90.0, "CW", -64.0133333, 61.32, 125.34, 377),
+            # An authored arc that wraps through zero.
+            (300.0, 60.0, 0.0, "CW", -59.6666667, 60.0, 120.0, 360),
+            # The ROS interval crosses the signed GMO boundary and remains unwrapped.
+            (0.0, 135.0, 55.0, "CW", 170.3333333, 305.0, 135.0, 405),
+            # Kit retains one tick for an arc narrower than one resolution interval.
+            (0.0, 0.1, 0.0, "CW", 0.0, 0.0, 0.1, 1),
+        ]
+
+        for (
+            valid_start,
+            valid_end,
+            offset,
+            rotation_direction,
+            expected_start,
+            expected_end,
+            expected_fov,
+            expected_count,
+        ) in cases:
+            attributes = {
+                **common_attributes,
+                "omni:sensor:Core:validStartAzimuthDeg": valid_start,
+                "omni:sensor:Core:validEndAzimuthDeg": valid_end,
+                "omni:sensor:Core:startAzimuthOffsetDeg": offset,
+                "omni:sensor:Core:rotationDirection": rotation_direction,
+            }
+            metadata = lidar_helper.OgnROS2RtxLidarHelper._read_laser_scan_metadata(FakePrim(attributes))
+            self.assertIsNotNone(metadata)
+            self.assertAlmostEqual(metadata["azimuth_range_start"], expected_start, places=4)
+            self.assertAlmostEqual(metadata["azimuth_range_end"], expected_end, places=4)
+            self.assertAlmostEqual(metadata["horizontal_fov"], expected_fov, places=4)
+            self.assertAlmostEqual(metadata["horizontal_resolution"], 1.0 / 3.0, places=6)
+            self.assertEqual(
+                math.ceil(metadata["horizontal_fov"] / metadata["horizontal_resolution"]),
+                expected_count,
+            )
+
+        # The shipped Hesai AT360's float32 USD values resolve a few ulps above
+        # an integral clipped-tick count. Python and the C++ publisher must both
+        # retain 2089 samples rather than allocating/shifting metadata for 2090.
+        at360_count = lidar_helper.OgnROS2RtxLidarHelper._calculate_rotary_output_count(
+            154.0200042725 - 28.6800003052, 6000
+        )
+        self.assertEqual(at360_count, 2089)
+        self.assertEqual(lidar_helper.OgnROS2RtxLidarHelper._calculate_rotary_output_count(1e-7, 1080), 1)
+        self.assertEqual(lidar_helper.OgnROS2RtxLidarHelper._calculate_rotary_output_count(0.0, 1080), 0)
 
     async def test_laser_scan_setup_does_not_forward_removed_max_points_metadata(self) -> None:
         """LaserScan setup should ignore stale max_points metadata before calling pybind."""

@@ -1,5 +1,5 @@
 [package]
-version = "0.1.5"
+version = "0.1.12"
 category = "Simulation"
 title = "Wheeled Robots Nodes"
 description = "OmniGraph nodes for wheeled robot controllers including differential, holonomic, and Ackermann steering"
@@ -16,7 +16,6 @@ writeTarget.kit = true
 "isaacsim.robot.experimental.wheeled_robots" = {}
 "omni.graph" = {}
 "omni.graph.tools" = {}
-"omni.physx" = {}
 
 [[python.module]]
 name = "isaacsim.robot.wheeled_robots.nodes"
@@ -41,6 +40,7 @@ name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
 ]
@@ -98,6 +98,7 @@ args = [
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
 ]
+
 stdoutFailPatterns.exclude = [
     "*Invalid Bundle object in Py_Bundle in getPrimPath*",
     "*AttributeError: 'NoneType' object has no attribute 'GetPrimAtPath'*",

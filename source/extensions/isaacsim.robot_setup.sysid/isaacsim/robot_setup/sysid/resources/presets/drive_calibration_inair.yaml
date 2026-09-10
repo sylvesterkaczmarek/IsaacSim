@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: drive_calibration_inair
+description: In-air joint-drive calibration (friction, stiffness, damping) on the differentiable Newton bridge.
+include_basic: true
+include_com_offsets: false
+include_inertia_log_cholesky: false
+include_joint_limit_scales: false
+include_per_link_mass: false
+optimizer_backend:
+  backend: gradient_descent
+  gd_learning_rate: 0.05
+  gd_num_restarts: 2
+simulation:
+  engine: newton
+  newton:
+    solver: featherstone_diff
+    featherstone_substeps: 4
+    # Controller class is robot-specific. Set feedforward from the real
+    # controller configuration; total measured torque cannot identify its
+    # feedback/feedforward decomposition.
+    feedforward: none
+solver:
+  max_iterations: 60
+  max_rollout_steps: 600
+chunking:
+  mode: auto
+  train_fraction: 0.8
+  min_chunk_seconds: 1.0
+residual_weights_mode: auto
+residual_weights:
+  position_weight: 1.0
+  velocity_weight: 0.5
+notes:
+  - Contact-free protocol; record trajectories with the robot fixed-based or in the air.
+  - Armature, command delay, integral gain, and limit scales are rejected by the differentiable bridge.

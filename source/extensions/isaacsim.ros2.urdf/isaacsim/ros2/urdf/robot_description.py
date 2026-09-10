@@ -109,6 +109,7 @@ class RobotDescription:
         self._option_widget.set_import_enabled(False)
         self._last_urdf_path = None
         if not value:
+            RobotDefinitionReader().cancel()
             return
         self._sync_config_from_models()
         if hasattr(self.urdf_importer, "robot_frame"):

@@ -1,5 +1,5 @@
 [package]
-version = "0.3.0"
+version = "0.3.1"
 category = "other"
 title = "Isaac Sim Robot Wizard [Deprecated]"
 description = "Wizard to guide through robot import and configuration"
@@ -32,6 +32,10 @@ persistent.exts."isaacsim.robot_setup.wizard".launch_on_startup = false
 [[test]]
 name = "startup"
 enabled = true
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+]
 
 [documentation]
 pages = ["docs/Overview.md","docs/SETTINGS.md", "docs/CHANGELOG.md"]

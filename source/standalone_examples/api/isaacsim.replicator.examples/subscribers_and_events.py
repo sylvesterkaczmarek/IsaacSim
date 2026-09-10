@@ -57,7 +57,11 @@ VERBOSE = False
 
 
 def on_timeline_event(event: carb.eventdispatcher.Event) -> None:
-    """Handle timeline tick events."""
+    """Collect a timeline tick event for the example summary.
+
+    Args:
+        event: Timeline event emitted by the event dispatcher.
+    """
     global timeline_events
     timeline_events.append(event)
     if VERBOSE:
@@ -65,7 +69,12 @@ def on_timeline_event(event: carb.eventdispatcher.Event) -> None:
 
 
 def on_physics_step(dt: float, context: object) -> None:
-    """Handle physics step events."""
+    """Collect the duration of a completed physics step.
+
+    Args:
+        dt: Duration of the completed physics step.
+        context: User context supplied when the callback was registered.
+    """
     global physics_events
     physics_events.append(dt)
     if VERBOSE:
@@ -73,7 +82,11 @@ def on_physics_step(dt: float, context: object) -> None:
 
 
 def on_stage_render_event(event: carb.eventdispatcher.Event) -> None:
-    """Handle stage render new frame events."""
+    """Collect the name of a newly rendered stage-frame event.
+
+    Args:
+        event: Stage-render event emitted by the event dispatcher.
+    """
     global stage_render_events
     stage_render_events.append(event.event_name)
     if VERBOSE:
@@ -81,7 +94,11 @@ def on_stage_render_event(event: carb.eventdispatcher.Event) -> None:
 
 
 def on_app_update(event: carb.eventdispatcher.Event) -> None:
-    """Handle application update events."""
+    """Collect the name of an application update event.
+
+    Args:
+        event: Application-update event emitted by the event dispatcher.
+    """
     global app_update_events
     app_update_events.append(event.event_name)
     if VERBOSE:

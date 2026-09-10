@@ -32,11 +32,15 @@ from .common import EARTH_GRAVITY, GRAVITY_TOLERANCE, ORIENTATION_TOLERANCE, SMA
 
 
 class TestIMU(omni.kit.test.AsyncTestCase):
-    """Test i m u."""
+    """Test IMU."""
 
     # Before running each test
     async def setUp(self) -> None:
-        """Set up test fixtures."""
+        """Set up test fixtures.
+
+        Creates a new stage with simulation timing, ground plane, Nova Carter reference, IMUSensor, collision cubes,
+        and resets the timeline for each test.
+        """
         await stage_utils.create_new_stage_async()
         SimulationManager.setup_simulation(dt=1.0 / 60.0)
         self._timeline = omni.timeline.get_timeline_interface()
@@ -62,7 +66,10 @@ class TestIMU(omni.kit.test.AsyncTestCase):
 
     # After running each test
     async def tearDown(self) -> None:
-        """Tear down test fixtures."""
+        """Tear down test fixtures.
+
+        Stops the timeline, invalidates physics, and waits for stage asset loading to finish.
+        """
         if self._timeline.is_playing():
             self._timeline.stop()
         SimulationManager.invalidate_physics()
@@ -74,7 +81,10 @@ class TestIMU(omni.kit.test.AsyncTestCase):
         return
 
     async def test_data_acquisition(self) -> None:
-        """Test data acquisition."""
+        """Test data acquisition.
+
+        Verifies IMUSensor frames contain expected data keys and boolean validity with gravity enabled and disabled.
+        """
         await omni.kit.app.get_app().next_update_async()
         await omni.kit.app.get_app().next_update_async()
         data = self._imu.get_current_frame()
@@ -88,7 +98,11 @@ class TestIMU(omni.kit.test.AsyncTestCase):
         return
 
     async def test_data_values_gravity_toggle(self) -> None:
-        """Test data values gravity toggle."""
+        """Test data values gravity toggle.
+
+        Verifies IMUSensor linear acceleration includes EARTH_GRAVITY by default, excludes gravity when requested,
+        and reports a normalized orientation.
+        """
         await reset_timeline(self._timeline, steps=2)
         data = None
         for _ in range(60):
@@ -108,7 +122,11 @@ class TestIMU(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(orientation_norm, 1.0, delta=ORIENTATION_TOLERANCE)
 
     async def test_pause_resume(self) -> None:
-        """Test pause resume."""
+        """Test pause resume.
+
+        Verifies paused IMUSensor frames keep the same time and physics step, resume advances them, and reset updates
+        frame timing.
+        """
         await omni.kit.app.get_app().next_update_async()
         await omni.kit.app.get_app().next_update_async()
         data = self._imu.get_current_frame()
@@ -138,7 +156,10 @@ class TestIMU(omni.kit.test.AsyncTestCase):
         return
 
     async def test_properties(self) -> None:
-        """Test properties."""
+        """Test properties.
+
+        Verifies IMUSensor frequency and dt setters update their corresponding values within tolerances.
+        """
         self._imu.set_frequency(20)
         self.assertAlmostEqual(20, self._imu.get_frequency(), delta=2)
         self._imu.set_dt(0.2)
@@ -146,7 +167,10 @@ class TestIMU(omni.kit.test.AsyncTestCase):
         return
 
     async def test_filter_size_parameters(self) -> None:
-        """Test filter size parameters."""
+        """Test filter size parameters.
+
+        Verifies IMUSensor filter size constructor parameters create the expected USD attribute widths.
+        """
         filter_imu = IMUSensor(
             prim_path="/World/Carter/chassis_link/Imu_Sensor_filtered",
             name="imu_filtered",

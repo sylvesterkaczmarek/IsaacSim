@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .impl.command import *
-from .impl.extension import *
+from .impl import command as _command  # noqa: F401
+from .impl.extension import Extension as Extension
 
 __all__ = []

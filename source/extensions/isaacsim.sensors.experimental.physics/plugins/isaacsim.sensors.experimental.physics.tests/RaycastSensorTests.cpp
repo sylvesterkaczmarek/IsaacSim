@@ -14,7 +14,7 @@
 // limitations under the License.
 
 #include <doctest/doctest.h>
-#include <isaacsim/sensors/experimental/physics/IRaycastSensor.h>
+#include <isaacsim/sensors/experimental/physics/IRaycastSensor.hpp>
 
 #include <cmath>
 #include <vector>

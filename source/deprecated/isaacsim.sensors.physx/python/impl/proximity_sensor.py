@@ -41,10 +41,10 @@ class ProximitySensor:
         parent: The USD prim that defines the sensor's position, orientation, and scale.
             The prim's transform determines the sensor's world position and the scale property
             defines the detection box dimensions.
-        callback_fns: List of three callback functions [on_enter, on_inside, on_exit].
-            Each callback receives the sensor instance as a parameter. Functions can be None
+        callback_fns: Three callback functions [on_enter, on_inside, on_exit].
+            Each callback receives the sensor instance as a parameter. Callbacks can be None
             to disable specific callbacks.
-        exclusions: List of prim paths to exclude from overlap detection.
+        exclusions: Prim paths to exclude from overlap detection.
             Objects at these paths will not trigger sensor events or appear in overlap data.
     """
 
@@ -74,7 +74,7 @@ class ProximitySensor:
         """Updates the proximity sensor state by checking for overlaps and triggering callbacks.
 
         Checks for overlap with collision meshes, updates active zones, determines entered and exited zones,
-        and calls appropriate callback functions for zone transitions and while inside zones.
+        and calls callback functions for zone transitions and while inside zones.
         """
         # get any active zones
         self._prev_active_zones = self._active_zones
@@ -203,11 +203,11 @@ class ProximitySensor:
     def get_data(self) -> dict[str, dict[str, float]]:
         """Returns dictionary of overlapped geometry and respective metadata.
 
-            key: prim_path of overlapped geometry
-            val: dictionary of metadata:
+        key: prim_path of overlapped geometry
+        val: dictionary of metadata:
 
-                "duration": float of time since overlap
-                "distance": distance from origin of tracker to origin of overlapped geometry
+            "duration": float of time since overlap
+            "distance": distance from origin of tracker to origin of overlapped geometry
 
         Returns:
             Overlapped geometry and metadata.
@@ -277,13 +277,10 @@ class ProximitySensorManager(object):
     """Singleton instance of the ProximitySensorManager class."""
 
     def __new__(cls: type) -> "ProximitySensorManager":
-        """Creates or returns the singleton instance of ProximitySensorManager.
-
-        Implements the singleton pattern to ensure only one instance of the manager exists.
-        Initializes an empty sensors list on first instantiation.
+        """Creates or returns the singleton ProximitySensorManager instance.
 
         Returns:
-            The singleton instance of ProximitySensorManager.
+            The singleton ProximitySensorManager instance.
         """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -308,8 +305,7 @@ class ProximitySensorManager(object):
     def update(self) -> None:
         """Updates all registered proximity sensors.
 
-        Iterates through all registered sensors and calls their update method to check for
-        overlaps and trigger callbacks.
+        Iterates through all registered sensors and calls their update method to check for overlaps and trigger callbacks.
         """
         for sensor in self.sensors:
             sensor.update()

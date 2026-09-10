@@ -33,27 +33,26 @@ class PhysicsContext(object):
     """Provide high-level functions for managing physics scene and simulation settings.
 
     Create a PhysicsScene prim at the specified prim path when no PhysicsScene is present in the current stage.
-    If a PhysicsScene already exists, use the existing scene and apply default settings regardless of the
-    specified prim_path.
+    If a PhysicsScene already exists, use the existing scene and apply default settings regardless of the specified
+    prim_path.
 
     Args:
         physics_dt: Specifies the physics_dt of the simulation.
         prim_path: Specifies the prim path to create a PhysicsScene at,
-            only in the case where no PhysicsScene already defined.
+            only when no PhysicsScene is already defined.
         sim_params: Dictionary of simulation parameters to configure physics settings.
-        set_defaults: Set to True to use the defaults physics parameters
+        set_defaults: Set to True to use the default physics parameters
             [physics_dt = 1.0/ 60.0,
             gravity = -9.81 m / s
             ccd_enabled,
             stabilization_enabled,
-            gpu dynamics turned off,
+            GPU dynamics turned off,
             broadphase type is MBP,
             solver type is TGS].
 
     Raises:
         Exception: If prim_path is not absolute.
         Exception: If prim_path already exists and its type is not a PhysicsScene.
-
     """
 
     def __init__(
@@ -213,7 +212,6 @@ class PhysicsContext(object):
 
         Returns:
             The absolute prim path of the PhysicsScene.
-
         """
         return self._prim_path
 
@@ -222,8 +220,7 @@ class PhysicsContext(object):
         """Physics simulation device being used.
 
         Returns:
-            The device name (e.g., 'cpu' or 'cuda').
-
+            The device name, such as 'cpu' or 'cuda'.
         """
         return SimulationManager.get_physics_sim_device()
 
@@ -233,7 +230,6 @@ class PhysicsContext(object):
 
         Returns:
             True if using CUDA device for physics simulation, False otherwise.
-
         """
         return True if "cuda" in SimulationManager.get_physics_sim_device() else False
 
@@ -243,7 +239,6 @@ class PhysicsContext(object):
 
         Returns:
             True if using CUDA device for physics simulation, False otherwise.
-
         """
         return True if "cuda" in SimulationManager.get_physics_sim_device() else False
 
@@ -253,7 +248,6 @@ class PhysicsContext(object):
 
         Returns:
             True if Fabric is enabled, False otherwise.
-
         """
         return SimulationManager.is_fabric_enabled()
 
@@ -266,17 +260,15 @@ class PhysicsContext(object):
 
         Note:
             This method is deprecated and no longer performs any operations.
-
         """
         carb.log_info("PhysicsContext.warm_start is deprecated.")
         return
 
     def get_current_physics_scene_prim(self) -> Usd.Prim | None:
-        """Used to return the PhysicsScene prim in stage by traversing the stage.
+        """Finds the PhysicsScene prim in the current USD stage.
 
         Returns:
             A PhysicsScene prim if found in current stage. Otherwise, None.
-
         """
         for prim in traverse_stage():
             if prim.HasAPI(PhysxSchema.PhysxSceneAPI) or prim.GetTypeName() == "PhysicsScene":
@@ -291,7 +283,6 @@ class PhysicsContext(object):
 
         Returns:
             The newly created UsdPhysics.Scene object.
-
         """
         carb.log_info(f"Defining a new Physics Scene at path `{prim_path}`")
         stage = get_current_stage()
@@ -310,7 +301,6 @@ class PhysicsContext(object):
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
             ValueError: Physics dt must be a >= 0.
             ValueError: Physics dt must be a <= 1.0.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -343,7 +333,6 @@ class PhysicsContext(object):
 
         Returns:
             Physics dt.
-
         """
         return SimulationManager.get_physics_dt()
 
@@ -352,21 +341,18 @@ class PhysicsContext(object):
 
         Args:
             enable: Whether to enable fabric.
-
         """
         SimulationManager.enable_fabric(enable=enable)
 
     def enable_ccd(self, flag: bool) -> None:
-        """Enable a second broad phase after integration that makes it possible to prevent objects from tunneling.
-
-               through each other. If GPU is enabled, CCD is not supported and the request will be ignored. If CCD is enabled and then the GPU pipeline is requested, CCD will be disabled automatically.
+        """Enable a second broad phase after integration that makes it possible to prevent objects from tunneling through each other. If GPU is enabled, CCD is not supported and the request will be ignored. If CCD is enabled and then the GPU pipeline is requested, CCD will be disabled automatically.
 
         Args:
-            flag: Enables or disables ccd on the PhysicsScene. CCD is not supported on GPU, so the request will be ignored if GPU is enabled.
+            flag: Enables or disables ccd on the PhysicsScene. CCD is not supported on GPU, so the request will be
+                ignored if GPU is enabled.
 
         Raises:
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
-
         """
         SimulationManager.enable_ccd(flag=flag)
 
@@ -378,7 +364,6 @@ class PhysicsContext(object):
 
         Returns:
             True if ccd is enabled, otherwise False.
-
         """
         return SimulationManager.is_ccd_enabled()
 
@@ -386,11 +371,10 @@ class PhysicsContext(object):
         """Enable additional stabilization pass in the solver.
 
         Args:
-            flag: Enables or disables stabilization on the PhysicsScene
+            flag: Enables or disables stabilization on the PhysicsScene.
 
         Raises:
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -407,11 +391,10 @@ class PhysicsContext(object):
             Use :meth:`enable_stabilization` instead.
 
         Args:
-            flag: Enables or disables stabilization on the PhysicsScene
+            flag: Enables or disables stabilization on the PhysicsScene.
 
         Raises:
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
-
         """
         return self.enable_stabilization(flag)
 
@@ -423,7 +406,6 @@ class PhysicsContext(object):
 
         Returns:
             True if stabilization is enabled, otherwise False.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -433,11 +415,10 @@ class PhysicsContext(object):
         """Enable gpu dynamics pipeline, required for deformables for instance.
 
         Args:
-            flag: Enables or disables gpu dynamics on the PhysicsScene
+            flag: Enables or disables gpu dynamics on the PhysicsScene.
 
         Raises:
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
-
         """
         SimulationManager.enable_gpu_dynamics(flag=flag)
 
@@ -449,19 +430,17 @@ class PhysicsContext(object):
 
         Returns:
             True if Gpu Dynamics is enabled, otherwise False.
-
         """
         return SimulationManager.is_gpu_dynamics_enabled()
 
     def set_broadphase_type(self, broadcast_type: str) -> None:
-        """Broadphase algorithm used in simulation.
+        """Set the broadphase algorithm used in simulation.
 
         Args:
-            broadcast_type: Broadphase algorithm type (e.g. "MBP", "GPU", "SAP").
+            broadcast_type: Broadphase algorithm type, such as ``MBP``, ``GPU``, or ``SAP``.
 
         Raises:
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
-
         """
         SimulationManager.set_broadphase_type(val=broadcast_type)
         return
@@ -474,20 +453,18 @@ class PhysicsContext(object):
 
         Returns:
             Broadphase algorithm used.
-
         """
         return SimulationManager.get_broadphase_type()
 
     def set_solver_type(self, solver_type: str) -> None:
-        """Solver used for simulation.
+        """Set the solver used for simulation.
 
         Args:
-            solver_type: can be "TGS" or "PGS".
+            solver_type: Can be "TGS" or "PGS".
 
         Raises:
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
             ValueError: If solver_type is not "TGS" or "PGS".
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -506,8 +483,7 @@ class PhysicsContext(object):
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
 
         Returns:
-            solver used for simulation.
-
+            Solver used for simulation.
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -517,11 +493,10 @@ class PhysicsContext(object):
         """Set the gravity direction and magnitude.
 
         Args:
-            value: gravity value to be used in simulation.
+            value: Gravity value to be used in simulation.
 
         Raises:
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -552,8 +527,7 @@ class PhysicsContext(object):
             Exception: If the prim path registered in context doesn't correspond to a valid prim path currently.
 
         Returns:
-            A tuple, first element corresponds to the gravity direction vector and second element is the magnitude.
-
+            A tuple where the first element is the gravity direction vector and the second element is the magnitude.
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -571,13 +545,12 @@ class PhysicsContext(object):
         update_velocities_to_usd: bool | None = None,
         output_velocities_local_space: bool | None = None,
     ) -> None:
-        """Set how physx syncs with the usd when transformations are updated.
+        """Set how PhysX syncs with USD when transformations are updated.
 
         Args:
-            update_to_usd: Updates to USD the transformations.
-            update_velocities_to_usd: Updates Velocities to USD.
-            output_velocities_local_space: Output the velocities in the local frame and not the world frame.
-
+            update_to_usd: Whether to update transformations to USD.
+            update_velocities_to_usd: Whether to update velocities to USD.
+            output_velocities_local_space: Whether to output velocities in the local frame instead of the world frame.
         """
         if update_to_usd is not None:
             set_carb_setting(self._carb_settings, "/physics/updateToUsd", update_to_usd)
@@ -588,11 +561,10 @@ class PhysicsContext(object):
         return
 
     def get_physx_update_transformations_settings(self) -> tuple[bool, bool, bool]:
-        """Get how physx syncs with the usd when transformations are updated.
+        """Get how PhysX syncs with USD when transformations are updated.
 
         Returns:
-            [update_to_usd, update_velocities_to_usd, output_velocities_local_space]
-
+            A tuple containing (update_to_usd, update_velocities_to_usd, output_velocities_local_space).
         """
         return (
             get_carb_setting(self._carb_settings, "/physics/updateToUsd"),
@@ -601,12 +573,11 @@ class PhysicsContext(object):
         )
 
     def _step(self, current_time: float, update_fabric: bool = False) -> None:
-        """Executes a single physics simulation step.
+        """Execute a single physics simulation step.
 
         Args:
             current_time: The current simulation time.
             update_fabric: Whether to update the fabric interface after simulation.
-
         """
         self._physics_sim_interface.simulate(self.get_physics_dt(), current_time)
         if update_fabric:
@@ -626,7 +597,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -644,7 +614,6 @@ class PhysicsContext(object):
 
         Returns:
             Whether collision group filtering is inverted.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -658,7 +627,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -671,12 +639,11 @@ class PhysicsContext(object):
     def get_bounce_threshold(self) -> float:
         """Bounce threshold for contact resolution.
 
-        Raises:
-            Exception: If the physics scene path is invalid.
-
         Returns:
             The current bounce threshold value.
 
+        Raises:
+            Exception: If the physics scene path is invalid.
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -690,7 +657,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -703,12 +669,11 @@ class PhysicsContext(object):
     def get_friction_offset_threshold(self) -> float:
         """Get the friction offset threshold.
 
-        Raises:
-            Exception: If the physics scene path is invalid.
-
         Returns:
             The current friction offset threshold value.
 
+        Raises:
+            Exception: If the physics scene path is invalid.
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -722,7 +687,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -735,12 +699,11 @@ class PhysicsContext(object):
     def get_friction_correlation_distance(self) -> float:
         """Get the friction correlation distance.
 
-        Raises:
-            Exception: If the physics scene path is invalid.
-
         Returns:
             The current friction correlation distance value.
 
+        Raises:
+            Exception: If the physics scene path is invalid.
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -750,11 +713,10 @@ class PhysicsContext(object):
         """Set the Enable Scene Query Support attribute in Physx Scene.
 
         Args:
-            enable_scene_query_support: Whether to enable scene query support
+            enable_scene_query_support: Whether to enable scene query support.
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -767,12 +729,11 @@ class PhysicsContext(object):
     def get_enable_scene_query_support(self) -> bool:
         """Enable Scene Query Support attribute in Physx Scene.
 
-        Raises:
-            Exception: If the physics scene path is invalid.
-
         Returns:
             Enable scene query support attribute.
 
+        Raises:
+            Exception: If the physics scene path is invalid.
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -786,7 +747,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -799,12 +759,11 @@ class PhysicsContext(object):
     def get_gpu_max_rigid_contact_count(self) -> int:
         """Get the maximum number of rigid body contacts on GPU.
 
-        Raises:
-            Exception: If the physics scene path is invalid.
-
         Returns:
             The maximum rigid contact count.
 
+        Raises:
+            Exception: If the physics scene path is invalid.
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -818,7 +777,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -836,7 +794,6 @@ class PhysicsContext(object):
 
         Returns:
             The maximum rigid patch count.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -850,7 +807,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -868,7 +824,6 @@ class PhysicsContext(object):
 
         Returns:
             The found/lost pairs capacity.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -882,7 +837,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -900,7 +854,6 @@ class PhysicsContext(object):
 
         Returns:
             The found/lost aggregate pairs capacity.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -914,7 +867,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -932,7 +884,6 @@ class PhysicsContext(object):
 
         Returns:
             The total aggregate pairs capacity.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -946,7 +897,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -964,7 +914,6 @@ class PhysicsContext(object):
 
         Returns:
             The maximum soft body contacts count.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -978,7 +927,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -996,7 +944,6 @@ class PhysicsContext(object):
 
         Returns:
             The maximum particle contacts count.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -1010,7 +957,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -1028,7 +974,6 @@ class PhysicsContext(object):
 
         Returns:
             The GPU heap capacity in bytes.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -1042,7 +987,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -1060,7 +1004,6 @@ class PhysicsContext(object):
 
         Returns:
             The GPU temp buffer capacity in bytes.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -1074,7 +1017,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -1092,7 +1034,6 @@ class PhysicsContext(object):
 
         Returns:
             The maximum number of partitions.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -1106,7 +1047,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: If the physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -1124,7 +1064,6 @@ class PhysicsContext(object):
 
         Returns:
             The collision stack size.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -1141,7 +1080,6 @@ class PhysicsContext(object):
 
         Raises:
             Exception: The physics scene path is invalid.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")
@@ -1152,7 +1090,7 @@ class PhysicsContext(object):
         attribute.Set(solve_articulation_contact_last)
 
     def get_solve_articulation_contact_last(self) -> bool:
-        """Retrieves the ``solveArticulationContactLast`` state in PhysX scene.
+        """Retrieve the ``solveArticulationContactLast`` state in PhysX scene.
 
         Raises:
             Exception: The physics scene path is invalid.
@@ -1160,7 +1098,6 @@ class PhysicsContext(object):
         Returns:
             Whether the articulation contact constraints and the articulation joint maximum velocity constraints
             are ordered to be solved last.
-
         """
         if not is_prim_path_valid(self._prim_path):
             raise Exception("The Physics Context's physics scene path is invalid, you need to reinit Physics Context")

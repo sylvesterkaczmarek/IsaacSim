@@ -7,6 +7,10 @@
 - SIMULATION_CONTEXT_ATTRIBUTES: List
 - TENDON_ATTRIBUTES: List
 
+## Other
+
+
+
 # Public API for module isaacsim.replicator.experimental.domain_randomization.scripts.context:
 
 ## Classes
@@ -21,9 +25,17 @@
 ## Functions
 
 - def initialize_context(num_envs: Any, action_graph_entry_node: Any)
+- def cleanup()
 - def get_reset_inds() -> Any
 - def resolve_context() -> Any
 - def trigger_randomization(reset_inds: Any)
+
+## Other
+
+- Any: unknown
+- omni.graph.core: unknown module
+- utils: unknown
+
 
 # Public API for module isaacsim.replicator.experimental.domain_randomization.scripts.gate:
 
@@ -31,6 +43,14 @@
 
 - def on_interval(interval: Any) -> Any
 - def on_env_reset() -> Any
+
+## Other
+
+- Any: unknown
+- ReplicatorItem: unknown
+- ReplicatorWrapper: unknown
+- create_node: unknown
+
 
 # Public API for module isaacsim.replicator.experimental.domain_randomization.scripts.physics_view:
 
@@ -153,6 +173,7 @@
   - def get_enabled_rigid_bodies(self) -> wp.array
   - def set_enabled_gravities(self, enabled: bool | list | np.ndarray | wp.array)
   - def get_enabled_gravities(self) -> wp.array
+  - def remove_physics_apis(self)
   - def set_enabled_contact_tracking(self, enabled: bool | list | np.ndarray | wp.array)
   - def get_enabled_contact_tracking(self) -> wp.array
   - def get_net_contact_forces(self) -> wp.array
@@ -240,12 +261,34 @@
 
 - TENDON_ATTRIBUTES: List
 
+## Other
+
+- copy: builtin module
+- Any: unknown
+- Optional: unknown
+- numpy: unknown module
+- distribution: unknown
+- ReplicatorItem: unknown
+- ReplicatorWrapper: unknown
+- utils: unknown
+- Gf: unknown
+
+
+
+
 # Public API for module isaacsim.replicator.experimental.domain_randomization.scripts.trigger:
 
 ## Functions
 
 - def initialize_context(num_envs: Any, action_graph_entry_node: Any)
 - def on_rl_frame(num_envs: int) -> Any
+
+## Other
+
+- Any: unknown
+- ReplicatorWrapper: unknown
+- create_node: unknown
+
 
 # Public API for module isaacsim.replicator.experimental.domain_randomization.scripts.utils:
 
@@ -260,3 +303,10 @@
 - def get_distribution_params(distribution: ReplicatorItem, parameters: list[str]) -> list
 - def get_image_space_points(points: Any, view_proj_matrix: Any) -> Any
 - def calculate_truncation_ratio_simple(corners: Any, img_width: Any, img_height: Any) -> Any
+
+## Other
+
+- json: builtin module
+- Any: unknown
+- numpy: unknown module
+- ReplicatorItem: unknown

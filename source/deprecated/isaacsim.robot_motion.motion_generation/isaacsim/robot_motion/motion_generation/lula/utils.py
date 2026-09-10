@@ -95,7 +95,7 @@ def get_pose3(trans: object = None, rot_mat: object = None, rot_quat: object = N
         rot_quat: Rotation quaternion.
 
     Returns:
-        Pose3 object representing the transformation.
+        The transformation created from the provided translation and rotation.
     """
     if trans is None and rot_mat is None and rot_quat is None:
         return lula.Pose3()

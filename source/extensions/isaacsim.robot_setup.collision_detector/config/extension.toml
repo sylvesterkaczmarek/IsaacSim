@@ -1,5 +1,5 @@
 [package]
-version = "0.2.1"
+version = "0.2.2"
 category = "Simulation"
 title = "Robot Self Collision Detector"
 description = "UI panel for detecting and managing self-collision pairs between rigid body links of a robot articulation"
@@ -36,7 +36,10 @@ dependencies = [
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
 ]
+
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*omni.syntheticdata.scripts.extension*stageFrameHistoryCount*",
 ]
 
@@ -94,7 +97,10 @@ args = [
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
 ]
+
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*omni.syntheticdata.scripts.extension*stageFrameHistoryCount*",
 ]
 
@@ -152,7 +158,10 @@ args = [
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
 ]
+
 stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    ### test-suite specific args
     "*omni.syntheticdata.scripts.extension*stageFrameHistoryCount*",
 ]
 

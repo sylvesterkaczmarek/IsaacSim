@@ -15,6 +15,6 @@
 
 """Robot Poser UI extension public API."""
 
-from isaacsim.robot.poser.ui.extension import *  # noqa: F401,F403
+from isaacsim.robot.poser.ui.extension import Extension as Extension
 
 __all__ = []

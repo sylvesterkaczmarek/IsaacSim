@@ -26,7 +26,7 @@ parser.add_argument("--test", default=False, action="store_true", help="Run in t
 args, _ = parser.parse_known_args()
 
 FRANKA_STAGE_PATH = "/Franka"
-FRANKA_USD_PATH = "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+FRANKA_USD_PATH = "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 BACKGROUND_STAGE_PATH = "/background"
 BACKGROUND_USD_PATH = "/Isaac/Environments/Simple_Room/simple_room.usd"
 
@@ -76,7 +76,7 @@ xform_api.SetTranslate(Gf.Vec3d(0, -0.64, 0))
 xform_api.SetRotate((0, 0, 90), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 # Set variant selections for the Franka robot
-robot.GetVariantSet("Gripper").SetVariantSelection("AlternateFinger")
+robot.GetVariantSet("Gripper").SetVariantSelection("Default")
 robot.GetVariantSet("Mesh").SetVariantSelection("Quality")
 
 simulation_app.update()

@@ -15,7 +15,7 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/ros2/tf_viewer/ITransformListener.h>
+#include <isaacsim/ros2/tf_viewer/ITransformListener.hpp>
 
 CARB_BINDINGS("isaacsim.ros2.tf_viewer")
 

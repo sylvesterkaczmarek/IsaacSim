@@ -14,14 +14,14 @@
 // limitations under the License.
 
 // clang-format off
-#include <pch/UsdPCH.h>
+#include <pch/UsdPCH.hpp>
 // clang-format on
 
-#include "isaacsim/core/includes/UsdUtilities.h"
+#include "isaacsim/core/includes/UsdUtilities.hpp"
 
-#include <isaacsim/core/includes/BaseResetNode.h>
-#include <isaacsim/robot/schema/sensor_tokens.h>
-#include <isaacsim/sensors/physx/IPhysxSensorInterface.h>
+#include <isaacsim/core/includes/BaseResetNode.hpp>
+#include <isaacsim/robot/schema/sensor_tokens.hpp>
+#include <isaacsim/sensors/physx/IPhysxSensorInterface.hpp>
 #include <omni/fabric/FabricUSD.h>
 
 #include <OgnIsaacReadLidarBeamsDatabase.h>

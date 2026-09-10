@@ -37,9 +37,9 @@ import isaacsim.robot_motion.experimental.motion_generation as mg
 import numpy as np
 
 # Now we can import Isaac Sim modules
-import omni.timeline
 from isaacsim.core.experimental.objects import Cube, Mesh, Sphere
 from isaacsim.core.experimental.prims import GeomPrim, RigidPrim
+from isaacsim.core.experimental.utils import app as app_utils
 from isaacsim.core.rendering_manager import ViewportManager
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.robot_motion.experimental.motion_generation import WorldInterface
@@ -52,14 +52,14 @@ from isaacsim.robot_motion.experimental.motion_generation import WorldInterface
 def setup_scene() -> None:
     """Create a simple example scene with obstacles.
 
-    The scene is created from the default template which includes a ground plane, lights, etc.
+    The scene is created from the default template, which includes a ground plane and lights.
     In practice, your scene could come from:
     - A USD file loaded via open_stage()
     - Procedurally generated content
     - A database or asset library
     - Any other source - the Motion Generation API doesn't care where the scene comes from
     """
-    # Create a new stage from default template (includes ground plane, lights, etc.)
+    # Create a new stage from the default template.
     stage_utils.create_new_stage(template="default stage")
     stage_utils.set_stage_units(meters_per_unit=1.0)
 
@@ -99,7 +99,7 @@ def setup_scene() -> None:
     mesh_geom.set_collision_approximations(["convexHull", "convexHull"])
 
     # Make meshes rigid bodies so they fall under gravity
-    RigidPrim(["/World/Mesh1", "/World/Mesh2"], masses=[1.0, 1.0])
+    RigidPrim(["/World/Mesh1", "/World/Mesh2"], masses=1.0)
 
     # Set camera view
     ViewportManager.set_camera_view("/OmniverseKit_Persp", eye=[3.0, 3.0, 2.0], target=[0.0, 0.0, 0.5])
@@ -115,7 +115,11 @@ def setup_scene() -> None:
 # ============================================================================
 # <start-scene-query-snippet>
 def demonstrate_scene_query() -> list[str]:
-    """Demonstrate using SceneQuery to find objects in the scene."""
+    """Demonstrate using SceneQuery to find objects in the scene.
+
+    Returns:
+        Collision prim paths inside the search bounds, excluding the ground plane.
+    """
     # Create a scene query
     query = mg.SceneQuery()
 
@@ -156,13 +160,20 @@ def demonstrate_scene_query() -> list[str]:
 # ============================================================================
 # <start-obstacle-strategy-snippet>
 def demonstrate_obstacle_strategy(obstacle_paths: list[str]) -> mg.ObstacleStrategy:
-    """Demonstrate configuring obstacle representations with ObstacleStrategy."""
+    """Demonstrate configuring obstacle representations with ObstacleStrategy.
+
+    Args:
+        obstacle_paths: Collision prim paths that may receive per-object configuration overrides.
+
+    Returns:
+        Obstacle strategy configured with mesh representations and safety tolerances.
+    """
     # Create an obstacle strategy
     strategy = mg.ObstacleStrategy()
 
     # Set default representation for Mesh shape type to OBB with large safety tolerance
     # of 0.15 meters.
-    strategy.set_default_configuration(Mesh, mg.ObstacleConfiguration("obb", 0.15))
+    strategy.set_default_configuration(Mesh, mg.ObstacleConfiguration(representation="obb", safety_tolerance=0.15))
 
     # Set per-object overrides for specific prims
     # Mesh2 needs more faithful representation for interaction, so use triangulated mesh
@@ -170,7 +181,7 @@ def demonstrate_obstacle_strategy(obstacle_paths: list[str]) -> mg.ObstacleStrat
     overrides = {}
     mesh2_path = "/World/Mesh2"
     if mesh2_path in obstacle_paths:
-        overrides[mesh2_path] = mg.ObstacleConfiguration("triangulated_mesh", 0.01)
+        overrides[mesh2_path] = mg.ObstacleConfiguration(representation="triangulated_mesh", safety_tolerance=0.01)
         strategy.set_configuration_overrides(overrides)
 
     # Set default safety tolerance for all other shapes
@@ -199,7 +210,6 @@ class ExampleWorldInterface(WorldInterface):
     """
 
     def __init__(self) -> None:
-        """Initialize the planning world representation."""
         # In a real implementation, this would initialize your planning library's world
         # e.g., self.world_model = cumotion.WorldModel()
         self.obstacles = {}
@@ -475,7 +485,15 @@ class ExampleWorldInterface(WorldInterface):
 def demonstrate_world_binding(
     obstacle_paths: list[str], obstacle_strategy: mg.ObstacleStrategy
 ) -> tuple[mg.WorldBinding, ExampleWorldInterface]:
-    """Demonstrate using WorldBinding to synchronize scene to planning library."""
+    """Demonstrate using WorldBinding to synchronize scene to planning library.
+
+    Args:
+        obstacle_paths: Collision prim paths for the binding to track.
+        obstacle_strategy: Representation and safety-tolerance policy for tracked obstacles.
+
+    Returns:
+        Initialized binding and the planning-world adapter populated by that binding.
+    """
     # Create WorldInterface adapter for your planning library
     world_interface = ExampleWorldInterface()
 
@@ -490,10 +508,8 @@ def demonstrate_world_binding(
     # Initialize the binding (populates your planning library's world)
     binding.initialize()
 
-    # In your simulation loop, you would call:
-    # binding.synchronize_transforms()  # Fast: updates only poses (use every frame for moving obstacles)
-    # binding.synchronize_properties()  # Slower: updates shape properties (use less frequently)
-    # binding.synchronize()  # Convenience: calls both methods above
+    # In your simulation loop, update the poses of moving obstacles:
+    # binding.synchronize_transforms()
 
     return binding, world_interface
 
@@ -515,7 +531,7 @@ def main() -> None:
     setup_scene()
 
     # Initialize physics
-    SimulationManager.set_physics_dt(1.0 / 60.0)
+    SimulationManager.setup_simulation(dt=1.0 / 60.0)
 
     # Step 1: Find obstacles using SceneQuery
     obstacle_paths = demonstrate_scene_query()
@@ -536,24 +552,15 @@ def main() -> None:
     # Pick a target object to print its pose
     target_path = "/World/Mesh1"
 
-    # Start timeline
-    timeline = omni.timeline.get_timeline_interface()
     # let objects float for a few seconds:
-    for _ in range(500):
-        simulation_app.update()
+    app_utils.update_app(steps=500)
 
-    timeline.play()
-    # Run simulation loop
-    for step in range(25):  # Run for short period while falling:
-        # Update the app (advances timeline, handles rendering, physics, etc.)
-        simulation_app.update()
+    app_utils.play()
 
-        # Update the binding: use synchronize_transforms for fast updates when only poses change
-        # For full synchronization including property changes, use synchronize() instead
-        # Note: synchronize_transforms() reads current world poses, which are updated by physics
+    def synchronize_world(_step: int, _steps: int) -> None:
+        """Synchronize and print the target obstacle after each application update."""
         binding.synchronize_transforms()
 
-        # Print transforms
         obstacle = world_interface.obstacles[target_path]
         position = obstacle["position"]
         orientation = obstacle["orientation"]
@@ -563,8 +570,8 @@ def main() -> None:
             f"    Orientation (quat wxyz): [{orientation[0]:.3f}, {orientation[1]:.3f}, {orientation[2]:.3f}, {orientation[3]:.3f}]"
         )
 
-        if step % 5 == 0:  # Periodically check for property changes (less frequent)
-            binding.synchronize_properties()
+    # Run simulation loop
+    app_utils.update_app(steps=25, callback=synchronize_world)
 
     print("\n" + "=" * 60)
     print("Summary")
@@ -575,12 +582,11 @@ def main() -> None:
     print("\nComplete workflow demonstrated successfully!")
 
     # Stop timeline
-    timeline.pause()
+    app_utils.pause()
 
     # Keep window open for a moment to see results
     print("\nClosing soon...")
-    for _ in range(500):
-        simulation_app.update()
+    app_utils.update_app(steps=500)
 
     simulation_app.close()
 

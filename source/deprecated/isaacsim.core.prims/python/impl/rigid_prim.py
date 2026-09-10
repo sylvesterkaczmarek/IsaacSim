@@ -37,11 +37,11 @@ torch = import_module("torch")
 
 
 class RigidPrim(XFormPrim):
-    """Provide high-level functions for prims that have Rigid Body API applied to them.
+    """Provide high-level functions for prims that have the Rigid Body API applied to them.
 
     Handle attributes and properties of single or multiple rigid body prims.
 
-    Wrap all matching rigid prims found at the regex provided at the ``prim_paths_expr`` argument
+    Wrap all matching rigid prims found at the regex provided by the ``prim_paths_expr`` argument.
 
     .. note::
 
@@ -52,50 +52,50 @@ class RigidPrim(XFormPrim):
 
     .. warning::
 
-        The rigid prim view object must be initialized in order to be able to operate on it.
+        The rigid prim view object must be initialized in order to operate on it.
         See the ``initialize`` method for more details.
 
     Args:
-        prim_paths_expr: prim paths regex to encapsulate all prims that match it.
-            example: "/World/Env[1-5]/Cube" will match /World/Env1/Cube,
-            /World/Env2/Cube..etc.
-            (a non regex prim path can also be used to encapsulate one rigid prim). Additionally a
-            list of regex can be provided. example ["/World/Env[1-5]/Cube", "/World/Env[10-19]/Cube"].
-        name: shortname to be used as a key by Scene class.
+        prim_paths_expr: Prim path regex to encapsulate all prims that match it.
+            Example: "/World/Env[1-5]/Cube" will match /World/Env1/Cube,
+            /World/Env2/Cube, etc.
+            A non-regex prim path can also be used to encapsulate one rigid prim. Additionally, a
+            list of regexes can be provided. Example: ["/World/Env[1-5]/Cube", "/World/Env[10-19]/Cube"].
+        name: Short name to be used as a key by the Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        positions: default positions in the world frame of the prims.
-            shape is (N, 3).
-        translations: default translations in the local frame of the prims
-            (with respect to its parent prims). shape is (N, 3).
-        orientations: default quaternion orientations in the world/ local frame of the prims
-            (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (N, 4).
-        scales: local scales to be applied to
-            the prim's dimensions in the view. shape is (N, 3).
-        visibilities: set to false for an invisible prim in
-            the stage while rendering. shape is (N,).
-        reset_xform_properties: True if the prims don't have the right set of xform properties
+        positions: Default positions in the world frame of the prims.
+            Shape is (N, 3).
+        translations: Default translations in the local frame of the prims
+            with respect to their parent prims. Shape is (N, 3).
+        orientations: Default quaternion orientations in the world/local frame of the prims
+            depending on whether translations or positions are specified.
+            Quaternion is scalar-first (w, x, y, z). Shape is (N, 4).
+        scales: Local scales to be applied to
+            the prims' dimensions in the view. Shape is (N, 3).
+        visibilities: Set to False for an invisible prim in
+            the stage while rendering. Shape is (N,).
+        reset_xform_properties: True if the prims do not have the right set of xform properties
             (i.e: translate, orient and scale) ONLY and in that order.
-            Set this parameter to False if the object were cloned using using
-            the cloner api in isaacsim.core.cloner.
-        masses: mass in kg specified for each prim in the view.
-            shape is (N,).
-        densities: density in kg/m^3 specified for each prim in the view.
-            shape is (N,).
-        linear_velocities: default linear velocity of each prim in the view
-            (to be applied in the first frame and on resets).
+            Set this parameter to False if the objects were cloned using
+            the cloner API in isaacsim.core.cloner.
+        masses: Mass in kg specified for each prim in the view.
+            Shape is (N,).
+        densities: Density in kg/m^3 specified for each prim in the view.
+            Shape is (N,).
+        linear_velocities: Default linear velocity of each prim in the view
+            to be applied in the first frame and on resets.
             Shape is (N, 3).
-        angular_velocities: default angular velocity of each prim in the view
-            (to be applied in the first frame and on resets).
+        angular_velocities: Default angular velocity of each prim in the view
+            to be applied in the first frame and on resets.
             Shape is (N, 3).
-        track_contact_forces: if enabled, the view will track the net contact forces on each rigid prim in the view
-        prepare_contact_sensors: if rigid prims in the view are not cloned from a prim in a prepared state,
-            (although slow for large number of prims) this ensures that
-            appropriate physics settings are applied on all the prim in the view.
-        disable_stablization: disables the contact stabilization parameter in the physics context
-        contact_filter_prim_paths_expr: a list of filter expressions which allows for tracking contact forces
+        track_contact_forces: If enabled, the view will track the net contact forces on each rigid prim in the view.
+        prepare_contact_sensors: If rigid prims in the view are not cloned from a prim in a prepared state,
+            although slow for large numbers of prims, this ensures that
+            appropriate physics settings are applied on all the prims in the view.
+        disable_stablization: Disables the contact stabilization parameter in the physics context.
+        contact_filter_prim_paths_expr: A list of filter expressions which allows tracking contact forces
             between prims and this subset through get_contact_force_matrix().
-        max_contact_count: maximum number of contact data to report when detailed contact information is needed
+        max_contact_count: Maximum number of contact data entries to report when detailed contact information is needed.
 
     Example:
 
@@ -211,10 +211,10 @@ class RigidPrim(XFormPrim):
         return
 
     def _invalidate_physics_handle_callback(self, event: object) -> None:
-        """Callback to invalidate the physics handle when physics simulation stops.
+        """Invalidate the physics handle when physics simulation stops.
 
         Args:
-            event: The event triggering the invalidation.
+            event: Event triggering the invalidation.
         """
         self._physics_view = None
 
@@ -224,32 +224,18 @@ class RigidPrim(XFormPrim):
 
         Returns:
             Number of rigid shapes for the prims in the view.
-
-        Example:
-
-        .. code-block:: python
-
-            >>> prims.num_shapes
-            1
         """
         return self._num_shapes
 
     def is_physics_handle_valid(self) -> bool:
-        """Check if rigid prim view's physics handler is initialized.
+        """Check whether the rigid prim view's physics handle is initialized.
 
         .. warning::
 
-            If the physics handler is not valid many of the methods that requires PhysX will return None.
+            If the physics handle is not valid, methods that require PhysX can return None.
 
         Returns:
-            bool: True if the physics handle of the view is valid (i.e physics is initialized for the view). Otherwise False.
-
-        Example:
-
-        .. code-block:: python
-
-            >>> prims.is_physics_handle_valid()
-            True
+            True if the physics handle of the view is valid, otherwise False.
         """
         return SimulationManager.get_physics_sim_view() is not None and self._physics_view is not None
 
@@ -264,38 +250,22 @@ class RigidPrim(XFormPrim):
 
         .. warning::
 
-            This method will change (teleport) the prim poses immediately to the specified value
+            This method will change (teleport) the prim poses immediately to the specified value.
 
         Args:
-            positions: positions in the world frame of the prim. shape is (M, 3).
-                Defaults to None, which means left unchanged.
-            orientations: quaternion orientations in the world frame of the prims.
-                quaternion is scalar-first (w, x, y, z). shape is (M, 4).
-                Defaults to None, which means left unchanged.
-            indices: indices to specify which prims to manipulate. Shape (M,).
-                Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-            usd: True to query from usd. Otherwise False to query from Fabric data.
+            positions: Positions in the world frame of the prims. Shape is (M, 3). If not specified, left unchanged.
+            orientations: Quaternion orientations in the world frame of the prims.
+                Quaternion is scalar-first (w, x, y, z). Shape is (M, 4). If not specified, left unchanged.
+            indices: Indices to specify which prims to manipulate. Shape is (M,).
+                Where M <= size of the encapsulated prims in the view. If not specified, all prims in the view are used.
+            usd: Whether to use USD data instead of Fabric data when setting poses.
 
         .. hint::
 
-            This method belongs to the methods used to set the prim state
+            This method belongs to the methods used to set the prim state.
 
-        Example:
-
-        .. code-block:: python
-
-            >>> # reposition all rigid prims in row (x-axis)
-            >>> positions = np.zeros((num_envs, 3))
-            >>> positions[:,0] = np.arange(num_envs)
-            >>> orientations = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (num_envs, 1))
-            >>> prims.set_world_poses(positions, orientations)
-            >>>
-            >>> # reposition only the rigid prims for the first, middle and last of the 5 envs in column (y-axis)
-            >>> positions = np.zeros((3, 3))
-            >>> positions[:,1] = np.arange(3)
-            >>> orientations = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (3, 1))
-            >>> prims.set_world_poses(positions, orientations, indices=np.array([0, 2, 4]))
+        Raises:
+            Exception: If the prim view is not valid.
         """
         if not self._is_valid:
             raise Exception(f"prim view {self._regex_prim_paths} is not a valid view")
@@ -328,48 +298,17 @@ class RigidPrim(XFormPrim):
         """Get the poses of the prims in the view with respect to the world's frame.
 
         Args:
-            indices: indices to specify which prims to query. Shape (M,).
-                Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
+            indices: Indices to specify which prims to query. Shape is (M,).
+                Where M <= size of the encapsulated prims in the view. If not specified, all prims in the view are used.
             clone: True to return a clone of the internal buffer. Otherwise False.
-            usd: True to query from usd. Otherwise False to query from Fabric data.
+            usd: True to query from USD. Otherwise False to query from Fabric data.
 
         Returns:
-            first index is positions in the world frame of the prims. shape is (M, 3).
-            second index is quaternion orientations in the world frame of the prims.
-            quaternion is scalar-first (w, x, y, z). shape is (M, 4).
+            A tuple containing positions in the world frame with shape (M, 3) and quaternion orientations with shape (M, 4).
+            The quaternion is scalar-first (w, x, y, z).
 
-        Example:
-
-        .. code-block:: python
-
-            >>> # get all rigid prim poses with respect to the world's frame.
-            >>> # Returned shape is position (5, 3) and orientation (5, 4) for the example: 5 envs
-            >>> positions, orientations = prims.get_world_poses()
-            >>> positions
-            [[ 1.4999989e+00 -7.4999851e-01 -1.5118626e-07]
-             [ 1.4999989e+00  7.5000149e-01 -2.5988294e-07]
-             [-1.0017333e-06 -7.4999845e-01  7.6070329e-08]
-             [-9.5906785e-07  7.5000149e-01  1.0593490e-07]
-             [-1.5000011e+00 -7.4999851e-01  1.9655154e-07]]
-            >>> orientations
-            [[ 9.9999994e-01 -8.8168377e-07 -4.1946004e-07 -1.5067183e-08]
-             [ 9.9999994e-01 -8.8691013e-07 -4.2665880e-07 -2.7188951e-09]
-             [ 1.0000000e+00 -9.5171310e-07 -2.2615541e-07  5.5922797e-08]
-             [ 1.0000000e+00 -8.9923367e-07 -1.4408238e-07  1.3476099e-08]
-             [ 1.0000000e+00 -7.9806580e-07 -1.3064776e-07  5.3154917e-08]]
-            >>>
-            >>> # get only the rigid prim poses with respect to the world's frame for the first, middle and last of the 5 envs.
-            >>> # Returned shape is position (3, 3) and orientation (3, 4) for the example: 3 envs selected
-            >>> positions, orientations = prims.get_world_poses(indices=np.array([0, 2, 4]))
-            >>> positions
-            [[ 1.4999989e+00 -7.4999851e-01 -1.5118626e-07]
-             [-1.0017333e-06 -7.4999845e-01  7.6070329e-08]
-             [-1.5000011e+00 -7.4999851e-01  1.9655154e-07]]
-            >>> orientations
-            [[ 9.9999994e-01 -8.8168377e-07 -4.1946004e-07 -1.5067183e-08]
-             [ 1.0000000e+00 -9.5171310e-07 -2.2615541e-07  5.5922797e-08]
-             [ 1.0000000e+00 -7.9806580e-07 -1.3064776e-07  5.3154917e-08]]
+        Raises:
+            Exception: If the prim view is not valid.
         """
         if not self._is_valid:
             raise Exception(f"prim view {self._regex_prim_paths} is not a valid view")
@@ -390,46 +329,15 @@ class RigidPrim(XFormPrim):
         """Get prim poses in the view with respect to the local frame (the prim's parent frame).
 
         Args:
-            indices: indices to specify which prims to query. Shape (M,).
-                Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view)
+            indices: Indices to specify which prims to query. Shape is (M,).
+                Where M <= size of the encapsulated prims in the view. If not specified, all prims in the view are used.
 
         Returns:
-            first index is positions in the local frame of the prims. shape is (M, 3).
-            second index is quaternion orientations in the local frame of the prims.
-            quaternion is scalar-first (w, x, y, z). shape is (M, 4).
+            A tuple containing positions in the local frame with shape (M, 3) and quaternion orientations with shape (M, 4).
+            The quaternion is scalar-first (w, x, y, z).
 
-        Example:
-
-        .. code-block:: python
-
-            >>> # get all rigid prim poses with respect to the local frame.
-            >>> # Returned shape is position (5, 3) and orientation (5, 4) for the example: 5 envs
-            >>> positions, orientations = prims.get_local_poses()
-            >>> positions
-            [[-1.0728836e-06  1.4901161e-06 -1.5118626e-07]
-             [-1.0728836e-06  1.4901161e-06 -2.5988294e-07]
-             [-1.0017333e-06  1.5497208e-06  7.6070329e-08]
-             [-9.5906785e-07  1.4901161e-06  1.0593490e-07]
-             [-1.0728836e-06  1.4901161e-06  1.9655154e-07]]
-            >>> orientations
-            [[ 1.0000000e+00 -8.8174920e-07 -4.1949116e-07 -1.5068302e-08]
-             [ 1.0000000e+00 -8.8696777e-07 -4.2668654e-07 -2.7190719e-09]
-             [ 1.0000000e+00 -9.5164734e-07 -2.2613979e-07  5.5918935e-08]
-             [ 1.0000000e+00 -8.9923157e-07 -1.4408204e-07  1.3476067e-08]
-             [ 1.0000000e+00 -7.9806864e-07 -1.3064822e-07  5.3155105e-08]]
-            >>>
-            >>> # get only the rigid prim poses with respect to the local frame for the first, middle and last of the 5 envs.
-            >>> # Returned shape is position (3, 3) and orientation (3, 4) for the example: 3 envs selected
-            >>> positions, orientations = prims.get_local_poses(indices=np.array([0, 2, 4]))
-            >>> positions
-            [[-1.0728836e-06  1.4901161e-06 -1.5118626e-07]
-             [-1.0017333e-06  1.5497208e-06  7.6070329e-08]
-             [-1.0728836e-06  1.4901161e-06  1.9655154e-07]]
-            >>> orientations
-            [[ 1.0000000e+00 -8.8174920e-07 -4.1949116e-07 -1.5068302e-08]
-             [ 1.0000000e+00 -9.5164734e-07 -2.2613979e-07  5.5918935e-08]
-             [ 1.0000000e+00 -7.9806864e-07 -1.3064822e-07  5.3155105e-08]]
+        Raises:
+            Exception: If the prim view is not valid.
         """
         if not self._is_valid:
             raise Exception(f"prim view {self._regex_prim_paths} is not a valid view")
@@ -463,31 +371,15 @@ class RigidPrim(XFormPrim):
         """Set prim poses in the view with respect to the local frame (the prim's parent frame).
 
         Args:
-            translations: translations in the local frame of the prims
-                (with respect to its parent prim). shape is (M, 3).
-                Defaults to None, which means left unchanged.
-            orientations: quaternion orientations in the local frame of the prims.
-                quaternion is scalar-first (w, x, y, z). shape is (M, 4).
-                Defaults to None, which means left unchanged.
-            indices: indices to specify which prims to manipulate. Shape (M,).
-                Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
+            translations: Translations in the local frame of the prims.
+                With respect to their parent prim. Shape is (M, 3). If not specified, left unchanged.
+            orientations: Quaternion orientations in the local frame of the prims.
+                Quaternion is scalar-first (w, x, y, z). Shape is (M, 4). If not specified, left unchanged.
+            indices: Indices to specify which prims to manipulate. Shape is (M,).
+                Where M <= size of the encapsulated prims in the view. If not specified, all prims in the view are used.
 
-        Example:
-
-        .. code-block:: python
-
-            >>> # reposition all rigid prims
-            >>> positions = np.zeros((num_envs, 3))
-            >>> positions[:,0] = np.arange(num_envs)
-            >>> orientations = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (num_envs, 1))
-            >>> prims.set_local_poses(positions, orientations)
-            >>>
-            >>> # reposition only the rigid prims for the first, middle and last of the 5 envs
-            >>> positions = np.zeros((3, 3))
-            >>> positions[:,1] = np.arange(3)
-            >>> orientations = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (3, 1))
-            >>> prims.set_local_poses(positions, orientations, indices=np.array([0, 2, 4]))
+        Raises:
+            Exception: If the prim view is not valid.
         """
         if not self._is_valid:
             raise Exception(f"prim view {self._regex_prim_paths} is not a valid view")
@@ -528,35 +420,20 @@ class RigidPrim(XFormPrim):
     ) -> None:
         """Set the linear velocities of the prims in the view.
 
-        The method does this through the PhysX API only. It has to be called after initialization.
-        Note: This method is not supported for the gpu pipeline. ``set_velocities`` method should be used instead.
+        When the physics handle is valid, the method sets velocities through the PhysX API. For the GPU pipeline,
+        use ``set_velocities`` instead.
 
         .. warning::
 
-            This method will immediately set the rigid prim state
+            This method will immediately set the rigid prim state.
 
         Args:
-            velocities: linear velocities to set the rigid prims to. shape is (M, 3).
-            indices: indices to specify which prims to manipulate. Shape (M,).
-                Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
-        .. hint::
+            velocities: Linear velocities to set the rigid prims to. Shape is (M, 3).
+            indices: Indices to specify which prims to manipulate. Shape is (M,).
+                Where M <= size of the encapsulated prims in the view. If not specified, all prims in the view are used.
 
-            This method belongs to the methods used to set the rigid prim kinematic state:
-
-            ``set_velocities`` (``set_linear_velocities``, ``set_angular_velocities``)
-
-        Example:
-
-        .. code-block:: python
-
-            >>> # set each rigid prim linear velocity to (1.0, 1.0, 1.0)
-            >>> velocities = np.ones((num_envs, 3))
-            >>> prims.set_linear_velocities(velocities)
-            >>>
-            >>> # set only the rigid prim linear velocities for the first, middle and last of the 5 envs
-            >>> velocities = np.ones((3, 3))
-            >>> prims.set_linear_velocities(velocities, indices=np.array([0, 2, 4]))
+        Raises:
+            Exception: If the prim view is not valid.
         """
         if not self._is_valid:
             raise Exception(f"prim view {self._regex_prim_paths} is not a valid view")
@@ -598,32 +475,15 @@ class RigidPrim(XFormPrim):
         """Get the linear velocities of prims in the view.
 
         Args:
-            indices: indices to specify which prims to query. Shape (M,).
-                Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view)
+            indices: Indices to specify which prims to query. Shape is (M,).
+                Where M <= size of the encapsulated prims in the view. If not specified, all prims in the view are used.
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
-            linear velocities of the prims in the view. shape is (M, 3).
+            Linear velocities of the prims in the view. Shape is (M, 3).
 
-        Example:
-
-        .. code-block:: python
-
-            >>> # get all rigid prim linear velocities. Returned shape is (5, 3) for the example: 5 envs, linear (3)
-            >>> prims.get_linear_velocities()
-            [[0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]]
-            >>>
-            >>> # get only the rigid prim linear velocities for the first, middle and last of the 5 envs.
-            >>> # Returned shape is (3, 3) for the example: 3 envs selected, linear (3)
-            >>> prims.get_linear_velocities(indices=np.array([0, 2, 4]))
-            [[0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]]
+        Raises:
+            Exception: If the prim view is not valid.
         """
         if not self._is_valid:
             raise Exception(f"prim view {self._regex_prim_paths} is not a valid view")
@@ -661,7 +521,7 @@ class RigidPrim(XFormPrim):
     ) -> None:
         """Set the angular velocities of the prims in the view.
 
-        The method does this through the physx API only. It has to be called after initialization.
+        The method does this through the PhysX API only. It has to be called after initialization.
         Note: This method is not supported for the gpu pipeline. ``set_velocities`` method should be used instead.
 
         .. warning::
@@ -669,9 +529,12 @@ class RigidPrim(XFormPrim):
             This method will immediately set the rigid prim state
 
         Args:
-            velocities: angular velocities to set the rigid prims to. shape is (M, 3).
+            velocities: Angular velocities to set the rigid prims to. shape is (M, 3).
             indices: indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         .. hint::
 
@@ -735,7 +598,10 @@ class RigidPrim(XFormPrim):
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
-            angular velocities of the prims in the view. shape is (M, 3).
+            Angular velocities of the prims in the view. shape is (M, 3).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -791,16 +657,19 @@ class RigidPrim(XFormPrim):
     ) -> None:
         """Set the linear and angular velocities of the prims in the view at once.
 
-        The method does this through the PhysX API only. It has to be called after initialization
+        The method does this through the PhysX API only. It has to be called after initialization.
 
         .. warning::
 
             This method will immediately set the rigid prim state
 
         Args:
-            velocities: linear and angular velocities respectively to set the rigid prims to. shape is (M, 6).
+            velocities: Linear and angular velocities respectively to set the rigid prims to. shape is (M, 6).
             indices: indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         .. hint::
 
@@ -848,7 +717,10 @@ class RigidPrim(XFormPrim):
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
-            linear and angular velocities of the prims in the view concatenated. shape is (M, 6).
+            Linear and angular velocities of the prims in the view concatenated. shape is (M, 6).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -897,6 +769,9 @@ class RigidPrim(XFormPrim):
                 Where M <= size of the encapsulated prims in the view.
             is_global: True if forces are in the global frame. Otherwise False.
 
+        Raises:
+            Exception: If the prim view is not valid.
+
         Example:
 
         .. code-block:: python
@@ -932,7 +807,7 @@ class RigidPrim(XFormPrim):
     ) -> None:
         """Apply forces and torques to prims in the view. The forces and/or torques can be in local or global coordinates.
 
-        The forces can applied at a location given by positions variable.
+        The forces can be applied at a location given by positions variable.
 
         Args:
             forces: forces to be applied to the prims. If not specified, no force will be applied.
@@ -943,6 +818,9 @@ class RigidPrim(XFormPrim):
                 Where M <= size of the encapsulated prims in the view.
             is_global: True if forces, torques, and positions are in the global frame.
                 False if forces, torques, and positions are in the local frame.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1010,7 +888,10 @@ class RigidPrim(XFormPrim):
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
-            masses of in kg of prims in the view. shape is (M,).
+            Masses in kg of prims in the view. shape is (M,).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1061,7 +942,10 @@ class RigidPrim(XFormPrim):
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
-            rigid body inverse masses of prims in the view. Shape is (M,).
+            Rigid body inverse masses of prims in the view. Shape is (M,).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1104,8 +988,11 @@ class RigidPrim(XFormPrim):
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
-            rigid body center of mass positions and orientations of prims in the view.
+            Rigid body center of mass positions and orientations of prims in the view.
             position shape is (M, 1, 3), orientation shape is (M, 1, 4).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1170,7 +1057,10 @@ class RigidPrim(XFormPrim):
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
-            rigid body inertias of prims in the view. Shape is (M, 9).
+            Rigid body inertias of prims in the view. Shape is (M, 9).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1212,11 +1102,14 @@ class RigidPrim(XFormPrim):
         Args:
             indices: indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
             clone: True to return a clone of the internal buffer. Otherwise False.
 
         Returns:
-            rigid body inverse inertias of prims in the view. Shape is (M, 9).
+            Rigid body inverse inertias of prims in the view. Shape is (M, 9).
+            None if Physics Simulation View is not created yet.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1230,7 +1123,8 @@ class RigidPrim(XFormPrim):
              [0.006 0.    0.    0.    0.006 0.    0.    0.    0.006]
              [0.006 0.    0.    0.    0.006 0.    0.    0.    0.006]]
             >>>
-            >>> # get rigid body inverse inertias for the first, middle and last of the 5 envs. Returned shape is (3, 9)
+            >>> # get rigid body inverse inertias for the first, middle and last of the 5 envs.
+            >>> # Returned shape is (3, 9)
             >>> prims.get_inv_inertias(indices=np.array([0, 2, 4]))
             [[0.006 0.    0.    0.    0.006 0.    0.    0.    0.006]
              [0.006 0.    0.    0.    0.006 0.    0.    0.    0.006]
@@ -1261,7 +1155,9 @@ class RigidPrim(XFormPrim):
             masses: body masses for prims in kg. shape (M,).
             indices: indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1302,10 +1198,12 @@ class RigidPrim(XFormPrim):
         """Set rigid body inertias for prims in the view.
 
         Args:
-            values: body inertias for prims in the view. shape (M, 1, 9).
+            values: body inertias for prims in the view. shape (M, 9).
             indices: indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1313,11 +1211,12 @@ class RigidPrim(XFormPrim):
 
             >>> # set the rigid body inertias for all the rigid bodies to the specified values.
             >>> # Since there are 5 envs, the inertias are repeated 5 times
-            >>> inertias = np.tile(np.array([0.1, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1]), (num_envs, 1))
+            >>> inertia = np.array([0.1, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1])
+            >>> inertias = np.tile(inertia, (num_envs, 1))
             >>> prims.set_inertias(inertias)
             >>>
             >>> # set the rigid body inertias for the first, middle and last of the 5 envs
-            >>> inertias = np.tile(np.array([0.1, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1]), (3, 1))
+            >>> inertias = np.tile(inertia, (3, 1))
             >>> prims.set_inertias(inertias, indices=np.array([0, 2, 4]))
         """
         if not self._is_valid:
@@ -1343,7 +1242,9 @@ class RigidPrim(XFormPrim):
             orientations: body center of mass orientations for bodies in the view. shape (M, 1, 4).
             indices: indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1400,10 +1301,12 @@ class RigidPrim(XFormPrim):
 
         Args:
             densities: density in kg/m^3 specified for each prim in the view.
-                shape is (M,). Defaults to None.
+                shape is (M,).
             indices: indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1439,10 +1342,12 @@ class RigidPrim(XFormPrim):
         Args:
             indices: indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view)
 
         Returns:
-            densities of prims in the view in kg/m^3. shape (M,).
+            Densities of prims in the view in kg/m^3. shape (M,).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1481,16 +1386,17 @@ class RigidPrim(XFormPrim):
     ) -> None:
         """Set sleep thresholds of prims in the view.
 
-        Search for *Rigid Body Dynamics* > *Sleeping* in |physx_docs| for more details
+        Search for *Rigid Body Dynamics* > *Sleeping* in |physx_docs| for more details.
 
         Args:
             thresholds: Mass-normalized kinetic energy threshold below which
                 an actor may go to sleep. Range: [0, inf)
-                Defaults: 0.00005 * tolerancesSpeed* tolerancesSpeed
                 Units: distance^2 / second^2. shape (M,).
             indices: indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1524,17 +1430,18 @@ class RigidPrim(XFormPrim):
     ) -> np.ndarray | torch.Tensor | wp.indexedarray:
         """Get sleep thresholds of prims in the view.
 
-        Search for *Rigid Body Dynamics* > *Sleeping* in |physx_docs| for more details
+        Search for *Rigid Body Dynamics* > *Sleeping* in |physx_docs| for more details.
 
         Args:
             indices: indices to specify which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view)
 
         Returns:
-            Mass-normalized kinetic energy threshold below which
-            an actor may go to sleep. Range: [0, inf). Defaults: 0.00005 * tolerancesSpeed* tolerancesSpeed
-            Units: distance^2 / second^2. shape (M,).
+            Mass-normalized kinetic energy threshold below which an actor may go to sleep.
+            Range is [0, inf). Units: distance^2 / second^2. shape (M,).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1567,14 +1474,16 @@ class RigidPrim(XFormPrim):
         return thresholds
 
     def enable_rigid_body_physics(self, indices: np.ndarray | list | torch.Tensor | wp.array | None = None) -> None:
-        """Enable rigid body physics (enabled by default).
+        """Enable rigid body physics.
 
-        When enabled, the objects will be moved by external forces such as gravity and collisions
+        When enabled, the objects will be moved by external forces such as gravity and collisions.
 
         Args:
             indices: indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1608,23 +1517,25 @@ class RigidPrim(XFormPrim):
             return
 
     def disable_rigid_body_physics(self, indices: np.ndarray | list | torch.Tensor | wp.array | None = None) -> None:
-        """Disable rigid body physics (enabled by default).
+        """Disable rigid body physics.
 
-        When disabled, the objects will not be moved by external forces such as gravity and collisions
+        When disabled, the objects will not be moved by external forces such as gravity and collisions.
 
         Args:
             indices: indices to specify which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
-                Defaults to None (i.e: all prims in the view).
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
         .. code-block:: python
 
-            >>> # enable the rigid body dynamics for all rigid bodies
+            >>> # disable the rigid body dynamics for all rigid bodies
             >>> prims.disable_rigid_body_physics()
             >>>
-            >>> # enable the rigid body dynamics for the first, middle and last of the 5 envs
+            >>> # disable the rigid body dynamics for the first, middle and last of the 5 envs
             >>> prims.disable_rigid_body_physics(indices=np.array([0, 2, 4]))
         """
         if not self._is_valid:
@@ -1649,12 +1560,14 @@ class RigidPrim(XFormPrim):
             return
 
     def enable_gravities(self, indices: np.ndarray | list | torch.Tensor | wp.array | None = None) -> None:
-        """Enable gravity on rigid bodies (enabled by default).
+        """Enable gravity on rigid bodies.
 
         Args:
-            indices: indices to specify which prims
-                to manipulate. Shape (M,).
+            indices: Indices specifying which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1688,12 +1601,14 @@ class RigidPrim(XFormPrim):
                 self._physx_rigid_body_apis[i].GetDisableGravityAttr().Set(False)
 
     def disable_gravities(self, indices: np.ndarray | list | torch.Tensor | wp.array | None = None) -> None:
-        """Disable gravity on rigid bodies (enabled by default).
+        """Disable gravity on rigid bodies.
 
         Args:
-            indices: indices to specify which prims
-                to manipulate. Shape (M,).
+            indices: Indices specifying which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1735,26 +1650,21 @@ class RigidPrim(XFormPrim):
         angular_velocities: np.ndarray | torch.Tensor | wp.array | None = None,
         indices: np.ndarray | list | torch.Tensor | wp.array | None = None,
     ) -> None:
-        """Set the default state (position, orientation and linear and angular velocities) of prims in the view,.
-
-        that will be used after each reset.
+        """Set the default state of prims in the view after each reset.
 
         .. note::
 
-            The default states will be set during post-reset (e.g., calling ``.post_reset()`` or ``world.reset()`` methods)
+            The default states are set during post-reset, such as calling ``.post_reset()`` or ``world.reset()``.
 
         Args:
-            positions: default positions in the world frame of the prim. shape is (M, 3).
-            orientations: default quaternion orientations in the world frame of the prims.
-                quaternion is scalar-first (w, x, y, z). shape is (M, 4).
-            linear_velocities: default linear velocities of each prim in the view
-                (to be applied in the first frame and on resets).
-                Shape is (M, 3).
-            angular_velocities: default angular velocities of each prim in the view
-                (to be applied in the first frame and on resets).
-                Shape is (M, 3).
-            indices: indices to specify which prims
-                to manipulate. Shape (M,).
+            positions: Default positions in the world frame of the prim. Shape is (M, 3).
+            orientations: Default quaternion orientations in the world frame of the prims.
+                Quaternion is scalar-first (w, x, y, z). Shape is (M, 4).
+            linear_velocities: Default linear velocities of each prim in the view
+                to apply in the first frame and on resets. Shape is (M, 3).
+            angular_velocities: Default angular velocities of each prim in the view
+                to apply in the first frame and on resets. Shape is (M, 3).
+            indices: Indices specifying which prims to manipulate. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
 
         Example:
@@ -1825,12 +1735,10 @@ class RigidPrim(XFormPrim):
         return
 
     def get_default_state(self) -> DynamicsViewState:
-        """Default state (position, orientation and linear and angular velocities) of prims in the view,.
-
-        that is used after each reset.
+        """Default state of prims in the view that is used after each reset.
 
         Returns:
-            The default state of the prims that is used after each reset.
+            The default positions, orientations, linear velocities, and angular velocities of the prims.
 
         Example:
 
@@ -1838,39 +1746,23 @@ class RigidPrim(XFormPrim):
 
             >>> state = prims.get_default_state()
             <isaacsim.core.utils.types.DynamicsViewState object at 0x7f184e555480>
-            >>> state
             >>> state.positions
             [[ 1.4999989e+00 -7.4999851e-01 -1.5118626e-07]
              [ 1.4999989e+00  7.5000149e-01 -2.5988294e-07]
              [-1.0017333e-06 -7.4999845e-01  7.6070329e-08]
              [-9.5906785e-07  7.5000149e-01  1.0593490e-07]
              [-1.5000011e+00 -7.4999851e-01  1.9655154e-07]]
-            >>> state.orientations
-            [[ 9.9999994e-01 -8.8168377e-07 -4.1946004e-07 -1.5067183e-08]
-             [ 9.9999994e-01 -8.8691013e-07 -4.2665880e-07 -2.7188951e-09]
-             [ 1.0000000e+00 -9.5171310e-07 -2.2615541e-07  5.5922797e-08]
-             [ 1.0000000e+00 -8.9923367e-07 -1.4408238e-07  1.3476099e-08]
-             [ 1.0000000e+00 -7.9806580e-07 -1.3064776e-07  5.3154917e-08]]
-            >>> state.linear_velocities
-            [[0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]]
-            >>> state.angular_velocities
-            [[0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]]
         """
         return self._dynamics_default_state
 
     def get_current_dynamic_state(self) -> DynamicsViewState:
-        """Current rigid body states (position, orientation and linear and angular velocities).
+        """Current rigid body states for prims in the view.
 
         Returns:
-            The dynamic state of the rigid bodies
+            The current positions, orientations, linear velocities, and angular velocities of the rigid bodies.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1879,31 +1771,12 @@ class RigidPrim(XFormPrim):
             >>> # for the example the rigid bodies are in free fall
             >>> state = prims.get_current_dynamic_state()
             <isaacsim.core.utils.types.DynamicsViewState object at 0x7f182bd72590>
-            >>> state
             >>> state.positions
             [[   1.5       -0.75    -207.76808]
              [   1.5        0.75    -207.76808]
              [   0.        -0.75    -207.76808]
              [   0.         0.75    -207.76808]
              [  -1.5       -0.75    -207.76808]]
-            >>> state.orientations
-            [[1. 0. 0. 0.]
-             [1. 0. 0. 0.]
-             [1. 0. 0. 0.]
-             [1. 0. 0. 0.]
-             [1. 0. 0. 0.]]
-            >>> state.linear_velocities
-            [[  0.         0.       -63.765312]
-             [  0.         0.       -63.765312]
-             [  0.         0.       -63.765312]
-             [  0.         0.       -63.765312]
-             [  0.         0.       -63.765312]]
-            >>> state.angular_velocities
-            [[0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]
-             [0. 0. 0.]]
         """
         if not self._is_valid:
             raise Exception(f"prim view {self._regex_prim_paths} is not a valid view")
@@ -1925,19 +1798,20 @@ class RigidPrim(XFormPrim):
 
         .. note::
 
-            This method requires that the contact forces of the prims in the view be tracked by defining
-            the ``track_contact_forces`` argument to True (default to False) during view creation
+            This method requires tracking contact forces by setting ``track_contact_forces`` to True during view creation.
 
         Args:
-            indices: indices to specify which prims
-                to query. Shape (M,).
+            indices: Indices specifying which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
             clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: time step multiplier to convert the underlying impulses to forces.
-                If the default value is used then the forces are in fact contact impulses
+            dt: Time step multiplier to convert the underlying impulses to forces.
+                Use 1.0 to leave values as contact impulses.
 
         Returns:
-            Net contact forces of the prims with shape (M,3).
+            Net contact forces of the prims with shape (M, 3), or None if contact forces are not tracked.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
@@ -1950,12 +1824,6 @@ class RigidPrim(XFormPrim):
              [2.1967124e-05 0.0000000e+00 1.6349591e+02]
              [2.1967891e-05 0.0000000e+00 1.6350165e+02]
              [2.1967257e-05 0.0000000e+00 1.6349693e+02]
-             [2.1966895e-05 0.0000000e+00 1.6349425e+02]]
-            >>>
-            >>> # get the net contact force on the rigid bodies for the first, middle and last of the 5 envs
-            >>> prims.get_net_contact_forces(indices=np.array([0, 2, 4]))
-            [[2.1967362e-05 0.0000000e+00 1.6349771e+02]
-             [2.1967891e-05 0.0000000e+00 1.6350165e+02]
              [2.1966895e-05 0.0000000e+00 1.6349425e+02]]
         """
         if not self._is_valid:
@@ -1976,33 +1844,33 @@ class RigidPrim(XFormPrim):
     ) -> np.ndarray | torch.Tensor | wp.indexedarray | None:
         """Return the contact forces between the prims in the view and the filter prims.
 
-        E.g., a matrix of dimension ``(self.count, _contact_view.num_filters, 3)`` where ``_contact_view.num_filters``
-        is determined according to the ``contact_filter_prim_paths_expr`` parameter
+        Returns a matrix with dimension ``(self.count, _contact_view.num_filters, 3)``, where
+        ``_contact_view.num_filters`` is determined by ``contact_filter_prim_paths_expr``.
 
         .. note::
 
-            This method requires that the contact forces of the prims in the view be tracked by defining
-            the ``contact_filter_prim_paths_expr`` argument to a list of the prim paths from which to generate
-            the information and the ``max_contact_count`` argument be greater than 0 during view creation
+            This method requires ``contact_filter_prim_paths_expr`` to define filter prim paths and
+            ``max_contact_count`` to be greater than 0 during view creation.
 
         Args:
-            indices: indices to specify which prims
-                to query. Shape (M,).
+            indices: Indices specifying which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
             clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: time step multiplier to convert the underlying impulses to forces.
-                If the default value is used then the forces are in fact contact impulses
+            dt: Time step multiplier to convert the underlying impulses to forces.
+                Use 1.0 to leave values as contact impulses.
 
         Returns:
-            Net contact forces of the prims with shape (M, self._contact_view.num_filters, 3).
+            Contact forces of the prims with shape (M, self._contact_view.num_filters, 3), or None if no filter is set.
+
+        Raises:
+            Exception: If the prim view is not valid.
 
         Example:
 
         .. code-block:: python
 
-            >>> # for the example, the cubes are on top of each other. The view was instantiated with the following
-            >>> # extra parameters: contact_filter_prim_paths_expr=["/World/envs/env_2/Xform"], max_contact_count=10
-            >>> # This indicates that only contacts with the middle cube will be reported
+            >>> # for the example, the cubes are on top of each other.
+            >>> # The view was instantiated with contact_filter_prim_paths_expr and max_contact_count.
             >>> prims.get_contact_force_matrix()
             [[[ 0.0000000e+00  0.0000000e+00  0.0000000e+00]]
              [[-7.8665102e-03  8.3034458e-03 -4.9063504e+02]]
@@ -2033,102 +1901,36 @@ class RigidPrim(XFormPrim):
         np.ndarray | torch.Tensor | wp.indexedarray,
         np.ndarray | torch.Tensor | wp.indexedarray,
     ]:
-        """Get more detailed contact information between the prims in the view and the filter prims.
+        """Get detailed contact information between the prims in the view and the filter prims.
 
-        Specifically, this method provides individual contact normals, contact points, contact separations as well as
-        contact forces for each pair (the sum of which equals the forces that the ``get_contact_force_matrix``
-        method provides as the force aggregate of a pair)
+        Provides individual contact normals, contact points, contact separations, and contact forces for each pair.
+        The sum of per-contact forces equals the force aggregate returned by ``get_contact_force_matrix``.
 
-        Given to the dynamic nature of collision between bodies, this method will provide buffers of contact data which
-        are arranged sequentially for each pair. The starting index and the number of contact data points for each pair
-        in this stream can be realized from pair_contacts_start_indices, and pair_contacts_count tensors.
-        They both have a dimension of ``(num_shapes, _contact_view.num_filters)`` where ``_contact_view.num_filters``
-        is determined according to the ``contact_filter_prim_paths_expr`` parameter
+        Due to the dynamic nature of collision between bodies, contact data is arranged sequentially for each pair.
+        The starting index and number of contact data points for each pair are provided by
+        pair_contacts_start_indices and pair_contacts_count tensors. Both have dimension
+        ``(num_shapes, _contact_view.num_filters)``, where ``_contact_view.num_filters`` is determined by
+        ``contact_filter_prim_paths_expr``.
 
         .. note::
 
-            This method requires that the contact forces of the prims in the view be tracked by defining
-            the ``contact_filter_prim_paths_expr`` argument to a list of the prim paths from which to generate
-            the information and the ``max_contact_count`` argument be greater than 0 during view creation
+            This method requires ``contact_filter_prim_paths_expr`` to define filter prim paths and
+            ``max_contact_count`` to be greater than 0 during view creation.
 
         Args:
-            indices: indices to specify which prims
-                to query. Shape (M,).
+            indices: Indices specifying which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
             clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: time step multiplier to convert the underlying impulses to forces.
-                If the default value is used then the forces are in fact contact impulses
+            dt: Time step multiplier to convert the underlying impulses to forces.
+                Use 1.0 to leave values as contact impulses.
 
         Returns:
-            A set of buffers for normal forces with shape (max_contact_count, 1), points with shape
-            (max_contact_count, 3), normals with shape (max_contact_count, 3), and distances with shape
-            (max_contact_count, 1), as well as two tensors with shape (M, self.num_filters) to indicate the starting
-            index and the number of contact data points per pair in the aforementioned buffers.
+            Buffers for normal forces with shape (max_contact_count, 1), points with shape (max_contact_count, 3),
+            normals with shape (max_contact_count, 3), and distances with shape (max_contact_count, 1), plus two tensors
+            with shape (M, self.num_filters) for the starting index and number of contact data points per pair.
 
-        Example:
-
-        .. code-block:: python
-
-            >>> # for the example, the cubes are on top of each other. The view was instantiated with the following
-            >>> # extra parameters: contact_filter_prim_paths_expr=["/World/envs/env_2/Xform"], max_contact_count=10
-            >>> # This indicates that only contacts with the middle cube will be reported
-            >>> data = prims.get_contact_force_data()
-            >>> data[0]  # normal forces
-            [[-156.449   ]
-             [ -81.736336]
-             [-169.73076 ]
-             [ -82.397804]
-             [ 110.11985 ]
-             [  59.646057]
-             [  98.660545]
-             [  58.43006 ]
-             [   0.      ]
-             [   0.      ]]
-            >>> data[1]  # points
-            [[-0.50145745  0.49872556  0.7056795 ]
-             [-0.50184476 -0.5010655   0.7057198 ]
-             [ 0.49793154 -0.50147027  0.70576656]
-             [ 0.4983363   0.49833822  0.70572615]
-             [ 0.49818155 -0.5016888   1.7058725 ]
-             [ 0.49856627  0.4913648   1.7058672 ]
-             [-0.49732465  0.4915302   1.705814  ]
-             [-0.49748957 -0.501303    1.7058194 ]
-             [ 0.          0.          0.        ]
-             [ 0.          0.          0.        ]]
-            >>> data[2]  # normals
-            [[ 1.6479074e-05 -1.6995813e-05  1.0000000e+00]
-             [ 1.6479074e-05 -1.6995813e-05  1.0000000e+00]
-             [ 1.6479074e-05 -1.6995813e-05  1.0000000e+00]
-             [ 1.6479074e-05 -1.6995813e-05  1.0000000e+00]
-             [ 1.6479074e-05 -1.6995813e-05  1.0000000e+00]
-             [ 1.6479074e-05 -1.6995813e-05  1.0000000e+00]
-             [ 1.6479074e-05 -1.6995813e-05  1.0000000e+00]
-             [ 1.6479074e-05 -1.6995813e-05  1.0000000e+00]
-             [ 0.0000000e+00  0.0000000e+00  0.0000000e+00]
-             [ 0.0000000e+00  0.0000000e+00  0.0000000e+00]]
-            >>> data[3]  # distances
-            [[ 6.3175990e-05]
-             [ 5.8271162e-06]
-             [-5.7399273e-05]
-             [-1.0989098e-08]
-             [ 1.6338757e-04]
-             [ 1.4112510e-04]
-             [ 7.1585178e-05]
-             [ 9.3835908e-05]
-             [ 0.0000000e+00]
-             [ 0.0000000e+00]]
-            >>> data[4]  # pair contacts count
-            [[0]
-             [4]
-             [0]
-             [4]
-             [0]]
-            >>> data[5]  # start indices of pair contacts
-            [[0]
-             [0]
-             [4]
-             [4]
-             [8]]
+        Raises:
+            Exception: If the prim view is not valid.
         """
         if not self._is_valid:
             raise Exception(f"prim view {self._regex_prim_paths} is not a valid view")
@@ -2151,27 +1953,28 @@ class RigidPrim(XFormPrim):
         np.ndarray | torch.Tensor | wp.indexedarray,
         np.ndarray | torch.Tensor | wp.indexedarray,
     ]:
-        """Get friction data between the prims in the view and the filter prims. Specifically, this method provides frictional contact forces,.
+        """Get friction data between the prims in the view and the filter prims.
 
-        and points. The data in reported for number of anchor points that includes tangential forces in a single tangent direction to contact normal.
-        Given to the dynamic nature of collision between bodies, this method will provide buffers of friction data arranged sequentially for each pair.
-        The starting index and the number of contact data points for each pair in this stream can be realized from pair_contacts_start_indices,
-        and pair_contacts_count tensors. They both have a dimension of (self.num_shapes, self.num_filters) where filter_count is determined
-        according to the filter_paths_expr parameter.
+        Provides frictional contact forces and points for anchor points that include tangential forces in a single
+        tangent direction to the contact normal. Due to the dynamic nature of collision between bodies, friction data is
+        arranged sequentially for each pair. The starting index and number of contact data points for each pair are
+        provided by pair_contacts_start_indices and pair_contacts_count tensors. Both have dimension
+        (self.num_shapes, self.num_filters), where filter_count is determined by filter_paths_expr.
 
         Args:
-            indices: indicies to specify which prims
-                to query. Shape (M,).
+            indices: Indices specifying which prims to query. Shape (M,).
                 Where M <= size of the encapsulated prims in the view.
             clone: True to return a clone of the internal buffer. Otherwise False.
-            dt: time step multiplier to convert the underlying impulses to forces.
-                If the default value is used then the forces are in fact contact impulses
+            dt: Time step multiplier to convert the underlying impulses to forces.
+                Use 1.0 to leave values as contact impulses.
 
         Returns:
-            A set of buffers for tangential forces per patch (at number of anchor points, each in a single directions)
-            with shape (max_contact_count, 3), points with shape (max_contact_count, 3),
-            as well as two tensors with shape (M, self.num_filters) to indicate the starting index and the number of
-            contact data points per pair in the aforementioned buffers.
+            Buffers for tangential forces per patch with shape (max_contact_count, 3), points with shape
+            (max_contact_count, 3), and two tensors with shape (M, self.num_filters) for the starting index and number of
+            contact data points per pair.
+
+        Raises:
+            Exception: If the prim view is not valid.
         """
         if not self._is_valid:
             raise Exception(f"prim view {self._regex_prim_paths} is not a valid view")
@@ -2184,14 +1987,14 @@ class RigidPrim(XFormPrim):
             return None
 
     def initialize(self, physics_sim_view: omni.physics.tensors.SimulationView = None) -> None:
-        """Create a physics simulation view if not passed and set other properties using the PhysX tensor API.
+        """Create a physics simulation view and set rigid body properties using the PhysX tensor API.
 
         .. note::
 
-            For this particular class, calling this method will do nothing
+            For this particular class, calling this method will do nothing if the physics handle is already valid.
 
         Args:
-            physics_sim_view: current physics simulation view.
+            physics_sim_view: Current physics simulation view.
 
         Example:
 
@@ -2210,7 +2013,7 @@ class RigidPrim(XFormPrim):
         contact view if contact forces are being tracked.
 
         Args:
-            event: Physics ready event (unused but required for event handling).
+            event: Physics ready event required for event handling.
         """
         XFormPrim._on_physics_ready(self, event)
         simulation_view = SimulationManager.get_physics_sim_view()
@@ -2262,13 +2065,12 @@ class RigidPrim(XFormPrim):
         """Reset the rigid prims to their default states (positions, orientations and linear and angular velocities).
 
         Args:
-            event: Post-reset event (unused but required for event handling).
+            event: Post-reset event required for event handling.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> prims.post_reset()
+                >>> prims.post_reset()
         """
         XFormPrim._on_post_reset(self, event)
         if not self._non_root_link:

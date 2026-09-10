@@ -12,10 +12,6 @@
   - async def setup_post_clear(self)
   - def physics_cleanup(self)
 
-- class KayaGamepadExtension(omni.ext.IExt)
-  - def on_startup(self, ext_id: str)
-  - def on_shutdown(self)
-
 # Public API for module isaacsim.examples.interactive.omnigraph_keyboard:
 
 ## Classes
@@ -27,10 +23,6 @@
   - async def setup_pre_reset(self)
   - async def setup_post_reset(self)
   - async def setup_post_clear(self)
-
-- class OmnigraphKeyboardExtension(omni.ext.IExt)
-  - def on_startup(self, ext_id: str)
-  - def on_shutdown(self)
 
 # Public API for module isaacsim.examples.interactive.robo_party:
 
@@ -45,10 +37,6 @@
   - async def setup_post_clear(self)
   - def physics_cleanup(self)
 
-- class RoboPartyExtension(omni.ext.IExt)
-  - def on_startup(self, ext_id: str)
-  - def on_shutdown(self)
-
 # Public API for module isaacsim.examples.interactive.hello_world:
 
 ## Classes
@@ -60,10 +48,6 @@
   - async def setup_pre_reset(self)
   - async def setup_post_reset(self)
   - def world_cleanup(self)
-
-- class HelloWorldExtension(omni.ext.IExt)
-  - def on_startup(self, ext_id: str)
-  - def on_shutdown(self)
 
 # Public API for module isaacsim.examples.interactive.surface_gripper:
 
@@ -86,10 +70,6 @@ No public API
   - async def setup_post_clear(self)
   - def physics_cleanup(self)
 
-- class GettingStartedExtension(omni.ext.IExt)
-  - def on_startup(self, ext_id: str)
-  - def on_shutdown(self)
-
 - class GettingStartedRobot(BaseSample)
   - def __init__(self)
   - def setup_scene(self)
@@ -99,7 +79,3 @@ No public API
   - async def setup_post_reset(self)
   - async def setup_post_clear(self)
   - def physics_cleanup(self)
-
-- class GettingStartedRobotExtension(omni.ext.IExt)
-  - def on_startup(self, ext_id: str)
-  - def on_shutdown(self)

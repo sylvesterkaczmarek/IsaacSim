@@ -33,10 +33,10 @@ class PathPlannerVisualizer:
     """A helper class for quickly visualizing the plans output by a PathPlanner.
 
     The main utility of this class lies in the compute_plan_as_articulation_actions() function, which returns a sequence of
-    ArticulationActions that may be directly sent to the robot Articulation in order to visualize the planned path.
+    ArticulationActions that may be directly sent to the robot Articulation to visualize the planned path.
 
     Args:
-        robot_articulation: An Articulation object describing a single simulated robot.
+        robot_articulation: A SingleArticulation object describing a single simulated robot.
         path_planner: A PathPlanner object that has been configured to compute plans for the robot
             represented by the robot Articulation.
     """
@@ -52,17 +52,17 @@ class PathPlannerVisualizer:
         self._watched_joints_view = ArticulationSubset(robot_articulation, path_planner.get_watched_joints())
 
     def compute_plan_as_articulation_actions(self, max_cspace_dist: float = 0.05) -> list[ArticulationAction]:
-        """Compute plan using a PathPlanner and linearly interpolate the result to enforce that the maximum.
+        """Compute a PathPlanner plan and linearly interpolate it so adjacent points are at most max_cspace_dist apart.
 
-        distance (l2 norm) between any two points is max_cspace_dist.
+        The distance is measured by the L2 norm.
 
         Args:
             max_cspace_dist: Maximum distance between adjacent points in the path.
 
         Returns:
-            Linearly interpolated path given as a sequence of ArticulationActions that can be
-                passed directly to the robot Articulation. This may rearrange and augment the plan output by the PathPlanner to
-                match the number of DOFs available for control in the robot Articulation.
+            Linearly interpolated path given as a sequence of ArticulationActions that can be passed directly to the
+            robot Articulation. This may rearrange and augment the PathPlanner output to match the number of DOFs
+            available for control in the robot Articulation.
         """
         active_joint_positions = self._active_joints_view.get_joint_positions()
 
@@ -87,14 +87,14 @@ class PathPlannerVisualizer:
         return articulation_actions
 
     def interpolate_path(self, path: np.array, max_cspace_dist: float = 0.05) -> np.array:
-        """Linearly interpolate a sparse path such that the maximum distance (l2 norm) between any two points is max_cspace_dist.
+        """Linearly interpolate a sparse path so adjacent points are at most max_cspace_dist apart by L2 norm.
 
         Args:
-            path: Sparse cspace path with shape (N x num_dofs) where N is number of points in the path
+            path: Sparse cspace path with shape (N x num_dofs), where N is the number of points in the path.
             max_cspace_dist: Maximum distance between adjacent points in the path.
 
         Returns:
-            Linearly interpolated path with shape (M x num_dofs)
+            Linearly interpolated path with shape (M x num_dofs).
         """
         if path.shape[0] == 0:
             return path

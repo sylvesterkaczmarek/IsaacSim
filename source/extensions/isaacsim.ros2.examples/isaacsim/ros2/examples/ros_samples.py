@@ -24,8 +24,10 @@ import omni.ext
 import omni.ui as ui
 import omni.usd
 from isaacsim.examples.browser import get_instance as get_browser_instance
-from isaacsim.gui.components.ui_utils import setup_ui_headers
+from isaacsim.gui.components import setup_ui_headers
 from isaacsim.storage.native import get_assets_root_path
+
+__all__ = []
 
 
 class Extension(omni.ext.IExt):

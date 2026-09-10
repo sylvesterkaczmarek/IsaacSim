@@ -32,8 +32,8 @@ from isaacsim.sensors.experimental.physics import IMU
 from .common import (
     ANGULAR_VEL_TOLERANCE,
     EARTH_GRAVITY,
+    GRAVITY_TOLERANCE,
     ORIENTATION_TOLERANCE,
-    SMALL_TOLERANCE,
     step_simulation,
 )
 
@@ -65,7 +65,8 @@ class TestIMUSensorOgn(omni.kit.test.AsyncTestCase):
     async def setup_environment(self) -> None:
         """Create a rigid cube on a ground plane and author an IMU with a filter width."""
         GroundPlane("/World/GroundPlane", positions=[0.0, 0.0, 0.0])
-        Cube("/World/Cube", sizes=1.0, positions=[0.0, 0.0, 1.0])
+        # Center at z=0.5 so a size-1 cube rests on the ground under PhysX and Newton.
+        Cube("/World/Cube", sizes=1.0, positions=[0.0, 0.0, 0.5])
         GeomPrim("/World/Cube", apply_collision_apis=True)
         RigidPrim("/World/Cube", masses=[1.0])
 
@@ -109,11 +110,11 @@ class TestIMUSensorOgn(omni.kit.test.AsyncTestCase):
         )
 
         self._timeline.play()
-        await step_simulation(1.5)
+        await step_simulation(2.0)
         lin_acc = og.Controller.attribute(self.graph_path + "/ReadIMUNode.outputs:linAcc").get()
-        self.assertAlmostEqual(lin_acc[2], EARTH_GRAVITY, delta=SMALL_TOLERANCE)
-        self.assertAlmostEqual(lin_acc[0], 0.0, delta=SMALL_TOLERANCE)
-        self.assertAlmostEqual(lin_acc[1], 0.0, delta=SMALL_TOLERANCE)
+        self.assertAlmostEqual(lin_acc[2], EARTH_GRAVITY, delta=GRAVITY_TOLERANCE)
+        self.assertAlmostEqual(lin_acc[0], 0.0, delta=GRAVITY_TOLERANCE)
+        self.assertAlmostEqual(lin_acc[1], 0.0, delta=GRAVITY_TOLERANCE)
 
         ang_vel = og.Controller.attribute(self.graph_path + "/ReadIMUNode.outputs:angVel").get()
         self.assertAlmostEqual(ang_vel[0], 0.0, delta=ANGULAR_VEL_TOLERANCE)
@@ -139,9 +140,9 @@ class TestIMUSensorOgn(omni.kit.test.AsyncTestCase):
         )
 
         self._timeline.play()
-        await step_simulation(1.0)
+        await step_simulation(2.0)
         lin_acc = og.Controller.attribute(self.graph_path + "/ReadIMUNode.outputs:linAcc").get()
-        self.assertAlmostEqual(lin_acc[2], 0.0, delta=SMALL_TOLERANCE)
+        self.assertAlmostEqual(lin_acc[2], 0.0, delta=GRAVITY_TOLERANCE)
 
     async def test_use_latest_data_imu_sensor_ogn(self) -> None:
         """Verify useLatestData=True still returns a nonzero IMU sensor timestamp."""
@@ -167,22 +168,22 @@ class TestIMUSensorOgn(omni.kit.test.AsyncTestCase):
         )
 
         self._timeline.play()
-        await step_simulation(1.5)
+        await step_simulation(2.0)
 
         lin_acc = og.Controller.attribute(self.graph_path + "/ReadIMUNode.outputs:linAcc").get()
-        self.assertAlmostEqual(lin_acc[2], EARTH_GRAVITY, delta=SMALL_TOLERANCE)
+        self.assertAlmostEqual(lin_acc[2], EARTH_GRAVITY, delta=GRAVITY_TOLERANCE)
 
         self._timeline.stop()
         await omni.kit.app.get_app().next_update_async()
 
         self._timeline.play()
-        await step_simulation(1.5)
+        await step_simulation(2.0)
 
         lin_acc_after = og.Controller.attribute(self.graph_path + "/ReadIMUNode.outputs:linAcc").get()
         self.assertAlmostEqual(
             lin_acc_after[2],
             EARTH_GRAVITY,
-            delta=SMALL_TOLERANCE,
+            delta=GRAVITY_TOLERANCE,
             msg="Should recover valid gravity reading after stop/play",
         )
 

@@ -102,6 +102,8 @@ files_strip_exclude = [
     ["extscache/omni.kit.pip_archive*/pip_prebundle/**"],
     ["extsDeprecated/omni.isaac.ml_archive/pip_prebundle/**"],
     ["exts/isaacsim.pip.newton/pip_prebundle/**"],
+    ["exts/isaacsim.pip.nv/pip_prebundle/**"],
+    ["exts/isaacsim.pip.onnx/pip_prebundle/**"],
     ["exts/isaacsim.ucx.core/pip_prebundle/**"],
     ["exts/isaacsim.ucx.core/bin/libuc*"],
     ["exts/isaacsim.ucx.core/bin/librmm.so*"],
@@ -128,6 +130,8 @@ files_strip_exclude = [
     ["extscache/omni.kit.pip_archive*/pip_prebundle/**"],
     ["extsDeprecated/omni.isaac.ml_archive/pip_prebundle/**"],
     ["exts/isaacsim.pip.newton/pip_prebundle/**"],
+    ["exts/isaacsim.pip.nv/pip_prebundle/**"],
+    ["exts/isaacsim.pip.onnx/pip_prebundle/**"],
     ["exts/isaacsim.ucx.core/pip_prebundle/**"],
     ["exts/isaacsim.ucx.core/bin/libuc*"],
     ["exts/isaacsim.ucx.core/bin/librmm.so*"],
@@ -149,3 +153,44 @@ files_exclude = [
     ["standalone_examples/cortex/**"], # Cortex not shipped on windows
     ["exts/isaacsim.asset.exporter.urdf/pip_prebundle/bin/**"], # ISIM-2584 remove because of malware
 ]
+
+########################################################################################################################
+# coverage package
+########################################################################################################################
+
+[isaac-sim-standalone-coverage]
+files = [
+    ["$${platform}/$${config}/**", "."],
+    ["intermediate/**", "./intermediate"]
+]
+files_exclude = [
+    ["**/*.pyc"],
+    ["**/*.pdb"],
+    ["**/*.exp"],
+    ["**/*.a"], # static libs
+    ["apps/exts.deps.generated.kit"],
+    ["apps/isaacsim.exp.extscache.*"],
+    ["kit/data/**"], # This can contain portable files we don't want to package
+    ["kit/logs/**"],
+    ["logs/**"],
+    ["extsbuild/**"],
+    ["tests/tests-internal*"],
+    ["tests/tests-docker*"],
+    ["tests/tests-external*"], # internal tests only
+    ["dockertests/**"],
+    ["tests-external/**"],
+    ["exts/omni.isaac.core_archive/pip_prebundle/bin/**"], # OM-84922
+    ["tests/tests-startup.extscache*"],
+    ["tests/tests-omni.importer.onshape*"],
+    ["kit/exts/omni.kit.extpath.git/**"], # ISIM-1020
+    ["**/.git/**"], # ISIM-1020
+    ["dev/**"],
+    ["omni.isaac.sim*"],
+    ["pull_kit_sdk*"],
+    ["run_all_*"],
+    ["compile_commands.json"],
+    # Exclude windows pip installed binaries, they aren't valid to use currently (embedded interpreter path) and fail codesigning
+    ["exts/*/pip_*/**/*.exe"],
+    ["extscache/*/pip_*/**/*.exe"],
+]
+

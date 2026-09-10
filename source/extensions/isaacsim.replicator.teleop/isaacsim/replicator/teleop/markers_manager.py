@@ -21,11 +21,11 @@ play-space model.  Moving the origin in the viewport (or via locomotion
 carry) automatically moves all child markers via USD transform
 inheritance.
 
-Per-frame VR updates write **origin-local** poses to the children.
-The origin marker itself is **never** written by the per-frame marker
-update — only locomotion carry, manual viewport drag, or
-``move_tracking_space_to`` change the origin.  This avoids a
-dual-writer conflict between marker updates and locomotion.
+Live VR updates write finalized **world-space** poses to the children so
+their display matches Kit XR and robot targets. With a custom scene anchor,
+the origin marker is a live visualization proxy for the canonical resolved
+anchor. With the built-in origin, locomotion and manual viewport edits remain
+authoritative.
 
 In debug mode, markers are the authoritative pose source —
 ``get_marker_world_pose`` returns composed world poses via
@@ -43,12 +43,9 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Literal
 
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.usd
 from isaacsim.core.experimental.prims import XformPrim
-from isaacsim.core.experimental.utils.stage import (
-    add_reference_to_stage,
-    get_current_stage,
-)
 from isaacsim.storage.native import get_assets_root_path
 from pxr import Sdf, Usd
 
@@ -63,12 +60,11 @@ class MarkersManager:
     left, right, head markers are its USD children.  Moving the origin
     automatically moves all children via USD transform inheritance.
 
-    Per-frame updates write **origin-local** poses to children only —
-    the origin marker is never written by the per-frame update.  This
-    avoids dual-writer conflicts when locomotion carry also writes the
-    origin.  Markers are authored in an anonymous session sublayer,
-    never saved, and removing the layer instantly removes all teleop
-    prims.
+    Live updates write finalized world poses to the child markers. The
+    origin remains the built-in writable locomotion frame, or becomes a
+    visualization proxy while a custom scene anchor is active. Markers are
+    authored in an anonymous session sublayer, never saved, and removing the
+    layer instantly removes all teleop prims.
     """
 
     MARKERS_SCOPE = "/Teleop/Markers"
@@ -154,7 +150,7 @@ class MarkersManager:
         if self._layer is None:
             return
 
-        stage = get_current_stage()
+        stage = stage_utils.get_current_stage()
         if stage:
             session = stage.GetSessionLayer()
             ident = self._layer.identifier
@@ -171,7 +167,7 @@ class MarkersManager:
         Yields:
             Stage for convenience, or None if no marker layer exists yet.
         """
-        stage = get_current_stage()
+        stage = stage_utils.get_current_stage()
         if stage and self._layer is not None:
             with Usd.EditContext(stage, self._layer):
                 yield stage
@@ -329,7 +325,7 @@ class MarkersManager:
             print("[Teleop][Markers] Tracking Space marker not active - create markers first.")
             return False
 
-        stage = get_current_stage()
+        stage = stage_utils.get_current_stage()
         if not stage:
             return False
 
@@ -344,6 +340,33 @@ class MarkersManager:
                 return False
             origin.set_world_poses(positions, orientations)
         print(f"[Teleop][Markers] Tracking Space marker moved to '{source_prim_path}'.")
+        return True
+
+    def set_origin_world_pose(
+        self,
+        position: tuple[float, float, float],
+        orientation: tuple[float, float, float, float],
+    ) -> bool:
+        """Set the built-in tracking origin to an explicit world pose.
+
+        Args:
+            position: World position in Isaac Sim coordinates.
+            orientation: World quaternion in ``xyzw`` order.
+
+        Returns:
+            Whether the origin marker was available and updated.
+        """
+        origin = self._markers.get("origin")
+        if origin is None or not origin.valid:
+            return False
+        with self._edit_ctx() as stage:
+            if stage is None:
+                return False
+            with teleop_backend_ctx():
+                origin.set_world_poses(
+                    positions=[[position[0], position[1], position[2]]],
+                    orientations=[[orientation[3], orientation[0], orientation[1], orientation[2]]],
+                )
         return True
 
     # ------------------------------------------------------------------
@@ -374,14 +397,14 @@ class MarkersManager:
             if not ok:
                 return False, f"Cannot create '{name}': origin marker failed — {msg}"
 
-        stage = get_current_stage()
+        stage = stage_utils.get_current_stage()
         if not stage:
             return False, "No USD stage available"
 
         layer = self._ensure_layer(stage)
 
         with Usd.EditContext(stage, layer):
-            stage.DefinePrim(path, "Xform")
+            stage_utils.define_prim(path, "Xform")
             child_path = f"{path}/{self.FRAME_CHILD_NAME}"
             if not self._add_frame_reference(child_path):
                 return False, f"Failed to create frame reference for '{name}'"
@@ -424,9 +447,9 @@ class MarkersManager:
             if spec and spec.nameParent:
                 del spec.nameParent.nameChildren[spec.name]
         else:
-            stage = get_current_stage()
-            if stage:
-                stage.RemovePrim(path)
+            stage = stage_utils.get_current_stage()
+            if stage and stage.GetPrimAtPath(path).IsValid():
+                stage_utils.delete_prim(path)
 
         self._markers.pop(name, None)
         self._world_pose_caches.pop(name, None)
@@ -522,6 +545,46 @@ class MarkersManager:
                 self._set_all_poses(
                     left_position, left_orientation, right_position, right_orientation, head_position, head_orientation
                 )
+
+    def update_marker_world_transforms(
+        self,
+        left_position: tuple[float, float, float] | None = None,
+        left_orientation: tuple[float, float, float, float] | None = None,
+        right_position: tuple[float, float, float] | None = None,
+        right_orientation: tuple[float, float, float, float] | None = None,
+        head_position: tuple[float, float, float] | None = None,
+        head_orientation: tuple[float, float, float, float] | None = None,
+    ) -> None:
+        """Write live frame markers from finalized world-space poses.
+
+        This keeps marker visualization registered with the same canonical
+        anchor transform used by Kit XR and robot controllers, including
+        custom-anchor offset, yaw, smoothing, and fixed-height behavior.
+        """
+        with self._edit_ctx() as stage:
+            if stage is None:
+                return
+            with teleop_backend_ctx():
+                for name, position, orientation in (
+                    ("left", left_position, left_orientation),
+                    ("right", right_position, right_orientation),
+                    ("head", head_position, head_orientation),
+                ):
+                    xform = self._markers.get(name)
+                    if xform is None or not xform.valid or position is None:
+                        continue
+                    resolved_orientation = orientation or (0.0, 0.0, 0.0, 1.0)
+                    xform.set_world_poses(
+                        positions=[[position[0], position[1], position[2]]],
+                        orientations=[
+                            [
+                                resolved_orientation[3],
+                                resolved_orientation[0],
+                                resolved_orientation[1],
+                                resolved_orientation[2],
+                            ]
+                        ],
+                    )
 
     def _set_all_poses(
         self,
@@ -644,7 +707,7 @@ class MarkersManager:
             return False
 
         asset_path = self._assets_root_path + self.FRAME_ASSET_PATH
-        prim = add_reference_to_stage(asset_path, path)
+        prim = stage_utils.add_reference_to_stage(asset_path, path)
         if not prim or not prim.IsValid():
             print(f"[Teleop][Markers] Failed to add frame reference at '{path}'.")
             return False

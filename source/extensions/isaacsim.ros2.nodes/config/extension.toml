@@ -1,5 +1,5 @@
 [package]
-version = "1.18.13"
+version = "1.22.7"
 category = "Simulation"
 title = "ROS 2 Nodes"
 description = "The ROS 2 Nodes extension provides OmniGraph nodes for ROS 2 communication. It contains publisher, subscriber, and service nodes that can be used in Action graphs to interface with ROS 2 systems. This extension depends on the isaacsim.ros2.core extension for underlying ROS 2 functionality."
@@ -19,6 +19,7 @@ writeTarget.platform = true
 "isaacsim.core.rendering_manager" = {}
 "isaacsim.core.simulation_manager" = {}
 "isaacsim.robot.schema" = {}
+"isaacsim.ros2.control" = {}
 "isaacsim.ros2.core" = {}
 "isaacsim.sensors.experimental.physics" = {}
 "isaacsim.sensors.physics.nodes" = {}
@@ -29,6 +30,8 @@ writeTarget.platform = true
 "omni.pip.compute" = {}
 "omni.replicator.core" = {}
 "omni.syntheticdata" = {}
+"omni.timeline" = {}
+"omni.usd" = {}
 "usdrt.scenegraph" = {}
 
 [[python.module]]
@@ -46,6 +49,9 @@ public = false
 # All ROS 2 Bridge settings are centrally defined in the `ros2.core` extension under `/exts/isaacsim.ros2.bridge/*`.
 # The nodes extension reads these settings at runtime.
 
+# Whether ROS 2 TF publisher nodes aggregate submissions and publish once per topic after OmniGraph evaluation.
+exts."isaacsim.ros2.nodes".tfAggregation.enabled = true
+
 [fswatcher.patterns]
 include = ["*.ogn", "*.py", "*.toml"]
 exclude = ["Ogn*Database.py"]
@@ -62,6 +68,24 @@ args = [
 stdoutFailPatterns.exclude = [
     '*The NumPy module was reloaded*',
     "*Failed to create simulation view - physics backend may not be initialized*",
+]
+
+[[test]]
+name = "doctest"
+enabled = true
+timeout = 900
+dependencies = [
+    "isaacsim.test.utils",
+]
+args = [
+    "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+pythonTests.include = []
+pythonTests.exclude = ["*"]
+cppTests.libraries = ["bin/${lib_prefix}isaacsim.ros2.nodes.tests${lib_ext}"]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [[test]]
@@ -84,6 +108,7 @@ pythonTests.exclude = [
 ]
 
 stdoutFailPatterns.exclude = [
+    "*[Error] [omni.graph.core.plugin] /TestGraph/Template_isaacsim_ros2_control_ROS2ControlManager: [/TestGraph] *ROS2ControlManager: targetPrim is required*",
     "*[Error] [omni.graph.core.plugin] /TestGraph/Template_isaacsim_ros2_bridge_ROS2PublishJointState: [/TestGraph] Could not find target prim*",
     "*[Error] [omni.graph.core.plugin] /TestGraph/Template_isaacsim_ros2_bridge_ROS2PublishJointState: [/TestGraph] Specify targetPrim or connect Isaac Read Joint State node outputs*",
     "*[Error] [omni.graph.core.plugin] /TestGraph/Template_isaacsim_ros2_bridge_ROS2PublishImage: [/TestGraph] Width 0 or height 0 is not valid*",

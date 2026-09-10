@@ -13,5 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides physics sensor classes and creation commands for contact, IMU, and effort measurements in Isaac Sim."""
+
 from .bindings import _sensor  # noqa: F401
 from .impl import *

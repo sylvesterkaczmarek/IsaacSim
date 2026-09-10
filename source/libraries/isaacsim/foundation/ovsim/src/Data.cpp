@@ -1,0 +1,48 @@
+// SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include <isaacsim/foundation/ovsim/data/Data.hpp>
+#include <isaacsim/foundation/ovsim/details/Registry.hpp>
+
+namespace isaacsim
+{
+namespace foundation
+{
+namespace ovsim
+{
+namespace data
+{
+
+OutputValueType read(const PathType& paths, const std::string& attributeName, std::optional<double> timeStamp)
+{
+    // TODO: timeStamp support.
+    (void)timeStamp;
+    return details::getAttributeValues(details::processPaths(paths), attributeName);
+}
+
+void write(const PathType& paths,
+           const std::string& attributeName,
+           const InputValueType& values,
+           std::optional<double> timeStamp)
+{
+    // TODO: timeStamp support.
+    (void)timeStamp;
+    details::setAttributeValues(details::processPaths(paths), attributeName, values);
+}
+
+} // namespace data
+} // namespace ovsim
+} // namespace foundation
+} // namespace isaacsim

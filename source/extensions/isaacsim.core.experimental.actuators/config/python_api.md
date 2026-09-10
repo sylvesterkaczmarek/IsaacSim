@@ -50,10 +50,6 @@
   - lookup_positions: list[float]
   - lookup_efforts: list[float]
 
-- class Extension(omni.ext.IExt)
-  - def on_startup(self, ext_id: str)
-  - def on_shutdown(self)
-
 ## Functions
 
 - def add_actuator(articulation_root: str | Sdf.Path, target_names: str | list[str], name: str, controller: PDControlConfig | PIDControlConfig | NeuralControlConfig) -> Usd.Prim

@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id = "falling_cube.visualize_simulation"
+title = "Visualize the Simulation"
+summary = "Watch the falling-cube simulation in an interactive viewport rendered by the simple OpenGL backend."
+owners = [
+    "isaacsim.foundation.objects",
+    "isaacsim.physics.entities",
+    "isaacsim.physics.manager",
+    "isaacsim.physics_engines.ovphysx",
+    "isaacsim.ovgl_viewport.debug",
+]
+topics = ["physics", "python", "rendering", "usd", "viewport"]
+
+[build]
+adapter = "none"
+
+[run]
+adapter = "python"
+path = "main.py"
+
+[requirements]
+system = ["python"]
+
+[[requirements.modules]]
+name = "isaacsim_foundation"
+surfaces = ["python"]
+
+[[requirements.modules]]
+name = "isaacsim_physics"
+surfaces = ["python"]
+
+[[requirements.modules]]
+name = "isaacsim_physics_engines"
+surfaces = ["python"]
+
+[[requirements.modules]]
+name = "isaacsim_ovgl_viewport"
+surfaces = ["python"]
+
+[[test]]
+name = "headless"
+arguments = ["--headless"]
+timeout_seconds = 60
+stdout_contains = ["Cube top:", "Headless rendering smoke test passed."]

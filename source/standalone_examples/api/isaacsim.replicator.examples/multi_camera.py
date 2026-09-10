@@ -19,6 +19,7 @@ from isaacsim import SimulationApp
 
 simulation_app = SimulationApp(launch_config={"headless": False})
 
+import argparse
 import os
 from typing import Any
 
@@ -31,9 +32,17 @@ from omni.replicator.core.functional import write_image
 
 NUM_FRAMES = 5
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--num-frames", type=int, default=NUM_FRAMES, help="Number of capture steps to run.")
+args, _ = parser.parse_known_args()
+
 
 def cube_color_randomizer() -> Any:
-    """Randomize cube color every frame using a graph-based replicator randomizer."""
+    """Randomize cube color every frame using a graph-based replicator randomizer.
+
+    Returns:
+        Replicator node that selects the cubes receiving randomized colors.
+    """
     cube_prims = rep.get.prims(path_pattern="Cube")
     with cube_prims:
         rep.randomizer.color(colors=rep.distribution.uniform((0, 0, 0), (1, 1, 1)))
@@ -41,7 +50,11 @@ def cube_color_randomizer() -> Any:
 
 
 class MyWriter(Writer):
-    """Write RGB annotator data to disk from multiple render products."""
+    """Write RGB annotator data to disk from multiple render products.
+
+    Args:
+        rgb: Whether to attach the RGB annotator.
+    """
 
     def __init__(self, rgb: bool = True) -> None:
         # Organize data from render product perspective (legacy, annotator, renderProduct)
@@ -57,7 +70,11 @@ class MyWriter(Writer):
         self.backend = DiskBackend(output_dir=output_dir, overwrite=True)
 
     def write(self, data: dict[str, Any]) -> None:
-        """Write RGB frames from each render product to disk."""
+        """Write RGB frames from each render product to disk.
+
+        Args:
+            data: Writer payload organized by render-product name.
+        """
         if "renderProducts" in data:
             for rp_name, rp_data in data["renderProducts"].items():
                 if "rgb" in rp_data:
@@ -119,7 +136,7 @@ output_dir_annot = os.path.join(os.getcwd(), "_out_mc_annot")
 print(f"Writing annotator data to {output_dir_annot}")
 os.makedirs(output_dir_annot, exist_ok=True)
 
-for i in range(NUM_FRAMES):
+for i in range(args.num_frames):
     print(f"Step {i}")
     # The step function triggers registered graph-based randomizers, collects data from annotators,
     # and invokes the write function of attached writers with the annotator data
@@ -137,25 +154,24 @@ for rp in [rp_top, rp_side, rp_persp]:
     rp.destroy()
 
 # <start-multi-camera-test>
-import argparse
-import sys
-
-from isaacsim.core.utils.extensions import enable_extension
-
-enable_extension("isaacsim.test.utils")
-from isaacsim.test.utils.file_validation import validate_folder_contents
-
-parser = argparse.ArgumentParser()
-parser.add_argument(
+test_parser = argparse.ArgumentParser()
+test_parser.add_argument(
     "--test",
     action="store_true",
     help="Validate captured output files against expected counts and exit.",
 )
-args, _ = parser.parse_known_args()
+test_args, _ = test_parser.parse_known_args()
 
-if args.test:
-    # 3 render products x NUM_FRAMES captures each, both writer and annotator dirs.
-    expected_png_count = 3 * NUM_FRAMES
+if test_args.test:
+    import sys
+
+    from isaacsim.core.utils.extensions import enable_extension
+
+    enable_extension("isaacsim.test.utils")
+    from isaacsim.test.utils.file_validation import validate_folder_contents
+
+    # 3 render products x num_frames captures each, both writer and annotator dirs.
+    expected_png_count = 3 * args.num_frames
     output_dir_writer = os.path.join(os.getcwd(), "_out_mc_writer")
     if not validate_folder_contents(
         path=output_dir_writer,

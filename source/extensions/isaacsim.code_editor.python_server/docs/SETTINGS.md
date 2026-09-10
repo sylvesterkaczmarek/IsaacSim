@@ -8,11 +8,13 @@
 
 ### exts."isaacsim.code_editor.python_server".host
 - **Default Value**: "127.0.0.1"
-- **Description**: IP address where the extension server will listen for connections.
+- **Description**: IP address where the extension server will listen for connections. The headed runtime-control modal
+  can change the current session's IPv4 address after validating exposure risk.
 
 ### exts."isaacsim.code_editor.python_server".port
 - **Default Value**: 8226
-- **Description**: Port number where the extension server will listen for connections.
+- **Description**: Port number where the extension server will listen for connections. A successful runtime change
+  updates this setting for the current process; temporary Stop/Start does not persist stopped state.
 
 ### exts."isaacsim.code_editor.python_server".require_auth
 - **Default Value**: false

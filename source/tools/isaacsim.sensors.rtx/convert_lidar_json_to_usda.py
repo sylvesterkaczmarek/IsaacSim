@@ -17,6 +17,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 
 USD_EXTENSION = ".usd"  # switch to .usda for debugging
+# The largest profile shipped with Isaac Sim uses 108,000 emitters/channels.
+# Keep generous headroom while preventing unbounded generated lists.
+MAX_LIDAR_EMITTERS = 1_000_000
+MAX_LIDAR_CHANNELS = 1_000_000
+
+
+def _get_bounded_positive_int(profile: Dict[str, Any], field: str, upper_bound: int) -> int:
+    """Return a positive integer profile field within its supported bound."""
+    value = profile[field]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{field} must be an integer.")
+    if not 1 <= value <= upper_bound:
+        raise ValueError(f"{field} must be between 1 and {upper_bound}; got {value}.")
+    return value
 
 
 def convert_json_to_usd(json_path: Union[str, Path], usd_path: Union[str, Path], model_config: Dict[str, Any]) -> None:
@@ -48,6 +62,10 @@ def convert_json_to_usd(json_path: Union[str, Path], usd_path: Union[str, Path],
     profile = config["profile"]
     if "numberOfEmitters" not in profile:
         raise KeyError("numberOfEmitters not found in profile. This field is required.")
+    num_emitters = _get_bounded_positive_int(profile, "numberOfEmitters", MAX_LIDAR_EMITTERS)
+    num_channels = None
+    if "numberOfChannels" in profile:
+        num_channels = _get_bounded_positive_int(profile, "numberOfChannels", MAX_LIDAR_CHANNELS)
 
     # Test number of emitter states
     emitter_state_count = profile["emitterStateCount"]
@@ -94,16 +112,13 @@ def convert_json_to_usd(json_path: Union[str, Path], usd_path: Union[str, Path],
         emitter_state_fields_as_list = list(profile["emitterStates"][i].keys())
         emitter_state_fields = set(emitter_state_fields_as_list)
         missing_fields = required_emitter_state_fields - emitter_state_fields
-        num_emitters = profile["numberOfEmitters"]
         for field in missing_fields:
             if field == "channelId":
-                if "numberOfChannels" in profile:
+                if num_channels is not None:
                     carb.log_warn(
                         f"numberOfChannels found in profile, but channelId not found in emitterStates[{i}]. Autogenerating channelId by repeating the range 1 to numberOfChannels."
                     )
-                    profile["emitterStates"][i][field] = list(
-                        islice(cycle(range(1, profile["numberOfChannels"] + 1)), num_emitters)
-                    )
+                    profile["emitterStates"][i][field] = list(islice(cycle(range(1, num_channels + 1)), num_emitters))
                 else:
                     carb.log_warn(
                         f"numberOfChannels not found in profile, and channelId not found in emitterStates[{i}]. Autogenerating channelId by repeating the range 1 to numberOfEmitters."
@@ -111,6 +126,7 @@ def convert_json_to_usd(json_path: Union[str, Path], usd_path: Union[str, Path],
                     profile["emitterStates"][i][field] = list(range(1, num_emitters + 1))
                     carb.log_warn(f"Setting numberOfChannels to numberOfEmitters {num_emitters}.")
                     profile["numberOfChannels"] = num_emitters
+                    num_channels = num_emitters
             else:
                 profile["emitterStates"][i][field] = [0] * num_emitters
         # Now iterate over the specified fields and set the attributes

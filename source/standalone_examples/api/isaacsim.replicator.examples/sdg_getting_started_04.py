@@ -22,9 +22,9 @@ from isaacsim import SimulationApp
 simulation_app = SimulationApp(launch_config={"headless": False})
 
 import carb.settings
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.replicator.core as rep
 import omni.timeline
-import omni.usd
 from isaacsim.core.experimental.prims import RigidPrim
 from pxr import UsdGeom
 
@@ -32,7 +32,7 @@ from pxr import UsdGeom
 def run_example() -> None:
     """Run physics simulation and capture data at height-based intervals."""
     # Create a new stage and disable capture on play
-    omni.usd.get_context().new_stage()
+    stage_utils.create_new_stage()
     rep.orchestrator.set_capture_on_play(False)
 
     # Set DLSS to Quality mode (2) for best SDG results , options: 0 (Performance), 1 (Balanced), 2 (Quality), 3 (Auto)

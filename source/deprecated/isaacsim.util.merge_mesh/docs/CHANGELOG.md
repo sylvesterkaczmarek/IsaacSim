@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.21] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
+## [2.0.20] - 2026-06-29
+### Changed
+- Stop publishing the Kit lifecycle class while retaining the mesh merger and command APIs.
+
 ## [2.0.19] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

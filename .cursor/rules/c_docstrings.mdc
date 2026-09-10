@@ -1,0 +1,40 @@
+---
+description: Doxygen documentation rules for Isaac Sim C APIs
+globs:
+  - "**/*.c"
+  - "**/*.h"
+---
+
+# C Doxygen documentation rules
+
+Doxygen comments describe the public contract, not its implementation history.
+
+- Document every exported function, typedef, structure, structure field, enumeration, enumeration value, callback,
+  constant, and public macro.
+- Begin with a concise `@brief` sentence. Add details only when callers need them to use the API correctly.
+- Use `@param[in]`, `@param[out]`, and `@param[in,out]` for every function parameter.
+- Use `@return` to describe the result and the meaning of each status category.
+- State whether each pointer may be `NULL`, who owns it, how long it remains valid, and whether the callee retains it.
+- For buffers and strings, document size units, null termination, truncation, and required capacity.
+- Document numeric units, valid ranges, sentinel values, and zero-initialization behavior.
+- Document thread safety, callback invocation threads, serialization, and reentrancy restrictions when applicable.
+- Explain ABI initialization fields such as `structSize` and the behavior for newer or smaller structures.
+- Use `@pre`, `@post`, `@note`, `@warning`, `@deprecated`, and `@since` only when they add caller-visible information.
+- Do not use C++-specific tags or concepts such as `@class`, `@tparam`, `@throws`, exceptions, or namespaces.
+- Use complete sentences, US English, and the repository's 120-column limit.
+
+Example:
+
+```c
+/**
+ * @brief Copy bytes into a caller-owned buffer.
+ *
+ * The function does not retain either pointer and may be called concurrently.
+ *
+ * @param[in] source Source bytes. Must not be NULL when `size` is nonzero.
+ * @param[out] destination Caller-owned output buffer with capacity of at least `size` bytes.
+ * @param[in] size Number of bytes to copy.
+ * @return The operation result.
+ */
+IsaacSimExampleResult isaacsimExampleCopy(const void* source, void* destination, size_t size);
+```

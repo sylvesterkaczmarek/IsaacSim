@@ -53,7 +53,9 @@ class TestBehaviorsSDGScenario(omni.kit.test.AsyncTestCase):
         import inspect
         import os
 
+        import isaacsim.core.experimental.utils.prim as prim_utils
         import isaacsim.core.experimental.utils.semantics as semantics_utils
+        import isaacsim.core.experimental.utils.stage as stage_utils
         import numpy as np
         import omni.kit.app
         import omni.replicator.core as rep
@@ -73,7 +75,7 @@ class TestBehaviorsSDGScenario(omni.kit.test.AsyncTestCase):
             publish_event_and_wait_for_completion_async,
         )
         from isaacsim.storage.native import get_assets_root_path_async
-        from pxr import Gf, UsdGeom
+        from pxr import Gf
 
         async def setup_and_run_stacking_simulation_async(prim: Any, seed: int | None = None) -> None:
             STACK_ASSETS_CSV = (
@@ -244,23 +246,23 @@ class TestBehaviorsSDGScenario(omni.kit.test.AsyncTestCase):
             # Open stage
             assets_root_path = await get_assets_root_path_async()
             print(f"Opening stage from {assets_root_path + STAGE_URL}")
-            await omni.usd.get_context().open_stage_async(assets_root_path + STAGE_URL)
-            stage = omni.usd.get_context().get_stage()
+            await stage_utils.open_stage_async(assets_root_path + STAGE_URL)
 
             # Check if all required prims exist in the stage
-            pallets_root_prim = stage.GetPrimAtPath(PALLETS_ROOT_PATH)
-            lights_root_prim = stage.GetPrimAtPath(LIGHTS_ROOT_PATH)
-            camera_prim = stage.GetPrimAtPath(CAMERA_PATH)
+            pallets_root_prim = prim_utils.get_prim_at_path(PALLETS_ROOT_PATH)
+            lights_root_prim = prim_utils.get_prim_at_path(LIGHTS_ROOT_PATH)
+            camera_prim = prim_utils.get_prim_at_path(CAMERA_PATH)
             if not all([pallets_root_prim.IsValid(), lights_root_prim.IsValid(), camera_prim.IsValid()]):
-                print(f"Not all required prims exist in the stage.")
+                print("Not all required prims exist in the stage.")
                 return
 
             # Spawn the target asset at the requested location, label it with the target asset label
-            target_prim = stage.DefinePrim(TARGET_ASSET_PATH, "Xform")
-            target_prim.GetReferences().AddReference(assets_root_path + TARGET_ASSET_URL)
-            if not target_prim.HasAttribute("xformOp:translate"):
-                UsdGeom.Xformable(target_prim).AddTranslateOp()
-            target_prim.GetAttribute("xformOp:translate").Set(TARGET_ASSET_LOCATION)
+            target_prim = stage_utils.add_reference_to_stage(
+                assets_root_path + TARGET_ASSET_URL,
+                TARGET_ASSET_PATH,
+                prim_type="Xform",
+            )
+            rep.functional.modify.position(target_prim, TARGET_ASSET_LOCATION, write_to_usd=True)
             semantics_utils.remove_all_labels(target_prim, include_descendants=True)
             semantics_utils.add_labels(target_prim, labels=[TARGET_ASSET_LABEL], taxonomy="class")
 

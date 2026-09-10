@@ -103,7 +103,7 @@ class RobotWizardWindow:
         ProgressRegistry().set_steps(self._progress)
 
     def destroy(self) -> None:
-        """Destroy function. Class cleanup function."""
+        """Destroys the RobotWizardWindow resources."""
         self._visibility_changed_listener = None
 
         for p in self.pages.values():
@@ -116,7 +116,7 @@ class RobotWizardWindow:
     async def _dock_windows(self) -> None:
         """Docks the robot wizard window to the viewport.
 
-        Asynchronously positions the wizard window to the right of the viewport window.
+        Positions the wizard window to the right of the viewport window.
         """
         viewport = ui.Workspace.get_window("Viewport")
         for _ in range(3):
@@ -125,10 +125,10 @@ class RobotWizardWindow:
             self._window.dock_in(viewport, ui.DockPosition.RIGHT)
 
     def set_visible(self, visible: bool) -> None:
-        """Set window visibility state.
+        """Sets the window visibility state.
 
         Args:
-            visible: Visible state of the window.
+            visible: Visibility state of the window.
         """
         if self._window:
             self._window.visible = visible
@@ -141,7 +141,7 @@ class RobotWizardWindow:
         Rebuilds the window frame when hidden and notifies registered listeners of visibility state changes.
 
         Args:
-            visible: The new visibility state of the window.
+            visible: New visibility state of the window.
         """
         if not visible:
             # schedule a rebuild of window frame. _rebuild_window won't be actually called until the window is visible again.
@@ -151,18 +151,21 @@ class RobotWizardWindow:
             self._visibility_changed_listener(visible)
 
     def set_visibility_changed_listener(self, listener: callable) -> None:
-        """Adds callback function for when window visibility is changed.
+        """Adds a callback function for window visibility changes.
 
         Args:
-            listener: visibility changed callback.
+            listener: Visibility changed callback.
         """
         self._visibility_changed_listener = listener
 
     def _on_help_button_clicked(self) -> None:
-        """Opens an extension's documentation in a Web Browser."""
+        """Opens the robot setup wizard documentation in a web browser."""
         import webbrowser
 
-        doc_link = "https://docs.isaacsim.omniverse.nvidia.com/latest/robot_setup/robot_wizard.html"
+        doc_link = (
+            "https://docs.isaacsim.omniverse.nvidia.com/latest/migration_guides/"
+            "isaac_sim_6_0/robot_setup_wizard_and_mesh_merge.html"
+        )
         try:
             webbrowser.open(doc_link, new=2)
         except Exception as e:
@@ -174,7 +177,7 @@ class RobotWizardWindow:
         Updates the application setting to reflect the user's preference for launching the wizard at startup.
 
         Args:
-            model: The checkbox model containing the new boolean value.
+            model: Checkbox model containing the new boolean value.
         """
         self._launch_on_startup = model.get_value_as_bool()
         carb.settings.get_settings().set_bool(
@@ -184,7 +187,7 @@ class RobotWizardWindow:
     def _reset_wizard(self) -> None:
         """Resets the wizard to its initial state.
 
-        Clears the robot registry, resets all progress steps, rebuilds the window interface, and navigates to the first page.
+        Clears the RobotRegistry, resets all progress steps, rebuilds the window interface, and navigates to the first page.
         """
         RobotRegistry().reset()
         self.reset_progress()
@@ -279,6 +282,7 @@ class RobotWizardWindow:
             self.pages[self._save_page_name] = SaveRobot(visible=False)
 
     def _rebuild_window(self) -> None:
+        """Rebuild the robot wizard window layout with the header, step panel, and page content panel."""
         with ui.ScrollingFrame():
             with ui.VStack(style=get_style(), spacing=10):
                 self.__on_build_top()
@@ -306,6 +310,17 @@ class RobotWizardWindow:
                 self.pre_page_name = page_name
 
     def _add_step_item(self, step_name: Any, step_num: Any, use_img: Any = False, click_fn: Any = None) -> None:
+        """Create a wizard step or tool item in the steps panel.
+
+        Args:
+            step_name: Display name for the step or tool item.
+            step_num: Numeric label for wizard steps.
+            use_img: Whether to show a generic tool icon instead of a numbered step indicator.
+            click_fn: Mouse press callback for the item label.
+
+        Returns:
+            The created step item stack.
+        """
         item_stack = ui.ZStack(height=47)
         with item_stack:
             ui.Rectangle(name="step_item_background")
@@ -335,6 +350,7 @@ class RobotWizardWindow:
         return item_stack
 
     def _build_steps(self) -> None:
+        """Build wizard step items from the current progress registry state."""
         with ui.VStack():
             i = 1
             for name, progress in self._progress.items():
@@ -343,21 +359,40 @@ class RobotWizardWindow:
                 i += 1
 
     def _build_tools(self) -> None:
+        """Build additional tool items for Joint Drive Gain Tuner, Robot Assembler, and USD to URDF Exporter."""
         self._add_step_item("Joint Drive Gain Tuner", 2, use_img=True, click_fn=self._open_gain_tuner)
         self._add_step_item("Robot Assembler", 3, use_img=True, click_fn=self._open_robot_assembler)
         self._add_step_item("USD to URDF Exporter", 1, use_img=True, click_fn=self._open_usd_to_urdf_exporter)
 
     def _open_gain_tuner(self, *args: Any, **kwargs: Any) -> None:
+        """Open the Joint Drive Gain Tuner UI.
+
+        Args:
+            *args: Additional positional arguments from the UI callback.
+            **kwargs: Additional keyword arguments from the UI callback.
+        """
         omni.kit.actions.core.get_action_registry().execute_action(
             "isaacsim.robot_setup.gain_tuner", "CreateUIExtension:Gain Tuner"
         )
 
     def _open_robot_assembler(self, *args: Any, **kwargs: Any) -> None:
+        """Open the Robot Assembler UI.
+
+        Args:
+            *args: Additional positional arguments from the UI callback.
+            **kwargs: Additional keyword arguments from the UI callback.
+        """
         omni.kit.actions.core.get_action_registry().execute_action(
             "isaacsim.robot_setup.assembler", "CreateUIExtension:Robot Assembler"
         )
 
     def _open_usd_to_urdf_exporter(self, *args: Any, **kwargs: Any) -> None:
+        """Open the USD to URDF Exporter UI.
+
+        Args:
+            *args: Additional positional arguments from the UI callback.
+            **kwargs: Additional keyword arguments from the UI callback.
+        """
         # Open the USD to URDF exporter extension
         ext_manager = omni.kit.app.get_app().get_extension_manager()
         extension_name = "isaacsim.asset.exporter.urdf"
@@ -434,6 +469,11 @@ class ProgressState(object):
 
     @completion.setter
     def completion(self, value: bool) -> None:
+        """Sets the completion status of the progress step.
+
+        Args:
+            value: Whether the progress step is completed.
+        """
         self.completed = value
         # set the color of the circle to green if completed, gray if not
 
@@ -448,5 +488,10 @@ class ProgressState(object):
 
     @visibility.setter
     def visibility(self, value: bool) -> None:
+        """Sets the visibility status of the progress step and updates the step frame handle visibility.
+
+        Args:
+            value: Whether the progress step is visible.
+        """
         self.step_visible = value
         self.step_frame_handle.visible = value

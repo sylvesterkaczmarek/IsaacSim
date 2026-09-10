@@ -22,9 +22,10 @@ controller does not modify articulations or create physics bodies at runtime.
 import math
 from collections.abc import Generator
 
+import isaacsim.core.experimental.utils.prim as prim_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
 from isaacsim.core.experimental.prims import RigidPrim
-from isaacsim.core.experimental.utils.stage import get_current_stage
 from pxr import PhysxSchema, Usd, UsdPhysics
 
 from .._xform_utils import read_world_pose_arrays
@@ -418,7 +419,7 @@ class FloatingRigidBodyController:
         if not path or not path.strip():
             return False, "Set prim path first."
 
-        stage = get_current_stage()
+        stage = stage_utils.get_current_stage()
         if not stage:
             return False, "No stage available."
 
@@ -426,7 +427,7 @@ class FloatingRigidBodyController:
         if not prim or not prim.IsValid():
             return False, f"Prim not found: {path}"
 
-        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+        if not prim_utils.has_api(prim, UsdPhysics.RigidBodyAPI):
             return False, f"'{path}' must already have RigidBodyAPI."
 
         rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
@@ -437,7 +438,7 @@ class FloatingRigidBodyController:
         warnings: list[str] = []
         if not self._has_required_xform_ops(prim):
             warnings.append("xformOps will be normalized on enable")
-        if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+        if prim_utils.has_api(prim, UsdPhysics.ArticulationRootAPI):
             warnings.append("selected rigid body is also an articulation root; driving the rigid body directly")
 
         if warnings:
@@ -459,7 +460,7 @@ class FloatingRigidBodyController:
         if not valid:
             return False
 
-        stage = get_current_stage()
+        stage = stage_utils.get_current_stage()
         if not stage:
             return False
 
@@ -481,7 +482,7 @@ class FloatingRigidBodyController:
                 return False
 
         physics_path = self._left_physics_path if side == "left" else self._right_physics_path
-        stage = get_current_stage()
+        stage = stage_utils.get_current_stage()
         if not stage or not physics_path:
             return False
 
@@ -489,8 +490,7 @@ class FloatingRigidBodyController:
         if not physics_prim or not physics_prim.IsValid():
             return False
 
-        if not physics_prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
-            PhysxSchema.PhysxRigidBodyAPI.Apply(physics_prim)
+        prim_utils.ensure_api(physics_prim, PhysxSchema.PhysxRigidBodyAPI)
 
         self._clear_runtime_handle(side)
         if side == "left":

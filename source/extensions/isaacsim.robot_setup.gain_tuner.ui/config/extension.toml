@@ -1,0 +1,61 @@
+[package]
+version = "2.2.0"
+category = "Simulation"
+title = "Gain Tuner UI"
+description = "UI components for the Gain Tuner extension"
+keywords = ["isaac", "physics", "analyze", "tune", "ui"]
+changelog = "docs/CHANGELOG.md"
+readme = "docs/Overview.md"
+preview_image = "data/preview.png"
+icon = "data/icon.png"
+writeTarget.kit = true
+
+[dependencies]
+"isaacsim.core.simulation_manager" = {}
+"isaacsim.gui.components" = {}
+"isaacsim.robot.schema" = {}
+"isaacsim.robot_setup.gain_tuner" = {}
+"omni.appwindow" = {}
+"omni.kit.actions.core" = {}
+# Registers the command that copies a joint's advanced parameters from the active
+# backend onto the inactive one, and provides the undo grouping that makes a
+# multi-joint copy one step.  A copy, not a reconciliation: the two backends hold
+# their own values on purpose, and nothing here writes both.
+"omni.kit.commands" = {}
+"omni.kit.menu.utils" = {}
+"omni.kit.notification_manager" = {}
+"omni.kit.property.usd" = {}
+"omni.kit.uiapp" = {}
+"omni.kit.window.file" = {}
+"omni.kit.window.property" = {}
+"omni.physics" = {}
+
+[[python.module]]
+name = "isaacsim.robot_setup.gain_tuner.ui"
+
+[[python.module]]
+name = "isaacsim.robot_setup.gain_tuner.ui.tests"
+
+[[test]]
+name = "startup"
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    '*SyntheticData extension needs*FrameHistoryCount*',
+    '*Stage opening or closing already in progress*',
+]
+
+[[test]]
+name = "default"
+dependencies = [
+    "isaacsim.test.utils",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
+    '*SyntheticData extension needs*FrameHistoryCount*',
+    '*Stage opening or closing already in progress*',
+]
+
+[documentation]
+pages = ["docs/Overview.md", "docs/CHANGELOG.md"]

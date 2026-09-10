@@ -13,9 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "WarpInterop.h"
+#include "WarpInterop.hpp"
 
 #include <carb/logging/Log.h>
+
+#include <cuda_runtime.h>
 
 namespace isaacsim
 {
@@ -135,6 +137,35 @@ template wp::array_t<wp::vec3> warpArrayFromPython<wp::vec3>(py::object);
 template wp::array_t<wp::transform> warpArrayFromPython<wp::transform>(py::object);
 template wp::array_t<wp::spatial_vector> warpArrayFromPython<wp::spatial_vector>(py::object);
 template wp::array_t<wp::mat33> warpArrayFromPython<wp::mat33>(py::object);
+
+// We do not know the warp data size, so we won't check the size of the tensor either
+bool warpArrayToTensor(const TensorDesc* dstTensor, void* warpData, int warpDevice, size_t byte_size)
+{
+    cudaMemcpyKind mode = cudaMemcpyHostToHost;
+    if (warpDevice >= 0 && dstTensor->device >= 0)
+    {
+        // GPU TO GPU data copy
+        mode = cudaMemcpyDeviceToDevice;
+    }
+    else if (warpDevice < 0 && dstTensor->device >= 0)
+    {
+        // CPU TO GPU data copy
+        mode = cudaMemcpyHostToDevice;
+    }
+    else if (warpDevice >= 0 && dstTensor->device < 0)
+    {
+        // GPU TO CPU data copy
+        mode = cudaMemcpyDeviceToHost;
+    }
+    cudaError_t err = cudaMemcpy(dstTensor->data, warpData, byte_size, mode);
+    if (err != cudaSuccess)
+    {
+        (void)cudaGetLastError();
+        CARB_LOG_ERROR("warpArrayToTensor cudaMemcpy failed: %s", cudaGetErrorString(err));
+        return false;
+    }
+    return true;
+}
 
 } // namespace tensors
 } // namespace newton

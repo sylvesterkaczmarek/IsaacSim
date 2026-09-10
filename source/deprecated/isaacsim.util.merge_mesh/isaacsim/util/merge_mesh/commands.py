@@ -25,16 +25,16 @@ class MergeMeshesCommand(omni.kit.commands.Command):
 
     This command provides options to control the merge behavior:
 
-    - Clear Parent Transform: Sets the mesh origin at world origin, otherwise origin is
+    - Clear Parent Transform: Sets the mesh origin at the world origin. Otherwise, the origin is
       the same as the first element.
-    - Deactivate source assets: Sets source prims to Inactive after performing the merge operation.
-    - Combine Materials: Redirects all assets materials to a given folder, and every geomsubset
-      that shares a same material name uses the same material, each geom subset uses the original
+    - Deactivate source assets: Sets source prims to inactive after performing the merge operation.
+    - Combine Materials: Redirects all asset materials to a given folder, and every geom subset
+      that shares the same material name uses the same material. Each geom subset uses the original
       material from the source assets.
 
     Args:
         source: List of prim paths to merge.
-        clear_transform: If True, sets the merged mesh origin at world origin.
+        clear_transform: If True, sets the merged mesh origin at the world origin.
             Otherwise, the origin is the same as the first element.
         deactivate_source: If True, deactivates source prims after merging.
         combine_materials: If True, redirects all materials to a single folder
@@ -53,7 +53,6 @@ class MergeMeshesCommand(omni.kit.commands.Command):
         ...     combine_materials=True,
         ...     materials_destination="/World/Looks",
         ... )
-
     """
 
     def __init__(
@@ -79,7 +78,6 @@ class MergeMeshesCommand(omni.kit.commands.Command):
 
         Returns:
             The prim path of the merged mesh.
-
         """
         self.mesh_merger.merge_meshes()
 

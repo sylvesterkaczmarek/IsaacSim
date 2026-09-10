@@ -19,12 +19,12 @@ import numpy as np
 import omni.timeline
 import omni.ui as ui
 import omni.usd
+from isaacsim.core.api import World
 from isaacsim.core.api.objects.cuboid import FixedCuboid
-from isaacsim.core.api.world import World
 from isaacsim.core.prims import SingleArticulation, XFormPrim
 from isaacsim.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
-from isaacsim.gui.components.element_wrappers import CollapsableFrame, StateButton
+from isaacsim.gui.components import CollapsableFrame, StateButton
 from isaacsim.gui.components.ui_utils import get_style
 from isaacsim.storage.native import get_assets_root_path
 from omni.usd import StageEventType

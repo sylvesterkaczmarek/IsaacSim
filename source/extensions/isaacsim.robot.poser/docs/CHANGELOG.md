@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.0.0] - 2026-07-30
+### Changed
+- Own the kinematics, math, and IK APIs previously shipped by `isaacsim.robot.schema`.
+
 ## [1.1.3] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.

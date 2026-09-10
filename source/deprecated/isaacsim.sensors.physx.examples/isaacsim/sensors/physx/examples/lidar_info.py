@@ -25,7 +25,8 @@ import omni.ui as ui
 from isaacsim.core.utils.prims import delete_prim, get_prim_at_path
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.examples.browser import get_instance as get_browser_instance
-from isaacsim.gui.components.ui_utils import btn_builder, combo_cb_scrolling_frame_builder, get_style, setup_ui_headers
+from isaacsim.gui.components import btn_builder, combo_cb_scrolling_frame_builder, setup_ui_headers
+from isaacsim.gui.components.ui_utils import get_style
 from isaacsim.sensors.physx import _range_sensor
 from pxr import Gf, Sdf, UsdGeom, UsdLux, UsdPhysics
 
@@ -73,8 +74,8 @@ class Extension(omni.ext.IExt):
     def build_ui(self) -> None:
         """Build the user interface components for the LIDAR sensor extension.
 
-        Creates command panel with buttons to load LIDAR sensor, spawn obstacles, and display data stream.
-        Sets up the UI headers and collapsible frame containing control buttons and data visualization components.
+        Creates a command panel with buttons to load a LIDAR sensor, spawn obstacles, and display the data stream.
+        Sets up UI headers and a collapsible frame with control buttons and data visualization components.
         """
         # This just defines the window we will use to access the lidar_info GUI.  Note that clicking on the menu item
         # does not create an instance of lidar_info; that is done by the extension when it is loaded by kit.  All this
@@ -137,7 +138,7 @@ class Extension(omni.ext.IExt):
     def on_shutdown(self) -> None:
         """Perform cleanup when the extension shuts down.
 
-        Deregisters the example from the browser instance and clears event subscriptions.
+        Deregisters the example from the browser instance and clears the editor event subscription.
         """
         # Perform cleanup once the sample closes
         get_browser_instance().deregister_example(name=self.example_name, category=self.category)
@@ -146,11 +147,11 @@ class Extension(omni.ext.IExt):
     async def _spawn_lidar_function(self, task: object) -> None:
         """Create and configure a LIDAR sensor in the stage.
 
-        Sets up the physics scene, creates the LIDAR prim with specified attributes including field of view,
-        rotation rate, resolution, and range parameters. Configures the stage coordinate system and camera view.
+        Sets up the physics scene, creates the LIDAR prim with field of view, rotation rate, resolution, and
+        range parameters. Configures the stage coordinate system and camera view.
 
         Args:
-            task: Asyncio task for stage creation to wait for completion.
+            task: Stage creation task to wait for before adding the LIDAR sensor.
         """
         # Wait for stage clear to complete before creating LIDAR
         # Disable buttons while waiting to avoid issues if user keeps clicking button
@@ -233,9 +234,9 @@ class Extension(omni.ext.IExt):
         )
 
     def _on_editor_step(self, step: object) -> None:
-        """Handle editor step updates to refresh LIDAR data display.
+        """Handle editor step updates to refresh the LIDAR data display.
 
-        Updates the data stream display when the info checkbox is enabled and timeline is playing.
+        Updates the data stream display when the info checkbox is enabled and the timeline is playing.
 
         Args:
             step: Editor step event information.
@@ -249,7 +250,7 @@ class Extension(omni.ext.IExt):
     def _on_spawn_obstacles_button(self) -> None:
         """Handle the spawn obstacles button click event.
 
-        Creates a cube obstacle and distant light in the scene for the LIDAR to detect.
+        Creates a cube obstacle if missing and recreates the distant light in the scene for the LIDAR to detect.
         Applies collision API to the cube for physics interactions.
         """
         stage = omni.usd.get_context().get_stage()
@@ -288,7 +289,7 @@ class Extension(omni.ext.IExt):
         for display in the info label.
 
         Args:
-            val: Optional boolean parameter for function behavior.
+            val: Value accepted by the callback; not used.
         """
         if not self.lidar:
             return

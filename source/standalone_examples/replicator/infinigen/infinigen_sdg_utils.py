@@ -35,7 +35,12 @@ from pxr import Gf, PhysxSchema, Usd, UsdGeom, UsdPhysics
 
 
 def add_colliders(root_prim: Usd.Prim, approximation_type: str = "convexHull") -> None:
-    """Add collision attributes to mesh and geometry primitives under the root prim."""
+    """Add collision attributes to mesh and geometry primitives under the root prim.
+
+    Args:
+        root_prim: Asset root whose geometry descendants should receive collision APIs.
+        approximation_type: USD mesh-collision approximation token to apply to mesh descendants.
+    """
     for desc_prim in Usd.PrimRange(root_prim):
         if desc_prim.IsA(UsdGeom.Gprim):
             if not desc_prim.HasAPI(UsdPhysics.CollisionAPI):
@@ -53,7 +58,13 @@ def add_colliders(root_prim: Usd.Prim, approximation_type: str = "convexHull") -
 
 
 def add_rigid_body(prim: Usd.Prim, disable_gravity: bool = False, ensure_mass: bool = False) -> None:
-    """Apply rigid body physics, optionally ensuring a valid mass property exists (defaults to 1.0 kg)."""
+    """Apply rigid-body physics and optionally assign a valid positive mass.
+
+    Args:
+        prim: Prim to make dynamic.
+        disable_gravity: Whether the rigid body should ignore scene gravity.
+        ensure_mass: Whether to assign a 1 kg mass when the existing mass is absent or nonpositive.
+    """
     rep.functional.physics.apply_rigid_body(prim, disableGravity=disable_gravity)
     if not ensure_mass:
         return
@@ -72,7 +83,18 @@ def get_random_pose_on_sphere(
     camera_forward_axis: tuple[float, float, float] = (0, 0, -1),
     rng: np.random.Generator = None,
 ) -> tuple[Gf.Vec3d, Gf.Quatf]:
-    """Generate a random pose on a sphere looking at the origin, with specified radius and polar angle ranges."""
+    """Generate a random pose on a sphere looking at the origin, with specified radius and polar angle ranges.
+
+    Args:
+        origin: Center of the sampling shell and camera look-at target.
+        radius_range: Lower and upper camera distances from the target in stage units.
+        polar_angle_range: Lower and upper polar angles from the positive z-axis in degrees.
+        camera_forward_axis: Local camera axis to orient toward the target.
+        rng: Generator used for pose sampling. When ``None``, create a fresh generator.
+
+    Returns:
+        Sampled camera position and orientation pointing at the target.
+    """
     if rng is None:
         rng = np.random.default_rng()
 
@@ -113,7 +135,16 @@ def randomize_camera_poses(
     look_at_offset: tuple[float, float] = (-0.1, 0.1),
     rng: np.random.Generator = None,
 ) -> None:
-    """Randomize the poses of cameras to look at random targets with adjustable distance and offset."""
+    """Randomize the poses of cameras to look at random targets with adjustable distance and offset.
+
+    Args:
+        cameras: Camera prims whose world poses should be randomized.
+        targets: Candidate prims at which the cameras should look. Must be nonempty when ``cameras`` is nonempty.
+        distance_range: Lower and upper camera distances from each selected target in stage units.
+        polar_angle_range: Lower and upper polar sampling angles in degrees.
+        look_at_offset: Lower and upper per-axis offsets from the selected target position.
+        rng: Generator used to select targets, offsets, and camera poses; it must not be ``None``.
+    """
     for cam in cameras:
         # Get a random target asset to look at
         target_asset = targets[rng.integers(len(targets))]
@@ -136,7 +167,17 @@ def randomize_camera_poses(
 def get_usd_paths_from_folder(
     folder_path: str, recursive: bool = True, usd_paths: list[str] = None, skip_keywords: list[str] = None
 ) -> list[str]:
-    """Retrieve USD file paths from a folder, optionally searching recursively and filtering by keywords."""
+    """Retrieve USD file paths from a folder, optionally searching recursively and filtering by keywords.
+
+    Args:
+        folder_path: Local or remote folder URL to enumerate.
+        recursive: Whether to visit child folders.
+        usd_paths: Optional accumulator to extend and return.
+        skip_keywords: Case-insensitive substrings identifying entries to exclude.
+
+    Returns:
+        Accumulated paths for discovered USD, USDA, and USDC files.
+    """
     if usd_paths is None:
         usd_paths = []
     skip_keywords = skip_keywords or []
@@ -167,10 +208,30 @@ def get_usd_paths_from_folder(
 def get_usd_paths(
     files: list[str] = None, folders: list[str] = None, skip_folder_keywords: list[str] = None
 ) -> list[str]:
-    """Retrieve USD paths from specified files and folders, optionally filtering out specific folder keywords."""
+    """Retrieve USD paths from specified files and folders, optionally filtering out specific folder keywords.
+
+    Args:
+        files: Explicit local, remote, or asset-root-relative USD paths to include. Relative values require a
+            discoverable Isaac asset root.
+        folders: Local, remote, or asset-root-relative folders to scan recursively. Relative values require a
+            discoverable Isaac asset root.
+        skip_folder_keywords: Case-insensitive substrings identifying folder entries to exclude.
+
+    Returns:
+        Resolved explicit paths followed by USD paths discovered in the folders.
+    """
 
     def resolve_path(path: str, assets_root: str, is_folder: bool = False) -> str:
-        """Resolve path to full URL: remote URLs and existing local paths used as-is, otherwise prefixed with assets_root."""
+        """Resolve a path against the asset root when it is not already absolute or remote.
+
+        Args:
+            path: Local, remote, or asset-root-relative path to resolve.
+            assets_root: Prefix to add to asset-root-relative paths.
+            is_folder: Whether local-path validation should require a directory rather than a file.
+
+        Returns:
+            Remote or existing absolute path unchanged, otherwise the path prefixed by the asset root.
+        """
         # Remote URLs - use as-is
         if path.startswith(("omniverse://", "http://", "https://", "file://")):
             return path
@@ -201,7 +262,16 @@ def get_usd_paths(
 
 
 def load_env(usd_path: str, prim_path: str, remove_existing: bool = True) -> Usd.Prim:
-    """Load an environment from a USD file into the stage at the specified prim path, optionally removing any existing prim."""
+    """Load an environment from a USD file into the stage at the specified prim path, optionally removing any existing prim.
+
+    Args:
+        usd_path: Local or remote USD file to reference.
+        prim_path: Destination path for the environment root prim.
+        remove_existing: Whether to delete an existing prim at the destination first.
+
+    Returns:
+        Root prim created for the referenced environment.
+    """
     stage = omni.usd.get_context().get_stage()
 
     # Remove existing prim if specified
@@ -213,7 +283,12 @@ def load_env(usd_path: str, prim_path: str, remove_existing: bool = True) -> Usd
 
 
 def add_colliders_to_env(root_path: str | None = None, approximation_type: str = "none") -> None:
-    """Add colliders to all mesh prims within the specified root path in the stage."""
+    """Add colliders to all mesh prims within the specified root path in the stage.
+
+    Args:
+        root_path: Stage subtree to process, or ``None`` to process the entire stage.
+        approximation_type: USD mesh-collision approximation token to apply.
+    """
     stage = omni.usd.get_context().get_stage()
     prim = stage.GetPseudoRoot() if root_path is None else stage.GetPrimAtPath(root_path)
 
@@ -225,7 +300,17 @@ def add_colliders_to_env(root_path: str | None = None, approximation_type: str =
 def find_matching_prims(
     match_strings: list[str], root_path: str | None = None, prim_type: str | None = None, first_match_only: bool = False
 ) -> Usd.Prim | list[Usd.Prim] | None:
-    """Find prims matching specified strings, with optional type filtering and single match return."""
+    """Find prims matching specified strings, with optional type filtering and single match return.
+
+    Args:
+        match_strings: Substrings to search for in prim paths.
+        root_path: Stage subtree to search, or ``None`` to search the entire stage.
+        prim_type: Optional USD type name that matching prims must have.
+        first_match_only: Whether to stop after finding one prim.
+
+    Returns:
+        First matching prim or ``None`` in single-match mode; otherwise all matching prims.
+    """
     stage = omni.usd.get_context().get_stage()
     root_prim = stage.GetPseudoRoot() if root_path is None else stage.GetPrimAtPath(root_path)
 
@@ -241,7 +326,13 @@ def find_matching_prims(
 
 
 def hide_matching_prims(match_strings: list[str], root_path: str | None = None, prim_type: str | None = None) -> None:
-    """Set visibility of prims matching specified strings to 'invisible' within the root path."""
+    """Set visibility of prims matching specified strings to 'invisible' within the root path.
+
+    Args:
+        match_strings: Substrings to search for in prim paths.
+        root_path: Stage subtree to search, or ``None`` to search the entire stage.
+        prim_type: Optional USD type name that matching prims must have.
+    """
     stage = omni.usd.get_context().get_stage()
     root_prim = stage.GetPseudoRoot() if root_path is None else stage.GetPrimAtPath(root_path)
 
@@ -252,7 +343,13 @@ def hide_matching_prims(match_strings: list[str], root_path: str | None = None, 
 
 
 def setup_env(root_path: str | None = None, approximation_type: str = "none", hide_top_walls: bool = False) -> None:
-    """Set up the environment with colliders, ceiling light adjustments, and optional top wall hiding."""
+    """Set up the environment with colliders, ceiling light adjustments, and optional top wall hiding.
+
+    Args:
+        root_path: Environment subtree to configure, or ``None`` for the entire stage.
+        approximation_type: USD mesh-collision approximation token for environment geometry.
+        hide_top_walls: Whether to hide exterior and ceiling prims for an unobstructed debug view.
+    """
     # Fix ceiling lights: meshes are blocking the light and need to be set to invisible
     ceiling_light_meshes = find_matching_prims(["001_SPLIT_GLA"], root_path, "Xform")
     for light_mesh in ceiling_light_meshes:
@@ -285,7 +382,19 @@ def create_shape_distractors(
     gravity_disabled_chance: float,
     rng: np.random.Generator = None,
 ) -> tuple[list[Usd.Prim], list[Usd.Prim]]:
-    """Create shape distractors with optional gravity settings, returning lists of floating and falling shapes."""
+    """Create shape distractors with optional gravity settings, returning lists of floating and falling shapes.
+
+    Args:
+        num_distractors: Number of primitive distractors to create.
+        shape_types: USD geometric primitive names from which to sample. Must be nonempty when
+            ``num_distractors`` is positive.
+        root_path: Parent prim path for the new distractors.
+        gravity_disabled_chance: Probability in ``[0, 1]`` that each distractor floats instead of falling.
+        rng: Generator used to sample shape types and gravity state. When ``None``, create a fresh generator.
+
+    Returns:
+        Created distractors partitioned into gravity-disabled and gravity-enabled lists.
+    """
     if rng is None:
         rng = np.random.default_rng()
     stage = omni.usd.get_context().get_stage()
@@ -306,7 +415,15 @@ def create_shape_distractors(
 def load_shape_distractors(
     shape_distractors_config: dict, rng: np.random.Generator = None
 ) -> tuple[list[Usd.Prim], list[Usd.Prim]]:
-    """Load shape distractors based on configuration, returning lists of floating and falling shapes."""
+    """Load shape distractors based on configuration, returning lists of floating and falling shapes.
+
+    Args:
+        shape_distractors_config: Distractor count, candidate primitive names, and floating probability.
+        rng: Optional generator forwarded to shape creation for reproducible sampling.
+
+    Returns:
+        Created shape distractors partitioned into gravity-disabled and gravity-enabled lists.
+    """
     num_shapes = shape_distractors_config.get("num", 0)
     shape_types = shape_distractors_config.get("shape_types", ["capsule", "cone", "cylinder", "sphere", "cube"])
     shape_gravity_disabled_chance = shape_distractors_config.get("gravity_disabled_chance", 0.0)
@@ -320,7 +437,24 @@ def create_mesh_distractors(
     gravity_disabled_chance: float,
     rng: np.random.Generator = None,
 ) -> tuple[list[Usd.Prim], list[Usd.Prim]]:
-    """Create mesh distractors from specified URLs with optional gravity settings."""
+    """Create mesh distractors from specified URLs with optional gravity settings.
+
+    Args:
+        num_distractors: Number of mesh distractors to create.
+        mesh_urls: Candidate USD asset URLs from which to sample. An empty list is a no-op and returns empty
+            result lists, including when a resolved folder yields no matching USD files.
+        root_path: Parent prim path for the new distractors.
+        gravity_disabled_chance: Probability in ``[0, 1]`` that each distractor floats instead of falling.
+        rng: Generator used to sample mesh assets and gravity state. When ``None``, create a fresh generator.
+
+    Returns:
+        Successfully loaded distractors partitioned into gravity-disabled and gravity-enabled lists, or empty
+        lists when ``mesh_urls`` is empty.
+    """
+    if not mesh_urls:
+        if num_distractors > 0:
+            print("[SDG] Warning: No mesh URLs available; skipping mesh distractor creation")
+        return [], []
     if rng is None:
         rng = np.random.default_rng()
     stage = omni.usd.get_context().get_stage()
@@ -346,7 +480,15 @@ def create_mesh_distractors(
 def load_mesh_distractors(
     mesh_distractors_config: dict, rng: np.random.Generator = None
 ) -> tuple[list[Usd.Prim], list[Usd.Prim]]:
-    """Load mesh distractors based on configuration, returning lists of floating and falling meshes."""
+    """Load mesh distractors based on configuration, returning lists of floating and falling meshes.
+
+    Args:
+        mesh_distractors_config: Distractor count, asset files and folders, and floating probability.
+        rng: Optional generator forwarded to mesh creation for reproducible sampling.
+
+    Returns:
+        Unlabeled mesh distractors partitioned into gravity-disabled and gravity-enabled lists.
+    """
     num_meshes = mesh_distractors_config.get("num", 0)
     mesh_gravity_disabled_chance = mesh_distractors_config.get("gravity_disabled_chance", 0.0)
     mesh_folders = mesh_distractors_config.get("folders", [])
@@ -371,7 +513,26 @@ def create_auto_labeled_assets(
     gravity_disabled_chance: float,
     rng: np.random.Generator = None,
 ) -> tuple[list[Usd.Prim], list[Usd.Prim]]:
-    """Create assets with automatic labels, applying optional gravity settings."""
+    """Create assets with automatic labels, applying optional gravity settings.
+
+    Args:
+        num_assets: Number of labeled asset instances to create.
+        asset_urls: Candidate USD asset URLs from which to sample. An empty list is a no-op and returns empty
+            result lists, including when a resolved folder yields no matching USD files.
+        root_path: Parent prim path for the new assets.
+        regex_replace_pattern: Regular expression matched against each asset basename.
+        regex_replace_repl: Replacement text used to derive the semantic class label.
+        gravity_disabled_chance: Probability in ``[0, 1]`` that each asset floats instead of falling.
+        rng: Generator used to sample asset URLs and gravity state. When ``None``, create a fresh generator.
+
+    Returns:
+        Successfully loaded assets partitioned into gravity-disabled and gravity-enabled lists, or empty
+        lists when ``asset_urls`` is empty.
+    """
+    if not asset_urls:
+        if num_assets > 0:
+            print("[SDG] Warning: No asset URLs available; skipping auto-labeled asset creation")
+        return [], []
     if rng is None:
         rng = np.random.default_rng()
     stage = omni.usd.get_context().get_stage()
@@ -401,7 +562,15 @@ def create_auto_labeled_assets(
 def load_auto_labeled_assets(
     auto_label_config: dict, rng: np.random.Generator = None
 ) -> tuple[list[Usd.Prim], list[Usd.Prim]]:
-    """Load auto-labeled assets based on configuration, returning lists of floating and falling assets."""
+    """Load auto-labeled assets based on configuration, returning lists of floating and falling assets.
+
+    Args:
+        auto_label_config: Asset sources, count, label-substitution rule, and floating probability.
+        rng: Optional generator forwarded to automatic asset creation for reproducible sampling.
+
+    Returns:
+        Automatically labeled assets partitioned into gravity-disabled and gravity-enabled lists.
+    """
     num_assets = auto_label_config.get("num", 0)
     gravity_disabled_chance = auto_label_config.get("gravity_disabled_chance", 0.0)
     assets_files = auto_label_config.get("files", [])
@@ -430,7 +599,20 @@ def create_labeled_assets(
     gravity_disabled_chance: float,
     rng: np.random.Generator = None,
 ) -> tuple[list[Usd.Prim], list[Usd.Prim]]:
-    """Create labeled assets with optional gravity settings, returning lists of floating and falling assets."""
+    """Create labeled assets with optional gravity settings, returning lists of floating and falling assets.
+
+    Args:
+        num_assets: Number of instances of the asset to create.
+        asset_url: Remote URL or Isaac asset-root-relative USD path to reference. Use a ``file://`` URL for a
+            local file; plain filesystem paths are prefixed with the Isaac asset root.
+        label: Semantic class label to assign to every instance.
+        root_path: Parent prim path for the new assets.
+        gravity_disabled_chance: Probability in ``[0, 1]`` that each asset floats instead of falling.
+        rng: Generator used to sample gravity state. When ``None``, create a fresh generator.
+
+    Returns:
+        Created assets partitioned into gravity-disabled and gravity-enabled lists.
+    """
     if rng is None:
         rng = np.random.default_rng()
     stage = omni.usd.get_context().get_stage()
@@ -459,7 +641,15 @@ def create_labeled_assets(
 def load_manual_labeled_assets(
     manual_labeled_assets_config: list[dict], rng: np.random.Generator = None
 ) -> tuple[list[Usd.Prim], list[Usd.Prim]]:
-    """Load manually labeled assets based on configuration, returning lists of floating and falling assets."""
+    """Load manually labeled assets based on configuration, returning lists of floating and falling assets.
+
+    Args:
+        manual_labeled_assets_config: Asset URLs, explicit labels, counts, and floating probabilities.
+        rng: Optional generator shared by all manually labeled asset groups.
+
+    Returns:
+        Manually labeled assets partitioned into gravity-disabled and gravity-enabled lists.
+    """
     labeled_floating_assets = []
     labeled_falling_assets = []
     for labeled_asset_config in manual_labeled_assets_config:
@@ -494,7 +684,15 @@ def resolve_scale_issues_with_metrics_assembler() -> None:
 
 
 def get_matching_prim_location(match_string: str, root_path: str | None = None) -> tuple[float, float, float]:
-    """Return the translation of the first prim matching the given string."""
+    """Return the translation of the first prim matching the given string.
+
+    Args:
+        match_string: Substring to search for in transform prim paths.
+        root_path: Stage subtree to search, or ``None`` to search the entire stage.
+
+    Returns:
+        Matching prim translation, or the origin when no usable match exists.
+    """
     prim = find_matching_prims(
         match_strings=[match_string], root_path=root_path, prim_type="Xform", first_match_only=True
     )
@@ -513,7 +711,15 @@ def get_matching_prim_location(match_string: str, root_path: str | None = None) 
 def offset_range(
     range_coords: tuple[float, float, float, float, float, float], offset: tuple[float, float, float]
 ) -> tuple[float, float, float, float, float, float]:
-    """Offset the min and max coordinates of a range by the specified offset."""
+    """Offset the min and max coordinates of a range by the specified offset.
+
+    Args:
+        range_coords: Axis-aligned bounds ordered as minimum xyz followed by maximum xyz.
+        offset: Translation to add to both corners.
+
+    Returns:
+        Translated minimum and maximum coordinates in the original ordering.
+    """
     return (
         range_coords[0] + offset[0],  # min_x
         range_coords[1] + offset[1],  # min_y
@@ -531,7 +737,15 @@ def randomize_poses(
     scale_range: tuple[float, float],
     rng: np.random.Generator = None,
 ) -> None:
-    """Randomize the location, rotation, and scale of a list of prims within specified ranges."""
+    """Randomize the location, rotation, and scale of a list of prims within specified ranges.
+
+    Args:
+        prims: Prims whose transforms should be randomized.
+        location_range: Axis-aligned bounds ordered as minimum xyz followed by maximum xyz.
+        rotation_range: Lower and upper bounds for every Euler angle in degrees.
+        scale_range: Lower and upper bounds for the uniform scale factor.
+        rng: Generator used for transform sampling. When ``None``, create a fresh generator.
+    """
     if rng is None:
         rng = np.random.default_rng()
     for prim in prims:
@@ -625,7 +839,12 @@ def configure_physics_scene(physics_config: dict | None = None) -> None:
 
 
 def run_simulation(num_frames: int, render: bool = True) -> None:
-    """Run a simulation for a specified number of frames, optionally without rendering."""
+    """Run a simulation for a specified number of frames, optionally without rendering.
+
+    Args:
+        num_frames: Number of application or physics updates to execute.
+        render: Whether to advance through application updates with rendering enabled.
+    """
     if render:
         # Start the timeline and advance the app, this will render the physics simulation results every frame
         timeline = omni.timeline.get_timeline_interface()
@@ -668,7 +887,11 @@ def register_dome_light_randomizer() -> None:
 
 
 def register_shape_distractors_color_randomizer(shape_distractors: list[Usd.Prim]) -> None:
-    """Register a replicator graph randomizer to change colors of shape distractors."""
+    """Register a replicator graph randomizer to change colors of shape distractors.
+
+    Args:
+        shape_distractors: Primitive distractors whose display colors should be randomized.
+    """
     with rep.trigger.on_custom_event(event_name="randomize_shape_distractor_colors"):
         shape_distractors_paths = [prim.GetPath() for prim in shape_distractors]
         shape_distractors_group = rep.create.group(shape_distractors_paths)
@@ -683,7 +906,15 @@ def randomize_lights(
     intensity_range: tuple[float, float] | None = None,
     rng: np.random.Generator = None,
 ) -> None:
-    """Randomize location, color, and intensity of specified lights within given ranges."""
+    """Randomize location, color, and intensity of specified lights within given ranges.
+
+    Args:
+        lights: Light prims whose authored properties should be randomized.
+        location_range: Optional bounds ordered as minimum xyz followed by maximum xyz.
+        color_range: Optional RGB bounds ordered as minimum RGB followed by maximum RGB.
+        intensity_range: Optional lower and upper light-intensity bounds.
+        rng: Generator used for property sampling. When ``None``, create a fresh generator.
+    """
     if rng is None:
         rng = np.random.default_rng()
     for light in lights:
@@ -712,7 +943,17 @@ def randomize_lights(
 
 
 def setup_writer(config: dict) -> None:
-    """Setup a writer based on configuration settings, initializing with specified arguments."""
+    """Set up a writer from its registry name and initialization arguments.
+
+    When ``config["kwargs"]["output_dir"]`` is relative, replace it in the supplied configuration with a path
+    rooted at the current working directory.
+
+    Args:
+        config: Writer registry type and keyword arguments passed to its initializer.
+
+    Returns:
+        Initialized writer, or ``None`` when no valid writer type is configured.
+    """
     writer_type = config.get("type", None)
     if writer_type is None:
         print("[SDG] Warning: No writer type specified, skipping writer setup")

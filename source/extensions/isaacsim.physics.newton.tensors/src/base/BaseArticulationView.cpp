@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "BaseArticulationView.h"
+#include "BaseArticulationView.hpp"
 
-#include "utils/TensorOps.h"
-#include "utils/WarpInterop.h"
+#include "utils/TensorOps.hpp"
+#include "utils/WarpInterop.hpp"
 
 #include <carb/logging/Log.h>
 
@@ -53,7 +53,6 @@ static bool isDofJoint(int jType)
 BaseArticulationView::BaseArticulationView(py::object newtonStage, const std::vector<pxr::SdfPath>& articulationPaths)
     : m_newtonStage(newtonStage), m_count(0), m_maxLinks(0), m_maxDofs(0), m_maxShapes(0)
 {
-
     py::gil_scoped_acquire gil;
 
     try
@@ -78,23 +77,33 @@ BaseArticulationView::BaseArticulationView(py::object newtonStage, const std::ve
         auto jointTypes = jointType.unchecked<int, 1>();
         auto jointChildren = jointChild.unchecked<int, 1>();
 
+        py::array_t<bool> mask(articulationCount);
+        bool* maskPtr = static_cast<bool*>(mask.request().ptr);
         std::vector<int> matchedArticulationIndices;
         for (int artiIdx = 0; artiIdx < articulationCount; ++artiIdx)
         {
             std::string artiPath = py::str(articulationLabel[artiIdx]);
+            maskPtr[artiIdx] = false;
             for (size_t pi = 0; pi < articulationPaths.size(); ++pi)
             {
                 if (articulationPaths[pi].GetString() == artiPath)
                 {
                     matchedArticulationIndices.push_back(artiIdx);
                     m_articulationPrimPaths.push_back(artiPath);
+                    maskPtr[artiIdx] = true;
                     break;
                 }
             }
         }
 
-        m_count = matchedArticulationIndices.size();
+        // Now convert the mask to wp.array
+        py::module_ wpMod = py::module_::import("warp");
+        py::object device = m_model.attr("device");
+        m_modelDeviceString = py::str(device);
+        m_articulationMask =
+            wpMod.attr("from_numpy")(mask, /*dtype=*/py::none(), /*shape=*/py::none(), /*device*/ device);
 
+        m_count = matchedArticulationIndices.size();
         struct ArtiInfo
         {
             int jointStart, jointEnd, rootBodyIdx;
@@ -105,7 +114,9 @@ BaseArticulationView::BaseArticulationView(py::object newtonStage, const std::ve
             int totalDofs;
         };
         std::vector<ArtiInfo> artiInfos(m_count);
-
+        // numpy buffer to be converted to warp
+        py::array_t<int> articulationIndices(m_count);
+        int* articulationIdxPtr = static_cast<int*>(articulationIndices.request().ptr);
         for (uint32_t a = 0; a < m_count; ++a)
         {
             int artiIdx = matchedArticulationIndices[a];
@@ -122,6 +133,7 @@ BaseArticulationView::BaseArticulationView(py::object newtonStage, const std::ve
             m_rootJointQStartIndices.push_back(rootType == kJointFree ? jointQStarts(info.jointStart) : -1);
             m_fixedRootJointMapping.push_back(rootType != kJointFree ? info.jointStart : -1);
             m_articulationIndices.push_back(artiIdx);
+            articulationIdxPtr[a] = artiIdx;
 
             info.totalDofs = 0;
 
@@ -156,6 +168,10 @@ BaseArticulationView::BaseArticulationView(py::object newtonStage, const std::ve
             m_maxDofs = std::max(m_maxDofs, (uint32_t)info.totalDofs);
             m_maxLinks = std::max(m_maxLinks, (uint32_t)info.linkIndices.size());
         }
+
+        // Cast articulationIndices to warp
+        m_articulationIndicesWarp =
+            wpMod.attr("from_numpy")(articulationIndices, /*dtype=*/py::none(), /*shape=*/py::none(), /*device*/ device);
 
         m_dofPosIndices.resize(m_count * m_maxDofs, -1);
         m_dofVelIndices.resize(m_count * m_maxDofs, -1);
@@ -284,14 +300,20 @@ void BaseArticulationView::_cacheWarpPointers()
     m_cachedBodyCenterOfMass = ptr(m_model.attr("body_com"));
     m_cachedJointXp = ptr(m_model.attr("joint_X_p"));
 
-    m_cachedCtrlTargetPos = ptr(control.attr("joint_target_pos"));
-    m_cachedCtrlTargetVel = ptr(control.attr("joint_target_vel"));
+    m_cachedCtrlTargetPos = ptr(control.attr("joint_target_q"));
+    m_cachedCtrlTargetVel = ptr(control.attr("joint_target_qd"));
     m_cachedJointTorques = ptr(control.attr("joint_f"));
 
     py::object bodyMassArr = m_model.attr("body_mass");
     m_modelDeviceOrdinal = getWarpArrayDevice(bodyMassArr);
     m_totalBodyCount = getWarpArraySize(bodyMassArr);
     m_cacheValid = (m_cachedBodyQ != nullptr);
+    py::module_ helper_mod = py::module_::import("isaacsim.physics.newton.tensors.impl.articulation_helper");
+    py::module_ wp_mod = py::module_::import("warp");
+    m_jacobianBuffer = helper_mod.attr("allocate_buffer")(
+        m_jacobianBuffer, m_model.attr("joint_dof_count"), wp_mod.attr("spatial_vector"), m_modelDeviceString);
+    m_massMatricesBuffer = helper_mod.attr("allocate_buffer")(
+        m_massMatricesBuffer, m_model.attr("body_count"), wp_mod.attr("spatial_matrix"), m_modelDeviceString);
 }
 
 BaseArticulationView::~BaseArticulationView()
@@ -441,8 +463,8 @@ void BaseArticulationView::_notifyJointDofPropertiesChanged()
         py::object solver = m_newtonStage.attr("solver");
         if (!solver.is_none())
         {
-            py::module_ newton_solvers = py::module_::import("newton.solvers");
-            py::object flags = newton_solvers.attr("SolverNotifyFlags").attr("JOINT_DOF_PROPERTIES");
+            py::module_ newton = py::module_::import("newton");
+            py::object flags = newton.attr("ModelFlags").attr("JOINT_DOF_PROPERTIES");
             solver.attr("notify_model_changed")(flags);
         }
     }
@@ -561,20 +583,110 @@ bool BaseArticulationView::getArticulationCentroidalMomentum(const TensorDesc*) 
 {
     return false;
 }
-bool BaseArticulationView::getJacobianShape(uint32_t*, uint32_t*) const
+bool BaseArticulationView::getJacobianShape(uint32_t* numRows, uint32_t* numCols) const
 {
+    if (!isHomogeneous())
+    {
+        return false;
+    }
+    auto metatype = getSharedMetatype();
+    if (!metatype)
+    {
+        return false;
+    }
+    bool isBaseFixed = metatype->getFixedBase();
+    *numRows = (isBaseFixed ? -6 : 0) + metatype->getLinkCount() * 6;
+    *numCols = (isBaseFixed ? 0 : 6) + metatype->getDofCount();
+    return true;
+}
+bool BaseArticulationView::getJacobians(const TensorDesc* dstTensor) const
+{
+    uint32_t numRows, numCols;
+    size_t numArti = m_articulationIndices.size();
+    if (!numArti)
+    {
+        return true;
+    }
+    if (!getJacobianShape(&numRows, &numCols))
+    {
+        return false;
+    }
+    if (!validateFloat32TensorAnyDevice(dstTensor, size_t(m_count) * numRows * numCols, "jacobians", __FUNCTION__))
+        return false;
+    py::gil_scoped_acquire gil;
+    try
+    {
+        py::module_ newton_mod = py::module_::import("newton");
+        m_jacobianWarp = newton_mod.attr("eval_jacobian")(
+            m_model, m_newtonStage.attr("state_0"), m_jacobianWarp, m_jacobianBuffer, m_articulationMask);
+        py::module_ helper_mod = py::module_::import("isaacsim.physics.newton.tensors.impl.articulation_helper");
+        // We need to wrangle jacobian because newton's matrix dimension contains all articulations in the scene.
+        m_jacobianTensor = helper_mod.attr("wrangle_matrix")(
+            m_jacobianWarp, m_jacobianTensor, m_articulationIndicesWarp, numRows, numCols, m_modelDeviceString);
+        size_t data_size = size_t(numRows) * size_t(numCols) * numArti * sizeof(float);
+        return warpArrayToTensor(dstTensor, reinterpret_cast<void*>(m_jacobianTensor.attr("ptr").cast<uintptr_t>()),
+                                 m_modelDeviceOrdinal, data_size);
+    }
+    catch (py::error_already_set& e)
+    {
+        CARB_LOG_ERROR("Failed to get Jacobians: %s", e.what());
+    }
     return false;
 }
-bool BaseArticulationView::getJacobians(const TensorDesc*) const
+bool BaseArticulationView::getGeneralizedMassMatrixShape(uint32_t* numRows, uint32_t* numCols) const
 {
-    return false;
+    if (!isHomogeneous())
+    {
+        return false;
+    }
+    auto metatype = getSharedMetatype();
+    if (!metatype)
+    {
+        return false;
+    }
+    bool isBaseFixed = metatype->getFixedBase();
+    int size = (isBaseFixed ? 0 : 6) + metatype->getDofCount();
+    *numCols = size;
+    *numRows = size;
+    return true;
 }
-bool BaseArticulationView::getGeneralizedMassMatrixShape(uint32_t*, uint32_t*) const
+bool BaseArticulationView::getGeneralizedMassMatrices(const TensorDesc* dstTensor) const
 {
-    return false;
-}
-bool BaseArticulationView::getGeneralizedMassMatrices(const TensorDesc*) const
-{
+    uint32_t numRows, numCols;
+    size_t numArti = m_articulationIndices.size();
+    if (!numArti)
+    {
+        return true;
+    }
+    if (!getGeneralizedMassMatrixShape(&numRows, &numCols))
+    {
+        return false;
+    }
+    if (!validateFloat32TensorAnyDevice(dstTensor, size_t(m_count) * numRows * numCols, "masse matrices", __FUNCTION__))
+        return false;
+    py::gil_scoped_acquire gil;
+    try
+    {
+        py::module_ newton_mod = py::module_::import("newton");
+        py::object state_0 = m_newtonStage.attr("state_0");
+        // Evaluate Jacobian first, to avoid memory allocation in mass matrix evaluation
+        m_jacobianWarp =
+            newton_mod.attr("eval_jacobian")(m_model, state_0, m_jacobianWarp, m_jacobianBuffer, m_articulationMask);
+        m_massMatricesWarp =
+            newton_mod.attr("eval_mass_matrix")(m_model, state_0, m_massMatricesWarp, m_jacobianWarp,
+                                                m_massMatricesBuffer, m_jacobianBuffer, m_articulationMask);
+        py::module_ helper_mod = py::module_::import("isaacsim.physics.newton.tensors.impl.articulation_helper");
+        // We need to wrangle jacobian because newton's matrix dimension contains all articulations in the scene.
+        m_massMatricesTensor = helper_mod.attr("wrangle_matrix")(
+            m_massMatricesWarp, m_massMatricesTensor, m_articulationIndicesWarp, numRows, numCols, m_modelDeviceString);
+        size_t data_size = size_t(numRows) * size_t(numCols) * numArti * sizeof(float);
+        return warpArrayToTensor(dstTensor, reinterpret_cast<void*>(m_massMatricesTensor.attr("ptr").cast<uintptr_t>()),
+                                 m_modelDeviceOrdinal, data_size);
+    }
+    catch (py::error_already_set& e)
+    {
+        CARB_LOG_ERROR("Failed to get Generalized Mass Matrices: %s", e.what());
+    }
     return false;
 }
 bool BaseArticulationView::getCoriolisAndCentrifugalCompensationForces(const TensorDesc*) const

@@ -22,6 +22,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+import carb
 import isaacsim.core.experimental.utils.app as app_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
 import numpy as np
@@ -40,10 +41,13 @@ from pxr import UsdGeom, UsdLux
 
 # Per-test camera resolution (height, width) for CameraSensor-based tests.
 _RESOLUTION = (240, 320)
+_ABOVE_POST_AA_FLOOR_RESOLUTION = (360, 640)
 
 # Default pattern paths used by most tests; values are placeholder filesystem paths
 # — the tests never actually read pixel data from them.
 _PLACEHOLDER_DIRECTION_TEXTURE = Path("/tmp/sl_direction.exr")
+_RTX_POST_AA_OP_SETTING = "/rtx/post/aa/op"
+_RTX_POST_DLSS_EXEC_MODE_SETTING = "/rtx/post/dlss/execMode"
 
 
 def _make_placeholder_patterns(num: int, temp_dir: str) -> list[Path]:
@@ -655,7 +659,7 @@ class TestStructuredLightCameraWithCameraSensor(_StructuredLightCameraTestBase):
         self._direction_texture.write_bytes(b"")  # empty placeholder — USD tolerates it
 
     async def test_camera_sensor_creation(self) -> None:
-        """Wrap a StructuredLightCamera in CameraSensor with RGB annotator and fixed resolution."""
+        """Wrap a low-resolution StructuredLightCamera in CameraSensor with RGB annotator."""
         cam = self._make_camera(
             "/World/camera",
             projector_light_patterns=self._patterns,
@@ -669,8 +673,36 @@ class TestStructuredLightCameraWithCameraSensor(_StructuredLightCameraTestBase):
             # sourced from ``authoring_object.camera``.
             self.assertIsNotNone(sensor.camera)
             self.assertEqual(sensor.resolution, _RESOLUTION)
+            render_product_prim = stage_utils.get_current_stage().GetPrimAtPath(str(sensor.render_product.GetPath()))
+            self.assertEqual(render_product_prim.GetAttribute("omni:rtx:post:aa:op").Get(), "none")
         finally:
             del sensor
+            await omni.kit.app.get_app().next_update_async()
+
+    async def test_camera_sensor_above_floor_inherits_post_aa(self) -> None:
+        """Leave post anti-aliasing inherited for render products at or above the RTX floor."""
+        settings = carb.settings.get_settings()
+        previous_aa_op = settings.get(_RTX_POST_AA_OP_SETTING)
+        settings.set(_RTX_POST_AA_OP_SETTING, 3)
+        cam = self._make_camera(
+            "/World/camera",
+            projector_light_patterns=self._patterns,
+            projector_direction_texture=self._direction_texture,
+            positions=np.array([[3.0, 3.0, 2.0]]),
+            orientations=np.array([[1.0, 0.0, 0.0, 0.0]]),
+        )
+        sensor = CameraSensor(cam, resolution=_ABOVE_POST_AA_FLOOR_RESOLUTION, annotators=["rgb"])
+        try:
+            render_product_prim = stage_utils.get_current_stage().GetPrimAtPath(str(sensor.render_product.GetPath()))
+            attr = render_product_prim.GetAttribute("omni:rtx:post:aa:op")
+            if attr.IsValid():
+                self.assertFalse(attr.HasAuthoredValueOpinion())
+        finally:
+            del sensor
+            if previous_aa_op is None:
+                settings.destroy_item(_RTX_POST_AA_OP_SETTING)
+            else:
+                settings.set(_RTX_POST_AA_OP_SETTING, previous_aa_op)
             await omni.kit.app.get_app().next_update_async()
 
     async def test_camera_sensor_rgb_shape(self) -> None:
@@ -758,6 +790,39 @@ class TestStructuredLightCameraOrchestrator(_StructuredLightCameraTestBase):
             self.assertEqual(cam.get_active_pattern_index(), 0)
         finally:
             del sensor
+
+    async def test_orchestrator_capture_ignores_global_dlss(self) -> None:
+        """Keep low-resolution RGB capture at sensor resolution when global DLSS is enabled."""
+        settings = carb.settings.get_settings()
+        previous_aa_op = settings.get(_RTX_POST_AA_OP_SETTING)
+        previous_dlss_mode = settings.get(_RTX_POST_DLSS_EXEC_MODE_SETTING)
+        settings.set(_RTX_POST_AA_OP_SETTING, 3)
+        settings.set(_RTX_POST_DLSS_EXEC_MODE_SETTING, 0)
+        sensor = None
+        try:
+            _, sensor = await self._make_camera_and_sensor()
+            render_product_prim = stage_utils.get_current_stage().GetPrimAtPath(str(sensor.render_product.GetPath()))
+            self.assertEqual(render_product_prim.GetAttribute("omni:rtx:post:aa:op").Get(), "none")
+            await rep.orchestrator.step_async(rt_subframes=2, delta_time=0.0)
+            data, _ = sensor.get_data("rgb")
+            for _ in range(3):
+                if data is not None:
+                    break
+                await app_utils.update_app_async()
+                data, _ = sensor.get_data("rgb")
+            self.assertIsNotNone(data, "No RGB data after orchestrator.step with global DLSS enabled")
+            self.assertEqual(tuple(data.shape), (*_RESOLUTION, 3))
+        finally:
+            if sensor is not None:
+                del sensor
+            if previous_aa_op is None:
+                settings.destroy_item(_RTX_POST_AA_OP_SETTING)
+            else:
+                settings.set(_RTX_POST_AA_OP_SETTING, previous_aa_op)
+            if previous_dlss_mode is None:
+                settings.destroy_item(_RTX_POST_DLSS_EXEC_MODE_SETTING)
+            else:
+                settings.set(_RTX_POST_DLSS_EXEC_MODE_SETTING, previous_dlss_mode)
 
     async def test_orchestrator_pattern_cycle(self) -> None:
         """Advance orchestrator steps through each projector interval and verify pattern cycling."""

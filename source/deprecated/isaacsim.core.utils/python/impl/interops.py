@@ -75,10 +75,10 @@ def warp2torch(array: "warp.array") -> "torch.Tensor":  # noqa: F821, F811
     """Convert Warp array to PyTorch tensor.
 
     Args:
-        array: Warp array
+        array: Warp array.
 
     Returns:
-        PyTorch tensor
+        PyTorch tensor.
 
     Example:
 
@@ -123,10 +123,10 @@ def warp2jax(array: "warp.array") -> "jax.Array":  # noqa: F821, F811
     """Convert Warp array to JAX array.
 
     Args:
-        array: Warp array
+        array: Warp array.
 
     Returns:
-        JAX array
+        JAX array.
 
     Example:
 
@@ -161,10 +161,10 @@ def warp2tensorflow(array: "warp.array") -> "tensorflow.Tensor":  # noqa: F821, 
     """Convert Warp array to TensorFlow tensor.
 
     Args:
-        array: Warp array
+        array: Warp array.
 
     Returns:
-        TensorFlow tensor
+        TensorFlow tensor.
 
     Example:
 
@@ -199,10 +199,10 @@ def warp2numpy(array: "warp.array") -> "numpy.ndarray":  # noqa: F821, F811
     """Convert Warp array to NumPy array.
 
     Args:
-        array: Warp array
+        array: Warp array.
 
     Returns:
-        NumPy array
+        NumPy array.
 
     Example:
 
@@ -229,10 +229,10 @@ def torch2warp(tensor: "torch.Tensor") -> "warp.array":  # noqa: F821, F811
     """Convert PyTorch tensor to Warp array.
 
     Args:
-        tensor: PyTorch tensor
+        tensor: PyTorch tensor.
 
     Returns:
-        Warp array
+        Warp array.
 
     Example:
 
@@ -277,10 +277,10 @@ def torch2jax(tensor: "torch.Tensor") -> "jax.Array":  # noqa: F821, F811
     """Convert PyTorch tensor to JAX array.
 
     Args:
-        tensor: PyTorch tensor
+        tensor: PyTorch tensor.
 
     Returns:
-        JAX array
+        JAX array.
 
     Example:
 
@@ -314,10 +314,10 @@ def torch2tensorflow(tensor: "torch.Tensor") -> "tensorflow.Tensor":  # noqa: F8
     """Convert PyTorch tensor to TensorFlow tensor.
 
     Args:
-        tensor: PyTorch tensor
+        tensor: PyTorch tensor.
 
     Returns:
-        TensorFlow tensor
+        TensorFlow tensor.
 
     Example:
 
@@ -351,10 +351,10 @@ def torch2numpy(tensor: "torch.Tensor") -> "numpy.ndarray":  # noqa: F821, F811
     """Convert PyTorch tensor to NumPy array.
 
     Args:
-        tensor: PyTorch tensor
+        tensor: PyTorch tensor.
 
     Returns:
-        NumPy array
+        NumPy array.
 
     Example:
 
@@ -380,10 +380,10 @@ def jax2warp(array: "jax.Array") -> "warp.array":  # noqa: F821, F811
     """Convert JAX array to Warp array.
 
     Args:
-        array: JAX array
+        array: JAX array.
 
     Returns:
-        Warp array
+        Warp array.
 
     Example:
 
@@ -420,10 +420,10 @@ def jax2torch(array: "jax.Array") -> "torch.Tensor":  # noqa: F821, F811
     """Convert JAX array to PyTorch tensor.
 
     Args:
-        array: JAX array
+        array: JAX array.
 
     Returns:
-        PyTorch tensor
+        PyTorch tensor.
 
     Example:
 
@@ -460,10 +460,10 @@ def jax2tensorflow(array: "jax.Array") -> "tensorflow.Tensor":  # noqa: F821, F8
     """Convert JAX array to TensorFlow tensor.
 
     Args:
-        array: JAX array
+        array: JAX array.
 
     Returns:
-        TensorFlow tensor
+        TensorFlow tensor.
 
     Example:
 
@@ -500,10 +500,10 @@ def jax2numpy(array: "jax.Array") -> "numpy.ndarray":  # noqa: F821, F811
     """Convert JAX array to NumPy array.
 
     Args:
-        array: JAX array
+        array: JAX array.
 
     Returns:
-        NumPy array
+        NumPy array.
 
     Example:
 
@@ -532,10 +532,10 @@ def tensorflow2warp(tensor: "tensorflow.Tensor") -> "warp.array":  # noqa: F821,
     """Convert TensorFlow tensor to Warp array.
 
     Args:
-        tensor: TensorFlow tensor
+        tensor: TensorFlow tensor.
 
     Returns:
-        Warp array
+        Warp array.
 
     .. warning::
 
@@ -576,10 +576,10 @@ def tensorflow2torch(tensor: "tensorflow.Tensor") -> "torch.Tensor":  # noqa: F8
     """Convert TensorFlow tensor to PyTorch tensor.
 
     Args:
-        tensor: TensorFlow tensor
+        tensor: TensorFlow tensor.
 
     Returns:
-        PyTorch tensor
+        PyTorch tensor.
 
     .. warning::
 
@@ -620,10 +620,10 @@ def tensorflow2jax(tensor: "tensorflow.Tensor") -> "jax.Array":  # noqa: F821, F
     """Convert TensorFlow tensor to JAX array.
 
     Args:
-        tensor: TensorFlow tensor
+        tensor: TensorFlow tensor.
 
     Returns:
-        JAX array
+        JAX array.
 
     .. warning::
 
@@ -664,10 +664,10 @@ def tensorflow2numpy(tensor: "tensorflow.Tensor") -> "numpy.ndarray":  # noqa: F
     """Convert TensorFlow tensor to NumPy array.
 
     Args:
-        tensor: TensorFlow tensor
+        tensor: TensorFlow tensor.
 
     Returns:
-        NumPy array
+        NumPy array.
 
     Example:
 
@@ -712,10 +712,10 @@ def numpy2warp(array: "numpy.ndarray") -> "warp.array":  # noqa: F821, F811
     """Convert NumPy array to Warp array.
 
     Args:
-        array: NumPy array
+        array: NumPy array.
 
     Returns:
-        Warp array
+        Warp array.
 
     Example:
 
@@ -747,10 +747,10 @@ def numpy2torch(array: "numpy.ndarray") -> "torch.Tensor":  # noqa: F821, F811
     """Convert NumPy array to PyTorch tensor.
 
     Args:
-        array: NumPy array
+        array: NumPy array.
 
     Returns:
-        PyTorch tensor
+        PyTorch tensor.
 
     Example:
 
@@ -779,10 +779,10 @@ def numpy2jax(array: "numpy.ndarray") -> "jax.Array":  # noqa: F821, F811
     """Convert NumPy array to JAX array.
 
     Args:
-        array: NumPy array
+        array: NumPy array.
 
     Returns:
-        JAX array
+        JAX array.
 
     Example:
 
@@ -817,10 +817,10 @@ def numpy2tensorflow(array: "numpy.ndarray") -> "tensorflow.Tensor":  # noqa: F8
     """Convert NumPy array to TensorFlow tensor.
 
     Args:
-        array: NumPy array
+        array: NumPy array.
 
     Returns:
-        TensorFlow tensor
+        TensorFlow tensor.
 
     Example:
 

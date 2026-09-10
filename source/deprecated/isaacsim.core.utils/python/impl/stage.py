@@ -45,7 +45,7 @@ def use_stage(stage: Usd.Stage) -> Generator[None, None, None]:
     """Context manager that sets a thread-local stage.
 
     Args:
-        stage: The stage to set in the context.
+        stage: The USD stage to set in the context.
 
     Yields:
         Control to the caller with the stage set in thread-local context.
@@ -86,10 +86,10 @@ def get_current_stage(fabric: bool = False) -> Usd.Stage | usdrt.Usd._Usd.Stage:
     """Get the current open USD or Fabric stage.
 
     Args:
-        fabric: True to get the fabric stage. False to get the USD stage.
+        fabric: True to get the Fabric stage. False to get the USD stage.
 
     Returns:
-        The USD or Fabric stage as specified by the input arg fabric.
+        The USD or Fabric stage as specified by the fabric argument.
 
     Example:
 
@@ -150,7 +150,7 @@ def update_stage() -> None:
 
 
 async def update_stage_async() -> None:
-    """Update the current USD stage (asynchronous version).
+    """Update the current USD stage.
 
     Example:
 
@@ -173,7 +173,10 @@ def set_stage_up_axis(axis: str = "z") -> None:
     """Change the up axis of the current stage.
 
     Args:
-        axis: valid values are ``"x"``, ``"y"`` and ``"z"``
+        axis: Valid values are ``"x"``, ``"y"`` and ``"z"``.
+
+    Raises:
+        Exception: When there is no stage currently opened.
 
     Example:
 
@@ -216,8 +219,8 @@ def clear_stage(predicate: typing.Callable[[str], bool] | None = None) -> None:
     """Deletes all prims in the stage without populating the undo command buffer.
 
     Args:
-        predicate: user defined function that takes a prim_path (str) as input and returns True/False if the prim
-            should/shouldn't be deleted. If predicate is None, a default is used that deletes all prims
+        predicate: User defined function that takes a prim_path as input and returns True or False if the prim
+            should or should not be deleted. If predicate is None, a default is used that deletes all prims.
 
     Example:
 
@@ -271,10 +274,10 @@ def clear_stage(predicate: typing.Callable[[str], bool] | None = None) -> None:
 
 
 def print_stage_prim_paths(fabric: bool = False) -> None:
-    """Traverses the stage and logs all prim (hidden or not) paths via carb.log_info.
+    """Traverses the stage and logs all prim paths, including hidden prims, via carb.log_info.
 
     Args:
-        fabric: True to get the fabric stage. False to get the USD stage.
+        fabric: True to get the Fabric stage. False to get the USD stage.
 
     Example:
 
@@ -295,16 +298,16 @@ def print_stage_prim_paths(fabric: bool = False) -> None:
 
 
 def add_reference_to_stage(usd_path: str, prim_path: str, prim_type: str = "Xform") -> Usd.Prim:
-    """Add USD reference to the opened stage at specified prim path.
+    """Add a USD reference to the opened stage at the specified prim path.
 
     Adds a reference to an external USD file at the specified prim path on the current stage.
-    If the prim does not exist, it will be created with the specified type.
+    If the prim does not exist, it is created with the specified type.
     This function also handles stage units verification to ensure compatibility.
 
     Args:
-        usd_path: The path to USD file to reference.
-        prim_path: The prim path where the reference will be attached.
-        prim_type: The type of prim to create if it doesn't exist.
+        usd_path: Path to the USD file to reference.
+        prim_path: Prim path where the reference is attached.
+        prim_type: Prim type to create if it does not exist.
 
     Returns:
         The USD prim at the specified prim path.
@@ -404,7 +407,7 @@ def create_new_stage_in_memory() -> Usd.Stage:
 
 
 async def create_new_stage_async() -> None:
-    """Create a new stage (asynchronous version).
+    """Create a new stage.
 
     Example:
 
@@ -424,7 +427,7 @@ async def create_new_stage_async() -> None:
 
 
 def open_stage(usd_path: str) -> bool:
-    """Open the given usd file and replace currently opened stage.
+    """Open the given USD file and replace currently opened stage.
 
     Args:
         usd_path: Path to the USD file to open.
@@ -433,7 +436,7 @@ def open_stage(usd_path: str) -> bool:
         ValueError: When input path is not a supported file type by USD.
 
     Returns:
-        True if operation is successful, otherwise false.
+        True if operation is successful, otherwise False.
 
     Example:
 
@@ -454,7 +457,7 @@ def open_stage(usd_path: str) -> bool:
 
 
 async def open_stage_async(usd_path: str) -> tuple[bool, int]:
-    """Open the given usd file and replace currently opened stage (asynchronous version).
+    """Open the given USD file and replace currently opened stage.
 
     Args:
         usd_path: Path to the USD file to open.
@@ -488,17 +491,17 @@ async def open_stage_async(usd_path: str) -> tuple[bool, int]:
 
 
 def save_stage(usd_path: str, save_and_reload_in_place: bool = True) -> bool:
-    """Save usd file to path, it will be overwritten with the current stage.
+    """Save USD file to path, overwriting it with the current stage.
 
     Args:
-        usd_path: File path to save the current stage to
-        save_and_reload_in_place: use ``save_as_stage`` to save and reload the root layer in place.
+        usd_path: File path to save the current stage to.
+        save_and_reload_in_place: Use ``save_as_stage`` to save and reload the root layer in place.
 
     Raises:
         ValueError: When input path is not a supported file type by USD.
 
     Returns:
-        True if operation is successful, otherwise false.
+        True if operation is successful, otherwise False.
 
     Example:
 
@@ -581,14 +584,17 @@ def close_stage(callback_fn: typing.Callable = None) -> bool:
 
 
 def set_livesync_stage(usd_path: str, enable: bool) -> bool:
-    """Save the stage and set the Live Sync mode for real-time live editing of shared files on a Nucleus server.
+    """Save the stage and set Live Sync mode for real-time live editing of shared files on a Nucleus server.
 
     Args:
-        usd_path: path to enable live sync for, it will be overwritten with the current stage
-        enable: True to enable livesync, false to disable livesync
+        usd_path: Path to enable Live Sync for. It will be overwritten with the current stage.
+        enable: True to enable Live Sync, False to disable Live Sync.
+
+    Raises:
+        ValueError: When input path is not a supported file type by USD.
 
     Returns:
-        True if operation is successful, otherwise false.
+        True if operation is successful, otherwise False.
 
     Example:
 
@@ -618,10 +624,10 @@ def set_livesync_stage(usd_path: str, enable: bool) -> bool:
 
 
 def traverse_stage(fabric: bool = False) -> typing.Iterable:
-    """Traverse through prims (hidden or not) in the opened Usd stage.
+    """Traverse through prims, hidden or not, in the opened USD or Fabric stage.
 
     Args:
-        fabric: If True, use the Fabric stage instead of the USD stage.
+        fabric: Whether to use the Fabric stage instead of the USD stage.
 
     Returns:
         Generator which yields prims from the stage in depth-first-traversal order.
@@ -653,7 +659,7 @@ def is_stage_loading() -> bool:
     """Convenience function to see if any files are being loaded.
 
     Returns:
-        True if loading, False otherwise
+        True if loading, False otherwise.
 
     Example:
 
@@ -692,7 +698,10 @@ def set_stage_units(stage_units_in_meters: float) -> None:
     +------------------+--------+
 
     Args:
-        stage_units_in_meters: units for stage
+        stage_units_in_meters: Units for stage.
+
+    Raises:
+        Exception: When there is no stage currently opened.
 
     Example:
 
@@ -728,7 +737,7 @@ def get_stage_units() -> float:
     +------------------+--------+
 
     Returns:
-        current stage meters per unit
+        Current stage meters per unit.
 
     Example:
 
@@ -743,14 +752,14 @@ def get_stage_units() -> float:
 
 
 def get_next_free_path(path: str, parent: str = None) -> str:
-    """Returns the next free usd path for the current stage.
+    """Returns the next free USD path for the current stage.
 
     Args:
-        path: path we want to check
+        path: Path to check.
         parent: Parent prim for the given path.
 
     Returns:
-        a new path that is guaranteed to not exist on the current stage
+        A new path that does not exist on the current stage.
 
     Example:
 

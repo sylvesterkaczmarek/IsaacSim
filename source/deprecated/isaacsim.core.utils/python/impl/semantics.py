@@ -24,14 +24,14 @@ from pxr import Usd, UsdGeom, UsdSemantics
 
 
 def add_labels(prim: Usd.Prim, labels: list[str], instance_name: str = "class", overwrite: bool = True) -> None:
-    """Apply semantic labels to a prim using the UsdSemantics.LabelsAPI.
+    """Apply semantic labels to a prim using UsdSemantics.LabelsAPI.
 
     Args:
-        prim: Usd Prim to add or update labels on.
-        labels: The list of labels to apply.
-        instance_name: The name of the semantic instance.
+        prim: USD prim to add or update labels on.
+        labels: Labels to apply.
+        instance_name: Name of the semantic instance.
         overwrite: If True, existing labels for this instance are replaced.
-            If False, the new labels are appended to existing ones (if any).
+            If False, new labels are appended to existing labels.
     """
     import omni.replicator.core.functional as F
 
@@ -40,13 +40,13 @@ def add_labels(prim: Usd.Prim, labels: list[str], instance_name: str = "class", 
 
 
 def get_labels(prim: Usd.Prim) -> dict[str, list[str]]:
-    """Returns semantic labels (UsdSemantics.LabelsAPI) applied to a prim.
+    """Return semantic labels using UsdSemantics.LabelsAPI applied to a prim.
 
     Args:
         prim: Prim to return labels for.
 
     Returns:
-        Dictionary mapping instance names to a list of labels.
+        Dictionary mapping instance names to lists of labels.
         Returns an empty dict if no LabelsAPI instances are found.
     """
     result = {}
@@ -64,13 +64,13 @@ def get_labels(prim: Usd.Prim) -> dict[str, list[str]]:
 
 
 def remove_labels(prim: Usd.Prim, instance_name: str | None = None, include_descendants: bool = False) -> None:
-    """Removes semantic labels (UsdSemantics.LabelsAPI) from a prim.
+    """Remove semantic labels using UsdSemantics.LabelsAPI from a prim.
 
     Args:
         prim: Prim to remove labels from.
         instance_name: Specific instance name to remove.
             If None, removes *all* LabelsAPI instances.
-        include_descendants: Also traverse children and remove labels recursively.
+        include_descendants: Whether to traverse children and remove labels recursively.
     """
 
     def remove_single_prim_labels(target_prim: Usd.Prim) -> None:
@@ -92,10 +92,10 @@ def remove_labels(prim: Usd.Prim, instance_name: str | None = None, include_desc
 
 
 def check_missing_labels(prim_path: str | None = None) -> list[str]:
-    """Returns a list of prim paths of meshes with missing semantic labels (UsdSemantics.LabelsAPI).
+    """Return prim paths of meshes with missing semantic labels using UsdSemantics.LabelsAPI.
 
     Args:
-        prim_path: This will check Prim path and its childrens' labels. If None, checks the whole stage.
+        prim_path: Prim path whose children's labels are checked. If None, checks the whole stage.
 
     Returns:
         Prim paths of meshes with no LabelsAPI applied.
@@ -128,13 +128,13 @@ def check_missing_labels(prim_path: str | None = None) -> list[str]:
 
 
 def check_incorrect_labels(prim_path: str | None = None, validate_against_prim_path: bool = False) -> list[list[str]]:
-    """Returns a list of [prim_path, label] for meshes where at least one semantic label (LabelsAPI).
+    """Return [prim_path, label] pairs for meshes where at least one semantic label is considered incorrect.
 
-    is considered incorrect. By default, this returns no mismatches for labeled meshes. The legacy heuristic that treats
-    labels absent from the prim path as incorrect can be enabled with validate_against_prim_path.
+    Labeled meshes have no mismatches unless validate_against_prim_path enables the legacy heuristic that treats labels
+    absent from the prim path as incorrect.
 
     Args:
-        prim_path: This will check Prim path and its childrens' labels. If None, checks the whole stage.
+        prim_path: Prim path whose children's labels are checked. If None, checks the whole stage.
         validate_against_prim_path: Whether to check if labels appear in the prim path string.
 
     Returns:
@@ -178,10 +178,10 @@ def check_incorrect_labels(prim_path: str | None = None, validate_against_prim_p
 
 
 def count_labels_in_scene(prim_path: str | None = None) -> dict[str, int]:
-    """Returns a dictionary of semantic labels (UsdSemantics.LabelsAPI) and their corresponding count.
+    """Return semantic labels using UsdSemantics.LabelsAPI and their corresponding counts.
 
     Args:
-        prim_path: This will check Prim path and its childrens' labels. If None, checks the whole stage.
+        prim_path: Prim path whose children's labels are checked. If None, checks the whole stage.
 
     Returns:
         Dictionary mapping individual labels to their total count across all instances.
@@ -216,22 +216,19 @@ def count_labels_in_scene(prim_path: str | None = None) -> dict[str, int]:
 
 
 def upgrade_prim_semantics_to_labels(prim: Usd.Prim, include_descendants: bool = False) -> int:
-    """Upgrades a prim and optionally its descendants from the deprecated SemanticsAPI.
+    """Upgrade a prim and optionally its descendants from the deprecated SemanticsAPI to UsdSemantics.LabelsAPI.
 
-    to the new UsdSemantics.LabelsAPI.
-
-    Converts each found SemanticsAPI instance on the processed prim(s) to a corresponding
-    LabelsAPI instance. The old 'semanticType' becomes the new LabelsAPI
-    'instance_name', and the old 'semanticData' becomes the single label in the
-    new 'labels' list. The old SemanticsAPI is always removed after upgrading.
+    Converts each found SemanticsAPI instance on the processed prims to a corresponding LabelsAPI instance. The old
+    'semanticType' becomes the new LabelsAPI 'instance_name', and the old 'semanticData' becomes the single label in
+    the new 'labels' list. The old SemanticsAPI is always removed after upgrading.
 
     Args:
-        prim: The starting prim to upgrade.
+        prim: Starting prim to upgrade.
         include_descendants: If True, upgrades the prim and all its descendants.
             If False, upgrades only the specified prim.
 
     Returns:
-        The total number of SemanticsAPI instances successfully upgraded to LabelsAPI.
+        Total number of SemanticsAPI instances successfully upgraded to LabelsAPI.
     """
     total_upgraded = 0
 

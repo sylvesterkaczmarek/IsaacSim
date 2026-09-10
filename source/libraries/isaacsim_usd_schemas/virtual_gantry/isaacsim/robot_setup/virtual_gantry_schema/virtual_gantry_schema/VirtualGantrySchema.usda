@@ -1,0 +1,77 @@
+#usda 1.0
+(
+    "Virtual Gantry Codeless schema"
+    subLayers = [
+    @usdGeom/schema.usda@,
+    ]
+)
+
+over "GLOBAL"(
+    customData= {
+        string libraryName = "VirtualGantrySchema"
+        string libraryPath = "./"
+        string libraryPrefix = "VirtualGantrySchema"
+        bool skipCodeGeneration = true
+    }
+)
+{
+
+}
+
+class IsaacVirtualGantry "IsaacVirtualGantry"
+(
+    inherits = </Xform>
+    doc = """
+    One-sided spring-damper "rope" that suspends one articulation body from this
+    prim's world position (the anchor). Zero force until the body drops past
+    ropeLength, then it pulls the body back toward the anchor. Applied as a
+    pre-physics external wrench; no USD joint, no kinematic constraint.
+    """
+)
+{
+    float isaac:gantry:ropeLength = -1 (
+        displayName = "Rope Length"
+        doc = """Slack rope length in meters. -1 auto-derives from the attach body's spawn height on the first step."""
+    )
+    float isaac:gantry:stiffness = 5000.0 (
+        displayName = "Stiffness"
+        doc = """Rope spring stiffness kp, in N/m."""
+    )
+    float isaac:gantry:damping = 800.0 (
+        displayName = "Damping"
+        doc = """Rope damping kd, in N*s/m, applied only while the rope is extending."""
+    )
+    float3 isaac:gantry:bodyOffset = (0, 0, 0.3) (
+        displayName = "Body Offset"
+        doc = """Attach point offset in the body's local frame, in meters."""
+    )
+    bool isaac:gantry:enabled = 1 (
+        displayName = "Enabled"
+        doc = """Whether the rope applies force."""
+    )
+    float isaac:gantry:emaAlpha = 0.2 (
+        displayName = "EMA Alpha"
+        doc = """Smoothing factor for the rope extension-rate estimate."""
+    )
+    float isaac:gantry:minRopeLength = 0.1 (
+        displayName = "Min Rope Length"
+        doc = """Lower clamp for the rope length, in meters."""
+    )
+    bool isaac:gantry:visualize = 1 (
+        displayName = "Visualize"
+        doc = """Draw the rope line and anchor marker."""
+    )
+    uniform token isaac:gantry:status = "Disabled" (
+        displayName = "Status"
+        allowedTokens = ["Slack", "Taut", "Disabled"]
+        doc = """Runtime rope state (read-only)."""
+    )
+    rel isaac:gantry:attachBody (
+        displayName = "Attach Body"
+        doc = """The articulation link the rope pulls on."""
+    )
+    rel isaac:gantry:articulation (
+        displayName = "Articulation"
+        doc = """The articulation-root prim of the robot to suspend."""
+    )
+}

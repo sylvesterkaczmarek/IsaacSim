@@ -23,7 +23,7 @@
 
 #include <carb/BindingsPythonUtils.h>
 
-#include <isaacsim/ros2/core/IRos2Core.h>
+#include <isaacsim/ros2/core/IRos2Core.hpp>
 #include <pybind11/numpy.h>
 
 CARB_BINDINGS("isaacsim.ros2.core.python")

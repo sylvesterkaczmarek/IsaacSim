@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Minimal valid descriptor. The joint list uses a YAML anchor (*joints) on purpose:
+# the parser must accept aliased nodes and never share mutable state between records.
+observations:
+  policy:
+  - name: joint_pos_rel
+    full_path: isaaclab.envs.mdp.observations.joint_pos_rel
+    mdp_type: Observation
+    observation_type: JointState
+    dtype: torch.float32
+    shape: [2]
+    joint_names: &joints
+    - joint_a
+    - joint_b
+    joint_pos_offsets: [0.0, 0.5]
+    overloads: {clip: null, scale: null, history_length: 0, flatten_history_dim: true}
+    extras: {modifiers: null, description: minimal joint positions, units: rad}
+  - name: last_action
+    full_path: isaaclab.envs.mdp.observations.last_action
+    mdp_type: Observation
+    observation_type: Action
+    dtype: torch.float32
+    shape: [2]
+    overloads: {clip: [-100.0, 100.0], scale: 2.0, history_length: 0, flatten_history_dim: true}
+    extras: {modifiers: null, description: minimal last action}
+actions:
+- name: joint_position_action
+  full_path: isaaclab.envs.mdp.actions.joint_actions.JointPositionAction
+  mdp_type: Action
+  action_type: JointAction
+  dtype: torch.float32
+  shape: [2]
+  joint_names: *joints
+  scale: 0.5
+  offset: [0.0, 0.5]
+  clip: null
+  extras: {description: minimal action}
+articulations:
+  robot:
+    joint_names: *joints
+    default_joint_pos: [0.0, 0.5]
+    default_joint_vel: [0.0, 0.0]
+scene: {physics_dt: 0.005, dt: 0.02, decimation: 4}

@@ -15,6 +15,7 @@
 
 """Example extension demonstrating trajectory generation using cuMotion for robot motion planning."""
 
-from .extension import *
+from .extension import Extension as Extension
+from .extension import UIBuilder as UIBuilder
 
-__all__ = ["UIBuilder"]
+__all__ = []

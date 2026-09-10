@@ -27,6 +27,7 @@ activates automatically on Play and deactivates on Stop.
 
 from __future__ import annotations
 
+import carb.eventdispatcher
 import carb.settings
 import omni.timeline
 import omni.ui as ui
@@ -107,10 +108,16 @@ class FloatingPanel:
         self._configured: dict[str, bool] = {"left": False, "right": False}
         self._desired_enabled: dict[str, bool] = {"left": False, "right": False}
         self._is_playing: bool = False
-        self._timeline_sub = (
-            omni.timeline.get_timeline_interface()
-            .get_timeline_event_stream()
-            .create_subscription_to_pop(self._on_timeline_event, name="FloatingPanel_timeline")
+        event_dispatcher = carb.eventdispatcher.get_eventdispatcher()
+        self._timeline_play_sub = event_dispatcher.observe_event(
+            event_name=omni.timeline.GLOBAL_EVENT_PLAY,
+            on_event=self._on_timeline_play,
+            observer_name="FloatingPanel._on_timeline_play",
+        )
+        self._timeline_stop_sub = event_dispatcher.observe_event(
+            event_name=omni.timeline.GLOBAL_EVENT_STOP,
+            on_event=self._on_timeline_stop,
+            observer_name="FloatingPanel._on_timeline_stop",
         )
 
         # Register persistent setting defaults
@@ -252,12 +259,12 @@ class FloatingPanel:
     def _apply_config_to_side(self, side: str, cfg: dict) -> None:
         w = self._widgets[side]
 
-        if "prim_path" in cfg and cfg["prim_path"]:
-            path_field = w.get("path")
-            if path_field:
-                path_field.model.set_value(cfg["prim_path"])
-                self._save(side, "path", cfg["prim_path"])
-                self._fc.set_prim_path(side, cfg["prim_path"])
+        prim_path = str(cfg.get("prim_path", ""))
+        path_field = w.get("path")
+        if path_field:
+            path_field.model.set_value(prim_path)
+            self._save(side, "path", prim_path)
+            self._fc.set_prim_path(side, prim_path)
 
         for key, widget_key in (
             ("pos_kp", "kp"),
@@ -410,23 +417,23 @@ class FloatingPanel:
     # Timeline-driven UI locking
     # ------------------------------------------------------------------
 
-    def _on_timeline_event(self, event: object) -> None:
-        if event.type == int(omni.timeline.TimelineEventType.PLAY):
-            self._is_playing = True
-            for side in ("left", "right"):
-                self._sync_side_controls(side)
-                status = self._get_field(side, "status")
-                if self._fc.is_running(side):
-                    set_status(status, "Active", CLR_GREEN, emit_terminal=True, side=side)
-        elif event.type == int(omni.timeline.TimelineEventType.STOP):
-            self._is_playing = False
-            for side in ("left", "right"):
-                self._sync_side_controls(side)
-                status = self._get_field(side, "status")
-                if self._fc.is_configured(side):
-                    set_status(status, "Standby", CLR_YELLOW, emit_terminal=True, side=side)
-                else:
-                    set_status(status, "", CLR_DIM)
+    def _on_timeline_play(self, _event: object) -> None:
+        self._is_playing = True
+        for side in ("left", "right"):
+            self._sync_side_controls(side)
+            status = self._get_field(side, "status")
+            if self._fc.is_running(side):
+                set_status(status, "Active", CLR_GREEN, emit_terminal=True, side=side)
+
+    def _on_timeline_stop(self, _event: object) -> None:
+        self._is_playing = False
+        for side in ("left", "right"):
+            self._sync_side_controls(side)
+            status = self._get_field(side, "status")
+            if self._fc.is_configured(side):
+                set_status(status, "Standby", CLR_YELLOW, emit_terminal=True, side=side)
+            else:
+                set_status(status, "", CLR_DIM)
 
     # ------------------------------------------------------------------
     # Callbacks
@@ -575,5 +582,6 @@ class FloatingPanel:
                     set_status(status, "", CLR_DIM)
 
     def destroy(self) -> None:
-        """Releases the timeline subscription."""
-        self._timeline_sub = None
+        """Release the timeline subscriptions."""
+        self._timeline_play_sub = None
+        self._timeline_stop_sub = None

@@ -14,5 +14,13 @@
 # limitations under the License.
 
 from .bindings import _prims_reader  # noqa: F401
-from .impl import *
-from .impl.extension import Extension  # noqa: F401 (Extension loaded for side effects)
+from .impl.articulation import Articulation as Articulation
+from .impl.buffer_dtype import BufferDtype as BufferDtype
+from .impl.deformable_prim import DeformablePrim as DeformablePrim
+from .impl.extension import Extension as Extension  # noqa: F401 (Extension loaded for side effects)
+from .impl.geom_prim import GeomPrim as GeomPrim
+from .impl.prim import Prim as Prim
+from .impl.rigid_prim import RigidPrim as RigidPrim
+from .impl.xform_prim import XformPrim as XformPrim
+
+__all__ = ["Articulation", "BufferDtype", "DeformablePrim", "GeomPrim", "Prim", "RigidPrim", "XformPrim"]

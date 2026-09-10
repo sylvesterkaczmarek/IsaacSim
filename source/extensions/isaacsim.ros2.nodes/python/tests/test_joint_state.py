@@ -53,7 +53,10 @@ class TestRos2JointStatePublisher(ROS2TestCase):
 
         ## load asset and setup ROS bridge
         # open simple_articulation asset (with one drivable revolute and one drivable prismatic joint)
-        self.usd_path = self._assets_root_path + "/Isaac/Robots/IsaacSim/SimpleArticulation/articulation_3_joints.usd"
+        self.usd_path = (
+            self._assets_root_path
+            + "/Isaac/Robots_Multiphysics/IsaacSim/SimpleArticulation/articulation_3_joints/articulation_3_joints.usda"
+        )
         result, error = await stage_utils.open_stage_async(self.usd_path)
         await omni.kit.app.get_app().next_update_async()
         self.assertTrue(result)  # Make sure the stage loaded
@@ -108,16 +111,18 @@ class TestRos2JointStatePublisher(ROS2TestCase):
 
         self._timeline.play()
         await omni.kit.app.get_app().next_update_async()
+        await self.wait_for_publishers_on_topic(node, "joint_states", timeout_sec=10.0, per_frame_callback=spin)
 
         art_handle = Articulation("/Articulation")
         art_handle.set_dof_position_targets(default_position)
 
-        await self.simulate_until_condition(
+        condition_met = await self.simulate_until_condition(
             lambda: len(self.js_ros.position) > 0
             and all(abs(self.js_ros.position[i] - default_position[i]) < 1e-3 for i in range(len(default_position))),
             max_frames=120,
             per_frame_callback=spin,
         )
+        self.assertTrue(condition_met, "Timed out waiting for joint_states position message")
         received_position = self.js_ros.position
 
         print("\n received_position", received_position)
@@ -152,6 +157,7 @@ class TestRos2JointStatePublisher(ROS2TestCase):
 
         self._timeline.play()
         await omni.kit.app.get_app().next_update_async()
+        await self.wait_for_publishers_on_topic(node, "joint_states", timeout_sec=10.0, per_frame_callback=spin)
 
         art_handle = Articulation("/Articulation")
         art_handle.set_dof_gains(stiffnesses=[0.0, 0.0, 0.0], dampings=[1e4, 1e4, 1e4])
@@ -164,12 +170,13 @@ class TestRos2JointStatePublisher(ROS2TestCase):
         # step runs with the original (zero-damping) drive before the new gains take
         # effect. Mirror the convergence-based condition used by the sibling
         # test_joint_state_position_publisher.
-        await self.simulate_until_condition(
+        condition_met = await self.simulate_until_condition(
             lambda: len(self.js_ros.velocity) > 0
             and all(abs(self.js_ros.velocity[i] - test_velocities[i]) < 1e-3 for i in range(len(test_velocities))),
             max_frames=120,
             per_frame_callback=spin,
         )
+        self.assertTrue(condition_met, "Timed out waiting for joint_states velocity message")
         received_velocity = self.js_ros.velocity
 
         print("received_velocity", received_velocity)
@@ -192,7 +199,10 @@ class TestRos2JointStatePublisherFromSensor(ROS2TestCase):
         await super().setUp()
         if SimulationManager.get_active_physics_engine() == "newton":
             self.skipTest("IsaacReadJointState sensor node requires PhysX backend")
-        self.usd_path = self._assets_root_path + "/Isaac/Robots/IsaacSim/SimpleArticulation/articulation_3_joints.usd"
+        self.usd_path = (
+            self._assets_root_path
+            + "/Isaac/Robots_Multiphysics/IsaacSim/SimpleArticulation/articulation_3_joints/articulation_3_joints.usda"
+        )
         result, error = await stage_utils.open_stage_async(self.usd_path)
         await omni.kit.app.get_app().next_update_async()
         self.assertTrue(result)
@@ -252,17 +262,19 @@ class TestRos2JointStatePublisherFromSensor(ROS2TestCase):
 
         self._timeline.play()
         await omni.kit.app.get_app().next_update_async()
+        await self.wait_for_publishers_on_topic(node, "joint_states", timeout_sec=10.0, per_frame_callback=spin)
 
         art_handle = Articulation("/Articulation")
         art_handle.set_dof_position_targets(default_position)
         print("\n commanded position", default_position)
 
-        await self.simulate_until_condition(
+        condition_met = await self.simulate_until_condition(
             lambda: len(self.js_ros.position) > 0
             and all(abs(self.js_ros.position[i] - default_position[i]) < 1e-3 for i in range(len(default_position))),
             max_frames=120,
             per_frame_callback=spin,
         )
+        self.assertTrue(condition_met, "Timed out waiting for sensor joint_states position message")
         received_position = self.js_ros.position
 
         print("\n received_position", received_position)
@@ -308,9 +320,12 @@ class TestRos2JointStatePublisherFromSensor(ROS2TestCase):
             )
 
         self._timeline.play()
-        await self.simulate_until_condition(
+        await omni.kit.app.get_app().next_update_async()
+        await self.wait_for_publishers_on_topic(node, "joint_states", timeout_sec=10.0, per_frame_callback=spin)
+        condition_met = await self.simulate_until_condition(
             lambda: len(self.js_ros.velocity) > 0, max_frames=60, per_frame_callback=spin
         )
+        self.assertTrue(condition_met, "Timed out waiting for sensor joint_states velocity message")
         received_velocity = self.js_ros.velocity
 
         comp_velocity = [5 * PI / 180.0, 0.1, -2.5 * PI / 180.0]
@@ -333,7 +348,10 @@ class TestRos2JointStateSubscriber(ROS2TestCase):
 
         ## load asset and setup ROS bridge
         # open simple_articulation asset (with one drivable revolute and one drivable prismatic joint)
-        self.usd_path = self._assets_root_path + "/Isaac/Robots/IsaacSim/SimpleArticulation/articulation_3_joints.usd"
+        self.usd_path = (
+            self._assets_root_path
+            + "/Isaac/Robots_Multiphysics/IsaacSim/SimpleArticulation/articulation_3_joints/articulation_3_joints.usda"
+        )
         result, error = await stage_utils.open_stage_async(self.usd_path)
         await omni.kit.app.get_app().next_update_async()
         self.assertTrue(result)  # Make sure the stage loaded
@@ -393,6 +411,7 @@ class TestRos2JointStateSubscriber(ROS2TestCase):
         await omni.kit.app.get_app().next_update_async()
         self._timeline.play()
         await self.simulate_until_condition(lambda: False, max_frames=30)
+        await self.wait_for_subscribers_on_topic(ros2_publisher, timeout_sec=10.0)
 
         # publish value
         ros2_publisher.publish(js_position)
@@ -436,6 +455,7 @@ class TestRos2JointStateSubscriber(ROS2TestCase):
 
         self._timeline.play()
         await self.simulate_until_condition(lambda: False, max_frames=30)
+        await self.wait_for_subscribers_on_topic(ros2_publisher, timeout_sec=10.0)
 
         art_handle = Articulation("/Articulation")
 
@@ -555,6 +575,7 @@ class TestRos2JointStateSubscriber(ROS2TestCase):
 
         self._timeline.play()
         await self.simulate_until_condition(lambda: False, max_frames=30)
+        await self.wait_for_subscribers_on_topic(ros2_publisher, timeout_sec=10.0)
 
         art_handle = Articulation("/Articulation")
 
@@ -714,6 +735,7 @@ class TestRos2JointStateSubscriber(ROS2TestCase):
 
         art_handle = Articulation("/Articulation")
         await self.simulate_until_condition(lambda: False, max_frames=30)
+        await self.wait_for_subscribers_on_topic(ros2_publisher, timeout_sec=10.0)
 
         ros2_publisher.publish(js)
         await self.simulate_until_condition(

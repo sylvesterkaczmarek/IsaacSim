@@ -71,6 +71,11 @@ class EditorState:
         # Link-subpath (relative to articulation base) -> list of mesh subpaths.
         self.link_to_meshes: OrderedDict[str, list[str]] = OrderedDict()
 
+        # Absolute link prim path -> the articulation's name for that link. Link
+        # names are unique per articulation even when two link prims share a prim
+        # name, so this is the only sound source for description-file keys.
+        self.link_name_by_path: dict[str, str] = {}
+
         self.collision_sphere_editor = CollisionSphereEditor()
 
         self._articulation_changed_callbacks: list[Callable[[], None]] = []
@@ -165,16 +170,25 @@ class EditorState:
         """Re-discover the per-link mesh inventory under the current articulation."""
         if self.articulation is None or self.articulation_base_path is None:
             self.link_to_meshes = OrderedDict()
+            self._clear_link_names()
             return
 
         stage = stage_utils.get_current_stage()
         if stage is None:
             self.link_to_meshes = OrderedDict()
+            self._clear_link_names()
             return
 
-        self.link_to_meshes = sphere_generation.find_link_meshes(
-            stage, self.articulation_base_path, list(self.articulation.link_names)
-        )
+        link_paths = list(self.articulation.link_paths[0])
+        self.link_name_by_path = dict(zip(link_paths, self.articulation.link_names))
+        self.collision_sphere_editor.set_link_names(self.link_name_by_path)
+
+        self.link_to_meshes = sphere_generation.find_link_meshes(stage, self.articulation_base_path, link_paths)
+
+    def _clear_link_names(self) -> None:
+        """Drop the link path/name mapping when no articulation is resolvable."""
+        self.link_name_by_path = {}
+        self.collision_sphere_editor.set_link_names({})
 
     # ------------------------------------------------------------------
     # Helpers exposed to UI / tests
@@ -205,10 +219,23 @@ class EditorState:
     def articulation_frames(self) -> set[str]:
         """Return link names for buffer-distance reconciliation.
 
+        ``link_to_meshes`` is keyed by link subpath, which equals the link name
+        only for links parented directly under the articulation root. Mapping each
+        subpath back through the articulation's own naming keeps links nested
+        inside another link matchable against the names used in XRDF
+        ``buffer_distance`` blocks, and keeps two links whose prims share a name
+        distinct.
+
         Returns:
             Link names without leading slashes.
         """
-        return {link_path[1:] for link_path in self.link_to_meshes}
+        if not self.articulation_base_path:
+            return set()
+        frames = set()
+        for link_subpath in self.link_to_meshes:
+            link_path = self.articulation_base_path + link_subpath
+            frames.add(self.link_name_by_path.get(link_path, link_subpath.rsplit("/", 1)[-1]))
+        return frames
 
     # ------------------------------------------------------------------
     # XRDF import / export

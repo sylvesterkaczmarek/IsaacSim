@@ -20,12 +20,13 @@ from __future__ import annotations
 import math
 from abc import abstractmethod
 
+import carb
 import numpy as np
-from isaacsim.core.deprecation_manager import import_module
 
 # isaacsim.replicator.mobility_gen.examples
 # isaacsim.core.experimental.*
 from isaacsim.core.experimental.prims import Articulation
+from isaacsim.core.experimental.utils.prim import join_prim_paths
 from isaacsim.core.experimental.utils.stage import add_reference_to_stage, get_current_stage
 from isaacsim.replicator.experimental.mobility_gen import (
     ROBOTS,
@@ -35,7 +36,7 @@ from isaacsim.replicator.experimental.mobility_gen import (
     Pose2d,
 )
 from isaacsim.robot.experimental.wheeled_robots import DifferentialController
-from isaacsim.robot.policy.examples.robots import H1FlatTerrainPolicy, SpotFlatTerrainPolicy
+from isaacsim.robot.policy.examples import RobotPolicyRunner, get_h1_spec, get_spot_spec
 from isaacsim.storage.native import get_assets_root_path
 
 # this package
@@ -63,6 +64,7 @@ class WheeledMobilityGenRobot(MobilityGenRobot):
     # Wheeled robot parameters
     wheel_dof_names: list[str]
     usd_url: str
+    """Robot USD asset path, relative to the Isaac assets root; ``build`` prepends it."""
     chassis_subpath: str
     wheel_radius: float
     wheel_base: float
@@ -91,7 +93,8 @@ class WheeledMobilityGenRobot(MobilityGenRobot):
         Returns:
             The configured wheeled robot instance.
         """
-        add_reference_to_stage(usd_path=cls.usd_url, path=prim_path)
+        full_url = get_assets_root_path() + cls.usd_url
+        add_reference_to_stage(usd_path=full_url, path=prim_path)
         stage = get_current_stage(backend="usd")
         stage.Load(prim_path)
         articulation = Articulation(prim_path)
@@ -132,19 +135,19 @@ class PolicyMobilityGenRobot(MobilityGenRobot):
     Args:
         prim_path: USD path where the robot prim is located in the stage.
         articulation: Articulation for managing the robot's joints and degrees of freedom.
-        controller: Policy controller that determines robot movement and behavior. Supports both H1 humanoid
-            and Spot quadruped terrain navigation policies.
+        controller: Policy runner that determines robot movement and behavior.
         front_camera: Optional camera module attached to the robot for perception and data collection.
     """
 
     usd_url: str
+    """Robot USD asset path, relative to the Isaac assets root."""
     articulation_path: str
 
     def __init__(
         self,
         prim_path: str,
         articulation: Articulation,
-        controller: H1FlatTerrainPolicy | SpotFlatTerrainPolicy,
+        controller: RobotPolicyRunner,
         front_camera: Module | None = None,
     ) -> None:
         super().__init__(prim_path, articulation, front_camera)
@@ -153,14 +156,14 @@ class PolicyMobilityGenRobot(MobilityGenRobot):
 
     @classmethod
     @abstractmethod
-    def build_policy(cls, prim_path: str) -> H1FlatTerrainPolicy | SpotFlatTerrainPolicy:
-        """Build the policy controller for the robot.
+    def build_policy(cls, prim_path: str) -> RobotPolicyRunner:
+        """Build the policy runner for the robot.
 
         Args:
             prim_path: USD prim path for the robot.
 
         Returns:
-            Policy controller for the robot.
+            Policy runner for the robot.
         """
         ...
 
@@ -174,19 +177,19 @@ class PolicyMobilityGenRobot(MobilityGenRobot):
         Returns:
             The configured robot instance.
         """
-        add_reference_to_stage(usd_path=cls.usd_url, path=prim_path)
         stage = get_current_stage(backend="usd")
 
         controller = cls.build_policy(prim_path)
+        articulation = controller.spawn()
 
         stage.Load(prim_path)
 
         camera = cls.build_front_camera(prim_path)
 
-        return cls(prim_path=prim_path, articulation=controller.robot, controller=controller, front_camera=camera)
+        return cls(prim_path=prim_path, articulation=articulation, controller=controller, front_camera=camera)
 
     def write_action(self, step_size: float) -> None:
-        """Apply the current action to the robot using the policy controller.
+        """Apply the current action to the robot using the policy runner.
 
         Args:
             step_size: Time step size for the action.
@@ -196,14 +199,11 @@ class PolicyMobilityGenRobot(MobilityGenRobot):
         if not self._controller_initialized:
             self.controller.initialize()
             self._controller_initialized = True
-        torch = import_module("torch")
         action = self.action.get_value()
-        device = torch.device(str(self.controller.robot._device))
-        command = torch.tensor([action[0], 0.0, action[1]], dtype=torch.float32, device=device)
-        self.controller.forward(step_size, command)
+        self.controller.step(step_size, [float(action[0]), 0.0, float(action[1])])
 
     def set_pose_2d(self, pose: Pose2d) -> None:
-        """Set the robot's 2D pose and reinitialize the controller.
+        """Set the robot's 2D pose and reinitialize the policy runner.
 
         Args:
             pose: The 2D pose to set for the robot.
@@ -308,8 +308,8 @@ class JetbotRobot(WheeledMobilityGenRobot):
 
     wheel_dof_names: list[str] = ["left_wheel_joint", "right_wheel_joint"]
     """Names of the wheel degree-of-freedom joints."""
-    usd_url: str = get_assets_root_path() + "/Isaac/Robots/NVIDIA/Jetbot/jetbot.usd"
-    """URL path to the USD file containing the robot's 3D model."""
+    usd_url: str = "/Isaac/Robots_Multiphysics/NVIDIA/Jetbot/jetbot.usda"
+    """Path to the robot's USD asset, relative to the Isaac assets root."""
 
     chassis_subpath: str = "chassis"
     """Subpath to the chassis component within the robot's USD structure."""
@@ -406,8 +406,8 @@ class CarterRobot(WheeledMobilityGenRobot):
 
     wheel_dof_names: list[str] = ["joint_wheel_left", "joint_wheel_right"]
     """Names of the wheel degree-of-freedom joints."""
-    usd_url: str = get_assets_root_path() + "/Isaac/Robots/NVIDIA/NovaCarter/nova_carter.usd"
-    """USD file path for the robot asset."""
+    usd_url: str = "/Isaac/Robots/NVIDIA/NovaCarter/nova_carter.usd"
+    """Path to the robot's USD asset, relative to the Isaac assets root."""
     chassis_subpath: str = "chassis_link"
     """Subpath to the chassis component within the robot USD."""
     wheel_base = 0.413
@@ -420,7 +420,7 @@ class CarterRobot(WheeledMobilityGenRobot):
 class H1Robot(PolicyMobilityGenRobot):
     """A humanoid robot implementation for mobility generation and navigation tasks.
 
-    This class represents the Unitree H1 humanoid robot configured for autonomous navigation and mobility generation scenarios. It inherits from PolicyMobilityGenRobot and uses the H1FlatTerrainPolicy for locomotion control. The robot is equipped with front-facing cameras, occupancy mapping capabilities, and supports multiple control modes including keyboard, gamepad, random actions, and path following.
+    This class represents the Unitree H1 humanoid robot configured for autonomous navigation and mobility generation scenarios. It inherits from PolicyMobilityGenRobot and uses RobotPolicyRunner for locomotion control. The robot is equipped with front-facing cameras, occupancy mapping capabilities, and supports multiple control modes including keyboard, gamepad, random actions, and path following.
 
     The H1Robot features a bipedal locomotion system with sophisticated terrain navigation capabilities. It includes configurable camera systems for visual navigation, occupancy mapping for obstacle avoidance, and various control parameters for different operational modes. The robot can operate in environments with varying terrain conditions and supports both manual and autonomous navigation modes.
     """
@@ -491,24 +491,28 @@ class H1Robot(PolicyMobilityGenRobot):
     path_following_target_point_offset_meters: float = 1.0
     """Distance ahead on the path to target for following."""
 
-    usd_url = get_assets_root_path() + "/Isaac/Robots/Unitree/H1/h1.usd"
-    """File path to the robot's USD asset."""
+    usd_url = "/Isaac/Robots_Multiphysics/Unitree/H1/h1.usda"
+    """Path to the robot's USD asset, relative to the Isaac assets root."""
     articulation_path = "pelvis"
     """Path to the articulation root within the robot hierarchy."""
     controller_z_offset: float = 1.05
     """Vertical offset applied to the robot controller's position."""
 
     @classmethod
-    def build_policy(cls, prim_path: str) -> H1FlatTerrainPolicy:
+    def build_policy(cls, prim_path: str) -> RobotPolicyRunner:
         """Create and configure a flat terrain policy for the H1 robot.
 
         Args:
             prim_path: USD prim path where the robot is located.
 
         Returns:
-            Configured H1FlatTerrainPolicy instance for robot control.
+            Configured policy runner for robot control.
         """
-        return H1FlatTerrainPolicy(prim_path=prim_path, position=np.array([0.0, 0.0, cls.controller_z_offset]))
+        return RobotPolicyRunner(
+            get_h1_spec(),
+            prim_path=prim_path,
+            position=np.array([0.0, 0.0, cls.controller_z_offset]),
+        )
 
 
 @ROBOTS.register()
@@ -524,7 +528,7 @@ class SpotRobot(PolicyMobilityGenRobot):
     keyboard, gamepad, random actions, and path following behaviors.
     """
 
-    physics_dt: float = 0.005
+    physics_dt: float = 0.002
     """Physics simulation time step in seconds."""
     z_offset: float = 0.7
     """Vertical offset applied to the robot's position in meters."""
@@ -589,24 +593,28 @@ class SpotRobot(PolicyMobilityGenRobot):
     path_following_target_point_offset_meters: float = 1.0
     """Look-ahead distance for selecting target points along the path in meters."""
 
-    usd_url = get_assets_root_path() + "/Isaac/Robots/BostonDynamics/spot/spot.usd"
-    """File path to the USD asset for the Spot robot model."""
+    usd_url = "/Isaac/Robots_Multiphysics/BostonDynamics/spot/spot.usda"
+    """Path to the robot's USD asset, relative to the Isaac assets root."""
     articulation_path = "/"
     """Relative path to the articulation root within the robot's prim hierarchy."""
     controller_z_offset: float = 0.7
     """Vertical offset for the controller's reference position in meters."""
 
     @classmethod
-    def build_policy(cls, prim_path: str) -> SpotFlatTerrainPolicy:
-        """Create and initializes a SpotFlatTerrainPolicy controller for the Spot robot.
+    def build_policy(cls, prim_path: str) -> RobotPolicyRunner:
+        """Create a policy runner for the Spot robot.
 
         Args:
             prim_path: USD prim path where the Spot robot is located in the stage.
 
         Returns:
-            Configured SpotFlatTerrainPolicy instance with the robot's position and z-offset.
+            Configured policy runner with the robot's position and z-offset.
         """
-        return SpotFlatTerrainPolicy(prim_path=prim_path, position=np.array([0.0, 0.0, cls.controller_z_offset]))
+        return RobotPolicyRunner(
+            get_spot_spec(),
+            prim_path=prim_path,
+            position=np.array([0.0, 0.0, cls.controller_z_offset]),
+        )
 
 
 # =========================================================
@@ -679,7 +687,7 @@ class PolicyMultiSensorRobot(MobilityGenMultiSensorRobot):
     Args:
         prim_path: USD prim path of the robot root.
         articulation: Isaac Sim articulation for the robot.
-        controller: Locomotion policy controller (H1 or Spot).
+        controller: Locomotion policy runner.
         sensor_rig: Optional pre-built sensor rig module.
     """
 
@@ -687,7 +695,7 @@ class PolicyMultiSensorRobot(MobilityGenMultiSensorRobot):
         self,
         prim_path: str,
         articulation: Articulation,
-        controller: H1FlatTerrainPolicy | SpotFlatTerrainPolicy,
+        controller: RobotPolicyRunner,
         sensor_rig: Module | None = None,
     ) -> None:
         super().__init__(prim_path=prim_path, articulation=articulation, sensor_rig=sensor_rig)
@@ -696,14 +704,14 @@ class PolicyMultiSensorRobot(MobilityGenMultiSensorRobot):
 
     @classmethod
     @abstractmethod
-    def build_policy(cls, prim_path: str) -> H1FlatTerrainPolicy | SpotFlatTerrainPolicy:
-        """Create the locomotion policy controller for the robot.
+    def build_policy(cls, prim_path: str) -> RobotPolicyRunner:
+        """Create the locomotion policy runner for the robot.
 
         Args:
             prim_path: USD prim path of the robot.
 
         Returns:
-            Locomotion policy controller for the robot.
+            Locomotion policy runner for the robot.
         """
         ...
 
@@ -717,16 +725,50 @@ class PolicyMultiSensorRobot(MobilityGenMultiSensorRobot):
         Returns:
             Configured :class:`PolicyMultiSensorRobot` instance.
         """
-        full_url = get_assets_root_path() + cls.usd_url
-        add_reference_to_stage(usd_path=full_url, path=prim_path)
         stage = get_current_stage(backend="usd")
         controller = cls.build_policy(prim_path)
+        articulation = controller.spawn()
         stage.Load(prim_path)
         sensor_rig = cls.build_sensor_rig(prim_path)
-        return cls(prim_path=prim_path, articulation=controller.robot, controller=controller, sensor_rig=sensor_rig)
+        return cls(prim_path=prim_path, articulation=articulation, controller=controller, sensor_rig=sensor_rig)
+
+    @classmethod
+    def build_sensor_rig(cls, prim_path: str) -> Module | None:
+        """Mount the configured camera on the robot, then build the rig that reads it.
+
+        These assets carry no cameras, so a rig that only discovers existing ones finds nothing.
+        Subclasses declaring the ``front_camera_*`` attributes get one mounted at
+        ``front_camera_base_path``, which their ``sensor_prim_path`` entries resolve against.
+
+        Args:
+            prim_path: USD prim path where the robot was created.
+
+        Returns:
+            The built sensor rig, or None when the robot configures no sensors.
+
+        Raises:
+            AttributeError: If only some of the ``front_camera_*`` attributes are declared.
+        """
+        required = ("front_camera_base_path", "front_camera_type", "front_camera_rotation", "front_camera_translation")
+        declared = [name for name in required if getattr(cls, name, None) is not None]
+        if declared:
+            missing = [name for name in required if getattr(cls, name, None) is None]
+            if missing:
+                raise AttributeError(f"{cls.__name__} declares {declared} but not {missing}; all four are required")
+            # Only the first segment comes from the asset. If that link is missing, define_prim
+            # fabricates the chain and the camera rides the robot root instead, silently.
+            link = join_prim_paths(prim_path, cls.front_camera_base_path.split("/")[0])
+            if not get_current_stage(backend="usd").GetPrimAtPath(link).IsValid():
+                carb.log_warn(
+                    f"{cls.__name__}: '{link}' is not in this robot's asset, so its camera will "
+                    "be mounted on the robot root and will not track that link"
+                )
+            # Called for the prims it authors; the rig binds them itself, so the return is unused.
+            cls.build_front_camera(prim_path)
+        return super().build_sensor_rig(prim_path)
 
     def write_action(self, step_size: float) -> None:
-        """Apply the current action via the locomotion policy controller.
+        """Apply the current action via the locomotion policy runner.
 
         Args:
             step_size: Physics timestep size in seconds.
@@ -736,14 +778,11 @@ class PolicyMultiSensorRobot(MobilityGenMultiSensorRobot):
         if not self._controller_initialized:
             self.controller.initialize()
             self._controller_initialized = True
-        torch = import_module("torch")
         action = self.action.get_value()
-        device = torch.device(str(self.controller.robot._device))
-        command = torch.tensor([action[0], 0.0, action[1]], dtype=torch.float32, device=device)
-        self.controller.forward(step_size, command)
+        self.controller.step(step_size, [float(action[0]), 0.0, float(action[1])])
 
     def set_pose_2d(self, pose: Pose2d) -> None:
-        """Set the robot's 2D pose and reinitialize the policy controller.
+        """Set the robot's 2D pose and reinitialize the policy runner.
 
         Args:
             pose: The target 2D pose (x, y, theta).
@@ -763,7 +802,7 @@ class CarterMultiSensorRobot(WheeledMultiSensorRobot):
 
 @ROBOTS.register()
 class JetbotMultiSensorRobot(WheeledMultiSensorRobot):
-    """Jetbot with front Hawk camera, driven by YAML config."""
+    """Jetbot with its front camera, driven by YAML config."""
 
     robot_config_path = "data/robots/jetbot.yaml"
 
@@ -774,17 +813,29 @@ class H1MultiSensorRobot(PolicyMultiSensorRobot):
 
     robot_config_path = "data/robots/h1.yaml"
 
+    front_camera_base_path = "d435_left_imager_link/front_camera/front"
+    """Base path the front camera is referenced onto, matching :class:`H1Robot`."""
+    front_camera_rotation = (0.0, 250.0, 90.0)
+    """Rotation angles (x, y, z) applied to the front camera, in degrees."""
+    front_camera_translation = (-0.06, 0.0, 0.0)
+    """Translation offset (x, y, z) applied to the front camera, in meters."""
+    front_camera_type = HawkCamera
+
     @classmethod
-    def build_policy(cls, prim_path: str) -> H1FlatTerrainPolicy:
-        """Build an H1 policy controller.
+    def build_policy(cls, prim_path: str) -> RobotPolicyRunner:
+        """Build an H1 policy runner.
 
         Args:
             prim_path: USD prim path of the robot.
 
         Returns:
-            H1 locomotion policy controller.
+            H1 locomotion policy runner.
         """
-        return H1FlatTerrainPolicy(prim_path=prim_path, position=np.array([0.0, 0.0, cls.controller_z_offset]))
+        return RobotPolicyRunner(
+            get_h1_spec(),
+            prim_path=prim_path,
+            position=np.array([0.0, 0.0, cls.controller_z_offset]),
+        )
 
 
 @ROBOTS.register()
@@ -793,14 +844,26 @@ class SpotMultiSensorRobot(PolicyMultiSensorRobot):
 
     robot_config_path = "data/robots/spot.yaml"
 
+    front_camera_base_path = "body/front_camera"
+    """Base path the front camera is referenced onto, matching :class:`SpotRobot`."""
+    front_camera_rotation = (180.0, 180.0, 180.0)
+    """Rotation angles (x, y, z) applied to the front camera, in degrees."""
+    front_camera_translation = (0.44, 0.075, 0.01)
+    """Translation offset (x, y, z) applied to the front camera, in meters."""
+    front_camera_type = HawkCamera
+
     @classmethod
-    def build_policy(cls, prim_path: str) -> SpotFlatTerrainPolicy:
-        """Build a Spot policy controller.
+    def build_policy(cls, prim_path: str) -> RobotPolicyRunner:
+        """Build a Spot policy runner.
 
         Args:
             prim_path: USD prim path of the robot.
 
         Returns:
-            Spot locomotion policy controller.
+            Spot locomotion policy runner.
         """
-        return SpotFlatTerrainPolicy(prim_path=prim_path, position=np.array([0.0, 0.0, cls.controller_z_offset]))
+        return RobotPolicyRunner(
+            get_spot_spec(),
+            prim_path=prim_path,
+            position=np.array([0.0, 0.0, cls.controller_z_offset]),
+        )

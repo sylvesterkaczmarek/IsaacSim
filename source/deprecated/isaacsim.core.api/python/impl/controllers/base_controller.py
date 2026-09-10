@@ -25,7 +25,6 @@ class BaseController(ABC):
 
     Args:
         name: Name identifier for the controller.
-
     """
 
     def __init__(self, name: str) -> None:
@@ -46,7 +45,6 @@ class BaseController(ABC):
 
         Returns:
             Action containing joint positions, velocities, or efforts to apply.
-
         """
         raise NotImplementedError
 

@@ -13,11 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "CpuSimulationView.h"
+#include "CpuSimulationView.hpp"
 
-#include "CpuArticulationView.h"
-#include "CpuRigidBodyView.h"
-#include "CpuRigidContactView.h"
+#include "CpuArticulationView.hpp"
+#include "CpuRigidBodyView.hpp"
+#include "CpuRigidContactView.hpp"
 
 namespace isaacsim
 {

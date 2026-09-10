@@ -33,32 +33,31 @@ from .single_prim_wrapper import _SinglePrimWrapper
 
 
 class SingleArticulation(_SinglePrimWrapper):
-    """High level wrapper to deal with an articulation prim (only one articulation prim) and its attributes/properties.
+    """High-level wrapper for dealing with one articulation prim and its attributes/properties.
 
     .. warning::
 
-        The articulation object must be initialized in order to be able to operate on it.
+        The articulation object must be initialized in order to operate on it.
         See the ``initialize`` method for more details.
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create.
-        name: shortname to be used as a key by Scene class.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. Shape is (3, ).
-        translation: translation in the local frame of the prim
+        position: Position in the world frame of the prim. Shape is (3, ).
+        translation: Translation in the local frame of the prim
             (with respect to its parent prim). Shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
+        orientation: Quaternion orientation in the world or local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). Shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. Shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        reset_xform_properties: True if the prims don't have the right set of xform properties
-            (i.e: translate, orient and scale) ONLY and in that order.
-            Set this parameter to False if the object were cloned using using
-            the cloner api in isaacsim.core.cloner.
-        articulation_controller: a custom ArticulationController which
-            inherits from it. Defaults to creating the
-            basic ArticulationController.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to False for an invisible prim in the stage while rendering.
+        reset_xform_properties: True if the prim does not have the right set of xform properties
+            (i.e.: translate, orient and scale) ONLY and in that order.
+            Set this parameter to False if the object was cloned using
+            the cloner API in isaacsim.core.cloner.
+        articulation_controller: Custom ArticulationController that inherits from ArticulationController.
+            If not provided, a basic ArticulationController is created.
 
     Example:
 
@@ -385,7 +384,7 @@ class SingleArticulation(_SinglePrimWrapper):
         """Set the articulation root velocity.
 
         Args:
-            velocity: linear and angular velocity to set the root prim to. Shape (6,).
+            velocity: Linear and angular velocity to set on the root prim. Shape (6,).
         """
         velocity = self._backend_utils.expand_dims(velocity, 0)
         self._articulation_view.set_velocities(velocities=velocity)
@@ -395,7 +394,7 @@ class SingleArticulation(_SinglePrimWrapper):
         """Get the articulation root velocity.
 
         Returns:
-            current velocity of the root prim. Shape (6,).
+            Current velocity of the root prim. Shape (6,).
         """
         velocities = self._articulation_view.get_velocities()
         return velocities[0]
@@ -409,9 +408,8 @@ class SingleArticulation(_SinglePrimWrapper):
             Use the ``apply_action`` method to control robot joints.
 
         Args:
-            positions: articulation joint positions
-            joint_indices: indices to specify which joints to manipulate.
-                Defaults to None (all joints)
+            positions: Articulation joint positions.
+            joint_indices: Indices to specify which joints to manipulate. If not specified, all joints are manipulated.
 
         .. hint::
 
@@ -422,13 +420,13 @@ class SingleArticulation(_SinglePrimWrapper):
 
         Example:
 
-        .. code-block:: python
+            .. code-block:: python
 
-            >>> # set all the robot joints
-            >>> prim.set_joint_positions(np.array([0.0, -1.0, 0.0, -2.2, 0.0, 2.4, 0.8, 0.04, 0.04]))
-            >>>
-            >>> # set only the fingers in closed position: panda_finger_joint1 (7) and panda_finger_joint2 (8) to 0.0
-            >>> prim.set_joint_positions(np.array([0.04, 0.04]), joint_indices=np.array([7, 8]))
+                >>> # set all the robot joints
+                >>> prim.set_joint_positions(np.array([0.0, -1.0, 0.0, -2.2, 0.0, 2.4, 0.8, 0.04, 0.04]))
+                >>>
+                >>> # set only the fingers in closed position: panda_finger_joint1 (7) and panda_finger_joint2 (8) to 0.0
+                >>> prim.set_joint_positions(np.array([0.04, 0.04]), joint_indices=np.array([7, 8]))
         """
         positions = self._backend_utils.expand_dims(positions, 0)
         if joint_indices is not None:
@@ -440,24 +438,23 @@ class SingleArticulation(_SinglePrimWrapper):
         """Get the articulation joint positions.
 
         Args:
-            joint_indices: indices to specify which joints to read.
-                Defaults to None (all joints)
+            joint_indices: Indices to specify which joints to read. If not specified, all joints are read.
 
         Returns:
-            all or selected articulation joint positions
+            All or selected articulation joint positions.
 
         Example:
 
-        .. code-block:: python
+            .. code-block:: python
 
-            >>> # get all joint positions
-            >>> prim.get_joint_positions()
-            [ 1.1999920e-02 -5.6962633e-01  1.3480479e-08 -2.8105433e+00  6.8284894e-06
-              3.0301569e+00  7.3234749e-01  3.9912373e-02  3.9999999e-02]
-            >>>
-            >>> # get finger positions: panda_finger_joint1 (7) and panda_finger_joint2 (8)
-            >>> prim.get_joint_positions(joint_indices=np.array([7, 8]))
-            [0.03991237  3.9999999e-02]
+                >>> # get all joint positions
+                >>> prim.get_joint_positions()
+                [ 1.1999920e-02 -5.6962633e-01  1.3480479e-08 -2.8105433e+00  6.8284894e-06
+                  3.0301569e+00  7.3234749e-01  3.9912373e-02  3.9999999e-02]
+                >>>
+                >>> # get finger positions: panda_finger_joint1 (7) and panda_finger_joint2 (8)
+                >>> prim.get_joint_positions(joint_indices=np.array([7, 8]))
+                [0.03991237  3.9999999e-02]
         """
         if joint_indices is not None:
             joint_indices = self._backend_utils.expand_dims(joint_indices, 0)
@@ -475,9 +472,8 @@ class SingleArticulation(_SinglePrimWrapper):
             Use the ``apply_action`` method to control robot joints.
 
         Args:
-            velocities: articulation joint velocities
-            joint_indices: indices to specify which joints to manipulate.
-                Defaults to None (all joints)
+            velocities: Articulation joint velocities.
+            joint_indices: Indices to specify which joints to manipulate. If not specified, all joints are manipulated.
 
         .. hint::
 
@@ -488,13 +484,13 @@ class SingleArticulation(_SinglePrimWrapper):
 
         Example:
 
-        .. code-block:: python
+            .. code-block:: python
 
-            >>> # set all the robot joint velocities to 0.0
-            >>> prim.set_joint_velocities(np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]))
-            >>>
-            >>> # set only the fingers velocities: panda_finger_joint1 (7) and panda_finger_joint2 (8) to -0.01
-            >>> prim.set_joint_velocities(np.array([-0.01, -0.01]), joint_indices=np.array([7, 8]))
+                >>> # set all the robot joint velocities to 0.0
+                >>> prim.set_joint_velocities(np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]))
+                >>>
+                >>> # set only the fingers velocities: panda_finger_joint1 (7) and panda_finger_joint2 (8) to -0.01
+                >>> prim.set_joint_velocities(np.array([-0.01, -0.01]), joint_indices=np.array([7, 8]))
         """
         velocities = self._backend_utils.expand_dims(velocities, 0)
         if joint_indices is not None:
@@ -511,9 +507,8 @@ class SingleArticulation(_SinglePrimWrapper):
             or the stiffness and damping must be set to zero.
 
         Args:
-            efforts: articulation joint efforts
-            joint_indices: indices to specify which joints to manipulate.
-                Defaults to None (all joints)
+            efforts: Articulation joint efforts.
+            joint_indices: Indices to specify which joints to manipulate. If not specified, all joints are manipulated.
 
         .. hint::
 
@@ -524,13 +519,13 @@ class SingleArticulation(_SinglePrimWrapper):
 
         Example:
 
-        .. code-block:: python
+            .. code-block:: python
 
-            >>> # set all the robot joint efforts to 0.0
-            >>> prim.set_joint_efforts(np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]))
-            >>>
-            >>> # set only the fingers efforts: panda_finger_joint1 (7) and panda_finger_joint2 (8) to 10
-            >>> prim.set_joint_efforts(np.array([10, 10]), joint_indices=np.array([7, 8]))
+                >>> # set all the robot joint efforts to 0.0
+                >>> prim.set_joint_efforts(np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]))
+                >>>
+                >>> # set only the fingers efforts: panda_finger_joint1 (7) and panda_finger_joint2 (8) to 10
+                >>> prim.set_joint_efforts(np.array([10, 10]), joint_indices=np.array([7, 8]))
         """
         efforts = self._backend_utils.expand_dims(efforts, 0)
         if joint_indices is not None:
@@ -542,24 +537,23 @@ class SingleArticulation(_SinglePrimWrapper):
         """Get the articulation joint velocities.
 
         Args:
-            joint_indices: indices to specify which joints to read.
-                Defaults to None (all joints)
+            joint_indices: Indices to specify which joints to read. If not specified, all joints are read.
 
         Returns:
-            all or selected articulation joint velocities
+            All or selected articulation joint velocities.
 
         Example:
 
-        .. code-block:: python
+            .. code-block:: python
 
-            >>> # get all joint velocities
-            >>> prim.get_joint_velocities()
-            [ 1.91603772e-06 -7.67638255e-03 -2.19138826e-07  1.10636465e-02 -4.63412944e-05
-              3.48245539e-02  8.84692147e-02  5.40335372e-04 1.02849208e-05]
-            >>>
-            >>> # get finger velocities: panda_finger_joint1 (7) and panda_finger_joint2 (8)
-            >>> prim.get_joint_velocities(joint_indices=np.array([7, 8]))
-            [5.4033537e-04 1.0284921e-05]
+                >>> # get all joint velocities
+                >>> prim.get_joint_velocities()
+                [ 1.91603772e-06 -7.67638255e-03 -2.19138826e-07  1.10636465e-02 -4.63412944e-05
+                  3.48245539e-02  8.84692147e-02  5.40335372e-04 1.02849208e-05]
+                >>>
+                >>> # get finger velocities: panda_finger_joint1 (7) and panda_finger_joint2 (8)
+                >>> prim.get_joint_velocities(joint_indices=np.array([7, 8]))
+                [5.4033537e-04 1.0284921e-05]
         """
         if joint_indices is not None:
             joint_indices = self._backend_utils.expand_dims(joint_indices, 0)
@@ -572,27 +566,26 @@ class SingleArticulation(_SinglePrimWrapper):
         """Returns the efforts computed/measured by the physics solver of the joint forces in the DOF motion direction.
 
         Args:
-            joint_indices: indices to specify which joints to read.
-                Defaults to None (all joints)
+            joint_indices: Indices to specify which joints to read. If not specified, all joints are read.
 
         Raises:
-            Exception: If the handlers are not initialized
+            Exception: If the handlers are not initialized.
 
         Returns:
-            all or selected articulation joint measured efforts
+            All or selected articulation joint measured efforts.
 
         Example:
 
-        .. code-block:: python
+            .. code-block:: python
 
-            >>> # get all joint efforts
-            >>> prim.get_measured_joint_efforts()
-            [ 2.7897308e-06 -6.9083519e+00 -3.6398471e-06  1.9158335e+01 -4.3552645e-06
-              1.1866090e+00 -4.7079347e-06  3.2339853e-04 -3.2044132e-04]
-            >>>
-            >>> # get finger efforts: panda_finger_joint1 (7) and panda_finger_joint2 (8)
-            >>> prim.get_measured_joint_efforts(joint_indices=np.array([7, 8]))
-            [ 0.0003234  -0.00032044]
+                >>> # get all joint efforts
+                >>> prim.get_measured_joint_efforts()
+                [ 2.7897308e-06 -6.9083519e+00 -3.6398471e-06  1.9158335e+01 -4.3552645e-06
+                  1.1866090e+00 -4.7079347e-06  3.2339853e-04 -3.2044132e-04]
+                >>>
+                >>> # get finger efforts: panda_finger_joint1 (7) and panda_finger_joint2 (8)
+                >>> prim.get_measured_joint_efforts(joint_indices=np.array([7, 8]))
+                [ 0.0003234  -0.00032044]
         """
         if not self._articulation_view.is_physics_handle_valid():
             raise Exception("handles are not initialized yet")
@@ -607,26 +600,25 @@ class SingleArticulation(_SinglePrimWrapper):
         """Get the efforts applied to the joints set by the ``set_joint_efforts`` method.
 
         Args:
-            joint_indices: indices to specify which joints to read.
-                Defaults to None (all joints)
+            joint_indices: Indices to specify which joints to read. If not specified, all joints are read.
 
         Raises:
-            Exception: If the handlers are not initialized
+            Exception: If the handlers are not initialized.
 
         Returns:
-            all or selected articulation joint applied efforts
+            All or selected articulation joint applied efforts.
 
         Example:
 
-        .. code-block:: python
+            .. code-block:: python
 
-            >>> # get all applied joint efforts
-            >>> prim.get_applied_joint_efforts()
-            [ 0.  0.  0.  0.  0.  0.  0.  0.  0.]
-            >>>
-            >>> # get finger applied efforts: panda_finger_joint1 (7) and panda_finger_joint2 (8)
-            >>> prim.get_applied_joint_efforts(joint_indices=np.array([7, 8]))
-            [0.  0.]
+                >>> # get all applied joint efforts
+                >>> prim.get_applied_joint_efforts()
+                [ 0.  0.  0.  0.  0.  0.  0.  0.  0.]
+                >>>
+                >>> # get finger applied efforts: panda_finger_joint1 (7) and panda_finger_joint2 (8)
+                >>> prim.get_applied_joint_efforts(joint_indices=np.array([7, 8]))
+                [0.  0.]
         """
         if not self._articulation_view.is_physics_handle_valid():
             raise Exception("handles are not initialized yet")
@@ -655,46 +647,45 @@ class SingleArticulation(_SinglePrimWrapper):
             To retrieve a specific row for the link incoming joint force/torque use ``joint_index + 1``
 
         Args:
-            joint_indices: indices to specify which joints to read.
-                Defaults to None (all joints)
+            joint_indices: Indices to specify which joints to read. If not specified, all joints are read.
 
         Raises:
-            Exception: If the handlers are not initialized
+            Exception: If the handlers are not initialized.
 
         Returns:
-            measured joint forces and torques. Shape is (num_joint + 1, 6). Row index 0 is the incoming
-            joint of the base link. For the last dimension the first 3 values are for forces and the last 3 for torques
+            Measured joint forces and torques. Shape is (num_joint + 1, 6). Row index 0 is the incoming
+            joint of the base link. For the last dimension the first 3 values are for forces and the last 3 for torques.
 
         Example:
 
-        .. code-block:: python
+            .. code-block:: python
 
-            >>> # get all measured joint forces and torques
-            >>> prim.get_measured_joint_forces()
-            [[ 0.0000000e+00  0.0000000e+00  0.0000000e+00  0.0000000e+00  0.0000000e+00  0.0000000e+00]
-             [ 1.4995076e+02  4.2574748e-06  5.6364370e-04  4.8701895e-05 -6.9072924e+00  3.1881387e-05]
-             [-2.8971717e-05 -1.0677823e+02 -6.8384506e+01 -6.9072924e+00 -5.4927128e-05  6.1222494e-07]
-             [ 8.7120995e+01 -4.3871860e-05 -5.5795174e+01  5.3687054e-05 -2.4538563e+01  1.3333466e-05]
-             [ 5.3519474e-05 -4.8109909e+01  6.0709282e+01  1.9157074e+01 -5.9258469e-05  8.2744418e-07]
-             [-3.1691040e+01  2.3313689e-04  3.9990173e+01 -5.8968733e-05 -1.1863431e+00  2.2335558e-05]
-             [-1.0809851e-04  1.5340537e+01 -1.5458489e+01  1.1863426e+00  6.1094368e-05 -1.5940281e-05]
-             [-7.5418940e+00 -5.0814648e+00 -5.6512990e+00 -5.6385466e-05  3.8859999e-01 -3.4943256e-01]
-             [ 4.7421460e+00 -3.1945827e+00  3.5528181e+00  5.5852943e-05  8.4794536e-03  7.6405057e-03]
-             [ 4.0760727e+00  2.1640673e-01 -4.0513167e+00 -5.9565349e-04  1.1407082e-02  2.1432268e-06]
-             [ 5.1680198e-03 -9.7754575e-02 -9.7093947e-02 -8.4155556e-12 -1.2910691e-12 -1.9347857e-11]
-             [-5.1910793e-03  9.7588278e-02 -9.7106412e-02  8.4155573e-12  1.2910637e-12 -1.9347855e-11]]
-            >>>
-            >>> # get measured joint force and torque for the fingers
-            >>> metadata = prim._articulation_view._metadata
-            >>> joint_indices = 1 + np.array([
-            ...     metadata.joint_indices["panda_finger_joint1"],
-            ...     metadata.joint_indices["panda_finger_joint2"],
-            ... ])
-            >>> joint_indices
-            [10 11]
-            >>> prim.get_measured_joint_forces(joint_indices)
-            [[ 5.1680198e-03 -9.7754575e-02 -9.7093947e-02 -8.4155556e-12 -1.2910691e-12 -1.9347857e-11]
-             [-5.1910793e-03  9.7588278e-02 -9.7106412e-02  8.4155573e-12  1.2910637e-12 -1.9347855e-11]]
+                >>> # get all measured joint forces and torques
+                >>> prim.get_measured_joint_forces()
+                [[ 0.0000000e+00  0.0000000e+00  0.0000000e+00  0.0000000e+00  0.0000000e+00  0.0000000e+00]
+                 [ 1.4995076e+02  4.2574748e-06  5.6364370e-04  4.8701895e-05 -6.9072924e+00  3.1881387e-05]
+                 [-2.8971717e-05 -1.0677823e+02 -6.8384506e+01 -6.9072924e+00 -5.4927128e-05  6.1222494e-07]
+                 [ 8.7120995e+01 -4.3871860e-05 -5.5795174e+01  5.3687054e-05 -2.4538563e+01  1.3333466e-05]
+                 [ 5.3519474e-05 -4.8109909e+01  6.0709282e+01  1.9157074e+01 -5.9258469e-05  8.2744418e-07]
+                 [-3.1691040e+01  2.3313689e-04  3.9990173e+01 -5.8968733e-05 -1.1863431e+00  2.2335558e-05]
+                 [-1.0809851e-04  1.5340537e+01 -1.5458489e+01  1.1863426e+00  6.1094368e-05 -1.5940281e-05]
+                 [-7.5418940e+00 -5.0814648e+00 -5.6512990e+00 -5.6385466e-05  3.8859999e-01 -3.4943256e-01]
+                 [ 4.7421460e+00 -3.1945827e+00  3.5528181e+00  5.5852943e-05  8.4794536e-03  7.6405057e-03]
+                 [ 4.0760727e+00  2.1640673e-01 -4.0513167e+00 -5.9565349e-04  1.1407082e-02  2.1432268e-06]
+                 [ 5.1680198e-03 -9.7754575e-02 -9.7093947e-02 -8.4155556e-12 -1.2910691e-12 -1.9347857e-11]
+                 [-5.1910793e-03  9.7588278e-02 -9.7106412e-02  8.4155573e-12  1.2910637e-12 -1.9347855e-11]]
+                >>>
+                >>> # get measured joint force and torque for the fingers
+                >>> metadata = prim._articulation_view._metadata
+                >>> joint_indices = 1 + np.array([
+                ...     metadata.joint_indices["panda_finger_joint1"],
+                ...     metadata.joint_indices["panda_finger_joint2"],
+                ... ])
+                >>> joint_indices
+                [10 11]
+                >>> prim.get_measured_joint_forces(joint_indices)
+                [[ 5.1680198e-03 -9.7754575e-02 -9.7093947e-02 -8.4155556e-12 -1.2910691e-12 -1.9347857e-11]
+                 [-5.1910793e-03  9.7588278e-02 -9.7106412e-02  8.4155573e-12  1.2910637e-12 -1.9347855e-11]]
         """
         if not self._articulation_view.is_physics_handle_valid():
             raise Exception("handles are not initialized yet")
@@ -965,10 +956,11 @@ class SingleArticulation(_SinglePrimWrapper):
 
         .. warning::
 
-            Setting a higher number of iterations may improve the fidelity of the simulation, although it may affect its performance.
+            Setting a higher number of iterations may improve the fidelity of the simulation, although it may affect
+            its performance.
 
         Args:
-            count: position iteration count
+            count: Position iteration count.
 
         Example:
 
@@ -987,7 +979,7 @@ class SingleArticulation(_SinglePrimWrapper):
         Search for *Solver Iteration Count* in |physx_docs| for more details.
 
         Returns:
-            position iteration count
+            Position iteration count.
 
         Example:
 
@@ -1006,10 +998,11 @@ class SingleArticulation(_SinglePrimWrapper):
 
         .. warning::
 
-            Setting a higher number of iterations may improve the fidelity of the simulation, although it may affect its performance.
+            Setting a higher number of iterations may improve the fidelity of the simulation, although it may affect
+            its performance.
 
         Args:
-            count: velocity iteration count
+            count: Velocity iteration count.
 
         Example:
 
@@ -1028,7 +1021,7 @@ class SingleArticulation(_SinglePrimWrapper):
         Search for *Solver Iteration Count* in |physx_docs| for more details.
 
         Returns:
-            velocity iteration count
+            Velocity iteration count.
 
         Example:
 
@@ -1042,10 +1035,10 @@ class SingleArticulation(_SinglePrimWrapper):
     def set_stabilization_threshold(self, threshold: float) -> None:
         """Set the mass-normalized kinetic energy below which the articulation may participate in stabilization.
 
-        Search for *Stabilization Threshold* in |physx_docs| for more details
+        Search for *Stabilization Threshold* in |physx_docs| for more details.
 
         Args:
-            threshold: stabilization threshold
+            threshold: Stabilization threshold.
 
         Example:
 
@@ -1060,10 +1053,10 @@ class SingleArticulation(_SinglePrimWrapper):
     def get_stabilization_threshold(self) -> float:
         """Get the mass-normalized kinetic energy below which the articulation may participate in stabilization.
 
-        Search for *Stabilization Threshold* in |physx_docs| for more details
+        Search for *Stabilization Threshold* in |physx_docs| for more details.
 
         Returns:
-            stabilization threshold
+            Stabilization threshold.
 
         Example:
 
@@ -1078,7 +1071,7 @@ class SingleArticulation(_SinglePrimWrapper):
         """Set the enable self collisions flag (``physxArticulation:enabledSelfCollisions``).
 
         Args:
-            flag: whether to enable self collisions
+            flag: Whether to enable self collisions.
 
         Example:
 
@@ -1094,7 +1087,7 @@ class SingleArticulation(_SinglePrimWrapper):
         """Get the enable self collisions flag (``physxArticulation:enabledSelfCollisions``).
 
         Returns:
-            self collisions flag (boolean interpreted as int)
+            Self collisions flag, with boolean values interpreted as integers.
 
         Example:
 
@@ -1108,10 +1101,10 @@ class SingleArticulation(_SinglePrimWrapper):
     def set_sleep_threshold(self, threshold: float) -> None:
         """Set the threshold for articulations to enter a sleep state.
 
-        Search for *Articulations and Sleeping* in |physx_docs| for more details
+        Search for *Articulations and Sleeping* in |physx_docs| for more details.
 
         Args:
-            threshold: sleep threshold
+            threshold: Sleep threshold.
 
         Example:
 
@@ -1126,10 +1119,10 @@ class SingleArticulation(_SinglePrimWrapper):
     def get_sleep_threshold(self) -> float:
         """Get the threshold for articulations to enter a sleep state.
 
-        Search for *Articulations and Sleeping* in |physx_docs| for more details
+        Search for *Articulations and Sleeping* in |physx_docs| for more details.
 
         Returns:
-            sleep threshold
+            Sleep threshold.
 
         Example:
 

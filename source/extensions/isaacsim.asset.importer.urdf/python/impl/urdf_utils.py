@@ -27,23 +27,36 @@ import numpy as np
 _logger = logging.getLogger(__name__)
 
 
-def _rewrite_relative_mesh_paths_to_absolute(urdf_file: str, reference_dir: str) -> None:
-    """Rewrite relative ``<mesh filename="..."/>`` entries to absolute paths in place.
+def _rewrite_relative_mesh_paths_to_absolute(
+    urdf_file: str,
+    reference_dir: str,
+    ros_package_paths: list[dict[str, str]] | None = None,
+) -> None:
+    """Rewrite mesh paths to absolute paths after relocating a URDF.
 
-    ``package://`` URIs and already-absolute paths are left untouched; everything
-    else is resolved against *reference_dir*. Used when a URDF has been relocated
-    out of its source directory (e.g. to a scratch temp dir for pre-processing)
-    so that downstream mesh resolution still works.
+    Relative paths resolve against *reference_dir*. ``package://`` URIs resolve
+    through an explicit package mapping when available, otherwise by walking up
+    from *reference_dir* to find the referenced mesh. Unresolved package URIs
+    remain unchanged so downstream ROS package resolution can handle them.
 
     Args:
         urdf_file: Path to the URDF file to mutate in place.
         reference_dir: Directory against which relative mesh filenames are resolved.
+        ros_package_paths: Optional ROS package name/path mappings.
     """
-    tree = ET.parse(urdf_file)
+    parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    tree = ET.parse(urdf_file, parser=parser)
     changed = False
     for mesh in tree.getroot().iter("mesh"):
         filename = mesh.get("filename")
-        if not filename or filename.startswith("package://"):
+        if not filename:
+            continue
+        if filename.startswith("package://"):
+            resolved = _resolve_package_mesh_path(filename, reference_dir, ros_package_paths)
+            if resolved is None:
+                continue
+            mesh.set("filename", resolved)
+            changed = True
             continue
         stripped = filename[len("file://") :] if filename.startswith("file://") else filename
         if os.path.isabs(stripped):
@@ -52,6 +65,102 @@ def _rewrite_relative_mesh_paths_to_absolute(urdf_file: str, reference_dir: str)
         changed = True
     if changed:
         tree.write(urdf_file, xml_declaration=True, encoding="UTF-8")
+
+
+def _resolve_package_mesh_path(
+    package_uri: str,
+    reference_dir: str,
+    ros_package_paths: list[dict[str, str]] | None,
+) -> str | None:
+    """Resolve a ``package://`` mesh URI to an absolute path.
+
+    Args:
+        package_uri: Mesh URI beginning with ``package://``.
+        reference_dir: Original directory containing the source URDF.
+        ros_package_paths: Optional ROS package name/path mappings.
+
+    Returns:
+        Absolute mesh path, or None when the URI cannot be resolved locally.
+    """
+    package_and_path = package_uri.removeprefix("package://")
+    package_name, separator, relative_path = package_and_path.partition("/")
+    if not package_name or not separator or not relative_path:
+        return None
+
+    package_root = _get_configured_package_root(package_name, ros_package_paths)
+    if package_root is not None:
+        configured_path = _join_package_path(package_root, relative_path)
+        if configured_path is not None and os.path.isfile(configured_path):
+            return configured_path
+        _logger.warning("Configured ROS package path does not contain mesh: %s", package_uri)
+
+    package_root = _find_package_root(reference_dir, relative_path)
+    if package_root is None:
+        return None
+
+    return _join_package_path(package_root, relative_path)
+
+
+def _get_configured_package_root(
+    package_name: str,
+    ros_package_paths: list[dict[str, str]] | None,
+) -> str | None:
+    """Return the configured root path for a ROS package.
+
+    Args:
+        package_name: Name of the ROS package to resolve.
+        ros_package_paths: ROS package name/path mappings.
+
+    Returns:
+        Absolute package path, or None when no matching mapping exists.
+    """
+    for package in ros_package_paths or []:
+        if package.get("name") != package_name:
+            continue
+        package_path = package.get("path")
+        if package_path:
+            return os.path.abspath(package_path)
+    return None
+
+
+def _find_package_root(reference_dir: str, relative_path: str) -> str | None:
+    """Walk up from a source URDF directory to find a package mesh.
+
+    Args:
+        reference_dir: Directory containing the original URDF.
+        relative_path: Mesh path relative to the package root.
+
+    Returns:
+        Absolute package root, or None when no matching mesh is found.
+    """
+    current = os.path.abspath(reference_dir)
+    for _ in range(10):
+        candidate = _join_package_path(current, relative_path)
+        if candidate is not None and os.path.isfile(candidate):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return None
+
+
+def _join_package_path(package_root: str, relative_path: str) -> str | None:
+    """Join a package root and relative path without allowing path traversal.
+
+    Args:
+        package_root: Absolute or relative ROS package root.
+        relative_path: Requested path beneath the package root.
+
+    Returns:
+        Absolute joined path, or None when the path escapes the package root.
+    """
+    root = os.path.abspath(package_root)
+    resolved = os.path.abspath(os.path.join(root, relative_path))
+    if os.path.commonpath((root, resolved)) != root:
+        _logger.warning("Ignoring package mesh path outside its package root: %s", relative_path)
+        return None
+    return resolved
 
 
 def merge_fixed_joints(urdf_path: str, output_path: str) -> str:
@@ -72,7 +181,8 @@ def merge_fixed_joints(urdf_path: str, output_path: str) -> str:
     Returns:
         The *output_path* that was written to.
     """
-    tree = ET.parse(urdf_path)
+    parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    tree = ET.parse(urdf_path, parser=parser)
     root = tree.getroot()
 
     # iterate until no fixed joints remain (handles chains)
@@ -156,7 +266,7 @@ def merge_fixed_joints(urdf_path: str, output_path: str) -> str:
 
         # Flag <transmission>/<gazebo>/<sensor> references to the removed link.
         for sibling in root:
-            if sibling.tag in ("link", "joint"):
+            if not isinstance(sibling.tag, str) or sibling.tag in ("link", "joint"):
                 continue
             serialized = ET.tostring(sibling, encoding="unicode")
             if f'"{child_link_name}"' in serialized or f"'{child_link_name}'" in serialized:

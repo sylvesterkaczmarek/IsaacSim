@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides the SingleManipulator API for controlling a manipulator with a single end effector and optional gripper."""
+
 from .impl import Extension as Extension
 from .manipulators.single_manipulator import SingleManipulator
 

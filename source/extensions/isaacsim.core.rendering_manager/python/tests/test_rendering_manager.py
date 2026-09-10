@@ -21,8 +21,10 @@ from typing import Any
 import carb
 import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
+import omni.timeline
 from isaacsim.core.rendering_manager import RenderingEvent, RenderingManager, ViewportManager
 
+_SETTING_PLAY_SIMULATION = "/app/player/playSimulations"
 _SETTING_RATE_LIMIT_ENABLED = "/app/runLoops/main/rateLimitEnabled"
 
 
@@ -36,6 +38,7 @@ class TestRenderingManager(omni.kit.test.AsyncTestCase):
         self._callback_call = [0, 0]
         self._callback_call_stack = []
         self._fire_order = []
+        self._play_simulation = carb.settings.get_settings().get_as_bool(_SETTING_PLAY_SIMULATION)
         self._rate_limit_enabled = carb.settings.get_settings().get_as_bool(_SETTING_RATE_LIMIT_ENABLED)
         await stage_utils.create_new_stage_async()
         # ---------------
@@ -43,6 +46,9 @@ class TestRenderingManager(omni.kit.test.AsyncTestCase):
     async def tearDown(self) -> None:
         """Method called immediately after the test method has been called."""
         # ------------------
+        omni.timeline.get_timeline_interface().stop()
+        await omni.kit.app.get_app().next_update_async()
+        carb.settings.get_settings().set_bool(_SETTING_PLAY_SIMULATION, self._play_simulation)
         carb.settings.get_settings().set_bool(_SETTING_RATE_LIMIT_ENABLED, self._rate_limit_enabled)
         stage_utils.close_stage()
         # ------------------
@@ -61,6 +67,23 @@ class TestRenderingManager(omni.kit.test.AsyncTestCase):
         """Advance multiple asynchronous render frames without raising errors."""
         for _ in range(10):
             await RenderingManager.render_async()
+
+    async def test_render_does_not_advance_physics(self) -> None:
+        """Verify render-only app updates preserve the physics step count."""
+        from isaacsim.core.simulation_manager import SimulationManager
+
+        timeline = omni.timeline.get_timeline_interface()
+        SimulationManager.setup_simulation(dt=1.0 / 60.0)
+        timeline.play()
+        await omni.kit.app.get_app().next_update_async()
+
+        steps_before_manual = SimulationManager.get_num_physics_steps()
+        SimulationManager.step(steps=3)
+        steps_before_render = SimulationManager.get_num_physics_steps()
+        self.assertEqual(steps_before_render - steps_before_manual, 3)
+
+        await RenderingManager.render_async()
+        self.assertEqual(SimulationManager.get_num_physics_steps(), steps_before_render)
 
     async def test_dt(self) -> None:
         """Verify default and custom render delta times for rate-limit modes."""

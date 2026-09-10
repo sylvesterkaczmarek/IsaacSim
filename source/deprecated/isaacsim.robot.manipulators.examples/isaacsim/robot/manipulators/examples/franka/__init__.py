@@ -13,5 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Provides example utilities for Franka manipulators."""
+
 from isaacsim.robot.manipulators.examples.franka.franka import Franka as Franka
 from isaacsim.robot.manipulators.examples.franka.kinematics_solver import KinematicsSolver as KinematicsSolver

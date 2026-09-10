@@ -24,4 +24,4 @@ The {class}`PinkRobot <isaacsim.robot_motion.pink.PinkRobot>` dataclass holds th
 
 ## Integration
 
-The extension integrates with Isaac Sim's experimental motion generation framework through the `isaacsim.robot_motion.experimental.motion_generation` dependency. The controller implements the `BaseController` interface, ensuring compatibility with `ControllerContainer`, `ParallelController`, `SequentialController`, and `TrajectoryFollower` from the broader motion generation ecosystem.
+The extension integrates with Isaac Sim's experimental motion generation framework through the `isaacsim.robot_motion.experimental.motion_generation` dependency. The controller implements the `BaseController` interface, ensuring compatibility with `SelectableController`, `CombinedController`, `ChainedController`, and `TrajectoryFollower` from the broader motion generation ecosystem.

@@ -167,10 +167,11 @@ class TestRos2NodeCommands(ROS2TestCase):
         og.Controller.attribute("/controller_graph/Impulse.state:enableImpulse").set(True)
         # after first step we need to wait for ros node to initialize
         await self.simulate_until_condition(lambda: False, max_frames=10, per_frame_callback=spin)
+        await self.wait_for_publishers_on_topic(node, "clock", timeout_sec=10.0, per_frame_callback=spin)
 
         og.Controller.attribute("/controller_graph/Impulse.state:enableImpulse").set(True)
         # wait for message
-        await self.simulate_until_condition(lambda: self._time_sec > 0.0, max_frames=30, per_frame_callback=spin)
+        await self.simulate_until_condition(lambda: self._time_sec > 0.0, max_frames=120, per_frame_callback=spin)
         self.assertGreater(self._time_sec, 0.0)
 
         self._timeline.stop()

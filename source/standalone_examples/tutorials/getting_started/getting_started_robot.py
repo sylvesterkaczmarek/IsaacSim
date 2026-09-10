@@ -53,7 +53,7 @@ distant_light.set_intensities(300)
 set_camera_view(eye=[5.0, 0.0, 1.5], target=[0.00, 0.00, 1.00], camera_prim_path="/OmniverseKit_Persp")
 
 # Add Franka
-asset_path = assets_root_path + "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd"
+asset_path = assets_root_path + "/Isaac/Robots_Multiphysics/FrankaRobotics/FrankaPanda/franka/franka.usda"
 stage_utils.add_reference_to_stage(
     usd_path=asset_path,
     path="/World/Arm",

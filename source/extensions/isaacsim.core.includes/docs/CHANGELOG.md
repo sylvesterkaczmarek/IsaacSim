@@ -1,22 +1,35 @@
 # Changelog
+
+## [2.9.4] - 2026-07-28
+### Fixed
+- Guard Fabric transform lookups when a prim exists in USD but is missing from USDRT.
+
+## [2.9.3] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [2.9.2] - 2026-07-02
+### Changed
+- Publish the common headers as a platform target and remove the empty native plugin declaration.
+
 ## [2.9.1] - 2026-04-28
 ### Fixed
 - Added warning logs for clarity when rigid body APIs fail
 
 ## [2.9.0] - 2026-04-24
 ### Added
-- Add `PhysicsEngine.h` header with `getActivePhysicsEngineName()` to query the active physics simulation backend
+- Add `PhysicsEngine.hpp` header with `getActivePhysicsEngineName()` to query the active physics simulation backend
 
 ### Changed
-- `Transforms.h` uses `getActivePhysicsEngineName()` for simulation view creation instead of defaulting to nullptr
+- `Transforms.hpp` uses `getActivePhysicsEngineName()` for simulation view creation instead of defaulting to nullptr
 
 ## [2.8.0] - 2026-03-20
 ### Added
-- Added `BindingsPythonUtils.h` header for pybind11 bindings utilities
+- Added `BindingsPythonUtils.hpp` header for pybind11 bindings utilities
 
 ### Fixed
-- Fixed brace initialization for `g_kIsaacNameOveride` in `UsdUtilities.h`
-- Added Doxygen `@cond` to hide internal template `QuatFromAxisAngle` in `Quat.h`
+- Fixed brace initialization for `g_kIsaacNameOveride` in `UsdUtilities.hpp`
+- Added Doxygen `@cond` to hide internal template `QuatFromAxisAngle` in `Quat.hpp`
 
 ## [2.7.0] - 2026-03-04
 ### Changed
@@ -28,7 +41,7 @@
 
 ## [2.6.0] - 2026-01-07
 ### Added
-- Add `Defines.h` header with `ISAACSIM_EXPORT` and `ISAACSIM_IMPORT` macros for DLL visibility
+- Add `Defines.hpp` header with `ISAACSIM_EXPORT` and `ISAACSIM_IMPORT` macros for DLL visibility
 
 ## [2.5.4] - 2025-12-06
 ### Changed
@@ -41,7 +54,7 @@
 
 ## [2.5.2] - 2025-10-02
 ### Changed
-- Use cached physics views for PoseTree.h
+- Use cached physics views for PoseTree.hpp
 
 ## [2.5.1] - 2025-08-27
 ### Changed
@@ -73,7 +86,7 @@
 
 ## [2.1.1] - 2025-06-04
 ### Changed
-- Changed CUDA_CHECK in ScopedCudaDevice.h to indicate file and line for more verbose error logging
+- Changed CUDA_CHECK in ScopedCudaDevice.hpp to indicate file and line for more verbose error logging
 
 ## [2.1.0] - 2025-05-24
 ### Changed
@@ -94,7 +107,7 @@
 
 ## [2.0.4] - 2025-05-15
 ### Changed
-- Remove unnecessary warnings for empty attributes in UsdUtilities.h
+- Remove unnecessary warnings for empty attributes in UsdUtilities.hpp
 
 ## [2.0.3] - 2025-05-10
 ### Changed

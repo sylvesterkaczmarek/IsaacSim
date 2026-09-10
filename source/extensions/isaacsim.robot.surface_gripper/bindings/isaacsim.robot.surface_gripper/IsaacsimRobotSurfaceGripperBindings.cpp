@@ -16,7 +16,7 @@
 #include <carb/BindingsPythonUtils.h>
 #include <carb/BindingsUtils.h>
 
-#include <isaacsim/robot/surface_gripper/ISurfaceGripper.h>
+#include <isaacsim/robot/surface_gripper/ISurfaceGripper.hpp>
 #include <pybind11/functional.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>

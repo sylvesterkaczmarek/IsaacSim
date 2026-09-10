@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from isaacsim.gui.components.ui_utils import setup_ui_headers
+from isaacsim.gui.components import setup_ui_headers
 
 from ..constants import EXTENSION_NAME
 

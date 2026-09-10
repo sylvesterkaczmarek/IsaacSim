@@ -18,8 +18,9 @@
 from collections.abc import Callable
 
 import omni.ui as ui
-from isaacsim.asset.importer.mjcf.impl import MJCFImporterConfig
-from isaacsim.gui.components.ui_utils import checkbox_builder, dropdown_builder, string_filed_builder
+from isaacsim.asset.importer.mjcf import MJCFImporterConfig
+from isaacsim.gui.components import dropdown_builder
+from isaacsim.gui.components.ui_utils import checkbox_builder, string_filed_builder
 
 from .style import get_option_style
 
@@ -252,6 +253,7 @@ class OptionWidget:
         - Robot Type dropdown
         - Base Type dropdown (Source / Fixed / Mobile)
         - Import Scene checkbox (default: True)
+        - Add Reference to Stage checkbox (default: False)
         - Merge Mesh checkbox (default: False)
         - Debug Mode checkbox (default: False)
         """
@@ -307,6 +309,13 @@ class OptionWidget:
                     default_val=True,
                     on_clicked_fn=set_import_scene,
                     identifier="mjcf_import_scene",
+                )
+
+                self._models["add_reference_to_stage"] = checkbox_builder(
+                    "Add Reference to Stage",
+                    tooltip="Add the imported USD as a reference to the current stage instead of opening it",
+                    default_val=False,
+                    identifier="mjcf_add_reference_to_stage",
                 )
 
                 def set_merge_mesh(value: bool) -> None:

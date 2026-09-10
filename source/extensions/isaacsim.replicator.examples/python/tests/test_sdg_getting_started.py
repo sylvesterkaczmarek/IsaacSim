@@ -19,6 +19,8 @@ import tempfile
 from typing import Any
 
 import carb.settings
+import isaacsim.core.experimental.utils.app as app_utils
+import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit
 import omni.usd
 from isaacsim.test.utils.file_validation import validate_folder_contents
@@ -29,9 +31,9 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
 
     async def setUp(self) -> None:
         """Create a clean stage and save settings changed by the getting-started examples."""
-        await omni.kit.app.get_app().next_update_async()
-        omni.usd.get_context().new_stage()
-        await omni.kit.app.get_app().next_update_async()
+        await app_utils.update_app_async()
+        await stage_utils.create_new_stage_async()
+        await app_utils.update_app_async()
         self.original_dlss_exec_mode = carb.settings.get_settings().get("rtx/post/dlss/execMode")
         self.original_write_to_fabric = carb.settings.get_settings().get(
             "/exts/omni.replicator.core/enableWriteToFabric"
@@ -39,11 +41,11 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
 
     async def tearDown(self) -> None:
         """Close the stage, wait for pending loads, and restore render and Fabric settings."""
-        omni.usd.get_context().close_stage()
-        await omni.kit.app.get_app().next_update_async()
+        stage_utils.close_stage()
+        await app_utils.update_app_async()
         # In some cases the test will end before the asset is loaded, in this case wait for assets to load
         while omni.usd.get_context().get_stage_loading_status()[2] > 0:
-            await omni.kit.app.get_app().next_update_async()
+            await app_utils.update_app_async()
         carb.settings.get_settings().set("rtx/post/dlss/execMode", self.original_dlss_exec_mode)
         if self.original_write_to_fabric is not None:
             carb.settings.get_settings().set(
@@ -54,7 +56,6 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
         """Capture a labeled cube with BasicWriter RGB and tight 2D bounding-box annotators."""
         import carb.settings
         import omni.replicator.core as rep
-        import omni.usd
 
         out_dir = tempfile.mkdtemp(prefix="test_sdg_basic_writer_")
         print(f"Output directory: {out_dir}")
@@ -62,7 +63,7 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
         async def run_example_async() -> None:
             """Create the cube scene, step three captures, and flush BasicWriter output."""
             # Create a new stage and disable capture on play
-            omni.usd.get_context().new_stage()
+            await stage_utils.create_new_stage_async()
             rep.orchestrator.set_capture_on_play(False)
 
             # Set DLSS to Quality mode (2) for best SDG results (Options: 0 (Performance), 1 (Balanced), 2 (Quality), 3 (Auto)
@@ -109,7 +110,6 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
         """Capture two camera views with direct RGB annotators, a custom writer, and PoseWriter."""
         import carb.settings
         import omni.replicator.core as rep
-        import omni.usd
         from omni.replicator.core import Writer
 
         out_dir = tempfile.mkdtemp(prefix="test_sdg_pose_writer_")
@@ -139,7 +139,7 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
         async def run_example_async() -> None:
             """Write pose/debug outputs while reading RGB data directly from two render products."""
             # Create a new stage and disable capture on play
-            omni.usd.get_context().new_stage()
+            await stage_utils.create_new_stage_async()
             rep.orchestrator.set_capture_on_play(False)
 
             # Set DLSS to Quality mode (2) for best SDG results , options: 0 (Performance), 1 (Balanced), 2 (Quality), 3 (Auto)
@@ -213,7 +213,6 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
 
         import carb.settings
         import omni.replicator.core as rep
-        import omni.usd
 
         out_dir = tempfile.mkdtemp(prefix="test_sdg_basic_writer_rand_")
         print(f"Output directory: {out_dir}")
@@ -226,7 +225,7 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
         async def run_example_async() -> None:
             """Randomize cube pose each frame, trigger light changes on selected frames, and capture."""
             # Create a new stage and disable capture on play
-            omni.usd.get_context().new_stage()
+            await stage_utils.create_new_stage_async()
             rep.orchestrator.set_capture_on_play(False)
             random.seed(42)
             rep.set_global_seed(42)
@@ -288,7 +287,6 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
         import omni.kit.app
         import omni.replicator.core as rep
         import omni.timeline
-        import omni.usd
         from isaacsim.core.experimental.prims import RigidPrim
         from pxr import UsdGeom
 
@@ -298,7 +296,7 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
         async def run_example_async() -> None:
             """Run physics, capture at drop-height thresholds, and resume the timeline between captures."""
             # Create a new stage and disable capture on play
-            omni.usd.get_context().new_stage()
+            await stage_utils.create_new_stage_async()
             rep.orchestrator.set_capture_on_play(False)
 
             # Set DLSS to Quality mode (2) for best SDG results , options: 0 (Performance), 1 (Balanced), 2 (Quality), 3 (Auto)
@@ -401,7 +399,6 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
 
         import carb.settings
         import omni.replicator.core as rep
-        import omni.usd
 
         NUM_CUBES = 100
         NUM_CAPTURES = 10
@@ -410,7 +407,7 @@ class TestSDGGettingStarted(omni.kit.test.AsyncTestCase):
 
         async def run_example_async(wait_for_render: Any, write_to_fabric: Any) -> None:
             print(f"\n[SDG] Running with wait_for_render={wait_for_render}, write_to_fabric={write_to_fabric}")
-            omni.usd.get_context().new_stage()
+            await stage_utils.create_new_stage_async()
             rep.orchestrator.set_capture_on_play(False)
 
             settings = carb.settings.get_settings()

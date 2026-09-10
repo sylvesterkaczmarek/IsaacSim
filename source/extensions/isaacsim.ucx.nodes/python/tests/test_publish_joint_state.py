@@ -90,7 +90,10 @@ class TestUCXPublishJointState(UCXTestCase):
         if assets_root_path is None:
             raise RuntimeError("Could not find Isaac Sim assets folder")
 
-        self.usd_path = assets_root_path + "/Isaac/Robots/IsaacSim/SimpleArticulation/articulation_3_joints.usd"
+        self.usd_path = (
+            assets_root_path
+            + "/Isaac/Robots_Multiphysics/IsaacSim/SimpleArticulation/articulation_3_joints/articulation_3_joints.usda"
+        )
         self._stage = await stage_utils.open_stage_async(self.usd_path)
         self.assertIsNotNone(self._stage)
         await omni.kit.app.get_app().next_update_async()

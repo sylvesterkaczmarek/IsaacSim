@@ -4,52 +4,117 @@
 This extension is deprecated. Use `isaacsim.robot_motion.experimental.motion_generation` and `isaacsim.robot_motion.cumotion` instead.
 ```
 
-The isaacsim.robot_motion.motion_generation.examples extension provides interactive UI-based examples for robot motion generation concepts within Isaac Sim. This extension demonstrates various motion planning algorithms and trajectory generation techniques through hands-on examples with Franka and UR10 robots.
+`**isaacsim.robot_motion.motion_generation.examples**` provides UI-based tutorials for robot motion generation examples using the Lula planning library. The extension is organized as separate example modules for RMPflow, RRT, kinematics, and trajectory generation, each exposing a {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` class that builds the tutorial interface and connects it to the simulation timeline, stage events, and physics steps.
 
-Each example registers a menu entry under **Motion Generation Examples** (RMPflow, Kinematics, RRT, Trajectory Generation).
+The examples are focused on interactive robot motion workflows. Users can load a prepared robot scenario, reset the scene, and run motion generation demonstrations through dedicated controls.
 
-## Key Components
+## Concepts
 
-### Example modules
+### Example Modules
 
-The extension consists of four specialized example modules, each focusing on different aspects of robot motion generation:
+The extension contains four sibling tutorial modules:
 
-#### RMP Flow
-The RMP Flow module demonstrates Riemannian Motion Policies (RMP) for reactive motion generation. It provides an interactive interface for loading Franka robot scenarios and running RMP-based motion planning algorithms that generate smooth, collision-aware trajectories in real-time.
+- `**isaacsim.robot_motion.motion_generation.examples.rmp_flow**`
+- `**isaacsim.robot_motion.motion_generation.examples.rrt**`
+- `**isaacsim.robot_motion.motion_generation.examples.kinematics**`
+- `**isaacsim.robot_motion.motion_generation.examples.trajectory_generator**`
 
-#### RRT
-The RRT module showcases Rapidly-exploring Random Tree path planning algorithms. Users can experiment with probabilistic sampling-based motion planning techniques that efficiently explore the robot's configuration space to find feasible paths from start to goal configurations.
+Each module follows the same structure: an extension-level window delegates tutorial-specific UI and behavior to a {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` class. The {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` is the main public API for each module.
 
-#### Kinematics
-The Kinematics module focuses on fundamental robot kinematics concepts. It provides demonstrations of forward and inverse kinematics calculations, joint space manipulations, and the relationship between joint configurations and end-effector poses.
+### Scenario-Based Tutorials
 
-#### Trajectory Generator
-The Trajectory Generator module presents comprehensive trajectory planning capabilities for UR10 robots. It covers configuration space trajectories, task space trajectories, and advanced trajectory planning methods, demonstrating how to generate smooth, time-parameterized paths for robot motion.
+Each {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` works with a specific scenario class:
 
-### {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` Architecture
+- `FrankaRmpFlowExample` for the RMPflow tutorial
+- `FrankaRrtExample` for the RRT path planning tutorial
+- `FrankaKinematicsExample` for the kinematics tutorial
+- `UR10TrajectoryGenerationExample` for the trajectory generation tutorial
 
-Each example module implements a {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` class that creates a standardized interface with two main control sections:
-
-**World Controls** - Provides Load and Reset buttons for scene management, allowing users to initialize robot scenarios and restore default states.
-
-**Scenario Controls** - Contains interactive buttons for starting and stopping motion generation demonstrations, with state-aware feedback to indicate execution status.
-
-The {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` classes handle timeline integration, physics step callbacks, and stage event management to ensure proper synchronization between the UI and Isaac Sim's simulation systems.
+The scenario classes provide the robot-specific demonstration logic, while {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` provides the controls and event handling needed to run the tutorial.
 
 ## Functionality
 
-### Interactive demonstrations
+### World Controls
 
-Each example provides hands-on exploration of motion generation concepts through visual demonstrations. Users can load pre-configured robot scenarios, adjust parameters, and observe real-time motion execution within the Isaac Sim environment.
+Each example UI includes a World Controls frame for scene setup. The controls allow users to load the tutorial scenario and reset the scene state.
 
-### Event system integration
+The UI also handles common scene preparation tasks, including camera positioning and lighting setup for visualization.
 
-The extension integrates with Isaac Sim's timeline and physics systems to provide responsive examples. Physics step callbacks ensure continuous updates during simulation, while timeline and stage event handling maintains proper state management throughout the example lifecycle.
+### Scenario Controls
 
-### Automated scene setup
+Each example includes controls for running the motion generation demonstration.
 
-The examples automatically handle scene initialization including lighting setup, camera positioning, and robot asset loading. This ensures optimal visualization conditions for each demonstration without requiring manual configuration.
+For the Franka examples, the Run Scenario frame provides a state button that starts and stops the demonstration:
 
-## Dependencies
+- RMPflow demonstrates robot motion generation using RMPflow.
+- RRT demonstrates path planning using Rapidly-exploring Random Tree planning.
+- Kinematics demonstrates robot kinematics behavior.
 
-The extension uses `isaacsim.robot_motion.lula` for accessing the Lula planning library functionality that powers the motion generation algorithms. It integrates with `isaacsim.robot_motion.motion_generation` to leverage the core motion planning infrastructure. The `isaacsim.gui.components` dependency provides the UI element wrappers used throughout the example interfaces.
+The trajectory generation example provides separate controls for multiple trajectory types:
+
+- Configuration space trajectories
+- Task space trajectories
+- Advanced trajectory demonstrations
+
+### Simulation Event Handling
+
+The UI builders respond to simulation and scene events so the controls stay in sync with the current state.
+
+Each {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` provides callbacks for:
+
+- `on_timeline_event(event)` to respond to timeline stop events
+- `on_physics_step(step)` to update while the timeline is playing
+- `on_stage_event(event)` to respond when a stage is opened
+- `cleanup()` to release wrapped UI element callbacks
+- `build_ui()` to construct the tutorial window content
+- `on_menu_callback()` to update UI state when opened from the menu
+
+## Key Components
+
+### {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>`
+
+{class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` is the main public class exposed by each example module. It builds the tutorial UI, manages the world and scenario controls, and connects user actions to the corresponding scenario.
+
+All four modules expose a {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>`, but each one targets a different robot motion generation workflow:
+
+```python
+from isaacsim.robot_motion.motion_generation.examples.rmp_flow import UIBuilder as RmpFlowUIBuilder
+from isaacsim.robot_motion.motion_generation.examples.rrt import UIBuilder as RrtUIBuilder
+from isaacsim.robot_motion.motion_generation.examples.kinematics import UIBuilder as KinematicsUIBuilder
+from isaacsim.robot_motion.motion_generation.examples.trajectory_generator import UIBuilder as TrajectoryUIBuilder
+```
+
+### Wrapped UI Elements
+
+The UI builders track wrapped UI elements through `wrapped_ui_elements`. Buttons imported from `**isaacsim.gui.components.element_wrappers**` implement cleanup behavior, so the UI builder calls cleanup on those elements when needed.
+
+### Frames
+
+Each {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` maintains UI frames through `frames`. The documented frames include World Controls and Run Scenario sections, which group scene setup actions separately from motion execution actions.
+
+## Relationships
+
+### Lula Motion Generation
+
+The extension package description states that these are examples for using the Lula planning library under motion generation. The tutorials demonstrate Lula-related motion generation workflows through RMPflow, RRT, kinematics, and trajectory generation examples.
+
+### Timeline, Stage, and Physics
+
+The example UIs are designed around simulation state:
+
+- Timeline events control play and stop related UI behavior.
+- Physics step callbacks run only while the timeline is playing.
+- Stage events reset or update the UI when a stage is opened.
+
+This relationship is visible in each {class}`UIBuilder <isaacsim.robot_motion.motion_generation.examples.rmp_flow.UIBuilder>` through `on_timeline_event`, `on_physics_step`, and `on_stage_event`.
+
+### Example Module Relationship
+
+The four modules share the same public API shape and UI pattern. The main difference is the scenario they connect to and the motion generation concept they demonstrate.
+
+Use the module that matches the workflow you want to explore:
+
+- Use `rmp_flow` for Franka RMPflow motion generation.
+- Use `rrt` for Franka RRT path planning.
+- Use `kinematics` for Franka kinematics.
+- Use `trajectory_generator` for UR10 trajectory generation.

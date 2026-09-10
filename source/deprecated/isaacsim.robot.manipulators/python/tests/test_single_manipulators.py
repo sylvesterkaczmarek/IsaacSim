@@ -35,7 +35,7 @@ class TestSingleManipulators(omni.kit.test.AsyncTestCase):
     """
 
     async def setUp(self) -> None:
-        """Set up the test environment by creating a new world, stage, and timeline interface."""
+        """Set up the test environment by creating a new World, stage, and timeline interface."""
         World.clear_instance()
         await create_new_stage_async()
         self._my_world = World()
@@ -45,7 +45,11 @@ class TestSingleManipulators(omni.kit.test.AsyncTestCase):
         self._timeline = omni.timeline.get_timeline_interface()
 
     async def test_single_manipulators(self) -> None:
-        """Test SingleManipulator creation and initialization with a UR10 robot and SurfaceGripper."""
+        """Test SingleManipulator creation and initialization with a UR10 robot and SurfaceGripper.
+
+        Raises:
+            AssertionError: If the UR10 SingleManipulator does not have a gripper after reset.
+        """
         asset_path = self._assets_root_path + "/Isaac/Robots/UniversalRobots/ur10/ur10.usd"
         robot = add_reference_to_stage(usd_path=asset_path, prim_path="/World/UR10")
         robot.GetVariantSet("Gripper").SetVariantSelection("Short_Suction")
@@ -65,7 +69,11 @@ class TestSingleManipulators(omni.kit.test.AsyncTestCase):
         self.assertFalse(ur10.gripper is None)
 
     async def test_parallel_gripper(self) -> None:
-        """Test ParallelGripper functionality with a UR10e robot and Robotiq gripper."""
+        """Test ParallelGripper functionality with a UR10e robot and Robotiq gripper.
+
+        Raises:
+            AssertionError: If the Robotiq gripper joint position does not reach the expected closed position.
+        """
         asset_path = self._assets_root_path + "/Isaac/Robots/UniversalRobots/ur10e/ur10e.usd"
         robot = add_reference_to_stage(usd_path=asset_path, prim_path="/World/ur10e")
         robot.GetVariantSet("Gripper").SetVariantSelection("Robotiq_2f_140")

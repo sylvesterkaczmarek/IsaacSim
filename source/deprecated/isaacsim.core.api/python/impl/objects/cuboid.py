@@ -31,26 +31,29 @@ from pxr import Gf, UsdGeom
 
 
 class VisualCuboid(SingleGeometryPrim):
-    """High level wrapper to create/encapsulate a visual cuboid.
+    """High-level wrapper to create or encapsulate a visual cuboid.
 
     .. note::
 
-        Visual cuboids (Cube shape) have no collisions (Collider API) or rigid body dynamics (Rigid Body API)
+        Visual cuboids (Cube shapes) have no collisions (Collider API) or rigid body dynamics (Rigid Body API).
 
     Args:
         prim_path: Prim path of the Prim to encapsulate or create.
-        name: Shortname to be used as a key by Scene class. Note: needs to be unique if the object is added to the
+        name: Short name to be used as a key by Scene class. Note: needs to be unique if the object is added to the
             Scene.
         position: Position in the world frame of the prim. Shape is (3, ).
         translation: Translation in the local frame of the prim (with respect to its parent prim). Shape is (3, ).
-        orientation: Quaternion orientation in the world/ local frame of the prim (depends if translation or position
+        orientation: Quaternion orientation in the world/local frame of the prim (depends if translation or position
             is specified). Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
         scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
-        visible: Set to false for an invisible prim in the stage while rendering.
+        visible: Set to False for an invisible prim in the stage while rendering.
         color: Color of the visual shape.
         size: Length of each cube edge.
         visual_material: Visual material to be applied to the held prim. If not specified, a default visual material
             will be added.
+
+    Raises:
+        Exception: If the prim at prim_path exists and cannot be parsed as a Cube object.
 
     Example:
 
@@ -63,7 +66,6 @@ class VisualCuboid(SingleGeometryPrim):
         >>> prim = VisualCuboid(prim_path="/World/Xform/Cube", color=np.array([1.0, 0.0, 0.0]))
         >>> prim
         <isaacsim.core.api.objects.cuboid.VisualCuboid object at 0x7f12e756fa00>
-
     """
 
     def __init__(
@@ -126,14 +128,12 @@ class VisualCuboid(SingleGeometryPrim):
         """Set the length of each cube edge.
 
         Args:
-            size: edge length
+            size: Edge length.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> prim.set_size(2.0)
-
+                >>> prim.set_size(2.0)
         """
         self.geom.CreateSizeAttr(size)
         return
@@ -142,15 +142,13 @@ class VisualCuboid(SingleGeometryPrim):
         """Get the length of each cube edge.
 
         Returns:
-            edge length
+            Edge length.
 
         Example:
+            .. code-block:: python
 
-        .. code-block:: python
-
-            >>> prim.get_size()
-            1.0
-
+                >>> prim.get_size()
+                1.0
         """
         return self.geom.GetSizeAttr().Get()
 
@@ -160,25 +158,25 @@ class FixedCuboid(VisualCuboid):
 
     .. note::
 
-        Fixed cuboids (Cube shape) have collisions (Collider API) but no rigid body dynamics (Rigid Body API)
+        Fixed cuboids (Cube shape) have collisions (Collider API) but no rigid body dynamics (Rigid Body API).
 
     Args:
-        prim_path: prim path of the Prim to encapsulate or create
-        name: shortname to be used as a key by Scene class.
+        prim_path: Prim path of the Prim to encapsulate or create.
+        name: Shortname to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
-        position: position in the world frame of the prim. shape is (3, ).
-        translation: translation in the local frame of the prim
-            (with respect to its parent prim). shape is (3, ).
-        orientation: quaternion orientation in the world/ local frame of the prim
+        position: Position in the world frame of the prim. Shape is (3, ).
+        translation: Translation in the local frame of the prim
+            (with respect to its parent prim). Shape is (3, ).
+        orientation: Quaternion orientation in the world/local frame of the prim
             (depends if translation or position is specified).
-            quaternion is scalar-first (w, x, y, z). shape is (4, ).
-        scale: local scale to be applied to the prim's dimensions. shape is (3, ).
-        visible: set to false for an invisible prim in the stage while rendering.
-        color: color of the visual shape.
-        size: length of each cube edge.
-        visual_material: visual material to be applied to the held prim.
+            Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
+        scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
+        visible: Set to false for an invisible prim in the stage while rendering.
+        color: Color of the visual shape.
+        size: Length of each cube edge.
+        visual_material: Visual material to be applied to the held prim.
             If not specified, a default visual material will be added.
-        physics_material: physics material to be applied to the held prim.
+        physics_material: Physics material to be applied to the held prim.
             If not specified, a default physics material will be added.
 
     Example:
@@ -192,7 +190,6 @@ class FixedCuboid(VisualCuboid):
         >>> prim = FixedCuboid(prim_path="/World/Xform/Cube", color=np.array([1.0, 0.0, 0.0]))
         >>> prim
         <isaacsim.core.api.objects.cuboid.FixedCuboid object at 0x7f7b4d91da80>
-
     """
 
     def __init__(
@@ -261,12 +258,12 @@ class DynamicCuboid(SingleRigidPrim, FixedCuboid):
 
     Args:
         prim_path: Prim path of the Prim to encapsulate or create.
-        name: Shortname to be used as a key by Scene class.
+        name: Short name to be used as a key by Scene class.
             Note: needs to be unique if the object is added to the Scene.
         position: Position in the world frame of the prim. Shape is (3, ).
         translation: Translation in the local frame of the prim
             (with respect to its parent prim). Shape is (3, ).
-        orientation: Quaternion orientation in the world/ local frame of the prim
+        orientation: Quaternion orientation in the world/local frame of the prim
             (depends if translation or position is specified).
             Quaternion is scalar-first (w, x, y, z). Shape is (4, ).
         scale: Local scale to be applied to the prim's dimensions. Shape is (3, ).
@@ -282,6 +279,9 @@ class DynamicCuboid(SingleRigidPrim, FixedCuboid):
         linear_velocity: Linear velocity in the world frame.
         angular_velocity: Angular velocity in the world frame.
 
+    Raises:
+        Exception: If the prim at ``prim_path`` cannot be parsed as a Cube object.
+
     Example:
 
     .. code-block:: python
@@ -293,7 +293,6 @@ class DynamicCuboid(SingleRigidPrim, FixedCuboid):
         >>> prim = DynamicCuboid(prim_path="/World/Xform/Cube", color=np.array([1.0, 0.0, 0.0]), mass=1.0)
         >>> prim
         <isaacsim.core.api.objects.cuboid.DynamicCuboid object at 0x7ff14c04d990>
-
     """
 
     def __init__(

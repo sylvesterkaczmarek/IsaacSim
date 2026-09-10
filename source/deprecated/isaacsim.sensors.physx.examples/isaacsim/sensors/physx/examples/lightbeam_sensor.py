@@ -29,7 +29,8 @@ import omni.usd
 from isaacsim.core.utils.prims import delete_prim, get_prim_at_path
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.examples.browser import get_instance as get_browser_instance
-from isaacsim.gui.components.ui_utils import LABEL_WIDTH, get_style, setup_ui_headers
+from isaacsim.gui.components import setup_ui_headers
+from isaacsim.gui.components.ui_utils import LABEL_WIDTH, get_style
 from isaacsim.sensors.physx import _range_sensor
 from isaacsim.storage.native import get_assets_root_path
 from pxr import Gf, Sdf, UsdGeom, UsdLux, UsdPhysics
@@ -42,7 +43,7 @@ class LightBeamSensorDemo(omni.ext.IExt):
 
     This extension provides an interactive example showing how to use the LightBeam sensor to detect
     objects and measure distances using physics-based ray casting. The demo creates a scene with a
-    moveable cube and a LightBeam sensor that continuously scans for hits, displaying real-time data
+    movable cube and a LightBeam sensor that continuously scans for hits, displaying real-time data
     including beam hit status, linear depth measurements, and hit positions.
 
     The extension integrates with the Isaac Sim examples browser and provides a user interface that
@@ -80,7 +81,7 @@ class LightBeamSensorDemo(omni.ext.IExt):
         """Placeholder method for building the extension window."""
 
     def _on_stage_closed(self, event: object) -> None:
-        """Stage closed event callback.
+        """Handles stage closed events by closing the demonstration window.
 
         Args:
             event: The stage closed event.

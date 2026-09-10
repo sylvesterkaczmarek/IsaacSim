@@ -16,7 +16,7 @@
 """Provides interactive editing capabilities for collision spheres in robot descriptions."""
 
 from collections import OrderedDict
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Any
 
 import carb
@@ -68,6 +68,9 @@ class CollisionSphereEditor:
         self._preview_spheres = []
 
         self._sphere_path_generators = {}
+
+        self._link_name_by_path: dict[str, str] = {}
+        self._link_path_by_name: dict[str, str] = {}
 
         self._lula_path = "/World/LulaRobotDescriptionEditor"
 
@@ -144,20 +147,25 @@ class CollisionSphereEditor:
     def clear_link_spheres(self, link_path: str, store_op: bool = True) -> None:
         """Removes all collision spheres associated with the specified link.
 
+        Only spheres owned by ``link_path`` itself are removed. Spheres on a link
+        nested inside it belong to that nested link and are left alone.
+
         Args:
             link_path: Path to the link whose spheres should be cleared.
             store_op: Whether to store this operation for undo functionality.
         """
+        # `add_sphere` strips a trailing slash before deriving generator keys, so normalize
+        # here too or the lookup misses for callers that pass one.
+        link_path = link_path.rstrip("/")
         if self._get_collision_sphere_base_path(link_path) in self._sphere_path_generators:
             del self._sphere_path_generators[self._get_collision_sphere_base_path(link_path)]
-        path_len = len(link_path)
 
         to_delete = []
         if store_op:
             self.copy_all_sphere_data()
         deleted_spheres = ["DEL"]
         for p in self.path_2_spheres:
-            if self._is_prim_path_valid(p) and p[:path_len] == link_path:
+            if self._is_prim_path_valid(p) and self._get_link_path(p) == link_path:
                 deleted_spheres.append(self.path_2_sphere_serial_copy[p])
                 to_delete.append(p)
 
@@ -184,7 +192,9 @@ class CollisionSphereEditor:
         """Sets the colors for spheres based on filter matching.
 
         Args:
-            filter: Filter string to match against sphere paths.
+            filter: Link path whose own spheres are colored with ``color_in``. Spheres on a
+                link nested inside it belong to that nested link and are colored with
+                ``color_out``. An empty string matches every sphere.
             color_in: Color for spheres that match the filter.
             color_out: Color for spheres that do not match the filter.
         """
@@ -208,10 +218,23 @@ class CollisionSphereEditor:
         if not self._is_prim_path_valid(sphere_path):
             return
         sphere = self.path_2_spheres[sphere_path]
-        if sphere_path[: len(self.filter)] == self.filter:
+        if self._matches_filter(sphere_path):
             sphere.set_display_colors(self.filter_in_sphere_color)
         else:
             sphere.set_display_colors(self.filter_out_sphere_color)
+
+    def _matches_filter(self, sphere_path: str) -> bool:
+        """Whether a sphere belongs to the link currently selected in the UI.
+
+        Args:
+            sphere_path: Full path to the collision sphere prim.
+
+        Returns:
+            True when the sphere is owned by ``self.filter``, or when no filter is set.
+        """
+        if not self.filter:
+            return True
+        return self._get_link_path(sphere_path) == self.filter.rstrip("/")
 
     def copy_all_sphere_data(self) -> None:
         """Copies all current sphere data to the serial copy storage for undo operations."""
@@ -425,7 +448,7 @@ class CollisionSphereEditor:
         self._redo = []
         sphere_path = self._get_unused_collision_sphere_path(link_path)
 
-        if sphere_path[: len(self.filter)] == self.filter:
+        if self._matches_filter(sphere_path):
             color = self.filter_in_sphere_color
         else:
             color = self.filter_out_sphere_color
@@ -545,25 +568,25 @@ class CollisionSphereEditor:
 
         added_sphere_paths = ["ADD"]
         for key, val in sphere_dict.items():
-            link_path = robot_prim_path + "/" + key
-            if self._is_prim_path_valid(link_path):
+            link_path = self._resolve_link_path(robot_prim_path, key)
+            if link_path is not None:
                 for sphere in val:
                     center = np.array(sphere["center"])
                     radius = sphere["radius"]
                     sphere_path = self.add_sphere(link_path, center, radius, store_op=False)
                     added_sphere_paths.append(sphere_path)
             else:
-                carb.log_warn(f"Could not place sphere from xrdf at path: {link_path}")
+                carb.log_warn(f"Could not place sphere from xrdf on link: {key}")
 
         self._operations.append(added_sphere_paths)
 
         for k, v in buffer_distances.items():
-            # Compare against the link path *with* a trailing slash so a buffer
-            # distance targeted at `link1` does not also match sibling links
-            # whose names share that prefix (e.g. `link10`, `link1_tip`).
-            link_path_prefix = robot_prim_path + "/" + k + "/"
+            link_path = self._resolve_link_path(robot_prim_path, k)
+            if link_path is None:
+                carb.log_warn(f"Could not apply buffer distance from xrdf on link: {k}")
+                continue
             for p in self.path_2_spheres:
-                if self._is_prim_path_valid(p) and p.startswith(link_path_prefix):
+                if self._is_prim_path_valid(p) and self._get_link_path(p) == link_path:
                     sphere = self.path_2_spheres[p]
                     rad = sphere.get_radii().numpy()[0]
                     sphere.set_radii(rad + v)
@@ -606,15 +629,15 @@ class CollisionSphereEditor:
 
         for sphere_dict in sphere_list:
             for key, val in sphere_dict.items():
-                link_path = robot_path + "/" + key
-                if self._is_prim_path_valid(link_path):
+                link_path = self._resolve_link_path(robot_path, key)
+                if link_path is not None:
                     for sphere in val:
                         center = np.array(sphere["center"])
                         radius = sphere["radius"]
                         sphere_path = self.add_sphere(link_path, center, radius, store_op=False)
                         added_sphere_paths.append(sphere_path)
                 else:
-                    carb.log_warn(f"Could not place sphere from robot description at path: {link_path}")
+                    carb.log_warn(f"Could not place sphere from robot description on link: {key}")
 
         self._operations.append(added_sphere_paths)
 
@@ -677,17 +700,42 @@ class CollisionSphereEditor:
         self._operations.append(added_sphere_paths)
 
     def scale_spheres(self, path: str, factor: float) -> None:
-        """Scale all spheres under the specified path by a factor.
+        """Scale every sphere nested under the specified path by a factor.
+
+        Subtree-scoped: intended for an articulation root, where scaling the whole
+        robot is the point. To scale one link without also scaling links nested
+        inside it, use :py:meth:`scale_link_spheres`.
 
         Args:
-            path: Path prefix to match spheres against.
+            path: Root path whose nested spheres are scaled.
+            factor: Scale factor to apply to sphere radii.
+        """
+        path_prefix = self._get_subtree_prefix(path)
+        self._scale_spheres(lambda p: p.startswith(path_prefix), factor)
+
+    def scale_link_spheres(self, link_path: str, factor: float) -> None:
+        """Scale the spheres owned by one link by a factor.
+
+        Spheres on a link nested inside ``link_path`` belong to that nested link
+        and keep their radii.
+
+        Args:
+            link_path: Path to the link whose spheres are scaled.
+            factor: Scale factor to apply to sphere radii.
+        """
+        link_path = link_path.rstrip("/")
+        self._scale_spheres(lambda p: self._get_link_path(p) == link_path, factor)
+
+    def _scale_spheres(self, selector: Callable[[str], bool], factor: float) -> None:
+        """Scale every sphere accepted by ``selector`` and record one undo entry.
+
+        Args:
+            selector: Predicate over sphere prim paths selecting what to scale.
             factor: Scale factor to apply to sphere radii.
         """
         scaled_spheres = ["SCALE"]
-        path_len = len(path)
-
         for p in self.path_2_spheres:
-            if self._is_prim_path_valid(p) and p[:path_len] == path:
+            if self._is_prim_path_valid(p) and selector(p):
                 sphere = self.path_2_spheres[p]
                 rad = sphere.get_radii().numpy()[0]
                 sphere.set_radii(factor * rad)
@@ -711,6 +759,27 @@ class CollisionSphereEditor:
 
         return sphere_names
 
+    def _warn_on_link_name_collision(self, link_name: str, sphere_path: str, link_path_by_name: dict[str, str]) -> None:
+        """Report two different links being written under the same description-file key.
+
+        Reachable only when no link path/name mapping was supplied and two link
+        prims share a name, in which case their spheres merge into one entry and
+        one link silently loses its collision geometry on reload.
+
+        Args:
+            link_name: Key the sphere is about to be written under.
+            sphere_path: Full path to the collision sphere prim.
+            link_path_by_name: Link paths already seen for each key, updated here.
+        """
+        link_path = self._get_link_path(sphere_path)
+        seen_link_path = link_path_by_name.setdefault(link_name, link_path)
+        if seen_link_path != link_path:
+            carb.log_error(
+                f"Links {seen_link_path} and {link_path} are both being written as '{link_name}'. "
+                "Their collision spheres will be merged. Select the articulation in the Robot "
+                "Description Editor so links can be named from the articulation, or rename the link prims."
+            )
+
     # Used for XRDF files
     def write_spheres_to_dict(self, robot_prim_path: str, link_to_spheres: dict[str, Any]) -> None:
         """Writes collision sphere data to a dictionary grouped by link names.
@@ -721,15 +790,18 @@ class CollisionSphereEditor:
             robot_prim_path: Path to the robot prim.
             link_to_spheres: Dictionary to update with sphere data, keyed by link name.
         """
+        robot_path_prefix = self._get_subtree_prefix(robot_prim_path)
+        link_path_by_name: dict[str, str] = {}
         for sphere in self.path_2_spheres.values():
             prim_path = sphere.paths[0]
             if self._is_prim_path_valid(prim_path):
-                if prim_path[: len(robot_prim_path)] != robot_prim_path:
+                if not prim_path.startswith(robot_path_prefix):
                     carb.log_warn(
                         f"Not writing sphere at path {prim_path} to file because it is not nested under the robot Articulation"
                     )
                     continue
-                link_name = prim_path[len(robot_prim_path) + 1 : prim_path.rfind("/")]
+                link_name = self._get_link_name(prim_path)
+                self._warn_on_link_name_collision(link_name, prim_path, link_path_by_name)
                 link_spheres = link_to_spheres.get(link_name, [])
                 sphere_pose = self._round_list_floats(sphere.get_local_poses()[0].numpy()[0])
                 link_spheres.append({"center": sphere_pose, "radius": sphere.get_radii().numpy().item()})
@@ -746,15 +818,18 @@ class CollisionSphereEditor:
             f: File handle to write the sphere data to.
         """
         link_to_spheres = OrderedDict()
+        robot_path_prefix = self._get_subtree_prefix(robot_prim_path)
+        link_path_by_name: dict[str, str] = {}
         for sphere in self.path_2_spheres.values():
             prim_path = sphere.paths[0]
             if self._is_prim_path_valid(prim_path):
-                if prim_path[: len(robot_prim_path)] != robot_prim_path:
+                if not prim_path.startswith(robot_path_prefix):
                     carb.log_warn(
                         f"Not writing sphere at path {prim_path} to file because it is not nested under the robot Articulation"
                     )
                     continue
-                link_name = prim_path[len(robot_prim_path) + 1 : prim_path.rfind("/")]
+                link_name = self._get_link_name(prim_path)
+                self._warn_on_link_name_collision(link_name, prim_path, link_path_by_name)
                 link_spheres = link_to_spheres.get(link_name, [])
                 # Coerce numpy scalars to Python floats before rounding:
                 # `numpy.float32` / `numpy.ndarray` returned by `get_radii()`
@@ -781,6 +856,21 @@ class CollisionSphereEditor:
         self.clear_preview()
         if self._is_prim_path_valid(self._lula_path):
             stage_utils.delete_prim(self._lula_path)
+
+    @staticmethod
+    def _get_subtree_prefix(root_path: str) -> str:
+        """Path prefix matching only prims nested under a root path.
+
+        Anchoring on the trailing slash keeps a root such as `/World/robot/link1` from also
+        matching sibling links whose names extend it (`link10`, `link1_tip`).
+
+        Args:
+            root_path: Path to the prim whose descendants should match.
+
+        Returns:
+            The root path with exactly one trailing slash.
+        """
+        return root_path.rstrip("/") + "/"
 
     def _get_collision_sphere_base_path(self, link_path: str) -> str:
         """Base path for collision spheres belonging to a link.
@@ -818,6 +908,77 @@ class CollisionSphereEditor:
         for f in l:
             r.append(round(f, decimals))
         return r
+
+    def set_link_names(self, link_name_by_path: dict[str, str]) -> None:
+        """Supply the articulation's authoritative link path/name mapping.
+
+        Without this the editor can only fall back to prim names, which are not
+        unique across an articulation: two links whose prims are both named
+        ``tool`` under different parents would share one description-file key and
+        silently merge their spheres.
+
+        Args:
+            link_name_by_path: Absolute link prim path to the articulation's name
+                for that link. Pass an empty mapping to clear it.
+        """
+        self._link_name_by_path = dict(link_name_by_path)
+        self._link_path_by_name = {name: path for path, name in self._link_name_by_path.items()}
+
+    def _resolve_link_path(self, robot_prim_path: str, link_key: str) -> str | None:
+        """Resolve a link key from a description file to a prim path on the stage.
+
+        Description files key spheres by link name, which is only a direct child
+        of the articulation root for robots with a flat link hierarchy. When a
+        link prim is authored inside another link prim, joining the name onto the
+        root produces a path that does not exist, and the spheres for that link
+        are dropped with only a warning.
+
+        Args:
+            robot_prim_path: Path to the robot prim.
+            link_key: Link key as written in the description file. Either a link
+                name or, in files written before link names were used, a path
+                fragment relative to the robot prim.
+
+        Returns:
+            Path to the link prim, or None when no link on the stage matches.
+        """
+        # The articulation's own naming is authoritative and unambiguous, so it
+        # wins over any path guessing.
+        link_path = self._link_path_by_name.get(link_key)
+        if link_path is not None and self._is_prim_path_valid(link_path):
+            return link_path
+
+        # Falls back to a direct join, which resolves the path fragments older
+        # files were written with. A name is never searched for across the stage:
+        # that can land on a same-named prim that is not a link, silently binding
+        # spheres to the wrong frame.
+        direct_path = robot_prim_path + "/" + link_key
+        if not self._is_prim_path_valid(direct_path):
+            return None
+        # With a mapping to check against, only accept a prim that really is a
+        # link, so a leftover prim sharing a link's name cannot capture spheres.
+        if self._link_name_by_path and direct_path not in self._link_name_by_path:
+            return None
+        return direct_path
+
+    def _get_link_name(self, sphere_path: str) -> str:
+        """Name of the link a collision sphere belongs to.
+
+        XRDF and Lula robot description files key collision spheres by link
+        *name*, matching the robot description. Deriving the key by slicing the
+        sphere path relative to the articulation root instead yields a path
+        fragment such as ``"base_link/arm_link"`` whenever a link is nested
+        inside another link, which no downstream consumer can resolve.
+
+        Args:
+            sphere_path: Full path to the collision sphere prim.
+
+        Returns:
+            The articulation's name for the link containing the sphere, falling
+            back to the link's prim name when no mapping was supplied.
+        """
+        link_path = self._get_link_path(sphere_path)
+        return self._link_name_by_path.get(link_path, link_path.rsplit("/", 1)[-1])
 
     def _get_link_path(self, sphere_path: str) -> str:
         """Parent link path for a collision sphere.

@@ -62,13 +62,33 @@ print("Loading Complete")
 
 SimulationManager.setup_simulation(dt=1.0 / 60.0, device="cpu")
 
-ros_cameras_graph_path = "/World/Nova_Carter_ROS/front_hawk"
+robot_prim_path = "/World/Nova_Carter_ROS"
+front_hawk_path = f"{robot_prim_path}/chassis_link/sensors/front_hawk"
+left_camera_graph_path = f"{front_hawk_path}/left/ROS_Camera_Left"
+right_camera_graph_path = f"{front_hawk_path}/right/ROS_Camera_Right"
+camera_info_graph_path = f"{front_hawk_path}/ROS_Camera_Info"
 
 # Enabling rgb image publishers for left camera. Cameras will automatically publish images each frame
-og.Controller.set(og.Controller.attribute(ros_cameras_graph_path + "/left_camera_render_product.inputs:enabled"), True)
+og.Controller.set(
+    og.Controller.attribute(f"{left_camera_graph_path}/left_camera_render_product.inputs:enabled"),
+    True,
+)
 
 # Enabling rgb image publishers for right camera. Cameras will automatically publish images each frame
-og.Controller.set(og.Controller.attribute(ros_cameras_graph_path + "/right_camera_render_product.inputs:enabled"), True)
+og.Controller.set(
+    og.Controller.attribute(f"{right_camera_graph_path}/right_camera_render_product.inputs:enabled"),
+    True,
+)
+
+# CameraInfo has its own render product graph in the current Nova Carter scenario layout.
+og.Controller.set(
+    og.Controller.attribute(f"{camera_info_graph_path}/left_camera_render_product.inputs:enabled"),
+    True,
+)
+og.Controller.set(
+    og.Controller.attribute(f"{camera_info_graph_path}/right_camera_render_product.inputs:enabled"),
+    True,
+)
 
 app_utils.play()
 simulation_app.update()

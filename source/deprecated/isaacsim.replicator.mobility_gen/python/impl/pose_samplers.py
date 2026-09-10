@@ -34,8 +34,7 @@ class PoseSampler:
     def sample_px(self, occupancy_map: OccupancyMap) -> Pose2d:
         """Sample a 2D pose, with (x, y) in pixel coordinates.
 
-        This method should be implemented by PoseSampler
-        implementations.
+        This method should be implemented by PoseSampler implementations.
 
         Args:
             occupancy_map: An occupancy map that the
@@ -46,7 +45,7 @@ class PoseSampler:
 
         Returns:
             The sampled pose in (x, y) pixel and (theta)
-                world coordinates.
+            world coordinates.
         """
         raise NotImplementedError
 
@@ -56,6 +55,9 @@ class PoseSampler:
         Args:
             occupancy_map: An occupancy map that the
                 pose sampler may use.
+
+        Raises:
+            NotImplementedError: The sample_px method is not implemented.
 
         Returns:
             The sampled 2D pose.
@@ -83,6 +85,9 @@ class UniformPoseSampler(PoseSampler):
 
         Returns:
             The sampled pose in (x, y) pixel and (theta) world coordinates.
+
+        Raises:
+            ValueError: No freespace pixels are available to sample from.
         """
         freespace = occupancy_map.freespace_mask()
         coords = np.argwhere(freespace)
@@ -96,7 +101,7 @@ class UniformPoseSampler(PoseSampler):
 class GridPoseSampler(PoseSampler):
     """A pose sampler that samples poses using grid partitioning.
 
-    This pose sampler samples poses by
+    This pose sampler samples poses by:
 
     1. Splitting the occupancy map into grid regions specified by "grid_size_meters"
     2. Sampling a grid region uniformly

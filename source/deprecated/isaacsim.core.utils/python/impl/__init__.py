@@ -13,5 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Exposes the commands utilities for isaacsim.core.utils."""
+
 from . import commands  # noqa: F401 -- populates commands list
 from .bindings import _isaac_utils as _isaac_utils

@@ -13,15 +13,11 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-if platform_target == "linux-x86_64" then
-    local ext = get_current_extension_info()
-    project_ext(ext)
+local ext = get_current_extension_info()
+project_ext(ext)
 
-    repo_build.prebuild_link {
-        { "data", ext.target_dir .. "/data" },
-        { "docs", ext.target_dir .. "/docs" },
-        { "isaacsim", ext.target_dir .. "/isaacsim" },
-    }
-else
-    print("SKIPPING isaacsim.replicator.teleop.ui - only supported on linux-x86_64")
-end
+repo_build.prebuild_link {
+    { "data", ext.target_dir .. "/data" },
+    { "docs", ext.target_dir .. "/docs" },
+    { "isaacsim", ext.target_dir .. "/isaacsim" },
+}

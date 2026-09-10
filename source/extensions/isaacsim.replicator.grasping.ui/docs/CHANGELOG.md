@@ -1,4 +1,11 @@
 # Changelog
+## [1.1.4] - 2026-08-14
+### Changed
+- Use experimental stage utils for current-stage access.
+
+### Fixed
+- Preserve per-phase joint drive targets when loading a grasping configuration.
+
 ## [1.1.3] - 2026-05-08
 ### Fixed
 - Set explicit checkbox/label widths so checkboxes are reliably toggled via the Omniverse Kit API.

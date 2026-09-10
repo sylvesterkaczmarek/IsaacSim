@@ -39,6 +39,7 @@ class GeometryData:
     # Cylinder
     cylinder_radius: float | None = None
     cylinder_length: float | None = None
+    axis: str = "Z"
     # Mesh
     mesh_prim: Usd.Prim | None = None
     mesh_scale: tuple[float, float, float] | None = None
@@ -97,8 +98,8 @@ def read_geometry(prim: Usd.Prim) -> list[GeometryData]:
 def _read_cube(prim: Usd.Prim) -> GeometryData:
     """Read box geometry from a UsdGeomCube.
 
-    Newton convention: size=1.0 with scale XformOp for dimensions.
-    General: size attribute * any scale.
+    Returns the authored size without applying Xform scale. The exporter later
+    applies the composed geometry-to-link scale, including ancestor Xforms.
 
     Args:
         prim: USD prim to read.
@@ -110,11 +111,7 @@ def _read_cube(prim: Usd.Prim) -> GeometryData:
     size_attr = cube.GetSizeAttr()
     size = float(size_attr.Get()) if size_attr and size_attr.Get() is not None else 2.0
 
-    scale = _get_scale(prim)
-
-    box_size = (size * scale[0], size * scale[1], size * scale[2])
-
-    return GeometryData(geom_type="box", source_prim=prim, box_size=box_size)
+    return GeometryData(geom_type="box", source_prim=prim, box_size=(size, size, size))
 
 
 def _read_sphere(prim: Usd.Prim) -> GeometryData:
@@ -129,11 +126,6 @@ def _read_sphere(prim: Usd.Prim) -> GeometryData:
     sphere = UsdGeom.Sphere(prim)
     radius_attr = sphere.GetRadiusAttr()
     radius = float(radius_attr.Get()) if radius_attr and radius_attr.Get() is not None else 1.0
-
-    scale = _get_scale(prim)
-    max_scale = max(abs(scale[0]), abs(scale[1]), abs(scale[2]))
-    if max_scale != 1.0:
-        radius *= max_scale
 
     return GeometryData(geom_type="sphere", source_prim=prim, sphere_radius=radius)
 
@@ -153,21 +145,16 @@ def _read_cylinder(prim: Usd.Prim) -> GeometryData:
     radius = float(radius_attr.Get()) if radius_attr and radius_attr.Get() is not None else 1.0
     height = float(height_attr.Get()) if height_attr and height_attr.Get() is not None else 2.0
 
-    scale = _get_scale(prim)
     axis_attr = cyl.GetAxisAttr()
     axis = axis_attr.Get() if axis_attr else "Z"
 
-    if axis == "Z":
-        radius *= max(abs(scale[0]), abs(scale[1]))
-        height *= abs(scale[2])
-    elif axis == "Y":
-        radius *= max(abs(scale[0]), abs(scale[2]))
-        height *= abs(scale[1])
-    else:
-        radius *= max(abs(scale[1]), abs(scale[2]))
-        height *= abs(scale[0])
-
-    return GeometryData(geom_type="cylinder", source_prim=prim, cylinder_radius=radius, cylinder_length=height)
+    return GeometryData(
+        geom_type="cylinder",
+        source_prim=prim,
+        cylinder_radius=radius,
+        cylinder_length=height,
+        axis=axis,
+    )
 
 
 def _read_capsule(prim: Usd.Prim) -> list[GeometryData]:
@@ -189,19 +176,8 @@ def _read_capsule(prim: Usd.Prim) -> list[GeometryData]:
     radius = float(radius_attr.Get()) if radius_attr and radius_attr.Get() is not None else 0.5
     height = float(height_attr.Get()) if height_attr and height_attr.Get() is not None else 1.0
 
-    scale = _get_scale(prim)
     axis_attr = capsule.GetAxisAttr()
     axis = axis_attr.Get() if axis_attr else "Z"
-
-    if axis == "Z":
-        radius *= max(abs(scale[0]), abs(scale[1]))
-        height *= abs(scale[2])
-    elif axis == "Y":
-        radius *= max(abs(scale[0]), abs(scale[2]))
-        height *= abs(scale[1])
-    else:
-        radius *= max(abs(scale[1]), abs(scale[2]))
-        height *= abs(scale[0])
 
     half_h = height / 2.0
     prim_name = get_prim_name(prim)
@@ -222,27 +198,30 @@ def _read_capsule(prim: Usd.Prim) -> list[GeometryData]:
         source_prim=prim,
         cylinder_radius=radius,
         cylinder_length=height,
+        axis=axis,
         name_suffix="_body",
         original_type="Capsule",
-        original_params=breadcrumb,
+        original_params=dict(breadcrumb),
     )
     top_cap = GeometryData(
         geom_type="sphere",
         source_prim=prim,
         sphere_radius=radius,
+        axis=axis,
         name_suffix="_top_cap",
         local_offset_xyz=top_offset,
         original_type="Capsule",
-        original_params=breadcrumb,
+        original_params=dict(breadcrumb),
     )
     bottom_cap = GeometryData(
         geom_type="sphere",
         source_prim=prim,
         sphere_radius=radius,
+        axis=axis,
         name_suffix="_bottom_cap",
         local_offset_xyz=bot_offset,
         original_type="Capsule",
-        original_params=breadcrumb,
+        original_params=dict(breadcrumb),
     )
     return [body, top_cap, bottom_cap]
 
@@ -266,19 +245,8 @@ def _read_cone(prim: Usd.Prim) -> GeometryData:
     radius = float(radius_attr.Get()) if radius_attr and radius_attr.Get() is not None else 1.0
     height = float(height_attr.Get()) if height_attr and height_attr.Get() is not None else 2.0
 
-    scale = _get_scale(prim)
     axis_attr = cone.GetAxisAttr()
     axis = axis_attr.Get() if axis_attr else "Z"
-
-    if axis == "Z":
-        radius *= max(abs(scale[0]), abs(scale[1]))
-        height *= abs(scale[2])
-    elif axis == "Y":
-        radius *= max(abs(scale[0]), abs(scale[2]))
-        height *= abs(scale[1])
-    else:
-        radius *= max(abs(scale[1]), abs(scale[2]))
-        height *= abs(scale[0])
 
     prim_name = get_prim_name(prim)
     breadcrumb = {
@@ -292,6 +260,7 @@ def _read_cone(prim: Usd.Prim) -> GeometryData:
         geom_type="mesh",
         source_prim=prim,
         mesh_prim=None,
+        axis=axis,
         original_type="Cone",
         original_params=breadcrumb,
     )
@@ -315,25 +284,3 @@ def _read_mesh(prim: Usd.Prim) -> GeometryData:
         Geometry data for the mesh.
     """
     return GeometryData(geom_type="mesh", source_prim=prim, mesh_prim=prim)
-
-
-def _get_scale(prim: Usd.Prim) -> tuple[float, float, float]:
-    """Extract scale from a prim's XformOps.
-
-    Args:
-        prim: USD prim to read.
-
-    Returns:
-        Scale values authored on the prim.
-    """
-    xformable = UsdGeom.Xformable(prim)
-    if not xformable:
-        return (1.0, 1.0, 1.0)
-
-    for op in xformable.GetOrderedXformOps():
-        if op.GetOpType() == UsdGeom.XformOp.TypeScale:
-            scale_val = op.Get()
-            if scale_val is not None:
-                return (float(scale_val[0]), float(scale_val[1]), float(scale_val[2]))
-
-    return (1.0, 1.0, 1.0)

@@ -30,21 +30,22 @@ Command class to create a light beam sensor.
 import omni.kit.commands
 from pxr import Gf
 
-# Create a light beam sensor with default settings
-result, prim = omni.kit.commands.execute(
+# Create a light beam sensor with multiple rays.
+# Note: curtain_length must be greater than 0 when num_rays > 1.
+success, light_beam_sensor = omni.kit.commands.execute(
     "IsaacSensorCreateLightBeamSensor",
-    path="/LightBeam_Sensor",
+    path="/World/LightBeam_Sensor",
     parent=None,
-    translation=Gf.Vec3d(0, 0, 1),
-    orientation=Gf.Quatd(1, 0, 0, 0),
+    translation=Gf.Vec3d(0.0, 0.0, 1.0),
+    orientation=Gf.Quatd(1.0, 0.0, 0.0, 0.0),
     num_rays=5,
     curtain_length=2.0,
-    forward_axis=Gf.Vec3d(1, 0, 0),
-    curtain_axis=Gf.Vec3d(0, 0, 1),
-    min_range=0.4,
-    max_range=100.0,
+    forward_axis=Gf.Vec3d(1.0, 0.0, 0.0),
+    curtain_axis=Gf.Vec3d(0.0, 0.0, 1.0),
+    min_range=0.1,
+    max_range=10.0,
     draw_points=True,
-    draw_lines=True
+    draw_lines=True,
 )
 ```
 
@@ -69,15 +70,15 @@ sampling_rate=60,
 )
 
 ### Arguments
-- path
-- parent
-- translation
-- orientation
-- min_range
-- max_range
-- draw_points
-- draw_lines
-- sampling_rate
+- path: Path for the new prim.
+- parent: Parent prim path.
+- translation: Translation vector for the prim.
+- orientation: Orientation quaternion for the prim.
+- min_range: Minimum range of the sensor.
+- max_range: Maximum range of the sensor.
+- draw_points: Whether to draw points for visualization.
+- draw_lines: Whether to draw lines for visualization.
+- sampling_rate: Sampling rate of the sensor in Hz.
 
 ### Usage
 
@@ -85,18 +86,19 @@ sampling_rate=60,
 import omni.kit.commands
 from pxr import Gf
 
-# Create a generic range sensor with default parameters
-result, prim = omni.kit.commands.execute(
+# Create a generic range sensor prim at /World/GenericSensor.
+# The command returns (success, schema_object).
+success, generic_sensor = omni.kit.commands.execute(
     "RangeSensorCreateGeneric",
-    path="/GenericSensor",
+    path="/World/GenericSensor",
     parent=None,
-    translation=Gf.Vec3d(0, 0, 1),
-    orientation=Gf.Quatd(1, 0, 0, 0),
+    translation=Gf.Vec3d(0.0, 0.0, 1.0),
+    orientation=Gf.Quatd(1.0, 0.0, 0.0, 0.0),
     min_range=0.4,
-    max_range=100.0,
+    max_range=50.0,
     draw_points=True,
-    draw_lines=True,
-    sampling_rate=60
+    draw_lines=False,
+    sampling_rate=60,
 )
 ```
 
@@ -128,22 +130,22 @@ enable_semantics=False,
 )
 
 ### Arguments
-- path
-- parent
-- translation
-- orientation
-- min_range
-- max_range
-- draw_points
-- draw_lines
-- horizontal_fov
-- vertical_fov
-- horizontal_resolution
-- vertical_resolution
-- rotation_rate
-- high_lod
-- yaw_offset
-- enable_semantics
+- path: Path for the new lidar sensor prim.
+- parent: Parent prim path.
+- translation: Translation vector for the lidar sensor.
+- orientation: Orientation quaternion for the lidar sensor.
+- min_range: Minimum range of the sensor.
+- max_range: Maximum range of the sensor.
+- draw_points: Whether to draw points for visualization.
+- draw_lines: Whether to draw lines for visualization.
+- horizontal_fov: Horizontal field of view in degrees.
+- vertical_fov: Vertical field of view in degrees.
+- horizontal_resolution: Horizontal resolution in degrees per sample.
+- vertical_resolution: Vertical resolution in degrees per sample.
+- rotation_rate: Rotation rate of the sensor in Hz.
+- high_lod: Whether to enable high level of detail rendering.
+- yaw_offset: Yaw offset in degrees.
+- enable_semantics: Whether to enable semantic segmentation.
 
 ### Usage
 
@@ -151,13 +153,13 @@ enable_semantics=False,
 import omni.kit.commands
 from pxr import Gf
 
-# Create a lidar sensor with default parameters
-omni.kit.commands.execute(
+# Create a LiDAR range sensor prim.
+success, lidar_schema = omni.kit.commands.execute(
     "RangeSensorCreateLidar",
     path="/World/Lidar",
-    parent="/World",
-    translation=Gf.Vec3d(0, 0, 2),
-    orientation=Gf.Quatd(1, 0, 0, 0),
+    parent=None,
+    translation=Gf.Vec3d(0.0, 0.0, 1.0),
+    orientation=Gf.Quatd(1.0, 0.0, 0.0, 0.0),
     min_range=0.4,
     max_range=100.0,
     draw_points=True,
@@ -169,8 +171,12 @@ omni.kit.commands.execute(
     rotation_rate=20.0,
     high_lod=False,
     yaw_offset=0.0,
-    enable_semantics=False
+    enable_semantics=False,
 )
+
+if success and lidar_schema:
+    lidar_prim = lidar_schema.GetPrim()
+    print(f"Created LiDAR sensor at: {lidar_prim.GetPath()}")
 ```
 
 ## RangeSensorCreatePrim
@@ -198,19 +204,23 @@ import omni.kit.commands
 import omni.isaac.RangeSensorSchema as RangeSensorSchema
 from pxr import Gf
 
-# Create a basic range sensor prim using RangeSensorCreatePrim
-result, prim = omni.kit.commands.execute(
+# Create a base range sensor prim using the Lidar schema.
+success, sensor_schema = omni.kit.commands.execute(
     "RangeSensorCreatePrim",
-    path="/World/RangeSensor",
+    path="/World/MyRangeSensor",
     parent="",
     schema_type=RangeSensorSchema.Lidar,
-    translation=Gf.Vec3d(0, 0, 1),
-    orientation=Gf.Quatd(1, 0, 0, 0),
+    translation=Gf.Vec3d(0.0, 0.0, 1.0),
+    orientation=Gf.Quatd(1.0, 0.0, 0.0, 0.0),
     visibility=False,
     min_range=0.4,
     max_range=100.0,
     draw_points=True,
-    draw_lines=True
+    draw_lines=False,
 )
+
+if success and sensor_schema:
+    prim = sensor_schema.GetPrim()
+    print(f"Created range sensor prim at: {prim.GetPath()}")
 ```
 

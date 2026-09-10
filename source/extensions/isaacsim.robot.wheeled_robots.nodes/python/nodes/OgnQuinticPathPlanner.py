@@ -20,7 +20,7 @@ import numpy as np
 import omni
 import omni.graph.core as og
 from isaacsim.core.nodes import BaseResetNode
-from isaacsim.robot.experimental.wheeled_robots.controllers import normalize_angle, quintic_polynomials_planner
+from isaacsim.robot.experimental.wheeled_robots import normalize_angle, quintic_polynomials_planner
 from isaacsim.robot.wheeled_robots.nodes.ogn.OgnQuinticPathPlannerDatabase import OgnQuinticPathPlannerDatabase
 
 
@@ -149,7 +149,11 @@ def get_target_pos(inputs: object, state: OgnQuinticPathPlannerInternalState) ->
         m = omni.usd.get_world_transform_matrix(prim)  # get position/rotation matrix of targetPrim
         m.Orthonormalize()  # normalize vectors and make orthogonal
         pos = list(m.ExtractTranslation())  # get position double[3]
-        rot = normalize_angle(np.radians(m.ExtractRotation().angle))  # get rotation double
+        quat = m.ExtractRotationQuat()  # get signed rotation quaternion
+        imaginary = quat.GetImaginary()
+        _, _, rot = quatd4_to_euler(
+            [imaginary[0], imaginary[1], imaginary[2], quat.GetReal()]
+        )  # signed yaw, shares extractor with the targetOrientation branch
         g = [pos[0], pos[1], rot]  # combine into list of useful data
 
     if (

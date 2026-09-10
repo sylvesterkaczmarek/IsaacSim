@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.6.10] - 2026-07-21
+### Changed
+- Migrated robot asset references from `Isaac/Robots/` to `Isaac/Robots_Multiphysics/` for the new multiphysics-ready USDA assets.
+
+### Fixed
+- UCX node tests now pin `UCX_NET_DEVICES=lo` (all traffic is loopback), avoiding a multi-minute first-init stall from probing VPN/virtual interfaces that could trip the extension test process timeout.
+
+## [1.6.9] - 2026-07-20
+### Changed
+- Renamed C++ headers from `.h` to `.hpp`; update downstream include directives.
+
+## [1.6.8] - 2026-07-07
+### Changed
+- Use supported package-root imports for cross-extension APIs.
+
 ## [1.6.7] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings.

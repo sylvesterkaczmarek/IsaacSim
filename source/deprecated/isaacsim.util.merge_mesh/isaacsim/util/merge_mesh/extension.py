@@ -24,10 +24,10 @@ import omni.kit.commands
 import omni.kit.utils
 import omni.ui as ui
 import omni.usd
+from isaacsim.gui.components import btn_builder, cb_builder, combo_cb_str_builder, str_builder
 from isaacsim.gui.components.element_wrappers import ScrollingWindow
 from isaacsim.gui.components.menu import make_menu_item_description
 from isaacsim.gui.components.style import get_style
-from isaacsim.gui.components.ui_utils import btn_builder, cb_builder, combo_cb_str_builder, str_builder
 from omni.kit.menu.utils import MenuItemDescription, add_menu_items, remove_menu_items
 
 from .mesh_merger import MeshMerger
@@ -43,7 +43,6 @@ class Extension(omni.ext.IExt):
 
         Args:
             ext_id: The unique identifier for this extension instance.
-
         """
         carb.log_warn(
             f"Extension {EXTENSION_NAME} is deprecated since ISaac Sim 6.0.0. Replaced with the Scene Optimizer"
@@ -144,7 +143,6 @@ class Extension(omni.ext.IExt):
 
         Args:
             value: The new material destination path value.
-
         """
         if type(value) == str:
             self.override_looks_directory[1].set_value(value)
@@ -154,7 +152,6 @@ class Extension(omni.ext.IExt):
 
         Args:
             value: The new material destination path entered by the user.
-
         """
         if self.mesh_merger.materials_destination != value:
             self.mesh_merger.materials_destination = value
@@ -168,7 +165,6 @@ class Extension(omni.ext.IExt):
 
         Args:
             visible: Whether the window is now visible.
-
         """
         if self._window.visible:
             self._usd_context = omni.usd.get_context()
@@ -190,7 +186,6 @@ class Extension(omni.ext.IExt):
 
         Args:
             event: The stage event that triggered this callback. If None, forces a UI update.
-
         """
         if self._window.visible:
             self._stage = omni.usd.get_context().get_stage()

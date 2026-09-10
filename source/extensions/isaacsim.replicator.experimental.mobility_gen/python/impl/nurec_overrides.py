@@ -91,13 +91,23 @@ def setup_for_replay(args: argparse.Namespace, stage: Usd.Stage | None) -> tuple
         stage: The loaded USD stage, or ``None`` (treated as a non-NuRec no-op).
 
     Returns:
-        ``setup_for_rendering``'s ``(success, nurec, spg, problems)``.
+        ``setup_for_rendering``'s ``(success, nurec, spg, problems)``. On return ``success`` is
+        always True and ``problems`` empty, since an unmet prerequisite raises instead.
+
+    Raises:
+        RuntimeError: If a NuRec launch prerequisite is unmet. Rendering the stage anyway crashes
+            the process natively, so this stops before any render product is created; catch it to
+            decide whether to skip the recording or stop.
     """
     if stage is None:
         return True, False, False, []
     success, nurec, spg, problems = setup_for_rendering(stage)
-    for problem in problems:
-        carb.log_warn(f"[nurec-overrides] {problem}")
+    if not success:
+        detail = "; ".join(problems) if problems else "unmet launch prerequisite"
+        raise RuntimeError(
+            f"Cannot render this stage with the current launch configuration: {detail}. "
+            "Relaunch with those settings to include it."
+        )
     if nurec:
         ensure_nurec_replay_flags(args)
     return success, nurec, spg, problems

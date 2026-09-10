@@ -49,13 +49,13 @@ class TestSceneValidation(omni.kit.test.AsyncTestCase):
         await get_app().next_update_async()
 
     async def test_scene_validation_detects_scaled_parent(self) -> None:
-        """Test that scene validation detects when a parent has non-identity scaling."""
+        """Test that scene validation detects when a parent has non-uniform scaling."""
         # Create a parent Xform with scaling
         parent_xform = Sphere(
             paths="/World/ParentXform",
             positions=[0.0, 0.0, 0.0],
             orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[2.0, 3.0, 4.0],  # Non-identity scaling
+            scales=[2.0, 3.0, 4.0],  # Non-uniform scaling
         )
 
         # Create a child sphere under the scaled parent
@@ -100,9 +100,8 @@ class TestSceneValidation(omni.kit.test.AsyncTestCase):
         # Check for invalid ancestors
         invalid_ancestors = scene_validation.find_all_invalid_ancestors(prim_paths=["/World/Parent/Cube"])
 
-        # Should detect the parent as invalid
-        self.assertGreater(len(invalid_ancestors), 0)
-        self.assertIn("/World/Parent", invalid_ancestors)
+        # Uniform scaling, we are fine
+        self.assertTrue(len(invalid_ancestors) == 0)
 
     async def test_scene_validation_accepts_identity_parent_scaling(self) -> None:
         """Test that scene validation accepts a prim when parent has identity scaling."""
@@ -203,7 +202,7 @@ class TestSceneValidation(omni.kit.test.AsyncTestCase):
     async def test_scene_validation_detects_uniform_parent_scaling(self) -> None:
         """Test that even uniform parent scaling is detected.
 
-        ANY parent scaling (uniform or non-uniform) is invalid.
+        ANY parent with non-uniform scaling is invalid.
         """
         # Parent with uniform scaling
         parent_xform = Cube(
@@ -227,9 +226,7 @@ class TestSceneValidation(omni.kit.test.AsyncTestCase):
         # Check for invalid ancestors
         invalid_ancestors = scene_validation.find_all_invalid_ancestors(prim_paths=["/World/UniformParent/Cube"])
 
-        # Should detect the parent as invalid (even though scaling is uniform)
-        self.assertGreater(len(invalid_ancestors), 0)
-        self.assertIn("/World/UniformParent", invalid_ancestors)
+        self.assertTrue(len(invalid_ancestors) == 0)
 
     async def test_scene_validation_detects_negative_scale_in_parent(self) -> None:
         """Test that negative scaling in parent (mirrored/left-handed coordinate system).
@@ -241,7 +238,7 @@ class TestSceneValidation(omni.kit.test.AsyncTestCase):
             paths="/World/MirroredParent",
             positions=[0.0, 0.0, 0.0],
             orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[-1.0, 1.0, 1.0],  # Negative X scale
+            scales=[-1.0, -1.0, -1.0],
         )
 
         # Child sphere
@@ -269,7 +266,7 @@ class TestSceneValidation(omni.kit.test.AsyncTestCase):
             paths="/World/ValidParent",
             positions=[0.0, 0.0, 0.0],
             orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[1.0, 1.0, 1.0],  # Identity scaling
+            scales=[2.0, 2.0, 2.0],  # Uniform scaling
         )
         valid_child = Sphere(
             paths="/World/ValidParent/Sphere",
@@ -284,7 +281,7 @@ class TestSceneValidation(omni.kit.test.AsyncTestCase):
             paths="/World/InvalidParent",
             positions=[0.0, 0.0, 0.0],
             orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[2.0, 2.0, 2.0],  # Non-identity scaling
+            scales=[1.0, 2.0, 2.0],  # Non-Uniform scaling
         )
         invalid_child = Cube(
             paths="/World/InvalidParent/Cube",
@@ -316,7 +313,7 @@ class TestSceneValidation(omni.kit.test.AsyncTestCase):
             paths="/World/Parent",
             positions=[0.0, 0.0, 0.0],
             orientations=[1.0, 0.0, 0.0, 0.0],
-            scales=[2.0, 2.0, 2.0],
+            scales=[1.0, 2.0, 2.0],
         )
 
         # Create multiple children under the same parent

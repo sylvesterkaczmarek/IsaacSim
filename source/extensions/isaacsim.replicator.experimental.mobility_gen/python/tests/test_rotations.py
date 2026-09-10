@@ -260,3 +260,63 @@ class TestRotationFixes(omni.kit.test.AsyncTestCase):
         self.assertAlmostEqual(pose.x, x, places=5)
         self.assertAlmostEqual(pose.y, y, places=5)
         self.assertAlmostEqual(pose.theta, theta, places=5)
+
+    async def test_write_replay_data_reports_missing_state_buffers(self) -> Any:
+        """write_replay_data must name the unset buffers instead of raising a TypeError.
+
+        Returns:
+            None.
+        """
+
+        class _ConcreteRobot(MobilityGenRobot):
+            z_offset = 0.0
+
+            @classmethod
+            def build(cls, prim_path: Any) -> None:
+                pass
+
+            def write_action(self, step_size: Any) -> None:
+                pass
+
+        mock_articulation = MagicMock()
+        mock_articulation.is_physics_tensor_entity_valid.return_value = False
+        robot = _ConcreteRobot(prim_path="/test", articulation=mock_articulation, front_camera=None)
+
+        # Buffers are unset, exactly as they are after loading a recording that never wrote them.
+        with self.assertRaises(ValueError) as ctx:
+            robot.write_replay_data()
+
+        message = str(ctx.exception)
+        self.assertIn("/test", message)
+        for name in ("position", "orientation", "joint_positions"):
+            self.assertIn(name, message)
+        mock_articulation.set_world_poses.assert_not_called()
+        mock_articulation.set_dof_positions.assert_not_called()
+
+    async def test_write_replay_data_writes_when_buffers_populated(self) -> Any:
+        """write_replay_data must forward populated buffers to the articulation.
+
+        Returns:
+            None.
+        """
+
+        class _ConcreteRobot(MobilityGenRobot):
+            z_offset = 0.0
+
+            @classmethod
+            def build(cls, prim_path: Any) -> None:
+                pass
+
+            def write_action(self, step_size: Any) -> None:
+                pass
+
+        mock_articulation = MagicMock()
+        robot = _ConcreteRobot(prim_path="/test", articulation=mock_articulation, front_camera=None)
+        robot.position.set_value(np.array([1.0, 2.0, 3.0]))
+        robot.orientation.set_value(np.array([1.0, 0.0, 0.0, 0.0]))
+        robot.joint_positions.set_value(np.array([0.5, 0.25]))
+
+        robot.write_replay_data()
+
+        mock_articulation.set_world_poses.assert_called_once()
+        mock_articulation.set_dof_positions.assert_called_once()

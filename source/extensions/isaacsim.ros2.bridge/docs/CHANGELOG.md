@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.1.4] - 2026-08-04
+### Fixed
+- `carter_stereo.py`: update Nova Carter stereo camera graph paths and enable separate CameraInfo render products for the current scenario asset layout.
+
+## [5.1.3] - 2026-06-26
+### Changed
+- Hide the Kit lifecycle extension class from the generated public Python API.
+
 ## [5.1.2] - 2026-06-09
 ### Fixed
 - Fix linter errors and missing or incomplete docstrings, and update `python_api.md`.
@@ -166,7 +174,7 @@
 
 ## [4.8.5] - 2025-06-18
 ### Changed
-- Track change from isaacsim.core.include Pose.h
+- Track change from isaacsim.core.include Pose.hpp
 
 ## [4.8.4] - 2025-06-17
 ### Fixed
@@ -195,7 +203,7 @@
 
 ## [4.7.4] - 2025-06-04
 ### Changed
-- Changed CUDA_CHECK in ScopedCudaDevice.h to indicate file and line for more verbose error logging
+- Changed CUDA_CHECK in ScopedCudaDevice.hpp to indicate file and line for more verbose error logging
 
 ## [4.7.3] - 2025-06-04
 ### Removed
@@ -246,7 +254,7 @@
 
 ## [4.6.2] - 2025-05-16
 ### Changed
-- UsdUtilities.h was updated
+- UsdUtilities.hpp was updated
 
 ## [4.6.1] - 2025-05-15
 ### Changed

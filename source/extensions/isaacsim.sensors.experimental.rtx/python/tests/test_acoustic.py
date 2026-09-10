@@ -50,11 +50,13 @@ class TestAcoustic(omni.kit.test.AsyncTestCase):
         with self.assertRaises(ValueError):
             Acoustic("/World/xform")
 
-    async def test_wrap_missing_schema_raises(self) -> None:
-        """Reject wrapping an OmniAcoustic prim that lacks the acoustic WPM schema."""
-        stage_utils.define_prim("/World/acoustic", "OmniAcoustic")
-        with self.assertRaises(ValueError):
-            Acoustic("/World/acoustic")
+    async def test_wrap_missing_schema_applies_schema(self) -> None:
+        """Apply the acoustic WPM schema when wrapping an OmniAcoustic prim that lacks it."""
+        prim = stage_utils.define_prim("/World/acoustic", "OmniAcoustic")
+        self.assertFalse(prim.HasAPI("OmniSensorGenericAcousticWpmAPI"))
+        acoustic = Acoustic("/World/acoustic")
+        self.assertEqual(acoustic.paths[0], "/World/acoustic")
+        self.assertTrue(acoustic.prims[0].HasAPI("OmniSensorGenericAcousticWpmAPI"))
 
     async def test_wrap_with_tick_rate(self) -> None:
         """Apply a tick rate override while wrapping an existing RTX acoustic prim."""

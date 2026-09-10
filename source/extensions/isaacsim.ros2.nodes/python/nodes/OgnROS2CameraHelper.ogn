@@ -1,6 +1,6 @@
 {
     "isaacsim.ros2.bridge.ROS2CameraHelper": {
-        "version": 3,
+        "version": 4,
         "icon": "icons/isaac-sim.svg",
         "description": "This node handles automation of the camera sensor pipeline",
         "language": "Python",
@@ -60,6 +60,7 @@
                     "allowedTokens": {
                         "rgb": "rgb",
                         "rgb_h264": "rgb_h264",
+                        "rgb_hevc": "rgb_hevc",
                         "depth": "depth",
                         "depth_pcl": "depth_pcl",
                         "instance_segmentation": "instance_segmentation",

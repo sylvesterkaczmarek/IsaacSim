@@ -1,5 +1,9 @@
 # Public API for module isaacsim.core.utils:
 
+## Other
+
+
+
 # Public API for module isaacsim.core.utils.commands:
 
 ## Classes
@@ -21,7 +25,7 @@
 
 - class IsaacSimDestroyPrim(omni.kit.commands.Command)
   - def __init__(self, prim_path: str)
-  - def do(self) -> bool
+  - def do(self)
   - def undo(self)
 
 ## Functions
@@ -32,3 +36,9 @@
 ## Variables
 
 - transforms: Unknown
+
+## Other
+
+- carb: unknown module
+- omni.kit.commands: unknown module
+- omni.kit.utils: unknown module

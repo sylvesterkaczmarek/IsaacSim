@@ -1,5 +1,5 @@
 [package]
-version = "0.3.5"
+version = "0.3.7"
 category = "Simulation"
 title = "Isaac Sim Schema UI"
 description = "UI components to display and work with Robot assets, following the Robot schema definition"
@@ -33,6 +33,10 @@ name = "isaacsim.robot.schema.ui.tests"
 name = "startup"
 args = [
     "--/app/settings/fabricDefaultStageFrameHistoryCount=3",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [[test]]
@@ -88,6 +92,10 @@ args = [
     "--/rtx/newDenoiser/enabled=1",
     "--/rtx/rendering/perSensorTickTlas=true",
     "--/rtx/reservedDescriptors=900000",
+]
+
+stdoutFailPatterns.exclude = [
+    '*The NumPy module was reloaded*',
 ]
 
 [documentation]

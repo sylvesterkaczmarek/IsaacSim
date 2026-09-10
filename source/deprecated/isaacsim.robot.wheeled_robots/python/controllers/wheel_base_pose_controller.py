@@ -24,15 +24,15 @@ from isaacsim.core.utils.types import ArticulationAction
 
 
 class WheelBasePoseController(BaseController):
-    """This controller closes the control loop, returning the wheel commands that will drive the robot to a desired pose. It does this by exploiting an open loop controller for the robot passed at class initialization.
+    """This controller closes the control loop, returning the wheel commands that drive the robot to a desired pose. It does this by exploiting an open loop controller for the robot passed at class initialization.
 
     .. hint::
 
         The logic for this controller is the following:
 
-        * calculate the difference between the current position and the target position, and compare against the position tolerance. If the result is inside the tolerance, stop forward motion (ie. stop if closer than position tolerance)
+        * calculate the difference between the current position and the target position, and compare against the position tolerance. If the result is inside the tolerance, stop forward motion (i.e., stop if closer than position tolerance)
 
-        * calculate the difference between the current heading and the target heading, and compare against the heading tolerance. If the result is outside the tolerance, stop forward motion and turn to align with the target heading (ie. dont bother turning unless it's by more than the heading tolerance)
+        * calculate the difference between the current heading and the target heading, and compare against the heading tolerance. If the result is outside the tolerance, stop forward motion and turn to align with the target heading (i.e., do not bother turning unless it is by more than the heading tolerance)
 
         * otherwise proceed forward
 
@@ -40,8 +40,8 @@ class WheelBasePoseController(BaseController):
         name: Name identifier for the controller.
         open_loop_wheel_controller: A controller that takes in a command of
             [longitudinal velocity, steering angle] and returns the
-            ArticulationAction to be applied to the wheels if non holonomic.
-            and [longitudinal velocity, latitude velocity, steering angle]
+            ArticulationAction to be applied to the wheels if non-holonomic,
+            and [longitudinal velocity, lateral velocity, steering angle]
             if holonomic.
         is_holonomic: Whether the robot uses holonomic drive.
     """
@@ -62,7 +62,7 @@ class WheelBasePoseController(BaseController):
         heading_tol: float = 0.05,
         position_tol: float = 0.04,
     ) -> ArticulationAction:
-        """Use the specified open loop controller to compute speed commands to the wheel joints of the robot that will move it towards the specified goal position.
+        """Use the specified open loop controller to compute wheel joint speed commands that move the robot toward the specified goal position.
 
         Args:
             start_position: The current position of the robot, (X, Y, Z).

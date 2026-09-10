@@ -14,7 +14,7 @@
 // limitations under the License.
 
 #include <flatbuffers/flatbuffers.h>
-#include <isaacsim/ucx/nodes/UcxPublishJointStateNodeBase.h>
+#include <isaacsim/ucx/nodes/UcxPublishJointStateNodeBase.hpp>
 
 #include <OgnUCXPublishJointStateDatabase.h>
 #include <joint_state_generated.h>

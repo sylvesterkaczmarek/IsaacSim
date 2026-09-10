@@ -15,6 +15,7 @@
 
 """Newton physics implementation module providing core classes and interfaces for physics simulation."""
 
+from .collision_config import CollisionConfig, HydroelasticConfig
 from .fabric import FabricManager
 from .interface import NewtonPhysicsInterface
 from .newton_config import NewtonConfig
@@ -27,15 +28,20 @@ from .property_query import (
 )
 from .solver_config import (
     MuJoCoSolverConfig,
+    VBDSolverConfig,
     XPBDSolverConfig,
 )
+from .utils import get_newton_solver, get_newton_solver_to_physics_scene_object, newton_solver_to_api_schema
 
 __all__ = [
     "NewtonStage",
     "NewtonPhysicsInterface",
     "FabricManager",
     "NewtonConfig",
+    "CollisionConfig",
+    "HydroelasticConfig",
     "XPBDSolverConfig",
+    "VBDSolverConfig",
     "MuJoCoSolverConfig",
     "NewtonPropertyQueryInterface",
     "NewtonPropertyQueryArticulationLink",

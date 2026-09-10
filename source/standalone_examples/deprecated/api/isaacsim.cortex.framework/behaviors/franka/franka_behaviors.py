@@ -46,15 +46,23 @@ behaviors = {
 class ContextStateMonitor(DfDiagnosticsMonitor):
     """State monitor to read the context and pass it to the UI.
 
-    For these behaviors, the context has a `diagnostic_message` that contains the text to be displayed, and each
+    For these behaviors, the context has a ``diagnostics_message`` that contains the text to be displayed, and each
     behavior implements its own monitor to update that.
+
+    Args:
+        print_dt: Minimum interval between diagnostic updates in seconds.
+        diagnostic_fn: Diagnostic callback accepted for interface compatibility and currently ignored.
     """
 
     def __init__(self, print_dt: float, diagnostic_fn: Any = None) -> None:
         super().__init__(print_dt=print_dt)
 
     def print_diagnostics(self, context: Any) -> None:
-        """Print diagnostic messages from the context."""
+        """Print diagnostic messages from the context.
+
+        Args:
+            context: Behavior context whose diagnostic message should be printed.
+        """
         if hasattr(context, "diagnostics_message"):
             print("====================================")
             print(context.diagnostics_message)

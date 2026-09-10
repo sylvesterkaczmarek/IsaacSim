@@ -41,7 +41,6 @@ class FollowTarget(ABC, BaseTask):
         target_position: Initial target position.
         target_orientation: Initial target orientation.
         offset: Offset for all task objects.
-
     """
 
     def __init__(
@@ -71,7 +70,6 @@ class FollowTarget(ABC, BaseTask):
 
         Args:
             scene: The scene to populate.
-
         """
         super().set_up_scene(scene)
         scene.add_default_ground_plane()
@@ -103,7 +101,6 @@ class FollowTarget(ABC, BaseTask):
 
         Raises:
             NotImplementedError: Must be implemented by subclass.
-
         """
         raise NotImplementedError
 
@@ -122,6 +119,8 @@ class FollowTarget(ABC, BaseTask):
             target_position: Target position.
             target_orientation: Target orientation.
 
+        Raises:
+            RuntimeError: If updating the target pose before set_up_scene() has been called.
         """
         if target_prim_path is not None:
             if self._target is not None:
@@ -163,7 +162,6 @@ class FollowTarget(ABC, BaseTask):
 
         Returns:
             Dictionary of task parameters.
-
         """
         params_representation = {}
         params_representation["target_prim_path"] = {"value": self._target.prim_path, "modifiable": True}
@@ -179,7 +177,6 @@ class FollowTarget(ABC, BaseTask):
 
         Returns:
             Dictionary with robot and target observations.
-
         """
         joints_state = self._robot.get_joints_state()
         target_position, target_orientation = self._target.get_local_pose()
@@ -200,24 +197,22 @@ class FollowTarget(ABC, BaseTask):
     def calculate_metrics(self) -> dict:
         """Calculate task metrics.
 
-        Raises:
-            NotImplementedError: Must be implemented by subclass.
-
         Returns:
             Dictionary containing calculated task metrics.
 
+        Raises:
+            NotImplementedError: Must be implemented by subclass.
         """
         raise NotImplementedError
 
     def is_done(self) -> bool:
         """Check if task is complete.
 
-        Raises:
-            NotImplementedError: Must be implemented by subclass.
-
         Returns:
             Whether the task is complete.
 
+        Raises:
+            NotImplementedError: Must be implemented by subclass.
         """
         raise NotImplementedError
 
@@ -226,7 +221,6 @@ class FollowTarget(ABC, BaseTask):
 
         Returns:
             True if target is reached, False otherwise.
-
         """
         end_effector_position, _ = self._robot.end_effector.get_world_pose()
         target_position, _ = self._target.get_world_pose()
@@ -241,7 +235,6 @@ class FollowTarget(ABC, BaseTask):
         Args:
             time_step_index: Current simulation step index.
             simulation_time: Current simulation time.
-
         """
         if self._target_visual_material is not None:
             if hasattr(self._target_visual_material, "set_color"):
@@ -257,14 +250,13 @@ class FollowTarget(ABC, BaseTask):
         return
 
     def add_obstacle(self, position: np.ndarray = None) -> None:
-        """Add an obstacle cube to the scene.
+        """Add an obstacle cube to the scene and track it for removal.
 
         Args:
             position: Position for the obstacle.
 
         Returns:
             The created obstacle cube object.
-
         """
         # TODO: move to task frame if there is one
         cube_prim_path = find_unique_string_name(
@@ -289,8 +281,11 @@ class FollowTarget(ABC, BaseTask):
         """Remove an obstacle from the scene.
 
         Args:
-            name: Name of obstacle to remove. Defaults to last added.
+            name: Name of obstacle to remove. If not provided, removes the last added obstacle.
 
+        Raises:
+            IndexError: If no obstacles are available to remove when name is not provided.
+            KeyError: If name is provided and no tracked obstacle has that name.
         """
         if name is not None:
             self.scene.remove_object(name)
@@ -309,6 +304,8 @@ class FollowTarget(ABC, BaseTask):
         Returns:
             The obstacle object to be deleted.
 
+        Raises:
+            IndexError: If no obstacles exist.
         """
         if not self._obstacle_cubes:
             raise IndexError("No obstacles exist.")
@@ -320,7 +317,6 @@ class FollowTarget(ABC, BaseTask):
 
         Returns:
             True if obstacles exist, False otherwise.
-
         """
         if len(self._obstacle_cubes) > 0:
             return True

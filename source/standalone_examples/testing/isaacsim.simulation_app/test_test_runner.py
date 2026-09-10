@@ -59,7 +59,12 @@ discovered_test_count = 0
 
 
 def custom_exception_handler(loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
-    """Custom exception handler to capture asyncio task exceptions."""
+    """Capture errors delivered to the event loop's exception handler.
+
+    Args:
+        loop: Event loop reporting the error.
+        context: Error context containing an exception or diagnostic message.
+    """
     exception = context.get("exception")
     message = context.get("message", "")
     if exception:
@@ -99,7 +104,11 @@ for _ in range(120):
 
 
 def on_tests_discovered(canceled: bool = False) -> None:
-    """Callback when test discovery completes."""
+    """Record completion of test discovery.
+
+    Args:
+        canceled: Whether discovery was canceled before returning test results.
+    """
     global test_discovery_complete, discovered_test_count
     if canceled:
         print("[WARNING] Test discovery was canceled")

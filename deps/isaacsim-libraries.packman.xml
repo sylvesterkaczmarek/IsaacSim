@@ -1,0 +1,30 @@
+<project toolsVersion="5.6">
+  <!-- CUDA -->
+  <dependency name="cuda" linkPath="../_cmake_build/isaacsim-libraries-target-deps/cuda">
+    <package name="cuda" version="12.8.0-5-${platform_target_abi}-release" />
+  </dependency>
+  <!-- Native logging backend -->
+  <dependency name="carb_sdk_plugins" linkPath="../_cmake_build/isaacsim-libraries-target-deps/carb_sdk_plugins">
+    <package name="carb_sdk+plugins.${platform_target_abi}" version="213.0.2+release.14134.6a000408.gl" />
+  </dependency>
+  <!-- Direct OmniClient SDK dependency, resolved for the target OS and ABI. -->
+  <dependency name="omni_client_library" linkPath="../_cmake_build/isaacsim-libraries-target-deps/omni_client_library">
+    <package name="omni_client_library.${platform_target_abi}" version="2.72.3" />
+  </dependency>
+  <!--  OpenUSD  -->
+  <dependency name="openusd" linkPath="../_cmake_build/isaacsim-libraries-target-deps/openusd">
+    <package name="usd.py312.${platform_target_abi}.stock.release" version="0.25.05.post.2-gl.15477+b8a1f40c"/>
+  </dependency>
+  <dependency name="openusd-no-python" linkPath="../_cmake_build/isaacsim-libraries-target-deps/openusd_no_python">
+    <package name="usd-minimal.nopy.${platform_target_abi}.stock.release" version="0.25.05.post.2-gl.15480+b8a1f40c"/>
+  </dependency>
+  <!-- cuMotion Python runtime -->
+  <dependency name="cumotion" linkPath="../_cmake_build/isaacsim-libraries-target-deps/cumotion">
+    <package name="cumotion" version="v1.1.0a2_229a794.linux-x86_64.py312.release"
+             platforms="linux-x86_64 manylinux_2_35_x86_64" />
+    <package name="cumotion" version="v1.1.0a2_229a794.linux-aarch64.py312.release"
+             platforms="linux-aarch64 manylinux_2_35_aarch64" />
+    <package name="cumotion" version="v1.1.0a2_229a794.windows-x86_64.py312.release"
+             platforms="windows-x86_64" />
+  </dependency>
+</project>

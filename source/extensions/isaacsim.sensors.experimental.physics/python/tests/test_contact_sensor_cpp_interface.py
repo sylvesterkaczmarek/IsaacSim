@@ -17,7 +17,6 @@
 
 import asyncio
 
-import isaacsim.core.experimental.utils.prim as prim_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.kit.test
 import omni.timeline
@@ -26,9 +25,9 @@ from isaacsim.core.experimental.prims import GeomPrim, RigidPrim
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.sensors.experimental.physics import Contact
 from isaacsim.sensors.experimental.physics.impl.extension import get_contact_sensor_interface
-from pxr import PhysxSchema
+from pxr import PhysicsSchemaTools, PhysxSchema, Sdf
 
-from .common import step_simulation
+from .common import is_physx_engine, step_simulation
 
 
 class TestContactSensorCppInterface(omni.kit.test.AsyncTestCase):
@@ -45,9 +44,6 @@ class TestContactSensorCppInterface(omni.kit.test.AsyncTestCase):
         Cube("/World/Cube", sizes=1.0, positions=[0.0, 0.0, 1.0])
         GeomPrim("/World/Cube", apply_collision_apis=True)
         RigidPrim("/World/Cube", masses=[1.0])
-
-        contact_report_api = PhysxSchema.PhysxContactReportAPI.Apply(prim_utils.get_prim_at_path("/World/Cube"))
-        contact_report_api.CreateThresholdAttr().Set(0)
 
         Contact.create(
             "/World/Cube/contact_sensor",
@@ -75,12 +71,17 @@ class TestContactSensorCppInterface(omni.kit.test.AsyncTestCase):
 
         self.assertTrue(iface.create_sensor("/World/Cube/contact_sensor"))
 
-        await step_simulation(1.0)
+        await step_simulation(2.0)
 
         reading = iface.get_sensor_reading("/World/Cube/contact_sensor")
         self.assertTrue(reading.is_valid)
         self.assertNotEqual(reading.value, 0.0)
         self.assertTrue(reading.in_contact)
+
+    async def test_contact_report_schema_matches_active_engine(self) -> None:
+        """Author PhysX contact-report schema only in the PhysX-configured test run."""
+        cube_prim = stage_utils.get_current_stage().GetPrimAtPath("/World/Cube")
+        self.assertEqual(cube_prim.HasAPI(PhysxSchema.PhysxContactReportAPI), is_physx_engine())
 
     async def test_cpp_raw_contacts_available(self) -> None:
         """Verify C++ IContactSensor provides raw contact data during contact."""
@@ -92,7 +93,7 @@ class TestContactSensorCppInterface(omni.kit.test.AsyncTestCase):
 
         self.assertTrue(iface.create_sensor("/World/Cube/contact_sensor"))
 
-        await step_simulation(1.0)
+        await step_simulation(2.0)
 
         raw_contacts = iface.get_raw_contacts("/World/Cube/contact_sensor")
         self.assertGreater(len(raw_contacts), 0)
@@ -106,6 +107,15 @@ class TestContactSensorCppInterface(omni.kit.test.AsyncTestCase):
         self.assertIn("dt", contact)
         self.assertGreater(float(contact["dt"]), 0.0)
 
+        body_paths = [
+            Sdf.Path(str(PhysicsSchemaTools.intToSdfPath(contact["body0"]))),
+            Sdf.Path(str(PhysicsSchemaTools.intToSdfPath(contact["body1"]))),
+        ]
+        for body_path in body_paths:
+            self.assertTrue(body_path.IsAbsolutePath(), f"Raw contact actor path must be absolute: {body_path}")
+        static_paths = [path for path in body_paths if path.HasPrefix(Sdf.Path("/World/GroundPlane"))]
+        self.assertTrue(static_paths, f"Raw contact should identify the static ground prim: {body_paths}")
+
     async def test_cpp_sensor_reading_matches(self) -> None:
         """Verify ContactSensor returns same results as direct C++ call."""
         from isaacsim.sensors.experimental.physics import ContactSensor
@@ -113,7 +123,7 @@ class TestContactSensorCppInterface(omni.kit.test.AsyncTestCase):
         sensor = ContactSensor("/World/Cube/contact_sensor")
 
         self._timeline.play()
-        await step_simulation(1.0)
+        await step_simulation(2.0)
 
         reading = sensor.get_sensor_reading()
         self.assertTrue(reading.is_valid)
@@ -127,7 +137,7 @@ class TestContactSensorCppInterface(omni.kit.test.AsyncTestCase):
         sensor = ContactSensor("/World/Cube/contact_sensor")
 
         self._timeline.play()
-        await step_simulation(1.0)
+        await step_simulation(2.0)
 
         raw_data = sensor.get_raw_data()
         self.assertGreater(len(raw_data), 0)
