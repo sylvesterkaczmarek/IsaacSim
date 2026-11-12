@@ -12,7 +12,6 @@ This directory contains scripts for building Docker images of Isaac Sim. The bui
 - [Example Usage](#example-usage)
 - [Environment Variables for `docker run`](#environment-variables-for-docker-run)
 - [Developing extensions with hot reload](#developing-extensions-with-hot-reload)
-- [Developing extensions with hot reload](#developing-extensions-with-hot-reload)
 - [Ports for streaming](#ports-for-streaming)
 - [Docker Compose (Isaac Sim + Web Viewer)](#docker-compose-isaac-sim--web-viewer)
   - [Quick start](#quick-start)
@@ -221,11 +220,23 @@ Alternatively, use the provided helper script which drops into a bash shell insi
 
 ### Developing extensions with hot reload
 
-For a bind-mounted extension development workflow with Kit filesystem watching and hot reload, see [Developing extensions in Docker](extension_development.md).
+Kit disables its extension file watcher when it detects a container, and extensions baked into
+the image are not watched, so neither is available with the commands above. To iterate on an
+extension, bind-mount its directory and enable the watcher at launch:
 
-### Developing extensions with hot reload
+- With `docker run`, see [Developing extensions in Docker](extension_development.md).
+- With Docker Compose, apply the development overlay. It mounts `ISAACSIM_EXTENSIONS_DIR` at
+  `/isaac-sim/extsUser` (already on the extension search path, so no `--ext-folder` is needed),
+  enables `ISAACSIM_EXTENSION_NAME`, and passes `--/app/extensions/fsWatcherEnabled=true`:
 
-For a bind-mounted extension development workflow with Kit filesystem watching and hot reload, see [Developing extensions in Docker](extension_development.md).
+```bash
+ISAACSIM_EXTENSIONS_DIR=$HOME/my-extensions \
+ISAACSIM_EXTENSION_NAME=my.custom.extension \
+docker compose -f tools/docker/docker-compose.yml -f tools/docker/docker-compose.dev.yml up -d
+```
+
+Both settings are applied at launch only: the watcher is created while the extension search
+paths are registered, so enabling it on a running application has no effect.
 
 ### Run with volume mounts:
 

@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Extension development overlay, applied on top of docker-compose.yml.
+#
+# Kit disables its extension file watcher when it detects a container, and
+# extensions baked into the image are never watched. To hot reload, the source
+# has to live on a bind mount outside the image and the watcher has to be
+# enabled at launch:
+#
+#   ISAACSIM_EXTENSIONS_DIR=$HOME/my-extensions \
+#   ISAACSIM_EXTENSION_NAME=my.custom.extension \
+#   docker compose -f tools/docker/docker-compose.yml \
+#                  -f tools/docker/docker-compose.dev.yml up -d
+#
+# The mount target, /isaac-sim/extsUser, is already on the extension search
+# path of every shipped experience, so no --ext-folder is required. The mounted
+# directory must be readable by uid 1234 (the container user).
+
+services:
+  isaac-sim:
+    command:
+      - --enable
+      - ${ISAACSIM_EXTENSION_NAME:?set ISAACSIM_EXTENSION_NAME to the id of the extension to develop}
+      - --/app/extensions/fsWatcherEnabled=true
+    volumes:
+      - ${ISAACSIM_EXTENSIONS_DIR:?set ISAACSIM_EXTENSIONS_DIR to the host directory containing your extensions}:/isaac-sim/extsUser:ro

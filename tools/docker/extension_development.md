@@ -51,7 +51,10 @@ paths.include = ["*"]
 paths.exclude = ["*/__pycache__*", "*/.git*"]
 ```
 
-The global `/app/extensions/fsWatcherEnabled` setting defaults to `true`. The launch example sets it explicitly so the expected development behavior is visible in the command line.
+The global `/app/extensions/fsWatcherEnabled` setting defaults to `true` on a workstation but
+`false` inside a container, which is why the launch example above sets it explicitly. It is read
+while the extension search paths are created, so passing it at launch is required; setting it on a
+running application has no effect.
 
 ## Verify hot reload
 
@@ -68,6 +71,20 @@ After Isaac Sim starts:
 4. Check the Isaac Sim log for the extension disable/enable cycle.
 
 If the file changes inside the container but no reload occurs, check that the extension is reloadable and that `/app/extensions/fsWatcherEnabled` is enabled. Kit uses operating-system filesystem notifications for extension watching, so the backing filesystem must deliver change notifications to the container. When that is not available, move the development checkout to a local filesystem that supports native file events or reload the extension manually.
+
+## Docker Compose
+
+`docker-compose.dev.yml` wraps the same workflow as an overlay for the Compose deployment:
+
+```bash
+ISAACSIM_EXTENSIONS_DIR=$HOME/my-extensions \
+ISAACSIM_EXTENSION_NAME=my.company.extension \
+docker compose -f tools/docker/docker-compose.yml -f tools/docker/docker-compose.dev.yml up -d
+```
+
+The overlay mounts `ISAACSIM_EXTENSIONS_DIR` at `/isaac-sim/extsUser` instead of using
+`--ext-folder`. Every shipped experience already adds `extsUser` to the extension search path, so
+both layouts work; mounting at `extsUser` only shortens the command line.
 
 ## Prebuilt images
 
